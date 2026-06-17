@@ -3,10 +3,9 @@
 import xml.etree.ElementTree as ET
 import urllib.request
 import gzip
-import io
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import re
 
 

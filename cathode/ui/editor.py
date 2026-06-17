@@ -9,13 +9,11 @@ top-right of the title bar.  All glyphs ASCII.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
-
 from PIL import Image, ImageDraw
 
 from .theme import (
     get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    BLACK, CHANNEL_GREEN, GUIDE_SELECTED,
+    CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 _COLORS = [("bg", "Background"), ("accent", "Accent"),

@@ -7,6 +7,8 @@ venv/
 
 # Build artifacts / caches
 _winbuild/
+_linuxbuild/
+_macbuild/
 build/
 dist/
 *.spec

@@ -1,9 +1,8 @@
 """M3U playlist parser."""
 
 import re
-import os
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 

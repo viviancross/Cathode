@@ -16,6 +16,7 @@ from __future__ import annotations
 import glob
 import os
 import struct
+import sys
 import threading
 import time
 from typing import Callable
@@ -75,6 +76,8 @@ class GamepadReader:
         try:
             if os.name == "nt":
                 self._run_xinput()
+            elif sys.platform == "darwin":
+                self._run_macos()
             else:
                 self._run_linux_js()
         except Exception:
@@ -194,3 +197,175 @@ class GamepadReader:
         if axes.get(2, -32767) > 0: buttons.add("lt")   # triggers: released ≈ -32767
         if axes.get(5, -32767) > 0: buttons.add("rt")
         return dirs, buttons
+
+    # ── macOS: IOKit HID (polling, no run loop) ───────────────────────────
+
+    def _run_macos(self):
+        import ctypes
+        from ctypes import (c_void_p, c_int, c_int32, c_uint32, c_long,
+                            c_char_p, c_bool, byref, POINTER)
+        try:
+            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/"
+                             "CoreFoundation")
+            io = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
+        except OSError:
+            return
+
+        # CoreFoundation — every ref-returning fn MUST be c_void_p (else a 64-bit
+        # pointer gets truncated to 32 bits and the next call segfaults).
+        cf.CFStringCreateWithCString.restype = c_void_p
+        cf.CFStringCreateWithCString.argtypes = [c_void_p, c_char_p, c_uint32]
+        cf.CFRetain.restype = c_void_p
+        cf.CFRetain.argtypes = [c_void_p]
+        cf.CFRelease.argtypes = [c_void_p]
+        cf.CFSetGetCount.restype = c_long
+        cf.CFSetGetCount.argtypes = [c_void_p]
+        cf.CFSetGetValues.argtypes = [c_void_p, POINTER(c_void_p)]
+        cf.CFArrayGetCount.restype = c_long
+        cf.CFArrayGetCount.argtypes = [c_void_p]
+        cf.CFArrayGetValueAtIndex.restype = c_void_p
+        cf.CFArrayGetValueAtIndex.argtypes = [c_void_p, c_long]
+        cf.CFNumberGetValue.restype = c_bool
+        cf.CFNumberGetValue.argtypes = [c_void_p, c_int, c_void_p]
+        for fn, args, ret in (
+            ("IOHIDManagerCreate", [c_void_p, c_uint32], c_void_p),
+            ("IOHIDManagerSetDeviceMatching", [c_void_p, c_void_p], None),
+            ("IOHIDManagerOpen", [c_void_p, c_uint32], c_int),
+            ("IOHIDManagerCopyDevices", [c_void_p], c_void_p),
+            ("IOHIDDeviceGetProperty", [c_void_p, c_void_p], c_void_p),
+            ("IOHIDDeviceCopyMatchingElements", [c_void_p, c_void_p, c_uint32], c_void_p),
+            ("IOHIDElementGetUsagePage", [c_void_p], c_uint32),
+            ("IOHIDElementGetUsage", [c_void_p], c_uint32),
+            ("IOHIDElementGetLogicalMin", [c_void_p], c_long),
+            ("IOHIDElementGetLogicalMax", [c_void_p], c_long),
+            ("IOHIDDeviceGetValue", [c_void_p, c_void_p, POINTER(c_void_p)], c_int),
+            ("IOHIDValueGetIntegerValue", [c_void_p], c_long),
+        ):
+            f = getattr(io, fn)
+            f.argtypes = args
+            f.restype = ret
+
+        UTF8 = 0x08000100
+        SINT32 = 3
+
+        def cfstr(s):
+            return cf.CFStringCreateWithCString(None, s.encode(), UTF8)
+
+        k_usage = cfstr("PrimaryUsage")
+        k_usagepage = cfstr("PrimaryUsagePage")
+
+        def dev_int(dev, key):
+            ref = io.IOHIDDeviceGetProperty(dev, key)
+            if not ref:
+                return None
+            out = c_int32(0)
+            return out.value if cf.CFNumberGetValue(ref, SINT32, byref(out)) else None
+
+        def read(dev, elem):
+            val = c_void_p()
+            if io.IOHIDDeviceGetValue(dev, elem, byref(val)) != 0 or not val:
+                return None
+            return io.IOHIDValueGetIntegerValue(val)
+
+        mgr = io.IOHIDManagerCreate(None, 0)
+        if not mgr:
+            return
+        io.IOHIDManagerSetDeviceMatching(mgr, None)   # match all; we filter below
+        io.IOHIDManagerOpen(mgr, 0)
+
+        # Best-effort Xbox HID button-usage → action map (numbering varies a bit
+        # by controller; tweak if buttons land wrong).
+        BTN = {1: "a", 2: "b", 3: "x", 4: "y", 5: "lb", 6: "rb",
+               7: "back", 8: "start", 9: "l3", 10: "r3", 11: "guide"}
+        HAT = {0: {"up"}, 1: {"up", "right"}, 2: {"right"}, 3: {"down", "right"},
+               4: {"down"}, 5: {"down", "left"}, 6: {"left"}, 7: {"up", "left"}}
+        state = {"buttons": set(), "held": {}}
+        dev = btn_el = axis_el = hat = els_arr = None
+        rescan = 0.0
+
+        def reset():
+            nonlocal dev, els_arr
+            if els_arr:
+                cf.CFRelease(els_arr)
+            if dev:
+                cf.CFRelease(dev)
+            dev = els_arr = None
+
+        while self._running:
+            now = time.monotonic()
+            if dev is None and now >= rescan:
+                rescan = now + 2.0
+                devices = io.IOHIDManagerCopyDevices(mgr)
+                if devices:
+                    cnt = cf.CFSetGetCount(devices)
+                    if cnt > 0:
+                        arr = (c_void_p * cnt)()
+                        cf.CFSetGetValues(devices, arr)
+                        for i in range(cnt):
+                            d = arr[i]
+                            if (dev_int(d, k_usagepage) == 1
+                                    and dev_int(d, k_usage) in (4, 5, 8)):
+                                dev = cf.CFRetain(d)   # keep it past the set release
+                                els_arr = io.IOHIDDeviceCopyMatchingElements(d, None, 0)
+                                btn_el, axis_el, hat = {}, {}, None
+                                en = cf.CFArrayGetCount(els_arr) if els_arr else 0
+                                for j in range(en):
+                                    e = cf.CFArrayGetValueAtIndex(els_arr, j)
+                                    ep = io.IOHIDElementGetUsagePage(e)
+                                    eu = io.IOHIDElementGetUsage(e)
+                                    if ep == 0x09:
+                                        btn_el[eu] = e
+                                    elif ep == 0x01 and eu == 0x39:
+                                        hat = (e, io.IOHIDElementGetLogicalMin(e),
+                                               io.IOHIDElementGetLogicalMax(e))
+                                    elif ep == 0x01 and eu in (0x30, 0x31, 0x32, 0x35):
+                                        axis_el[eu] = (e, io.IOHIDElementGetLogicalMin(e),
+                                                       io.IOHIDElementGetLogicalMax(e))
+                                break
+                    cf.CFRelease(devices)
+                if dev is None:
+                    time.sleep(0.5)
+                    continue
+
+            dirs, buttons, alive = set(), set(), False
+
+            def axis(usage):     # normalized -1..1, 0 if absent
+                t = axis_el.get(usage)
+                if not t:
+                    return 0.0
+                e, lo, hi = t
+                v = read(dev, e)
+                if v is None or hi == lo:
+                    return 0.0
+                nonlocal alive
+                alive = True
+                return (v - lo) / (hi - lo) * 2.0 - 1.0
+
+            for usage, e in btn_el.items():
+                v = read(dev, e)
+                if v is not None:
+                    alive = True
+                    if v and usage in BTN:
+                        buttons.add(BTN[usage])
+            lx, ly = axis(0x30), axis(0x31)
+            if ly < -0.5: dirs.add("up")
+            if ly > 0.5: dirs.add("down")
+            if lx < -0.5: dirs.add("left")
+            if lx > 0.5: dirs.add("right")
+            if axis(0x32) > 0.0: buttons.add("lt")
+            if axis(0x35) > 0.0: buttons.add("rt")
+            if hat:
+                e, lo, hi = hat
+                hv = read(dev, e)
+                if hv is not None:
+                    alive = True
+                    if lo <= hv <= hi and (hi - lo + 1) >= 8:
+                        dirs |= HAT.get(hv - lo, set())
+
+            if not alive and (btn_el or axis_el):   # device went away
+                reset()
+                state["buttons"].clear(); state["held"].clear()
+            else:
+                self._process(dirs, buttons, state)
+            time.sleep(_POLL)
+        reset()

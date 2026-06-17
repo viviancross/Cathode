@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 
 from .theme import (
     get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    BLACK, CHANNEL_GREEN, GUIDE_SELECTED,
+    CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 # (key, label) for each button, top to bottom.

@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 
 from .theme import (
     get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    BLACK, CHANNEL_GREEN, GUIDE_SELECTED,
+    CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 
@@ -118,6 +118,16 @@ class ContextMenu:
                 self.back()         # apply + return to the previous menu
             elif item.close_after:
                 self.close()
+
+    def replace_page(self, items: List[MenuItem]):
+        """Rebuild the current page's items in place, preserving the highlight.
+        Used after an action changes an item's own label (e.g. a toggle), so the
+        new label shows without leaving the submenu."""
+        p = self._page
+        if not p:
+            return
+        p[0] = list(items)
+        p[1] = min(max(p[1], 0), len(p[0]) - 1)
 
     def back(self):
         """Go up one level, or close if at the root."""

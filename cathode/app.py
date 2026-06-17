@@ -70,10 +70,15 @@ class App:
         self._digit_buf: str = ""
         self._digit_timer: Optional[threading.Timer] = None
 
-        # Runtime dir shared with the (sandboxed) mpv for the IPC socket and
-        # the overlay buffer.
+        # Runtime dir shared with mpv for the IPC socket + overlay buffer.
         if os.name == "nt":
             cache_base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        elif os.environ.get("FLATPAK_ID"):
+            # Cathode is sandboxed and mpv runs as a SEPARATE Flatpak — the
+            # per-app $XDG_CACHE_HOME (~/.var/app/<id>/cache) is unreachable
+            # cross-sandbox. Use the real ~/.cache, which the manifest shares
+            # with both via --filesystem=xdg-cache/cathode.
+            cache_base = os.path.expanduser("~/.cache")
         else:
             cache_base = os.environ.get(
                 "XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
@@ -134,6 +139,12 @@ class App:
             os.path.join(runtime_dir, "logos"),
             on_loaded=self.renderer.mark_dirty,
             user_agent=config.user_agent)
+
+        # Current weather for the guide header (off unless a zip is configured)
+        from .weather import Weather
+        self.renderer.weather = Weather(
+            config.weather_zip, config.weather_units,
+            on_update=self.renderer.mark_dirty, user_agent=config.user_agent)
 
         # Current channel
         self._ch_idx: int = 0
@@ -840,20 +851,25 @@ class App:
         return [
             MenuItem("Program Guide", action=self._toggle_guide, hint="G"),
             MenuItem("Info Bar", action=self._show_info, hint="I"),
-            MenuItem("Mute", action=self._toggle_mute, hint="M",
-                     checked=self.player.muted),
             MenuItem("Remove Favorite" if is_fav else "Add Favorite",
                      action=self._toggle_favorite, hint="F", checked=is_fav),
             MenuItem("Channel Up", action=self._channel_up, hint="[^]"),
             MenuItem("Channel Down", action=self._channel_down, hint="[v]"),
             MenuItem("Volume Up", action=self._vol_up, hint="[>]", close_after=False),
             MenuItem("Volume Down", action=self._vol_down, hint="[<]", close_after=False),
-            MenuItem("Fullscreen", action=self._toggle_fullscreen, hint="W",
-                     checked=self._fullscreen),
-            MenuItem("Themes", submenu=self._themes_submenu),
+            MenuItem("Mute", action=self._toggle_mute, hint="M",
+                     checked=self.player.muted),
             MenuItem("Playlists", submenu=self._playlists_submenu),
+            MenuItem("Options", submenu=self._options_submenu),
             MenuItem("Main Menu", action=self._open_main_menu),
             MenuItem("Quit", action=self._quit_app, hint="Q"),
+        ]
+
+    def _options_submenu(self):
+        return [
+            MenuItem("Themes", submenu=self._themes_submenu),
+            MenuItem("Weather", submenu=self._weather_submenu),
+            MenuItem("Display", submenu=self._display_submenu),
         ]
 
     def _themes_submenu(self):
@@ -861,19 +877,47 @@ class App:
             MenuItem("Color Theme", submenu=self._theme_submenu),
             MenuItem("Font", submenu=self._font_submenu),
             MenuItem("Profiles", submenu=self._profiles_submenu),
-            MenuItem("Display", submenu=self._display_submenu),
         ]
 
+    def _weather_submenu(self):
+        z = self.config.weather_zip or "(not set)"
+        # close_after=False keeps us in the Weather submenu; the handlers refresh
+        # the page so the new zip/units label shows immediately.
+        return [
+            MenuItem(f"Zip Code: {z}", action=self._set_weather_zip,
+                     close_after=False),
+            MenuItem(f"Units: °{self.config.weather_units}",
+                     action=self._toggle_weather_units, close_after=False),
+        ]
+
+    def _set_weather_zip(self):
+        z = self._osk_get("Weather zip / postal code", self.config.weather_zip)
+        if z is None:                      # cancelled
+            return
+        self.config.weather_zip = z.strip()
+        self._apply_weather_config()
+
+    def _toggle_weather_units(self):
+        self.config.weather_units = \
+            "C" if self.config.weather_units.upper().startswith("F") else "F"
+        self._apply_weather_config()
+
+    def _apply_weather_config(self):
+        self.config.save()
+        if self.renderer.weather:
+            self.renderer.weather.configure(self.config.weather_zip,
+                                            self.config.weather_units)
+        self.renderer.menu.replace_page(self._weather_submenu())  # refresh labels
+        self.renderer.mark_dirty()
+
     def _display_submenu(self):
-        displays = self.player.get_displays()
-        items = []
-        for i, name in enumerate(displays):
+        items = [MenuItem("Fullscreen", action=self._toggle_fullscreen, hint="W",
+                          checked=self._fullscreen, close_after=False)]
+        for i, name in enumerate(self.player.get_displays()):
             # close_after=False so picking a display keeps the menu open.
             items.append(MenuItem(name or f"Display {i}",
                          action=lambda idx=i: self._switch_display(idx),
                          close_after=False))
-        if not items:
-            items.append(MenuItem("(no monitors detected)", enabled=False))
         return items
 
     def _switch_display(self, index: int):
@@ -996,11 +1040,8 @@ class App:
         self.renderer.mark_dirty()
 
     def _main_options(self):
-        items = [
-            MenuItem("Themes", submenu=self._themes_submenu),
+        items = self._options_submenu() + [
             MenuItem("Playlists", submenu=self._playlists_submenu),
-            MenuItem("Fullscreen", action=self._toggle_fullscreen,
-                     checked=self._fullscreen, close_after=False),
             MenuItem("Quit", action=self._quit_app, hint="Q"),
         ]
         self.renderer.menu.open_with(items, title="OPTIONS")
@@ -1061,12 +1102,14 @@ class App:
                          action=lambda n=name: self._apply_profile(n),
                          back_after=True))
         items.append(MenuItem("-" * 16, enabled=False))
-        items.append(MenuItem("Save current as...", action=self._save_profile_dialog))
+        items.append(MenuItem("Save current as...", action=self._save_profile_dialog,
+                              back_after=True))
         items.append(MenuItem("Delete profile...", submenu=self._delete_submenu))
         return items
 
     def _delete_submenu(self):
-        items = [MenuItem(n, action=lambda name=n: self._delete_profile(name))
+        items = [MenuItem(n, action=lambda name=n: self._delete_profile(name),
+                          back_after=True)
                  for n in list(self.config.profiles)]
         if not items:
             items.append(MenuItem("(no saved profiles)", enabled=False))

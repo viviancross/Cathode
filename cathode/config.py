@@ -2,8 +2,7 @@
 
 import json
 import os
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -36,6 +35,10 @@ class Config:
 
     # Guide settings
     guide_hours: int = 3           # hours of EPG to show in guide
+
+    # Weather (shown in the guide header). Empty zip = feature off.
+    weather_zip: str = ""          # e.g. "90210" — your area's postal/zip code
+    weather_units: str = "F"       # "F" or "C"
 
     # Appearance
     font: str = "vcr"              # vcr | ibm | vt220 | pixelforge | dejavu
@@ -77,40 +80,10 @@ class Config:
     # isn't on PATH. Empty = auto-detect.
     mpv_path: str = ""
 
-    def __init__(self, path: str = ""):
-        self._path = path
-        # Set defaults
-        self.playlist_url = ""
-        self.epg_url = ""
-        self.last_channel = 1
-        self.volume = 80
-        self.muted = False
-        self.osd_timeout = 4.0
-        self.osd_timeout_info = 6.0
-        self.static_duration = 0.35
-        self.reveal_duration = 0.3
-        self.tune_timeout = 12.0
-        self.scanline_alpha = 40
-        self.crt_enabled = True
-        self.vignette_enabled = True
-        self.guide_hours = 3
-        self.font = "vcr"
-        self.theme = "blue"
-        self.custom_palette = {}
-        self.custom_themes = {}
-        self.profiles = {}
-        self.playlists = []
-        self.main_menu_on_launch = True
-        self.gamepad = True
-        self.nav_repeat_delay = 300
-        self.nav_repeat_rate = 8
-        self.favorites = []
-        self.user_agent = "Cathode/1.0 IPTV"
-        self.stream_timeout = 10
-        self.mpv_extra_args = []
-        self.mpv_path = ""
-
-        if path and os.path.exists(path):
+    def __post_init__(self):
+        # Field defaults above are the single source of truth; load only
+        # overrides them from disk when a config file already exists.
+        if self._path and os.path.exists(self._path):
             self._load()
 
     def _load(self):

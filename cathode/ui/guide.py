@@ -1,6 +1,7 @@
 """Program guide overlay — 80s-style cable TV grid."""
 
 from __future__ import annotations
+import math
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, TYPE_CHECKING
 
@@ -10,8 +11,8 @@ from .theme import (
     get_font,
     GUIDE_BG, GUIDE_HEADER_BG, GUIDE_ROW_ODD, GUIDE_ROW_EVEN,
     GUIDE_CURRENT, GUIDE_SELECTED, GUIDE_ONAIR, GUIDE_TIME_BG, GUIDE_BORDER,
-    WHITE, WHITE_DIM, CYAN, YELLOW, GRAY, GRAY_DARK, BLACK,
-    ORANGE, GREEN, OSD_BORDER, OSD_BG, CHANNEL_GREEN,
+    WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
+    ORANGE, OSD_BORDER, OSD_BG,
 )
 
 if TYPE_CHECKING:
@@ -287,11 +288,14 @@ class Guide:
         epg: Optional["EPG"],
         current_channel_idx: int,
         logos=None,
+        weather=None,
     ) -> Image.Image:
         img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         self._logos = logos
         self._img = img    # for pasting logos in channel rows
+        # Cached weather summary (None until first fetch / when no zip set).
+        self._weather = weather.current() if weather is not None else None
 
         now = datetime.now(timezone.utc)
         window_start = now + timedelta(minutes=self.time_offset_min)
@@ -372,19 +376,91 @@ class Guide:
             + str(local.day)
         )
         tw2, _ = _text_size(draw, time_str, self.font_time)
+        clock_x = self.width - tw2 - self.pad
         draw.text(
-            (self.width - tw2 - self.pad, (self.header_h - th) // 2),
+            (clock_x, (self.header_h - th) // 2),
             time_str, font=self.font_time, fill=CYAN,
         )
 
-        # Keybind hint (left)
-        # ASCII only (pixel fonts lack arrow glyphs), compact so it never runs
-        # into the centred title even with wide fonts.
-        hint = "Ch:Up/Dn  Time:L/R  F:Fav  G:Close"
-        draw.text(
-            (self.pad, (self.header_h - th) // 2),
-            hint, font=self.font_small, fill=GRAY,
-        )
+        # Weather on the LEFT (roomy, so it never truncates).  The keybind hint
+        # that used to live here is now covered by the context menu.
+        if self._weather:
+            title_left = (self.width - tw) // 2
+            self._draw_weather(draw, left=self.pad, right_limit=title_left - self.pad)
+
+    def _draw_weather(self, draw, left, right_limit):
+        """Two-line weather summary + condition icon, left-aligned from `left`
+        without crossing `right_limit` (the start of the centred title)."""
+        w = self._weather
+        f = self.font_small
+        icon_sz = int(self.header_h * 0.5)
+        gap = 8
+        line1 = f"{w.get('temp', '')}°{w.get('units', 'F')}  {w.get('conditions', '')}"
+        parts = []
+        if w.get("city"):
+            parts.append(w["city"])
+        if w.get("humidity"):
+            parts.append(f"{w['humidity']}% RH")
+        if w.get("rain"):                       # only when there's a real chance
+            parts.append(f"{w['rain']}% rain")
+        line2 = "   ".join(parts)
+
+        avail = right_limit - left - icon_sz - gap
+        if avail < 50:
+            return
+        line1 = _truncate(line1, draw, f, avail)
+        line2 = _truncate(line2, draw, f, avail)
+        self._draw_weather_icon(draw, left, (self.header_h - icon_sz) // 2, icon_sz,
+                                w.get("category", "cloudy"))
+        lh = _text_size(draw, "Ag", f)[1] + 3
+        ty = (self.header_h - (lh * 2 - 3)) // 2
+        tx = left + icon_sz + gap
+        draw.text((tx, ty), line1, font=f, fill=WHITE)
+        draw.text((tx, ty + lh), line2, font=f, fill=WHITE_DIM)
+
+    def _draw_weather_icon(self, draw, x, y, s, cat):
+        """Small vector glyph for the current condition (drawn, not an asset)."""
+        def cloud(bx, by, bw, bh, color):
+            r = bh * 0.5
+            draw.ellipse([bx, by + bh - 2 * r, bx + 2 * r, by + bh], fill=color)
+            draw.ellipse([bx + bw - 2 * r, by + bh - 2 * r, bx + bw, by + bh], fill=color)
+            draw.ellipse([bx + bw * 0.28, by, bx + bw * 0.72, by + bh * 0.95], fill=color)
+            draw.rectangle([bx + r, by + bh - r, bx + bw - r, by + bh], fill=color)
+
+        def sun(scx, scy, r, rays=True):
+            draw.ellipse([scx - r, scy - r, scx + r, scy + r], fill=YELLOW)
+            if rays:
+                for i in range(8):
+                    a = i * math.pi / 4
+                    draw.line([scx + math.cos(a) * (r + 2), scy + math.sin(a) * (r + 2),
+                               scx + math.cos(a) * (r + 5), scy + math.sin(a) * (r + 5)],
+                              fill=YELLOW, width=max(1, s // 18))
+
+        cx = x + s / 2
+        if cat == "clear":
+            sun(cx, y + s / 2, s * 0.28)
+            return
+        if cat == "partly":
+            sun(x + s * 0.32, y + s * 0.34, s * 0.2)
+            cloud(x + s * 0.28, y + s * 0.42, s * 0.66, s * 0.4, WHITE_DIM)
+            return
+        cloud(x + s * 0.08, y + s * 0.18, s * 0.84, s * 0.5, GRAY if cat == "fog" else WHITE_DIM)
+        base = y + s * 0.72
+        if cat == "rain":
+            for i in range(3):
+                dx = x + s * (0.3 + i * 0.2)
+                draw.line([dx, base, dx - s * 0.08, base + s * 0.2], fill=CYAN, width=max(1, s // 16))
+        elif cat == "snow":
+            for i in range(3):
+                dx = x + s * (0.3 + i * 0.2)
+                draw.ellipse([dx - 1, base + s * 0.06, dx + 2, base + s * 0.06 + 3], fill=WHITE)
+        elif cat == "storm":
+            draw.polygon([(cx, base), (cx - s * 0.12, base + s * 0.16),
+                          (cx, base + s * 0.16), (cx - s * 0.06, base + s * 0.3)], fill=YELLOW)
+        elif cat == "fog":
+            for i in range(2):
+                ly = base + s * 0.04 + i * s * 0.12
+                draw.line([x + s * 0.15, ly, x + s * 0.85, ly], fill=GRAY, width=max(1, s // 16))
 
     def _draw_category_bar(self, draw):
         """The ◄ Category ► selector, highlighted when it has focus."""
@@ -394,7 +470,6 @@ class Guide:
         draw.rectangle([x0, y0, x1, y1], fill=bg, outline=OSD_BORDER, width=1)
         cat = self.current_category()
         # Arrows on both sides
-        ay = y0 + (y1 - y0) // 2
         draw.text((x0 + 6, y0 + (y1 - y0 - 14) // 2), "<",
                   font=self.font_small, fill=YELLOW if focused else CYAN)
         draw.text((x1 - 14, y0 + (y1 - y0 - 14) // 2), ">",
@@ -409,9 +484,7 @@ class Guide:
         """Top info panel: currently-playing channel (left) + metadata for the
         selected channel's current program (right)."""
         pad = self.pad
-        top = self.header_h + pad
         bottom = self.header_h + self.panel_h - pad
-        h = bottom - top
         # Divider under the whole panel
         draw.rectangle([0, self.header_h + self.panel_h - 2,
                         self.width, self.header_h + self.panel_h], fill=OSD_BORDER)

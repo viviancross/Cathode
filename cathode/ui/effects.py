@@ -1,9 +1,7 @@
 """Retro visual effects: scanlines, static noise, CRT glow."""
 
 import numpy as np
-from PIL import Image, ImageFilter, ImageDraw
-import random
-from typing import Tuple
+from PIL import Image, ImageFilter
 
 
 # ── Scanline overlay ────────────────────────────────────────────────────────
@@ -23,7 +21,6 @@ def apply_scanlines(img: Image.Image, alpha: int = 40) -> Image.Image:
 
 def make_scanline_cache(width: int, height: int, alpha: int = 40) -> Image.Image:
     """Pre-render a scanline overlay (reuse every frame)."""
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     arr = np.zeros((height, width, 4), dtype=np.uint8)
     arr[::2, :, 3] = alpha  # every other row, alpha only
     return Image.fromarray(arr, "RGBA")

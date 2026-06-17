@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Optional
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, TRANSPARENT, OSD_BG, OSD_BORDER,
+    get_font, OSD_BG, OSD_BORDER,
     CYAN, YELLOW, WHITE, WHITE_DIM, GRAY,
-    CHNUM_BG, CHNUM_TEXT, GREEN, RED, ORANGE, CHANNEL_GREEN,
+    CHNUM_BG, GREEN, RED, ORANGE, CHANNEL_GREEN,
 )
 
 if TYPE_CHECKING:
