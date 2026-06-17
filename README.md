@@ -7,7 +7,7 @@ through your M3U channels like it's 80s/90s cable TV — phosphor‑glow program
 guide, CRT scanlines, channel‑change snow, on‑screen menus, and a UI that scales
 from the Deck's screen to 1080p when docked.
 
-**Version: 1.7**
+**Version: 1.7b**
 
 <br clear="left">
 
@@ -348,7 +348,7 @@ install-windows.ps1  cathode.bat  tools/build_windows.py        (Windows)
 
 ## Status
 
-**1.7.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
+**1.7b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
 theme editor, monitor swapping, playlist profiles, native gamepad control, the
 synced channel‑change static, the context menu + on‑screen keyboard, and
 Windows/Linux builds are all in. The Python/UI layers are verified by

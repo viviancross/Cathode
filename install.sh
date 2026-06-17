@@ -43,10 +43,14 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 python3 -m venv "$SCRIPT_DIR/.venv"
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/.venv/bin/activate"
-pip install -q --upgrade pip
-pip install -q -r "$SCRIPT_DIR/requirements.txt"
+# Call the venv's Python by absolute path with `-m pip` instead of running
+# `.venv/bin/pip` or `source activate`.  The pip/activate scripts hard-code the
+# venv path in their #! shebang line, which the kernel truncates at 127 bytes —
+# on a long install path that yields "bad interpreter: no such file or
+# directory".  Invoking the python *binary* directly sidesteps that entirely.
+VENV_PY="$SCRIPT_DIR/.venv/bin/python"
+"$VENV_PY" -m pip install -q --upgrade pip
+"$VENV_PY" -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
 
 # ── 3. Retro fonts ────────────────────────────────────────────────────────────
 echo "[3/4] Checking retro fonts…"
@@ -137,17 +141,15 @@ echo "  3. In its Steam properties, apply a controller layout that maps the"
 echo "     D-pad/buttons to the keys below."
 echo
 echo "Keyboard shortcuts:"
-echo "  Up / Down    Channel up / down"
+echo "  Up / Down    Channel up / down  (move selection inside the guide)"
 echo "  Left / Right Volume down / up  (timeline scroll inside the guide)"
-echo "  0-9          Direct channel entry"
+echo "  0-9 / numpad Direct channel entry"
 echo "  G            Open / close program guide"
 echo "  I / Tab      Show / hide info OSD"
 echo "  M            Mute"
-echo "  F            Cycle font (VCR / IBM VGA / VT220 / Pixel Forge / DejaVu)"
-echo "  C            Cycle color theme (Blue / Amber / Green / VHS / Mono)"
+echo "  F            Add / remove the channel from Favorites"
+echo "  C            Open the context menu (themes, fonts, playlists, display)"
 echo "  W            Toggle fullscreen / windowed"
-echo "  O            Toggle mpv on-screen controls (OSC)"
-echo "  L            Toggle guide layout (grid / detail)"
-echo "  Enter        Confirm (guide selection / show info)"
+echo "  Enter        Select / open the context menu from the info bar"
 echo "  PgUp / PgDn  Jump +/- 10 channels"
-echo "  Q / Esc      Quit (or close the guide)"
+echo "  Q            Quit        Esc  Close the current dialog / guide"
