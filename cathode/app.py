@@ -587,6 +587,8 @@ class App:
         for d in range(10):
             p.bind_key(f"KP{d}", (lambda n: lambda: self._char_typed(str(n)))(d),
                        name=f"kp_{d}")
+        # Keypad "." (mpv calls it KP_DEC) types a period in text entry.
+        p.bind_key("KP_DEC", lambda: self._char_typed("."), name="kp_dec")
 
     def _dialog_open(self) -> bool:
         return (self.renderer.osk.open or self.renderer.menu.open
