@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import time
 import threading
-from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 
 import numpy as np
@@ -117,6 +116,7 @@ class Renderer:
         self.current_channel_idx: int = 0
         self.epg: Optional["EPG"] = None
         self.logos = None    # LogoStore (set by App); fetches channel logos
+        self.weather = None  # Weather (set by App); guide-header weather
         self.volume: int = 80
         self.muted: bool = False
 
@@ -252,7 +252,7 @@ class Renderer:
 
     def _draw_notification(self, frame: Image.Image):
         """A centered pill near the top of the screen."""
-        from .menu import OSD_BG, OSD_BORDER, WHITE, CHANNEL_GREEN
+        from .menu import OSD_BG, WHITE, CHANNEL_GREEN
         d = ImageDraw.Draw(frame)
         text = self.notification
         font = get_font(max(16, int(self.height * 0.030)))
@@ -434,6 +434,7 @@ class Renderer:
                 self.epg,
                 self.current_channel_idx,
                 logos=self.logos,
+                weather=self.weather,
             )
             if self.crt_on:
                 guide_img = Image.alpha_composite(guide_img, self.scanlines)
@@ -569,11 +570,24 @@ class Renderer:
         self._write_overlay(np.ascontiguousarray(bgra).tobytes())
 
     def _write_overlay(self, data: bytes):
-        """Atomically publish a BGRA buffer and (re)point mpv's overlay at it."""
+        """Publish a BGRA buffer IN PLACE and (re)point mpv's overlay at it.
+
+        mpv mmaps the overlay file and keeps the mapping across `overlay-add`
+        calls, so the same physical file (inode) must be overwritten — an atomic
+        rename would swap in a fresh inode that mpv never re-reads, which freezes
+        the 60fps channel-change static after the first frame.  Writing in place
+        keeps the mapping live; a partially-written frame can only tear for one
+        16ms frame, which is invisible.
+        """
         try:
-            with open(self._overlay_tmp, "wb") as f:
+            # r+b updates the existing inode; create it the first time.
+            try:
+                f = open(self._overlay_path, "r+b")
+            except FileNotFoundError:
+                f = open(self._overlay_path, "wb")
+            with f:
+                f.seek(0)
                 f.write(data)
-            os.replace(self._overlay_tmp, self._overlay_path)
         except OSError:
             return
         try:

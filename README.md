@@ -7,7 +7,7 @@ through your M3U channels like it's 80s/90s cable TV — phosphor‑glow program
 guide, CRT scanlines, channel‑change snow, on‑screen menus, and a UI that scales
 from the Deck's screen to 1080p when docked.
 
-**Version: 1.8b**
+**Version: 2.1b**
 
 <br clear="left">
 
@@ -21,6 +21,9 @@ from the Deck's screen to 1080p when docked.
   until the new channel's first frame is on screen, then fades to reveal it.
 - **Themes & fonts** — 9 color themes, 5 retro fonts, and named **look
   profiles** (theme + font + scanline intensity), all switchable live.
+- **Weather in the guide** — set your zip/postal code and the guide header shows
+  the current conditions, temperature, humidity, chance of rain, your city, and a
+  matching condition icon. Off until you set a zip; no API key required.
 - **Playlist/network profiles** — save several IPTV sources and switch between
   them from the menu.
 - **On‑screen everything** — context menu (right‑click or a corner button) and
@@ -29,8 +32,8 @@ from the Deck's screen to 1080p when docked.
 - **Auto resolution** — renders at mpv's real window size (handheld 1280×800,
   docked 1920×1080, 4:3, etc.).
 - **Demo mode** — built‑in test‑pattern channels, no playlist needed.
-- Runs on **Steam Deck/Linux** (Flatpak or system mpv) and **Windows**
-  (self‑contained binary).
+- Runs on **Steam Deck/Linux**, **Windows**, and **macOS** — portable binaries
+  for each, or from source.
 
 ## How it works
 
@@ -53,7 +56,55 @@ first run it shows an on‑screen keyboard to enter your playlist URL.
 To rebuild it yourself: `pip install pyinstaller`, then
 `python tools/build_windows.py`.
 
-### Steam Deck (SteamOS)
+### Linux — portable binary (no venv needed)
+
+Grab **`cathode-linux-<ver>.tar.gz`**, then:
+
+```bash
+tar xzf cathode-linux-<ver>.tar.gz
+./Cathode/Cathode            # or: ./Cathode/Cathode --demo
+```
+Python + the app are bundled, so there's no virtualenv to set up. **mpv is still
+required** — install it once with `flatpak install flathub io.mpv.Mpv` (Steam
+Deck) or your distro's `mpv` package; Cathode finds it automatically.
+
+> Building it yourself (PyInstaller can't cross‑compile, so build on Linux — the
+> Steam Deck in Desktop mode works): `pip install pyinstaller`, then
+> `python3 tools/build_linux.py`. The binary targets the OS/CPU you build on.
+
+### macOS
+
+Grab **`cathode-macos-<ver>.zip`**, unzip, and run **`Cathode.app`** (first time:
+right‑click → **Open** to bypass Gatekeeper, since it's unsigned). Install mpv
+once with `brew install mpv`.
+
+Prefer running from source? Extract **`cathode-source-<ver>.zip`** and run:
+
+```bash
+chmod +x install-macos.sh cathode.sh
+./install-macos.sh          # installs mpv (Homebrew) + a local venv
+./cathode.sh                # or: ./cathode.sh --demo
+```
+
+> Building the `.app` yourself (run on a Mac): `pip3 install pyinstaller`, then
+> `python3 tools/build_macos.py`. Targets the build machine's arch (Apple
+> Silicon vs Intel).
+
+### Flatpak (experimental)
+
+Cathode can be packaged as a Flatpak (mpv stays on the host as `io.mpv.Mpv`,
+launched via `flatpak-spawn --host`). From an extracted **`cathode-source-<ver>.zip`**:
+
+```bash
+chmod +x install-flatpak.sh
+./install-flatpak.sh        # installs the runtime/SDK + mpv, then builds Cathode
+flatpak run io.github.viviancross.Cathode
+```
+
+> ⚠️ The manifest (`io.github.viviancross.Cathode.yml`) is **untested** — it was
+> authored on Windows, where `flatpak-builder` can't run. Expect to iterate.
+
+### Steam Deck (SteamOS) — from source
 
 In Desktop Mode, open a terminal in this folder:
 
@@ -85,8 +136,8 @@ Cathode opens on a **main menu** (home screen) — logo, title, and four buttons
   watching it.
 - **Load Playlist** — pick one of your saved playlists (and your currently
   configured one) to start watching.
-- **Options** — themes, fonts, the custom theme editor, display/monitor swap,
-  and playlist management.
+- **Options** — themes, fonts, the custom theme editor, weather, display/monitor
+  swap, and playlist management.
 - **Exit** — quit.
 
 Navigate with the mouse, arrows + Enter, or a gamepad (D‑pad + **A**). You can
@@ -140,11 +191,12 @@ the dialog and get them back.
 
 ### Gamepad / controller
 
-Cathode reads a plugged‑in gamepad with its own built‑in reader (**XInput** on
-Windows, the `/dev/input/js*` joystick interface on Linux) — so Xbox‑style pads
-work on every build, including the SDL‑less Flatpak mpv. Plug it in and launch —
-no configuration. On the Steam Deck in **Game Mode**, a Steam Input profile
-mapping buttons to the keyboard keys above also works.
+Cathode reads a plugged‑in gamepad with its own built‑in reader — **XInput** on
+Windows, the `/dev/input/js*` joystick interface on Linux, and **IOKit HID** on
+macOS — so Xbox‑style pads work on every build, including the SDL‑less Flatpak
+mpv. Plug it in and launch — no configuration. On the Steam Deck in **Game
+Mode**, a Steam Input profile mapping buttons to the keyboard keys above also
+works.
 
 | Button | Action |
 |--------|--------|
@@ -168,12 +220,17 @@ Open it with **right‑click** or the small **menu button** that appears with th
 info bar (top‑right). Navigate with mouse, arrows/Enter/Esc, or the controller.
 
 ```
-Program Guide / Info Bar / Mute / Channel [^][v] / Volume [<][>] / Fullscreen
-Themes >   - Color Theme > (themes... + Custom Theme...), Font >,
-             Profiles >, Display >
+Program Guide / Info Bar / Add Favorite / Channel [^][v] / Volume [<][>] / Mute
 Playlists > - switch network, Add playlist..., Delete playlist...
+Options >   - Themes >  - Color Theme > (themes... + Custom Theme...),
+                          Font >, Profiles >
+              Weather > - Zip Code..., Units (°F/°C)
+              Display > - Fullscreen, monitor swap
 Main Menu / Quit
 ```
+
+Picking an item inside **Options** (a theme, font, zip code, etc.) applies it
+and keeps the menu open so you can keep adjusting.
 
 ### Themes, fonts & look profiles
 
@@ -199,8 +256,8 @@ the **Channel #** sliders in the custom theme editor.
 
 ### Custom theme editor
 
-**Themes ▸ Color Theme ▸ Custom Theme…** (always the last entry in the Color
-Theme list) opens an editor for building your own look:
+**Options ▸ Themes ▸ Color Theme ▸ Custom Theme…** (always the last entry in the
+Color Theme list) opens an editor for building your own look:
 
 - **RGB sliders** for the five core OSD colors — Background, Accent (borders /
   highlights), Highlight, Text, and **Channel #** (the channel‑number color).
@@ -233,16 +290,26 @@ Favorites persist in `config.json` and show up as their own category.
 
 Drop any `.ttf` or `.otf` file into the **`assets/fonts/`** folder (next to the
 app — on the Windows portable build it's `assets\fonts\` beside `cathode.exe`).
-It appears automatically in **Themes ▸ Font**, labelled after its filename
+It appears automatically in **Options ▸ Themes ▸ Font**, labelled after its filename
 (e.g. `My_Cool_Font.ttf` → "My Cool Font"). Monospace/pixel fonts look best.
 No config edit or restart of the build is needed — just relaunch the app.
 
 ### Swapping monitors
 
-**Themes ▸ Display** lists the connected monitors; pick one to move the Cathode
-window there. The window targets that screen in both windowed and fullscreen
-modes, and the aspect ratio + OSD automatically rescale to the new monitor's
-resolution. (Single‑monitor systems show "no monitors detected".)
+**Options ▸ Display** holds the **Fullscreen** toggle and lists the connected
+monitors; pick one to move the Cathode window there. The window targets that
+screen in both windowed and fullscreen modes, and the aspect ratio + OSD
+automatically rescale to the new monitor's resolution.
+
+### Weather
+
+Set your zip/postal code under **Options ▸ Weather ▸ Zip Code…** (and toggle
+**°F / °C**) and the guide header shows the current conditions — a condition
+icon, temperature, the city, humidity, and chance of rain — on the left of the
+header. It refreshes every 15 minutes from [wttr.in](https://wttr.in) (no API
+key), is fetched in the background so it never blocks the UI, and stays hidden
+until you set a zip. Also configurable directly via `weather_zip` /
+`weather_units` in `config.json`.
 
 ### Playlists / networks
 
@@ -284,6 +351,8 @@ Created/updated automatically; edit while the app is closed.
 | `nav_repeat_delay`, `nav_repeat_rate` | Held‑key repeat delay (ms) / rate (per sec) |
 | `main_menu_on_launch` | Show the home screen on launch (`false` = boot into the playlist) |
 | `guide_hours` | Hours shown across the guide |
+| `weather_zip` | Zip/postal code for the guide weather (empty = off) |
+| `weather_units` | Weather temperature units, `F` or `C` |
 | `reveal_duration`, `tune_timeout` | Channel‑change fade / stall timeout |
 | `osd_timeout`, `osd_timeout_info` | Info‑bar durations |
 | `mpv_path` | Explicit path to mpv (when not on PATH) |
@@ -333,15 +402,17 @@ cathode/
     editor.py        custom theme editor (color sliders + CRT/vignette)
 assets/  fonts + icon       tools/  build + preview + icon scripts
 install.sh  install-service.sh  make-shortcut.sh  cathode.sh   (Linux)
+install-macos.sh                                              (macOS, from source)
+install-flatpak.sh  io.github.viviancross.Cathode.yml         (Flatpak, experimental)
 install-windows.ps1  cathode.bat  tools/build_windows.py        (Windows)
 ```
 
 ## Status
 
-**1.8b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
-theme editor, monitor swapping, playlist profiles, native gamepad control, the
-synced channel‑change static, the context menu + on‑screen keyboard, and
-Windows/Linux builds are all in. The Python/UI layers are verified by
+**2.1b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
+theme editor, guide weather, monitor swapping, playlist profiles, native gamepad
+control, the synced channel‑change static, the context menu + on‑screen keyboard,
+and Windows/Linux builds are all in. The Python/UI layers are verified by
 `tools/preview.py` and unit checks; live mpv input (gamepad, mouse buttons, the
 on‑screen keyboard feel) and multi‑monitor moves are best confirmed on real
 hardware.

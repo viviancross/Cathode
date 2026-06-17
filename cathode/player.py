@@ -72,6 +72,7 @@ class Player:
         os.makedirs(runtime_dir, exist_ok=True)
         self._runtime_dir = runtime_dir
         self._is_windows = (os.name == "nt")
+        self._is_macos = (sys.platform == "darwin")
         if self._is_windows:
             # mpv's IPC server is a Windows named pipe, not a filesystem socket.
             self._sock_path = r"\\.\pipe\cathode-mpv-%d" % os.getpid()
@@ -147,6 +148,12 @@ class Player:
             found = shutil.which(name)
             if found:
                 return found
+        # A GUI-launched macOS .app doesn't inherit the shell PATH, so probe the
+        # standard Homebrew locations directly.
+        if self._is_macos:
+            for p in ("/opt/homebrew/bin/mpv", "/usr/local/bin/mpv"):
+                if os.path.isfile(p):
+                    return p
         return None
 
     def _resolve_backend(self) -> str:
@@ -155,13 +162,17 @@ class Player:
         if self._backend == "system":
             return "system"
         # auto: prefer Flatpak mpv on Linux (Steam Deck), else a system mpv.
-        if not self._is_windows and self._flatpak_mpv_available():
+        # macOS uses a system mpv (Homebrew) — never Flatpak.
+        if (not self._is_windows and not self._is_macos
+                and self._flatpak_mpv_available()):
             return "flatpak"
         if self._mpv_exe():
             return "system"
         # Nothing found — fall back so the error names the right thing:
-        # Flatpak on Linux, a system mpv everywhere else (Windows/macOS).
-        return "flatpak" if not self._is_windows else "system"
+        # Flatpak on Linux, a system mpv on Windows/macOS.
+        if self._is_windows or self._is_macos:
+            return "system"
+        return "flatpak"
 
     # ── Launch / connect ───────────────────────────────────────────────────
 
@@ -213,7 +224,7 @@ class Player:
         backend = self._resolve_backend()
         self._resolved_backend = backend
         if backend == "flatpak":
-            return [
+            cmd = [
                 "flatpak", "run",
                 # Share the runtime dir so the socket + overlay buffer cross
                 # the sandbox boundary (host Python and sandboxed mpv share it).
@@ -221,7 +232,14 @@ class Player:
                 self._flatpak_app,
                 *self._common_args(),
             ]
-        return [self._mpv_exe() or "mpv", *self._common_args()]
+        else:
+            cmd = [self._mpv_exe() or "mpv", *self._common_args()]
+        # When Cathode itself runs inside a Flatpak sandbox, mpv lives on the
+        # host, so hop out with `flatpak-spawn --host`. Gated on $FLATPAK_ID, so
+        # source/binary/Windows runs are completely unaffected.
+        if os.environ.get("FLATPAK_ID"):
+            cmd = ["flatpak-spawn", "--host", *cmd]
+        return cmd
 
     def start(self):
         """Launch mpv and connect the IPC socket."""

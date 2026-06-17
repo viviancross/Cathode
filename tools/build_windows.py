@@ -8,7 +8,6 @@ Requires (install once):  pip install pyinstaller
 Run from the project root:  python tools/build_windows.py
 """
 import os
-import shutil
 import subprocess
 import sys
 import urllib.request
@@ -16,8 +15,8 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)   # so `import cathode` works when run from tools/
-# Release zips land in a sibling "builds" folder (e.g. S:/projects/builds).
-BUILDS = os.path.join(os.path.dirname(ROOT), "builds")
+# Rewrite release zips land in builds/rewrite/ (matches build_source.py).
+BUILDS = os.path.join(os.path.dirname(ROOT), "builds", "rewrite")
 WORK = os.path.join(ROOT, "_winbuild")
 MPV_DIR = os.path.join(WORK, "mpv")
 

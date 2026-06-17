@@ -1,0 +1,75 @@
+# Cathode — Flatpak manifest.
+#
+# ⚠️ EXPERIMENTAL / UNTESTED: this was authored on a Windows machine, where
+# `flatpak-builder` cannot run, so it has NOT been built or launched. Treat it
+# as a starting point and expect to iterate on a real Linux box.
+#
+# Packages Cathode itself as a Flatpak. mpv is NOT bundled — it runs on the host
+# as the io.mpv.Mpv Flatpak, reached via `flatpak-spawn --host` (Cathode detects
+# the sandbox through $FLATPAK_ID; see cathode/player.py). install-flatpak.sh
+# installs io.mpv.Mpv for you.
+#
+# Build + install locally (from the extracted source folder):
+#   ./install-flatpak.sh
+# …or manually:
+#   flatpak-builder --user --install --force-clean \
+#       .flatpak-build io.github.viviancross.Cathode.yml
+#   flatpak run io.github.viviancross.Cathode
+#
+app-id: io.github.viviancross.Cathode
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+command: cathode
+
+finish-args:
+  - --share=ipc
+  - --share=network                        # IPTV streams + playlist/EPG/logo fetch
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio                     # audio (host mpv also needs it)
+  - --device=all                            # GPU (dri) + gamepad (/dev/input/js*)
+  - --filesystem=xdg-cache/cathode:create   # IPC socket + overlay buffer (shared with mpv)
+  - --filesystem=xdg-config/cathode:create  # config.json
+  - --talk-name=org.freedesktop.Flatpak     # allow flatpak-spawn --host to launch mpv
+
+modules:
+  # Pillow + numpy via pip. Network is enabled for THIS LOCAL build only; a
+  # Flathub submission would instead pin pinned wheel/source archives.
+  - name: python-deps
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      - pip3 install --prefix=/app --no-warn-script-location Pillow numpy
+
+  - name: cathode
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: .
+    build-commands:
+      - mkdir -p /app/share/cathode /app/bin /app/share/applications
+        /app/share/icons/hicolor/256x256/apps
+      - cp -r cathode assets main.py /app/share/cathode/
+      - |
+        cat > /app/bin/cathode <<'EOF'
+        #!/bin/sh
+        exec python3 /app/share/cathode/main.py "$@"
+        EOF
+        chmod +x /app/bin/cathode
+      - install -Dm644 assets/cathode.png
+        /app/share/icons/hicolor/256x256/apps/io.github.viviancross.Cathode.png
+      - |
+        cat > /app/share/applications/io.github.viviancross.Cathode.desktop <<'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Cathode
+        GenericName=Retro IPTV Player
+        Comment=Flip through IPTV channels like 80s/90s cable TV
+        Exec=cathode
+        Icon=io.github.viviancross.Cathode
+        Terminal=false
+        Categories=AudioVideo;Video;TV;Player;
+        EOF
