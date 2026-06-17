@@ -45,7 +45,6 @@ class Player:
         backend: str = "auto",   # "auto" | "flatpak" | "system"
         extra_args: Optional[List[str]] = None,
         mpv_path: str = "",      # explicit path to mpv(.exe), optional
-        gamepad: bool = True,    # enable mpv's SDL gamepad input (XInput on Win)
         ar_delay: int = 300,     # ms before a held key repeats
         ar_rate: int = 8,        # held-key repeats per second
     ):
@@ -65,7 +64,6 @@ class Player:
         self._cmd_override = mpv_command
         self._resolved_backend = ""
         self._extra_args = list(extra_args or [])
-        self._gamepad = bool(gamepad)
         self._ar_delay = int(ar_delay)
         self._ar_rate = int(ar_rate)
         self._mpv_log = os.path.join(runtime_dir, "mpv.log")
@@ -182,10 +180,6 @@ class Player:
             "--osd-bar=no",
             "--input-default-bindings=no",
             "--input-vo-keyboard=yes",
-            # SDL gamepad input — emits GAMEPAD_* keys we bind below. On Windows
-            # SDL talks to XInput/DirectInput, so Xbox-style pads work natively;
-            # harmless (mpv just warns) if this build lacks SDL or no pad is set.
-            f"--input-gamepad={'yes' if self._gamepad else 'no'}",
             # Cap held-key auto-repeat so menu / guide scrolling is followable.
             f"--input-ar-delay={self._ar_delay}",
             f"--input-ar-rate={self._ar_rate}",
@@ -205,6 +199,10 @@ class Player:
             "--msg-level=all=v",
         ]
         args.append("--fullscreen=yes" if self.fullscreen else "--fullscreen=no")
+        # NB: mpv's own SDL gamepad input is intentionally NOT used — the app
+        # has a native gamepad reader (cathode/gamepad.py) that works on every
+        # mpv build (incl. the SDL-less Flatpak mpv), so we never pass
+        # --input-gamepad (which is a fatal unknown option on those builds).
         # User-supplied extra args last so they can override anything above.
         args.extend(self._extra_args)
         return args

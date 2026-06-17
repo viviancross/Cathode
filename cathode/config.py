@@ -56,7 +56,8 @@ class Config:
     # reachable from the context menu). First run always shows the menu.
 
     # Input
-    gamepad: bool = True           # enable native (XInput/SDL) gamepad control
+    gamepad: bool = True           # enable the native gamepad reader (XInput on
+    # Windows, /dev/input/js* on Linux)
     # Held-key auto-repeat (menu/guide/OSK scrolling). Capped so it's followable.
     nav_repeat_delay: int = 300    # ms before a held key starts repeating
     nav_repeat_rate: int = 8       # repeats per second while held
