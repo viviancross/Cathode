@@ -129,6 +129,13 @@ class ContextMenu:
         p[0] = list(items)
         p[1] = min(max(p[1], 0), len(p[0]) - 1)
 
+    def back_and_replace(self, items: List[MenuItem]):
+        """Pop one level, then rebuild the page we land on — so a child-menu
+        selection that changed a parent's label shows it on return."""
+        if len(self._stack) > 1:
+            self._stack.pop()
+        self.replace_page(items)
+
     def back(self):
         """Go up one level, or close if at the root."""
         if len(self._stack) > 1:

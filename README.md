@@ -2,122 +2,75 @@
 
 # Cathode
 
-A retro IPTV player for the Steam Deck (and any Linux PC or Windows). Flip
-through your M3U channels like it's 80s/90s cable TV — phosphor‑glow program
-guide, CRT scanlines, channel‑change snow, on‑screen menus, and a UI that scales
-from the Deck's screen to 1080p when docked.
+A retro IPTV player for the Steam Deck, Linux, Windows, and macOS. Flip through
+your M3U channels like it's 80s/90s cable TV — phosphor‑glow program guide, CRT
+scanlines, channel‑change snow, and on‑screen menus that scale from the Deck's
+screen to 1080p when docked.
 
-**Version: 2.1b**
+**Version: 2.2b**
 
 <br clear="left">
 
 ## Features
 
-- **M3U playlists** and **XMLTV EPG** with a full program guide (with a live
-  picture-in-picture video preview).
-- **Retro cable‑TV UI** — info bar, CRT scanlines, vignette, and a fully
-  controller/mouse/keyboard‑navigable on‑screen interface.
-- **Channel‑change static** synced to real stream loading — opaque snow holds
-  until the new channel's first frame is on screen, then fades to reveal it.
-- **Themes & fonts** — 9 color themes, 5 retro fonts, and named **look
-  profiles** (theme + font + scanline intensity), all switchable live.
-- **Weather in the guide** — set your zip/postal code and the guide header shows
-  the current conditions, temperature, humidity, chance of rain, your city, and a
-  matching condition icon. Off until you set a zip; no API key required.
-- **Playlist/network profiles** — save several IPTV sources and switch between
-  them from the menu.
-- **On‑screen everything** — context menu (right‑click or a corner button) and
-  an on‑screen keyboard for all text entry. No system dialogs; works in Game
-  Mode and with the Steam Deck controller.
-- **Auto resolution** — renders at mpv's real window size (handheld 1280×800,
-  docked 1920×1080, 4:3, etc.).
+- **M3U + XMLTV** with a full program guide and a live picture‑in‑picture preview.
+- **Retro cable‑TV UI** — info bar, CRT scanlines, vignette, and channel‑change
+  static that holds until the new stream's first frame is ready, then fades in.
+- **Themes & fonts** — 9 color themes, 5 retro fonts, a custom theme editor, and
+  saved look **profiles**, all switchable live.
+- **Weather in the guide** — set your country + zip and the guide header shows
+  current conditions, temperature, humidity, rain chance, and your city.
+- **Channel logos, favorites, and categories** pulled from your XMLTV/M3U data.
+- **On‑screen everything** — context menu and on‑screen keyboard, fully usable
+  with mouse, keyboard, or a controller. No system dialogs; works in Game Mode.
+- **Auto resolution** — renders at mpv's real window size (1280×800 handheld,
+  1920×1080 docked, 4:3, etc.).
 - **Demo mode** — built‑in test‑pattern channels, no playlist needed.
-- Runs on **Steam Deck/Linux**, **Windows**, and **macOS** — portable binaries
-  for each, or from source.
 
 ## How it works
 
-Cathode doesn't embed a player. It launches **mpv** as a subprocess and drives
-it over mpv's **JSON IPC** (a Unix socket on Linux, a named pipe on Windows).
+Cathode doesn't embed a player. It launches **mpv** as a subprocess and drives it
+over mpv's **JSON IPC** (a Unix socket on Linux/macOS, a named pipe on Windows).
 mpv handles video/audio; the UI is rendered in Python (Pillow + numpy) and drawn
-on top of the video with mpv's `overlay-add`. This needs no system packages on
-SteamOS beyond a Flatpak.
+over the video with `overlay-add`.
 
 ---
 
 ## Install
 
-### Windows — portable binary (no prerequisites)
+### Windows (portable, no prerequisites)
 
-Download **`cathode-windows-<ver>-portable.zip`**, extract it, and run
-**`Cathode.exe`**. Python and mpv are bundled — nothing else to install. On
-first run it shows an on‑screen keyboard to enter your playlist URL.
+Extract **`cathode-windows-<ver>-portable.zip`** and run **`Cathode.exe`**. Python
+and mpv are bundled. On first run an on‑screen keyboard asks for your playlist URL.
 
-To rebuild it yourself: `pip install pyinstaller`, then
-`python tools/build_windows.py`.
-
-### Linux — portable binary (no venv needed)
-
-Grab **`cathode-linux-<ver>.tar.gz`**, then:
-
-```bash
-tar xzf cathode-linux-<ver>.tar.gz
-./Cathode/Cathode            # or: ./Cathode/Cathode --demo
-```
-Python + the app are bundled, so there's no virtualenv to set up. **mpv is still
-required** — install it once with `flatpak install flathub io.mpv.Mpv` (Steam
-Deck) or your distro's `mpv` package; Cathode finds it automatically.
-
-> Building it yourself (PyInstaller can't cross‑compile, so build on Linux — the
-> Steam Deck in Desktop mode works): `pip install pyinstaller`, then
-> `python3 tools/build_linux.py`. The binary targets the OS/CPU you build on.
-
-### macOS
-
-Grab **`cathode-macos-<ver>.zip`**, unzip, and run **`Cathode.app`** (first time:
-right‑click → **Open** to bypass Gatekeeper, since it's unsigned). Install mpv
-once with `brew install mpv`.
-
-Prefer running from source? Extract **`cathode-source-<ver>.zip`** and run:
-
-```bash
-chmod +x install-macos.sh cathode.sh
-./install-macos.sh          # installs mpv (Homebrew) + a local venv
-./cathode.sh                # or: ./cathode.sh --demo
-```
-
-> Building the `.app` yourself (run on a Mac): `pip3 install pyinstaller`, then
-> `python3 tools/build_macos.py`. Targets the build machine's arch (Apple
-> Silicon vs Intel).
-
-### Flatpak (experimental)
-
-Cathode can be packaged as a Flatpak (mpv stays on the host as `io.mpv.Mpv`,
-launched via `flatpak-spawn --host`). From an extracted **`cathode-source-<ver>.zip`**:
-
-```bash
-chmod +x install-flatpak.sh
-./install-flatpak.sh        # installs the runtime/SDK + mpv, then builds Cathode
-flatpak run io.github.viviancross.Cathode
-```
-
-> ⚠️ The manifest (`io.github.viviancross.Cathode.yml`) is **untested** — it was
-> authored on Windows, where `flatpak-builder` can't run. Expect to iterate.
-
-### Steam Deck (SteamOS) — from source
+### Steam Deck / Linux (from source)
 
 In Desktop Mode, open a terminal in this folder:
 
 ```bash
 chmod +x install.sh cathode.sh
-./install.sh                 # installs Flatpak mpv (user scope) + venv + shortcut
-./cathode.sh                 # or: ./cathode.sh --demo
+./install.sh      # Flatpak mpv (user scope) + venv + a Desktop/menu shortcut
+./cathode.sh      # or: ./cathode.sh --demo
 ```
-The installer adds a **Cathode** shortcut (with icon) to your Desktop and app
-menu. To play in Game Mode: set your playlist in the menu/config, then add the
-Cathode shortcut as a Non‑Steam Game and map the controller (see Controls).
 
-### Other Linux
+For Game Mode, set your playlist, then add the Cathode shortcut as a Non‑Steam
+Game and map the controller (see [Controls](#controls)).
+
+A prebuilt **`cathode-linux-<ver>.tar.gz`** runs without a venv (extract, then
+`./Cathode/Cathode`) but still needs mpv installed (`flatpak install flathub
+io.mpv.Mpv` or your distro's `mpv`).
+
+### macOS
+
+Run **`Cathode.app`** from `cathode-macos-<ver>.zip` (first launch: right‑click →
+**Open**, since it's unsigned) and `brew install mpv`. Or from source:
+
+```bash
+chmod +x install-macos.sh cathode.sh
+./install-macos.sh && ./cathode.sh
+```
+
+### Other Linux (from source)
 
 ```bash
 sudo apt install mpv python3 python3-venv python3-pip   # or dnf / pacman
@@ -126,293 +79,186 @@ pip install -r requirements.txt
 python main.py --demo
 ```
 
+> **Flatpak** packaging (`io.github.viviancross.Cathode.yml` + `install-flatpak.sh`)
+> exists but is **experimental/untested** — expect to iterate.
+>
+> **Building binaries:** PyInstaller can't cross‑compile, so build on the target
+> OS. `pip install pyinstaller`, then `python tools/build_windows.py`
+> (or `build_linux.py` / `build_macos.py`).
+
 ---
 
-## Main menu
+## Using Cathode
 
-Cathode opens on a **main menu** (home screen) — logo, title, and four buttons:
+Cathode opens on a **main menu**: **New Playlist** (enter a name + M3U URL +
+optional XMLTV URL), **Load Playlist** (pick a saved one), **Options**, and
+**Exit**. Demo mode skips straight to the test channels. To boot directly into
+your playlist, set `"main_menu_on_launch": false` in `config.json` — the menu
+stays reachable from the context menu.
 
-- **New Playlist** — enter a name + M3U URL + optional XMLTV EPG URL, then start
-  watching it.
-- **Load Playlist** — pick one of your saved playlists (and your currently
-  configured one) to start watching.
-- **Options** — themes, fonts, the custom theme editor, weather, display/monitor
-  swap, and playlist management.
-- **Exit** — quit.
+Text entry (URLs, names) uses an **on‑screen keyboard** that also accepts direct
+physical typing and **Ctrl+V** paste. Press **DONE** to submit.
 
-Navigate with the mouse, arrows + Enter, or a gamepad (D‑pad + **A**). You can
-return here any time from the context menu's **Main Menu** entry. (Demo mode
-skips the menu and boots straight into the test channels.)
-
-To **boot straight into your playlist** instead of the menu, set
-`"main_menu_on_launch": false` in `config.json` — the home screen is still
-available from the context menu. (The first run, before any playlist is set,
-always opens the menu regardless of this flag.)
-
-## First‑run setup
-
-Choosing **New Playlist** (or **Load Playlist** with nothing saved yet) shows an
-**on‑screen keyboard** to enter your M3U URL and optional XMLTV EPG URL, then
-remembers them. If a playlist later fails to load, it re‑asks instead of
-quitting. The keyboard works three ways: the on‑screen grid (mouse / arrows+Enter
-/ controller), **typing directly on a physical keyboard** (including the numeric
-keypad), and **Ctrl+V to paste** (Ctrl+C copies the field). Backspace and the
-on‑screen `DEL` both delete — **hold Backspace** to clear a long string. Press
-the grid's **DONE** key (or click it) to submit.
-
-## Controls
+### Controls
 
 | Input | Action |
 |-------|--------|
 | ↑ / ↓ | Channel up / down (guide: move selection) |
 | ← / → | Volume down / up (guide: scroll time) — any volume change unmutes |
-| `0`–`9` / numpad | Direct channel entry (digits show top‑right) |
+| `0`–`9` / numpad | Direct channel entry |
 | `G` | Program guide |
 | `I` / `Tab` | Info bar |
 | `M` | Mute |
-| `F` | Add / remove the current (or highlighted) channel from **Favorites** |
-| `C` / **Right‑click** / corner button | **Context menu** |
+| `F` | Add / remove the current or highlighted channel from **Favorites** |
+| `C` / **right‑click** / corner button | **Context menu** |
 | `W` / double‑click | Toggle fullscreen |
-| `Enter` / `Keypad Enter` | Select / press the highlighted item; **with the info bar up, opens the context menu** |
+| `Enter` / `Keypad Enter` | Select the highlighted item (info bar up → opens the menu) |
 | `Backspace` | Delete a character (hold to repeat) / back out one menu level |
 | `PgUp` / `PgDn` | Jump ±10 channels |
 | `Q` | Quit |
-| `Esc` | **Failsafe:** fully closes any dialog (re‑enabling hotkeys), else dismisses guide → info bar → exits fullscreen. Never quits. |
+| `Esc` | Failsafe — closes any dialog, else guide → info bar → fullscreen. Never quits. |
 
-Both Enter keys behave the same (there's no separate "confirm"); use the on‑screen
-keyboard's **DONE** key to submit text. With the context menu open, **clicking
-outside the menu closes it**, and items activate only when the cursor is over
-them. **Hold a navigation key** to repeat it — the highlight scrolls (and wraps
-around) in menus, the on‑screen keyboard and the guide, and theme‑editor sliders
-keep moving (stopping at their min/max). Channel and volume changes are not
-repeated — they take a fresh press each time. While a menu or the on‑screen keyboard is open, the letter/number hotkeys
-are disabled so navigation and typing can't trigger them — press **Esc** to close
-the dialog and get them back.
+**Hold** a navigation key to repeat it (highlight wraps around in menus, the
+keyboard, and the guide); channel/volume take a fresh press each time. While a
+menu or the keyboard is open, letter/number hotkeys are disabled — press **Esc**
+to close and restore them.
 
-### Gamepad / controller
+### Gamepad
 
-Cathode reads a plugged‑in gamepad with its own built‑in reader — **XInput** on
-Windows, the `/dev/input/js*` joystick interface on Linux, and **IOKit HID** on
-macOS — so Xbox‑style pads work on every build, including the SDL‑less Flatpak
-mpv. Plug it in and launch — no configuration. On the Steam Deck in **Game
-Mode**, a Steam Input profile mapping buttons to the keyboard keys above also
-works.
+A plugged‑in pad works on every build via a built‑in reader (**XInput** on
+Windows, `/dev/input/js*` on Linux, **IOKit HID** on macOS) — no setup. On the
+Deck in Game Mode, a Steam Input profile mapping buttons to the keys above also
+works. Disable with `"gamepad": false`.
 
 | Button | Action |
 |--------|--------|
 | **D‑pad / left stick** | Navigate (channels & volume while watching; selection in guide/menu) |
-| **A** | Select / press highlighted key (types on the on‑screen keyboard) |
-| **B** | Back — delete a char / leave a sub‑menu / close guide or info bar |
+| **A** | Select / press highlighted key |
+| **B** | Back (delete char / leave sub‑menu / close guide or info bar) |
 | **X** / **Start** | Program guide |
 | **Y** | Info bar |
 | **Back / View** | Context menu |
 | **LB / RB** | Channel down / up |
 | **LT / RT** | Volume down / up |
-| **L3** (stick click) | Mute |
-| **R3** (stick click) | Toggle fullscreen |
-
-Disable it with `"gamepad": false` in `config.json` if it conflicts with another
-input layer (e.g. a Steam Input profile that already emits keyboard keys).
+| **L3 / R3** | Mute / toggle fullscreen |
 
 ### Context menu
 
-Open it with **right‑click** or the small **menu button** that appears with the
-info bar (top‑right). Navigate with mouse, arrows/Enter/Esc, or the controller.
+Open with **right‑click** or the menu button next to the info bar. Picking an
+item inside **Options** applies it and keeps the menu open.
 
 ```
 Program Guide / Info Bar / Add Favorite / Channel [^][v] / Volume [<][>] / Mute
-Playlists > - switch network, Add playlist..., Delete playlist...
-Options >   - Themes >  - Color Theme > (themes... + Custom Theme...),
-                          Font >, Profiles >
-              Weather > - Zip Code..., Units (°F/°C)
-              Display > - Fullscreen, monitor swap
+Playlists >  switch network, Add playlist..., Delete playlist...
+Options >    Themes >   Color Theme (+ Custom Theme...), Font, Profiles
+             Weather >  Zip Code..., Country, Units (°F/°C)
+             Display >  Fullscreen, monitor swap
 Main Menu / Quit
 ```
 
-Picking an item inside **Options** (a theme, font, zip code, etc.) applies it
-and keeps the menu open so you can keep adjusting.
+---
 
-### Themes, fonts & look profiles
+## Customizing
 
-- **Themes:** Classic Blue, Amber CRT, Green Phosphor, VHS Magenta, Monochrome,
-  Commodore 64, Red Alert, Synthwave, Ice.
-- **Fonts:** VCR OSD Mono, PxPlus IBM VGA, Glass TTY VT220, Pixel Forge, DejaVu
-  Sans Mono (all bundled on every platform), plus any fonts you add yourself.
-- **Profiles** bundle theme + font + scanline intensity + CRT/vignette toggles +
-  any custom palette. Built‑ins: Classic Blue, Amber Terminal, Green Phosphor,
-  Synthwave, Commodore, Monochrome. Use **Save current as…** to make your own and
-  **Delete** to remove them.
+**Themes & fonts** — 9 themes (Classic Blue, Amber CRT, Green Phosphor, VHS
+Magenta, Monochrome, Commodore 64, Red Alert, Synthwave, Ice) and 5 bundled fonts
+(VCR OSD Mono, PxPlus IBM VGA, Glass TTY VT220, Pixel Forge, DejaVu Sans Mono).
+Drop any `.ttf`/`.otf` into **`assets/fonts/`** and it appears in **Options ▸
+Themes ▸ Font** automatically. **Profiles** bundle theme + font + scanline
+intensity + CRT/vignette toggles; save your own with **Save current as…**.
 
-### Channel logos
+**Custom theme editor** (**Options ▸ Themes ▸ Color Theme ▸ Custom Theme…**) —
+RGB sliders for the five core colors (Background, Accent, Highlight, Text, and
+**Channel #**), a Scanline Intensity slider, and CRT/Vignette toggles, all with a
+live preview. Save over the current theme or as a new one; closing without saving
+discards changes.
 
-Cathode pulls channel logos from your **XMLTV** `<icon>` URLs (falling back to the
-M3U `tvg-logo`), fetched in the background and cached on disk. They appear in the
-**info bar** (in the box, with the channel number moved beside the name) and in
-the **guide** (above each row's number + name). Channels without a logo fall back
-to showing the number.
+**Weather** (**Options ▸ Weather**) — set your **Zip Code**, pick your **Country**
+(a bare zip is ambiguous — `90210` could resolve to Spain — so the lookup is
+pinned to the chosen country), and toggle **°F / °C**. The header shows a
+condition icon, temperature, city, humidity, and rain chance, refreshed every 15
+minutes from [wttr.in](https://wttr.in) (no API key, fetched in the background).
+Hidden until you set a zip.
 
-The channel‑number color defaults to vibrant green but is editable per theme via
-the **Channel #** sliders in the custom theme editor.
+**Favorites & categories** — press **`F`** to favorite the current/highlighted
+channel (a toast confirms; persists in config). The guide's category selector
+(◄ All ►, focus it by pressing **Up** past the top row) cycles through XMLTV
+genres plus **All** and **Favorites**.
 
-### Custom theme editor
+**Channel logos** come from XMLTV `<icon>` URLs (or the M3U `tvg-logo`), cached on
+disk, shown in the info bar and guide; channels without one show their number.
 
-**Options ▸ Themes ▸ Color Theme ▸ Custom Theme…** (always the last entry in the
-Color Theme list) opens an editor for building your own look:
+**Monitors** (**Options ▸ Display**) — holds the Fullscreen toggle and lists
+connected screens; pick one to move the window there (it rescales automatically).
 
-- **RGB sliders** for the five core OSD colors — Background, Accent (borders /
-  highlights), Highlight, Text, and **Channel #** (the channel‑number color).
-  Changes preview live.
-- **Scanline Intensity** slider, plus **CRT Scanlines** and **Vignette** on/off
-  toggles to dial the retro effects all the way down (or off).
-- **Save Current Theme** overwrites the currently‑selected theme's colors,
-  keeping its name. **Save As New Theme** prompts for a name and adds it to the
-  Color Theme menu (new themes appear at the bottom, above **Custom Theme…**).
-  **Reset to Default** restores the stock palette.
-- **Close** (the row, or the **✕** button in the top‑right) exits — and if you
-  haven't saved, your changes are **discarded and the previous theme restored**.
+**Playlists** (**Options ▸ Playlists**) — save multiple IPTV sources and switch
+instantly; it reloads channels + guide and retunes.
 
-Adjust with arrows/Enter (left/right changes a value, up/down moves rows) or with
-the mouse — click a slider to set it by position, click a toggle to flip it.
+---
 
-### Favorites & guide categories
+## Configuration
 
-The program guide has a **category selector** (◄ All ►) at the top‑right of its
-info panel — press **Up** past the top channel to focus it, then **Left/Right**
-to cycle categories. Categories are pulled from your **XMLTV** genres (falling
-back to the M3U group), plus **All** and **Favorites**. The selector remembers
-its position for the session and resets to **All** on the next launch.
+`~/.config/cathode/config.json` (Windows: `%USERPROFILE%\.config\cathode\`).
+Created automatically; edit while the app is closed.
 
-Press **`F`** (or use the context‑menu entry) to **add/remove the current or
-highlighted channel from Favorites** — a brief on‑screen toast confirms it.
-Favorites persist in `config.json` and show up as their own category.
+| Key | Meaning |
+|-----|---------|
+| `playlist_url`, `epg_url` | Active M3U / XMLTV (URL or file path) |
+| `playlists` | Saved networks: `[{name, playlist_url, epg_url}, …]` |
+| `profiles` | Saved looks: `{name: {theme, font, scanline_alpha, crt, vignette, …}}` |
+| `theme`, `font` | Active theme name / font key |
+| `custom_themes` | User themes: `{name: {bg, accent, accent2, text, chnum, …}}` |
+| `favorites` | Favorite channel numbers |
+| `volume`, `muted`, `last_channel` | Playback state |
+| `scanline_alpha`, `crt_enabled`, `vignette_enabled` | CRT effect strength / toggles |
+| `gamepad` | Native gamepad control on/off |
+| `nav_repeat_delay`, `nav_repeat_rate` | Held‑key repeat delay (ms) / rate (per sec) |
+| `main_menu_on_launch` | Show the home screen on launch (`false` = boot into the playlist) |
+| `guide_hours` | Hours shown across the guide |
+| `weather_zip`, `weather_country`, `weather_units` | Guide weather (empty zip = off; country is ISO‑2; units `F`/`C`) |
+| `reveal_duration`, `tune_timeout` | Channel‑change fade / stall timeout |
+| `osd_timeout`, `osd_timeout_info` | Info‑bar durations |
+| `mpv_path`, `mpv_extra_args` | Explicit mpv path / extra raw args (e.g. `["--hwdec=no"]`) |
+| `user_agent` | HTTP user‑agent for playlist/EPG/streams |
 
-### Adding your own fonts
-
-Drop any `.ttf` or `.otf` file into the **`assets/fonts/`** folder (next to the
-app — on the Windows portable build it's `assets\fonts\` beside `cathode.exe`).
-It appears automatically in **Options ▸ Themes ▸ Font**, labelled after its filename
-(e.g. `My_Cool_Font.ttf` → "My Cool Font"). Monospace/pixel fonts look best.
-No config edit or restart of the build is needed — just relaunch the app.
-
-### Swapping monitors
-
-**Options ▸ Display** holds the **Fullscreen** toggle and lists the connected
-monitors; pick one to move the Cathode window there. The window targets that
-screen in both windowed and fullscreen modes, and the aspect ratio + OSD
-automatically rescale to the new monitor's resolution.
-
-### Weather
-
-Set your zip/postal code under **Options ▸ Weather ▸ Zip Code…** (and toggle
-**°F / °C**) and the guide header shows the current conditions — a condition
-icon, temperature, the city, humidity, and chance of rain — on the left of the
-header. It refreshes every 15 minutes from [wttr.in](https://wttr.in) (no API
-key), is fetched in the background so it never blocks the UI, and stays hidden
-until you set a zip. Also configurable directly via `weather_zip` /
-`weather_units` in `config.json`.
-
-### Playlists / networks
-
-Save multiple IPTV sources under **Playlists** and switch instantly (it reloads
-channels + guide and retunes). Add new ones (name + M3U + XMLTV via the on‑screen
-keyboard) or delete them. Stored in `config.json`.
+**Command line:** `--playlist/-p`, `--epg/-e`, `--demo`, `--windowed/-w`,
+`--fullscreen/-f`, `--width`, `--height`, `--mpv auto|flatpak|system`,
+`--channel N`, `--config/-c FILE`.
 
 ---
 
 ## Autostart (always‑on PC)
-
-Install a systemd **user** service so Cathode launches with your desktop session
-and restarts on crash:
 
 ```bash
 chmod +x install-service.sh && ./install-service.sh
 systemctl --user start cathode.service
 journalctl --user -u cathode.service -f   # logs
 ```
-Enable desktop auto‑login for an unattended boot‑to‑Cathode box.
-
-## Configuration
-
-`~/.config/cathode/config.json` (Windows: `%USERPROFILE%\.config\cathode\`).
-Created/updated automatically; edit while the app is closed.
-
-| Key | Meaning |
-|-----|---------|
-| `playlist_url`, `epg_url` | Active M3U / XMLTV (URL or file path) |
-| `playlists` | Saved networks: `[{name, playlist_url, epg_url}, …]` |
-| `profiles` | Saved looks: `{name: {theme, font, scanline_alpha, crt, vignette, custom_palette}}` |
-| `theme`, `font` | Active theme name / font key |
-| `custom_themes` | User themes shown in the Color Theme menu: `{name: {bg, accent, accent2, text, chnum, scanline, crt, vignette}}` |
-| `favorites` | Favorite channel numbers (the Favorites guide category) |
-| `volume`, `muted`, `last_channel` | Playback state |
-| `scanline_alpha` | CRT scanline strength (0–255) |
-| `crt_enabled`, `vignette_enabled` | CRT scanline / vignette effect toggles |
-| `gamepad` | Native (XInput/SDL) gamepad control on/off |
-| `nav_repeat_delay`, `nav_repeat_rate` | Held‑key repeat delay (ms) / rate (per sec) |
-| `main_menu_on_launch` | Show the home screen on launch (`false` = boot into the playlist) |
-| `guide_hours` | Hours shown across the guide |
-| `weather_zip` | Zip/postal code for the guide weather (empty = off) |
-| `weather_units` | Weather temperature units, `F` or `C` |
-| `reveal_duration`, `tune_timeout` | Channel‑change fade / stall timeout |
-| `osd_timeout`, `osd_timeout_info` | Info‑bar durations |
-| `mpv_path` | Explicit path to mpv (when not on PATH) |
-| `mpv_extra_args` | Extra raw mpv args, e.g. `["--hwdec=no"]` |
-| `user_agent` | HTTP user‑agent for playlist/EPG/streams |
-
-### Command‑line options
-
-```
---playlist/-p, --epg/-e   M3U / XMLTV URL or file
---demo                    Built‑in test channels (no playlist needed)
---windowed/-w, --fullscreen/-f
---width / --height        Override resolution (auto‑detected otherwise)
---mpv  auto|flatpak|system
---channel N               Start on a channel number
---config/-c FILE          Config path
-```
-
----
 
 ## Troubleshooting
 
 - **`ModuleNotFoundError: PIL/numpy`** — venv not active; run the installer or
   `source .venv/bin/activate`.
 - **mpv not found (Windows)** — install real mpv (`mpv --version` must work) or
-  set `mpv_path`. Note: mpv.net is a different app.
-- **No video in Game Mode (works in Desktop)** — gamescope quirk. Read
-  `~/.cache/cathode/mpv.log` (Windows: `%LOCALAPPDATA%\cathode\mpv.log`) and try
-  `{"mpv_extra_args": ["--gpu-context=wayland"]}`, `["--hwdec=no"]`, or
-  `["--vo=gpu-next"]`.
-- **Nothing in the guide** — channels' `tvg-id`s must match the XMLTV ids
-  (a fuzzy name match is attempted as a fallback).
+  set `mpv_path`. mpv.net is a different app.
+- **No video in Game Mode (works in Desktop)** — gamescope quirk. Check
+  `~/.cache/cathode/mpv.log` and try `mpv_extra_args` like `["--gpu-context=wayland"]`,
+  `["--hwdec=no"]`, or `["--vo=gpu-next"]`.
+- **Nothing in the guide** — channel `tvg-id`s must match the XMLTV ids (a fuzzy
+  name match is attempted as a fallback).
 
 ## Project layout
 
 ```
 main.py              entry point
 cathode/
-  app.py             wiring, input handling, menu/profiles/playlists
-  player.py          drives mpv over JSON IPC
-  ipc.py             platform transports (unix socket / windows named pipe)
-  playlist.py epg.py config.py demo.py
+  app.py             wiring, input handling, menus/profiles/playlists
+  player.py ipc.py   drives mpv over JSON IPC (socket / named pipe)
+  playlist.py epg.py config.py weather.py demo.py
   ui/
     renderer.py      compositing + channel-change state machine
-    osd.py guide.py menu.py osk.py effects.py theme.py
-    mainmenu.py      home screen (logo + New/Load/Options/Exit)
-    editor.py        custom theme editor (color sliders + CRT/vignette)
-assets/  fonts + icon       tools/  build + preview + icon scripts
-install.sh  install-service.sh  make-shortcut.sh  cathode.sh   (Linux)
-install-macos.sh                                              (macOS, from source)
-install-flatpak.sh  io.github.viviancross.Cathode.yml         (Flatpak, experimental)
-install-windows.ps1  cathode.bat  tools/build_windows.py        (Windows)
+    osd.py guide.py menu.py osk.py effects.py theme.py mainmenu.py editor.py
+assets/   fonts + icon          tools/   build + preview scripts
+install*.sh  cathode.sh  make-shortcut.sh        (Linux / macOS / Flatpak)
+install-windows.ps1  cathode.bat                 (Windows)
 ```
-
-## Status
-
-**2.1b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
-theme editor, guide weather, monitor swapping, playlist profiles, native gamepad
-control, the synced channel‑change static, the context menu + on‑screen keyboard,
-and Windows/Linux builds are all in. The Python/UI layers are verified by
-`tools/preview.py` and unit checks; live mpv input (gamepad, mouse buttons, the
-on‑screen keyboard feel) and multi‑monitor moves are best confirmed on real
-hardware.

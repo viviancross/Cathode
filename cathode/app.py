@@ -11,6 +11,7 @@ from typing import Optional, List
 from .config import Config
 from .player import Player
 from . import playlist as m3u
+from . import weather
 from .epg import EPG
 from .playlist import Channel
 from .ui.renderer import Renderer, UIState
@@ -143,7 +144,7 @@ class App:
         # Current weather for the guide header (off unless a zip is configured)
         from .weather import Weather
         self.renderer.weather = Weather(
-            config.weather_zip, config.weather_units,
+            config.weather_zip, config.weather_units, config.weather_country,
             on_update=self.renderer.mark_dirty, user_agent=config.user_agent)
 
         # Current channel
@@ -882,13 +883,21 @@ class App:
     def _weather_submenu(self):
         z = self.config.weather_zip or "(not set)"
         # close_after=False keeps us in the Weather submenu; the handlers refresh
-        # the page so the new zip/units label shows immediately.
+        # the page so the new zip/units/country label shows immediately.
         return [
             MenuItem(f"Zip Code: {z}", action=self._set_weather_zip,
                      close_after=False),
+            MenuItem(f"Country: {weather.country_name(self.config.weather_country)}",
+                     submenu=self._country_submenu),
             MenuItem(f"Units: °{self.config.weather_units}",
                      action=self._toggle_weather_units, close_after=False),
         ]
+
+    def _country_submenu(self):
+        cur = (self.config.weather_country or "").upper()
+        return [MenuItem(name, action=lambda c=code: self._set_weather_country(c),
+                         checked=(code == cur), close_after=False)
+                for code, name in weather.COUNTRIES]
 
     def _set_weather_zip(self):
         z = self._osk_get("Weather zip / postal code", self.config.weather_zip)
@@ -902,11 +911,22 @@ class App:
             "C" if self.config.weather_units.upper().startswith("F") else "F"
         self._apply_weather_config()
 
+    def _set_weather_country(self, code):
+        self.config.weather_country = code
+        self.config.save()
+        if self.renderer.weather:
+            self.renderer.weather.configure(self.config.weather_zip,
+                                            self.config.weather_units, code)
+        # Return to the Weather submenu, rebuilt so its "Country:" label updates.
+        self.renderer.menu.back_and_replace(self._weather_submenu())
+        self.renderer.mark_dirty()
+
     def _apply_weather_config(self):
         self.config.save()
         if self.renderer.weather:
             self.renderer.weather.configure(self.config.weather_zip,
-                                            self.config.weather_units)
+                                            self.config.weather_units,
+                                            self.config.weather_country)
         self.renderer.menu.replace_page(self._weather_submenu())  # refresh labels
         self.renderer.mark_dirty()
 

@@ -20,6 +20,7 @@ tools/preview_out/
 *.zip
 
 # Local editor / tool config
+.claude/
 .vscode/
 .idea/
 
