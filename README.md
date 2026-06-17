@@ -241,7 +241,7 @@ journalctl --user -u cathode.service -f   # logs
   `source .venv/bin/activate`.
 - **mpv not found (Windows)** — install real mpv (`mpv --version` must work) or
   set `mpv_path`. mpv.net is a different app.
-- **No video in Game Mode (works in Desktop)** — gamescope quirk. Check
+- **No video in Game Mode (works in Desktop)** — Check
   `~/.cache/cathode/mpv.log` and try `mpv_extra_args` like `["--gpu-context=wayland"]`,
   `["--hwdec=no"]`, or `["--vo=gpu-next"]`.
 - **Nothing in the guide** — channel `tvg-id`s must match the XMLTV ids (a fuzzy
