@@ -105,7 +105,6 @@ class App:
             backend=mpv_backend,
             extra_args=config.mpv_extra_args,
             mpv_path=config.mpv_path,
-            gamepad=config.gamepad,
             ar_delay=config.nav_repeat_delay,
             ar_rate=config.nav_repeat_rate,
         )
@@ -182,6 +181,16 @@ class App:
 
         # Track the mouse so the on-screen menu button and dialogs are clickable.
         self.player.set_mouse_tracking(True)
+
+        # Native gamepad input (XInput on Windows, /dev/input/js* on Linux) —
+        # used on every build instead of mpv's SDL gamepad.
+        self._gamepad_reader = None
+        if self.config.gamepad:
+            self._build_gamepad_buttons()
+            from .gamepad import GamepadReader
+            self._gamepad_reader = GamepadReader(self._gamepad_action)
+            self._gamepad_reader.start()
+            print("[cathode] Native gamepad reader active.")
 
         # Demo mode boots straight into the test channels.  Otherwise show the
         # home screen, unless the user disabled it AND has a playlist to boot
@@ -486,11 +495,10 @@ class App:
         """
         Bind keyboard keys in mpv to Python callbacks over IPC.
 
-        A physical gamepad is supported two ways: (1) natively via mpv's SDL
-        gamepad input (GAMEPAD_* keys, bound below — XInput on Windows), and
-        (2) on the Steam Deck in Game Mode, via a Steam Input profile that maps
-        controller buttons to the keyboard keys below (SDL gamepad is unreliable
-        inside the Flatpak sandbox, so Steam Input is preferred there).
+        Gamepad input is handled separately by the native reader (see
+        cathode/gamepad.py and _build_gamepad_buttons), not through mpv.  On the
+        Steam Deck in Game Mode a Steam Input profile mapping the controller to
+        these keyboard keys also works.
         """
         import string
         p = self.player
@@ -540,39 +548,8 @@ class App:
         for key, handler in hotkeys.items():
             p.bind_key(key, self._guard_hotkey(handler), name=f"hk_{key}")
 
-        # ── Gamepad (mpv SDL / XInput) ────────────────────────────────────
-        # D-pad + left stick navigate; A selects/types; B backs out. These
-        # reuse the same handlers as the arrow/Enter keys, so they respect the
-        # OSK > editor > menu > guide priority automatically (always active).
-        gp_nav = {
-            "GAMEPAD_DPAD_UP": self._guide_up, "GAMEPAD_DPAD_DOWN": self._guide_down,
-            "GAMEPAD_DPAD_LEFT": self._guide_left, "GAMEPAD_DPAD_RIGHT": self._guide_right,
-            "GAMEPAD_LEFT_STICK_UP": self._guide_up,
-            "GAMEPAD_LEFT_STICK_DOWN": self._guide_down,
-            "GAMEPAD_LEFT_STICK_LEFT": self._guide_left,
-            "GAMEPAD_LEFT_STICK_RIGHT": self._guide_right,
-            "GAMEPAD_ACTION_DOWN": self._grid_select,   # A — select / type key
-            "GAMEPAD_ACTION_RIGHT": self._gamepad_back,  # B — back / delete
-        }
-        for key, handler in gp_nav.items():
-            p.bind_key(key, handler, name=f"gp_{key}")
-
-        # Buttons that map to hotkey-style actions — inert while a dialog is up.
-        gp_actions = {
-            "GAMEPAD_ACTION_LEFT": self._toggle_guide,       # X — guide
-            "GAMEPAD_ACTION_UP": self._show_info,            # Y — info bar
-            "GAMEPAD_START": self._toggle_guide,             # Start — guide
-            "GAMEPAD_BACK": self._toggle_context_menu,       # Back/View — menu
-            "GAMEPAD_MENU": self._toggle_context_menu,
-            "GAMEPAD_LEFT_SHOULDER": self._channel_down,     # LB — channel -
-            "GAMEPAD_RIGHT_SHOULDER": self._channel_up,      # RB — channel +
-            "GAMEPAD_LEFT_TRIGGER": self._vol_down,          # LT — volume -
-            "GAMEPAD_RIGHT_TRIGGER": self._vol_up,           # RT — volume +
-            "GAMEPAD_LEFT_STICK": self._toggle_mute,         # L3 — mute
-            "GAMEPAD_RIGHT_STICK": self._toggle_fullscreen,  # R3 — fullscreen
-        }
-        for key, handler in gp_actions.items():
-            p.bind_key(key, self._guard_hotkey(handler), name=f"gp_{key}")
+        # NB: the gamepad is handled by the native reader (cathode/gamepad.py),
+        # not mpv's SDL input — see _build_gamepad_buttons / _gamepad_action.
 
         # Every printable character routes through _char_typed: it types into
         # the on-screen keyboard when open, else runs the key's hotkey/digit
@@ -768,6 +745,41 @@ class App:
             r.close_guide(); r.update()
         elif r.osd_visible:
             r.hide_osd(); r.update()
+
+    # ── Native gamepad reader fallback (when mpv lacks SDL) ────────────────
+
+    def _gamepad_action(self, name: str, is_repeat: bool = False):
+        """Called from the gamepad reader thread.  Dispatch on its own thread so
+        a blocking handler (e.g. the on-screen keyboard) can't freeze input."""
+        threading.Thread(target=self._gamepad_dispatch,
+                         args=(name, is_repeat), daemon=True).start()
+
+    def _gamepad_dispatch(self, name, is_repeat):
+        nav = {"up": self._guide_up, "down": self._guide_down,
+               "left": self._guide_left, "right": self._guide_right}
+        if name in nav:
+            # Don't repeat channel / volume while watching (only nav contexts).
+            if is_repeat and not self._nav_context_active():
+                return
+            nav[name]()
+            return
+        if is_repeat:
+            return
+        fn = self._gamepad_buttons.get(name)
+        if fn:
+            fn()
+
+    def _build_gamepad_buttons(self):
+        g = self._guard_hotkey
+        self._gamepad_buttons = {
+            "a": self._grid_select, "b": self._gamepad_back,
+            "x": g(self._toggle_guide), "start": g(self._toggle_guide),
+            "y": g(self._show_info),
+            "back": g(self._toggle_context_menu), "guide": g(self._toggle_context_menu),
+            "lb": g(self._channel_down), "rb": g(self._channel_up),
+            "lt": g(self._vol_down), "rt": g(self._vol_up),
+            "l3": g(self._toggle_mute), "r3": g(self._toggle_fullscreen),
+        }
 
     def _after_menu_action(self):
         self.renderer.mark_dirty()
@@ -1360,6 +1372,8 @@ class App:
         self._quit = True
         if self._digit_timer:
             self._digit_timer.cancel()
+        if getattr(self, "_gamepad_reader", None):
+            self._gamepad_reader.stop()
         self.renderer.stop()
         self.player.terminate()
 

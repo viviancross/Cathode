@@ -7,7 +7,7 @@ through your M3U channels like it's 80s/90s cable TV — phosphor‑glow program
 guide, CRT scanlines, channel‑change snow, on‑screen menus, and a UI that scales
 from the Deck's screen to 1080p when docked.
 
-**Version: 1.7b**
+**Version: 1.8b**
 
 <br clear="left">
 
@@ -150,11 +150,11 @@ the dialog and get them back.
 
 ### Gamepad / controller
 
-Cathode reads a plugged‑in gamepad natively through mpv (SDL — **XInput** on
-Windows, so Xbox‑style pads work out of the box; no Steam needed). Plug it in
-and launch — no configuration. On the Steam Deck in **Game Mode**, use a Steam
-Input profile mapping buttons to the keyboard keys above instead (SDL gamepad is
-unreliable inside the Flatpak sandbox).
+Cathode reads a plugged‑in gamepad with its own built‑in reader (**XInput** on
+Windows, the `/dev/input/js*` joystick interface on Linux) — so Xbox‑style pads
+work on every build, including the SDL‑less Flatpak mpv. Plug it in and launch —
+no configuration. On the Steam Deck in **Game Mode**, a Steam Input profile
+mapping buttons to the keyboard keys above also works.
 
 | Button | Action |
 |--------|--------|
@@ -348,7 +348,7 @@ install-windows.ps1  cathode.bat  tools/build_windows.py        (Windows)
 
 ## Status
 
-**1.7b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
+**1.8b.** Playback, the picture-in-picture program guide with categories & favorites, themes/fonts/profiles, the custom
 theme editor, monitor swapping, playlist profiles, native gamepad control, the
 synced channel‑change static, the context menu + on‑screen keyboard, and
 Windows/Linux builds are all in. The Python/UI layers are verified by
