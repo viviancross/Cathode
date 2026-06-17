@@ -53,16 +53,6 @@ first run it shows an on‑screen keyboard to enter your playlist URL.
 To rebuild it yourself: `pip install pyinstaller`, then
 `python tools/build_windows.py`.
 
-### Windows — from source
-
-```powershell
-scoop install mpv            # real mpv (NOT mpv.net); or choco install mpv
-winget install Python.Python.3.12
-.\install-windows.ps1        # creates .venv, installs deps, checks for mpv
-.\cathode.bat                # or: .\cathode.bat --demo
-```
-If mpv isn't on PATH, set `"mpv_path": "C:/path/to/mpv.exe"` in `config.json`.
-
 ### Steam Deck (SteamOS)
 
 In Desktop Mode, open a terminal in this folder:
