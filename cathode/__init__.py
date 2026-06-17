@@ -1,3 +1,3 @@
 """Cathode — retro IPTV player."""
 
-__version__ = "2.1b"
+__version__ = "2.2b"

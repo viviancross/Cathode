@@ -39,6 +39,8 @@ class Config:
     # Weather (shown in the guide header). Empty zip = feature off.
     weather_zip: str = ""          # e.g. "90210" — your area's postal/zip code
     weather_units: str = "F"       # "F" or "C"
+    weather_country: str = "US"    # ISO country code — pins the zip lookup to one
+    # country (a bare zip is ambiguous, e.g. 90210 can resolve to Spain)
 
     # Appearance
     font: str = "vcr"              # vcr | ibm | vt220 | pixelforge | dejavu

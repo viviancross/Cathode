@@ -20,6 +20,25 @@ from typing import Callable, Optional
 
 _REFRESH = 900.0   # seconds between refreshes (15 min)
 
+# Countries offered in the Weather menu (ISO-2 code, display name).  The code is
+# appended to the zip ("90210,US") so wttr.in's geocoder pins the lookup to one
+# country instead of guessing — a bare zip is ambiguous across borders.
+# ponytail: a curated short list (fits the menu without scrolling); extend freely.
+COUNTRIES = [
+    ("US", "United States"), ("GB", "United Kingdom"), ("CA", "Canada"),
+    ("AU", "Australia"), ("IE", "Ireland"), ("NZ", "New Zealand"),
+    ("AT", "Austria"), ("BE", "Belgium"), ("BR", "Brazil"), ("DK", "Denmark"),
+    ("FI", "Finland"), ("FR", "France"), ("DE", "Germany"), ("IN", "India"),
+    ("IT", "Italy"), ("JP", "Japan"), ("MX", "Mexico"), ("NL", "Netherlands"),
+    ("NO", "Norway"), ("PL", "Poland"), ("PT", "Portugal"), ("ES", "Spain"),
+    ("SE", "Sweden"), ("CH", "Switzerland"),
+]
+_COUNTRY_NAMES = dict(COUNTRIES)
+
+
+def country_name(code: str) -> str:
+    return _COUNTRY_NAMES.get((code or "").upper(), code or "")
+
 # WWO weather codes → icon category (a few explicit; everything wet defaults to
 # "rain").  # ponytail: approximate grouping; extend per the WWO code table.
 _FOG = {143, 248, 260}
@@ -49,11 +68,12 @@ def _category(code) -> str:
 
 
 class Weather:
-    def __init__(self, zip_code: str, units: str = "F",
+    def __init__(self, zip_code: str, units: str = "F", country: str = "US",
                  on_update: Optional[Callable] = None,
                  user_agent: str = "Cathode/1.0"):
         self.zip = (zip_code or "").strip()
         self.units = "C" if str(units).upper().startswith("C") else "F"
+        self.country = (country or "").strip().upper()
         self._on_update = on_update
         self._ua = user_agent
         self._data: Optional[dict] = None
@@ -61,13 +81,16 @@ class Weather:
         self._inflight = False
         self._lock = threading.Lock()
 
-    def configure(self, zip_code: str, units: Optional[str] = None):
-        """Point at a new zip/units and drop the cache so the next current()
-        refetches.  Called by the Weather menu."""
+    def configure(self, zip_code: str, units: Optional[str] = None,
+                  country: Optional[str] = None):
+        """Point at a new zip/units/country and drop the cache so the next
+        current() refetches.  Called by the Weather menu."""
         with self._lock:
             self.zip = (zip_code or "").strip()
             if units is not None:
                 self.units = "C" if str(units).upper().startswith("C") else "F"
+            if country is not None:
+                self.country = (country or "").strip().upper()
             self._data = None
             self._fetched_at = 0.0
 
@@ -100,7 +123,8 @@ class Weather:
                 pass
 
     def _fetch(self) -> Optional[dict]:
-        url = f"https://wttr.in/{urllib.parse.quote(self.zip)}?format=j1"
+        loc = f"{self.zip},{self.country}" if self.country else self.zip
+        url = f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1"
         req = urllib.request.Request(url, headers={"User-Agent": self._ua})
         j = json.loads(urllib.request.urlopen(req, timeout=12).read())
         cur = (j.get("current_condition") or [{}])[0]
