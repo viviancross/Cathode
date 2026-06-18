@@ -7,13 +7,7 @@ your M3U channels like it's 80s/90s cable TV — phosphor‑glow program guide, 
 scanlines, channel‑change snow, and on‑screen menus that scale from the Deck's
 screen to 1080p when docked.
 
-**Version: 2.2b**
-
 <br clear="left">
-
-# Cathode 1.0
-
-A retro IPTV player that turns your M3U channel list into 80s/90s cable TV.
 
 ## Features
 
