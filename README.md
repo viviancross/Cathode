@@ -7,7 +7,7 @@ your M3U channels like it's 80s/90s cable TV — phosphor‑glow program guide, 
 scanlines, channel‑change snow, and on‑screen menus that scale from the Deck's
 screen to 1080p when docked.
 
-**Version: 2.2b**
+**Version: 1.0**
 
 <br clear="left">
 
@@ -20,7 +20,8 @@ screen to 1080p when docked.
   saved look **profiles**, all switchable live.
 - **Weather in the guide** — set your country + zip and the guide header shows
   current conditions, temperature, humidity, rain chance, and your city.
-- **Channel logos, favorites, and categories** pulled from your XMLTV/M3U data.
+- **Channel logos** (including animated GIF/APNG), favorites, and categories
+  pulled from your XMLTV/M3U data.
 - **On‑screen everything** — context menu and on‑screen keyboard, fully usable
   with mouse, keyboard, or a controller. No system dialogs; works in Game Mode.
 - **Auto resolution** — renders at mpv's real window size (1280×800 handheld,
@@ -79,9 +80,6 @@ pip install -r requirements.txt
 python main.py --demo
 ```
 
-> **Flatpak** packaging (`io.github.viviancross.Cathode.yml` + `install-flatpak.sh`)
-> exists but is **experimental/untested** — expect to iterate.
->
 > **Building binaries:** PyInstaller can't cross‑compile, so build on the target
 > OS. `pip install pyinstaller`, then `python tools/build_windows.py`
 > (or `build_linux.py` / `build_macos.py`).
@@ -187,6 +185,7 @@ genres plus **All** and **Favorites**.
 
 **Channel logos** come from XMLTV `<icon>` URLs (or the M3U `tvg-logo`), cached on
 disk, shown in the info bar and guide; channels without one show their number.
+**Animated logos** (GIF / APNG) play while they're on screen.
 
 **Monitors** (**Options ▸ Display**) — holds the Fullscreen toggle and lists
 connected screens; pick one to move the window there (it rescales automatically).
@@ -259,6 +258,6 @@ cathode/
     renderer.py      compositing + channel-change state machine
     osd.py guide.py menu.py osk.py effects.py theme.py mainmenu.py editor.py
 assets/   fonts + icon          tools/   build + preview scripts
-install*.sh  cathode.sh  make-shortcut.sh        (Linux / macOS / Flatpak)
-install-windows.ps1  cathode.bat                 (Windows)
+install.sh  install-macos.sh  install-service.sh  cathode.sh    (Linux / macOS)
+install-windows.ps1  cathode.bat                                (Windows)
 ```

@@ -1,12 +1,8 @@
 """Current-weather lookup for the guide header.
 
-Uses wttr.in's JSON endpoint: it takes a zip/postal code directly, needs no API
-key, and returns conditions, temperature, humidity, a rain chance and the city —
-everything the header shows.  Fetched on a background thread and cached (like the
-logo store), so the network never blocks rendering.
-
-# ponytail: wttr.in is free/no-auth but rate-limited and best-effort. Swap _fetch
-# for a keyed provider (OpenWeather/WeatherAPI) if you need reliability/accuracy.
+Uses wttr.in's JSON endpoint, which takes a zip/postal code directly and needs no
+API key. Fetched on a background thread and cached, so the network never blocks
+rendering.
 """
 
 from __future__ import annotations
@@ -20,10 +16,9 @@ from typing import Callable, Optional
 
 _REFRESH = 900.0   # seconds between refreshes (15 min)
 
-# Countries offered in the Weather menu (ISO-2 code, display name).  The code is
-# appended to the zip ("90210,US") so wttr.in's geocoder pins the lookup to one
-# country instead of guessing — a bare zip is ambiguous across borders.
-# ponytail: a curated short list (fits the menu without scrolling); extend freely.
+# Countries offered in the Weather menu (ISO-2 code, display name). The code is
+# appended to the zip ("90210,US") so the geocoder doesn't guess the wrong
+# country for an ambiguous postal code.
 COUNTRIES = [
     ("US", "United States"), ("GB", "United Kingdom"), ("CA", "Canada"),
     ("AU", "Australia"), ("IE", "Ireland"), ("NZ", "New Zealand"),
@@ -39,8 +34,7 @@ _COUNTRY_NAMES = dict(COUNTRIES)
 def country_name(code: str) -> str:
     return _COUNTRY_NAMES.get((code or "").upper(), code or "")
 
-# WWO weather codes → icon category (a few explicit; everything wet defaults to
-# "rain").  # ponytail: approximate grouping; extend per the WWO code table.
+# WWO weather codes -> icon category; anything wet not listed defaults to "rain".
 _FOG = {143, 248, 260}
 _STORM = {200, 386, 389, 392, 395}
 _SNOW = {179, 182, 185, 227, 230, 281, 284, 311, 314, 317, 320, 323, 326, 329,

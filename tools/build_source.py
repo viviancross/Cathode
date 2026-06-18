@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Build the cross-platform source zip (Linux / Flatpak / macOS).
+"""Build the cross-platform source zip (Linux / macOS).
 
-Writes cathode-source-<version>.zip into builds/rewrite/ with forward slashes (so
-it extracts correctly on Linux — see the zip-for-linux gotcha). Bundles the
-from-source install scripts for every non-Windows target: Linux/SteamOS
-(install.sh), Flatpak (install-flatpak.sh + the manifest), and macOS
-(install-macos.sh). Windows‑install files (install-windows.ps1, cathode.bat) are
-deliberately left out.
+Writes cathode-source-<version>.zip with forward-slash paths so it extracts
+cleanly on Linux. Bundles the Linux/SteamOS (install.sh) and macOS
+(install-macos.sh) install scripts; the Windows ones are left out.
 """
 
 import fnmatch
@@ -20,14 +17,13 @@ import cathode  # noqa: E402
 
 OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", "rewrite")
 
-# Top-level files to include (per-platform install scripts + docs; NOT Windows).
+# Top-level files to include (non-Windows install scripts).
 TOP_FILES = [
     "main.py", "requirements.txt", "README.md",
     "cathode.sh", "install.sh", "install-service.sh", "make-shortcut.sh",
-    "install-macos.sh", "install-flatpak.sh",
-    "io.github.viviancross.Cathode.yml",
+    "install-macos.sh",
 ]
-TREE_DIRS = ["cathode", "assets", "tools", "docs"]
+TREE_DIRS = ["cathode", "assets", "tools"]
 
 EXCLUDE_DIRS = {"__pycache__", "_winbuild", "_linuxbuild", "_macbuild",
                 "preview_out", ".git"}

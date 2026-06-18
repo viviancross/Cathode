@@ -224,22 +224,15 @@ class Player:
         backend = self._resolve_backend()
         self._resolved_backend = backend
         if backend == "flatpak":
-            cmd = [
+            # Share the runtime dir so the IPC socket + overlay buffer reach the
+            # sandboxed mpv.
+            return [
                 "flatpak", "run",
-                # Share the runtime dir so the socket + overlay buffer cross
-                # the sandbox boundary (host Python and sandboxed mpv share it).
                 f"--filesystem={self._runtime_dir}",
                 self._flatpak_app,
                 *self._common_args(),
             ]
-        else:
-            cmd = [self._mpv_exe() or "mpv", *self._common_args()]
-        # When Cathode itself runs inside a Flatpak sandbox, mpv lives on the
-        # host, so hop out with `flatpak-spawn --host`. Gated on $FLATPAK_ID, so
-        # source/binary/Windows runs are completely unaffected.
-        if os.environ.get("FLATPAK_ID"):
-            cmd = ["flatpak-spawn", "--host", *cmd]
-        return cmd
+        return [self._mpv_exe() or "mpv", *self._common_args()]
 
     def start(self):
         """Launch mpv and connect the IPC socket."""
@@ -257,6 +250,15 @@ class Player:
                 "config.json to the full path of mpv.exe. "
                 "Note: mpv.net is a different app — you need plain mpv."
             )
+
+        # A leftover socket from a crashed run can make the new connection hit a
+        # dead endpoint; remove it so mpv recreates it cleanly.
+        if not self._is_windows:
+            try:
+                if os.path.exists(self._sock_path):
+                    os.unlink(self._sock_path)
+            except OSError:
+                pass
 
         # Capture the subprocess's own stdout/stderr (flatpak + mpv startup
         # errors) to a file so failures are visible after the fact in Game Mode.
@@ -285,7 +287,12 @@ class Player:
                 break
             time.sleep(0.1)
         if not connected:
-            raise RuntimeError("Could not connect to mpv IPC endpoint.")
+            raise RuntimeError(
+                "Could not connect to mpv IPC endpoint. mpv is running but never "
+                f"opened its control socket at {self._sock_path}. See "
+                f"{self._mpv_log} and {self._proc_log} for the reason (e.g. an "
+                "unknown option, or a build of mpv without JSON IPC support)."
+            )
 
         self._running = True
         threading.Thread(target=self._reader, daemon=True).start()

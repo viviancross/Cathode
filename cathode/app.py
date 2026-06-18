@@ -74,12 +74,6 @@ class App:
         # Runtime dir shared with mpv for the IPC socket + overlay buffer.
         if os.name == "nt":
             cache_base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        elif os.environ.get("FLATPAK_ID"):
-            # Cathode is sandboxed and mpv runs as a SEPARATE Flatpak — the
-            # per-app $XDG_CACHE_HOME (~/.var/app/<id>/cache) is unreachable
-            # cross-sandbox. Use the real ~/.cache, which the manifest shares
-            # with both via --filesystem=xdg-cache/cathode.
-            cache_base = os.path.expanduser("~/.cache")
         else:
             cache_base = os.environ.get(
                 "XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
@@ -1096,7 +1090,7 @@ class App:
         for label in labels:
             items.append(MenuItem(label,
                          action=lambda i=label: self._select_theme(i),
-                         checked=(self._active_theme == label), back_after=True))
+                         checked=(self._active_theme == label), close_after=False))
         # User-created themes go below the built-ins (overrides of a built-in
         # name are already shown in place above).
         for name in self.config.custom_themes:
@@ -1104,7 +1098,7 @@ class App:
                 continue
             items.append(MenuItem(name,
                          action=lambda i=name: self._select_theme(i),
-                         checked=(self._active_theme == name), back_after=True))
+                         checked=(self._active_theme == name), close_after=False))
         # "Custom Theme..." (the editor) always stays at the very bottom.
         items.append(MenuItem("Custom Theme...", action=self._open_theme_editor))
         return items
@@ -1112,7 +1106,7 @@ class App:
     def _font_submenu(self):
         return [MenuItem(theme.font_label(k),
                          action=lambda key=k: self._apply_font_key(key),
-                         checked=(theme.current_font() == k), back_after=True)
+                         checked=(theme.current_font() == k), close_after=False)
                 for k in theme.available_fonts()]
 
     def _profiles_submenu(self):
@@ -1201,6 +1195,7 @@ class App:
         self._active_theme = ident
         self.config.save()
         self.renderer.rebuild()
+        self.renderer.menu.replace_page(self._theme_submenu())
         self.renderer.update()
         print(f"[cathode] Theme -> {ident}")
 
@@ -1217,6 +1212,7 @@ class App:
             self.config.font = key
             self.config.save()
             self.renderer.rebuild()
+            self.renderer.menu.replace_page(self._font_submenu())
             self.renderer.update()
 
     def _apply_profile(self, name: str):
