@@ -11,21 +11,19 @@ screen to 1080p when docked.
 
 <br clear="left">
 
+# Cathode 1.0
+
+A retro IPTV player that turns your M3U channel list into 80s/90s cable TV.
+
 ## Features
 
-- **M3U + XMLTV** with a full program guide and a live picture‑in‑picture preview.
-- **Retro cable‑TV UI** — info bar, CRT scanlines, vignette, and channel‑change
-  static that holds until the new stream's first frame is ready, then fades in.
-- **Themes & fonts** — 9 color themes, 5 retro fonts, a custom theme editor, and
-  saved look **profiles**, all switchable live.
-- **Weather in the guide** — set your country + zip and the guide header shows
-  current conditions, temperature, humidity, rain chance, and your city.
-- **Channel logos, favorites, and categories** pulled from your XMLTV/M3U data.
-- **On‑screen everything** — context menu and on‑screen keyboard, fully usable
-  with mouse, keyboard, or a controller. No system dialogs; works in Game Mode.
-- **Auto resolution** — renders at mpv's real window size (1280×800 handheld,
-  1920×1080 docked, 4:3, etc.).
-- **Demo mode** — built‑in test‑pattern channels, no playlist needed.
+- **M3U + XMLTV** — full program guide with a live picture-in-picture preview, channel logos (including animated GIF/APNG), favorites, and categories.
+- **Retro UI** — Info Bar, Program Guide, CRT scanlines, vignette, manual channel surfing, and authentic channel-change static.
+- **Themes & fonts** — 9 color themes, a custom theme editor, 5 retro fonts, the ability to add your own custom fonts, and saveable theme profiles.
+- **Weather** — set your country and zip in the options menu, and the guide header shows current conditions, temperature, humidity, rain chance, and your city.
+- **Full on-screen control** — context menu and on-screen keyboard, driven by mouse, keyboard, or a controller. Works in Steam Deck Game Mode.
+- **Auto resolution** — renders at mpv's real window size, to any resolution.
+- **Demo mode** — built-in test-pattern channels, no playlist needed.
 
 ## How it works
 
