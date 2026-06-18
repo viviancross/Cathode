@@ -49,6 +49,7 @@ class Renderer:
     STATIC_FPS   = 60   # frames/sec during the channel-change static
     STATIC_BLOCK = 5    # static "particle" size in px (bigger = coarser tube TV)
     CLOCK_TICK   = 1.0  # seconds between clock-only refreshes
+    ANIM_TICK    = 1.0 / 30  # seconds between repaints for animated logos (30fps)
 
     def __init__(
         self,
@@ -618,6 +619,7 @@ class Renderer:
         """
         frame_budget = 1.0 / self.STATIC_FPS
         next_clock = time.monotonic()
+        next_anim = time.monotonic()
         while self._running:
             if self.state == UIState.CHANNEL_CHANGING:
                 t0 = time.monotonic()
@@ -634,6 +636,10 @@ class Renderer:
                     self._dirty = False
                     self.update()
                     next_clock = now + self.CLOCK_TICK
+                elif self._logos_animating() and now >= next_anim:
+                    # Advance animated channel logos while they're on screen.
+                    next_anim = now + self.ANIM_TICK
+                    self.update()
                 elif now >= next_clock:
                     next_clock = now + self.CLOCK_TICK
                     # Only tick the OSD clock while plainly watching.
@@ -642,6 +648,12 @@ class Renderer:
                             and not self.editor.open and not self.main_menu.open):
                         self.update()
                 time.sleep(0.02)
+
+    def _logos_animating(self) -> bool:
+        """True when an animated logo is loaded AND logos are actually on screen
+        (the info bar or the guide), so we only repaint when it shows."""
+        return (self.logos is not None and self.logos.has_animation()
+                and (self.osd_visible or self.state == UIState.GUIDE_OPEN))
 
     def mark_dirty(self):
         """Request a repaint on the next render-thread tick (coalesces many
