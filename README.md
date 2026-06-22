@@ -48,7 +48,7 @@ Extract the Windows zip and run `Cathode.exe`. Python and mpv are included, so
 there's nothing else to install. On first run, an on‑screen keyboard asks for
 your playlist URL.
 
-### Steam Deck and Linux
+### Steam Deck
 
 In Desktop Mode, open a terminal in the source folder:
 
