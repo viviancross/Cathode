@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN,
+    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW,
     CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
@@ -48,7 +48,9 @@ class PlexOSD:
         self.volume = 80
         self.muted = False
         self.adjusting = False    # volume is selected for Left/Right adjustment
-        self.focus = 0            # index into ITEMS; default = timeline
+        self.focus = 0            # index into the current item list; default = timeline
+        self.skip_label = ""      # "SKIP INTRO"/"SKIP CREDITS" while a marker is active ("" = none)
+        self.skip_to = 0.0        # seconds to seek to when SKIP is pressed
         self._build_fonts()
 
     def _build_fonts(self):
@@ -83,18 +85,25 @@ class PlexOSD:
 
     # ── focus ─────────────────────────────────────────────────────────────
 
+    def _items(self) -> List[str]:
+        # SKIP is appended only while a marker is active, so it's never the
+        # default focus (which stays on the timeline at index 0).
+        return ITEMS + (["skip"] if self.skip_label else [])
+
     def focus_next(self):
-        self.focus = (self.focus + 1) % len(ITEMS)
+        self.focus = (self.focus + 1) % len(self._items())
 
     def focus_prev(self):
-        self.focus = (self.focus - 1) % len(ITEMS)
+        self.focus = (self.focus - 1) % len(self._items())
 
     def focused_id(self) -> str:
-        return ITEMS[self.focus]
+        items = self._items()
+        return items[self.focus % len(items)]
 
     def focus_to(self, name: str):
-        if name in ITEMS:
-            self.focus = ITEMS.index(name)
+        items = self._items()
+        if name in items:
+            self.focus = items.index(name)
 
     # ── geometry ──────────────────────────────────────────────────────────
 
@@ -123,6 +132,8 @@ class PlexOSD:
         gap = max(6, int(self.width * 0.01))
         order = [("prev", sw), ("back10", bw), ("playpause", bw), ("stop", bw),
                  ("fwd10", bw), ("next", sw), ("volume", vw), ("menu", mw)]
+        if self.skip_label:
+            order.append(("skip", max(bw, int(self.width * 0.14))))
         total = sum(w for _, w in order) + gap * (len(order) - 1)
         sx = (self.width - total) // 2
         by = y1 - bh - max(6, int(self.height * 0.018))
@@ -214,6 +225,9 @@ class PlexOSD:
                 self._draw_hamburger(d, ax0, ay0, ax1, ay1, sel)
             elif name == "volume":
                 self._draw_volume(d, ax0, ay0, ax1, ay1, sel)
+            elif name == "skip":
+                self._centered(d, self.skip_label, self.f_btn, ax0, ay0, ax1, ay1,
+                               WHITE if sel else YELLOW)
             else:
                 label = ("PLAY" if self.paused else "PAUSE") if name == "playpause" \
                     else _LABELS[name]

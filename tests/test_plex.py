@@ -289,5 +289,87 @@ class TestFolderBrowsing(unittest.TestCase):
                 self.c.folder_items("/library/sections/2/folder", section="2")
 
 
+class TestOnDeckSearchMarkers(unittest.TestCase):
+    def setUp(self):
+        self.c = plex.PlexClient("cid", token="acct")
+        self.c.server = "http://server:32400"
+        self.c._server_token = "srvtok"
+
+    def test_on_deck_parses_rows(self):
+        data = {"MediaContainer": {"Metadata": [
+            {"type": "episode", "ratingKey": 1, "title": "Ep",
+             "parentIndex": 1, "index": 2, "viewOffset": 120000,
+             "Media": [{"Part": [{"key": "/a.mkv"}]}]}]}}
+        with mock.patch.object(self.c, "_get", return_value=data) as g:
+            rows = self.c.on_deck()
+        self.assertIn("/library/onDeck", g.call_args[0][0])
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["playable"])
+        self.assertEqual(rows[0]["offset"], 120)
+
+    def test_search_url_typed_and_filtered(self):
+        captured = {}
+
+        def fake_get(url, token=None, timeout=plex._TIMEOUT):
+            captured["url"] = url
+            return {"MediaContainer": {"Metadata": [
+                {"type": "movie", "ratingKey": 1, "title": "M",
+                 "Media": [{"Part": [{"key": "/m.mkv"}]}]},
+                {"type": "show", "ratingKey": 2, "title": "S"},
+                {"type": "person", "ratingKey": 3, "title": "Actor"},   # filtered out
+            ]}}
+
+        with mock.patch.object(self.c, "_get", side_effect=fake_get):
+            rows = self.c.search("matrix")
+        self.assertIn("/library/search?", captured["url"])
+        self.assertIn("searchTypes=movies%2Ctv", captured["url"])
+        self.assertIn("query=matrix", captured["url"])
+        titles = [r["title"] for r in rows]
+        self.assertIn("M", titles)
+        self.assertIn("S", titles)
+        self.assertNotIn("Actor", titles)        # person dropped
+
+    def test_search_parses_searchresult_wrapper(self):
+        # Newer servers wrap each hit in SearchResult{Metadata}.
+        data = {"MediaContainer": {"SearchResult": [
+            {"score": 0.9, "Metadata": {"type": "episode", "ratingKey": 7,
+                                        "title": "E", "parentIndex": 1, "index": 1,
+                                        "Media": [{"Part": [{"key": "/e.mkv"}]}]}},
+            {"score": 0.1, "Metadata": {"type": "collection", "ratingKey": 8,
+                                        "title": "Coll"}},
+        ]}}
+        with mock.patch.object(self.c, "_get", return_value=data):
+            rows = self.c.search("x")
+        self.assertEqual([r["title"] for r in rows], ["S1E1  E"])
+
+    def test_search_empty_query_no_call(self):
+        with mock.patch.object(self.c, "_get") as g:
+            self.assertEqual(self.c.search("   "), [])
+        g.assert_not_called()
+
+    def test_markers_parse_ms_to_seconds_and_filter(self):
+        meta = {"Marker": [
+            {"type": "intro", "startTimeOffset": 5000, "endTimeOffset": 35000},
+            {"type": "credits", "startTimeOffset": 3500000, "endTimeOffset": 3600000},
+            {"type": "commercial", "startTimeOffset": 0, "endTimeOffset": 1000},  # dropped
+            {"type": "intro", "startTimeOffset": 100, "endTimeOffset": 100},      # zero-length dropped
+        ]}
+        mk = plex._markers(meta)
+        self.assertEqual(len(mk), 2)
+        self.assertEqual(mk[0], {"type": "intro", "start": 5.0, "end": 35.0})
+        self.assertEqual(mk[1]["type"], "credits")
+
+    def test_play_info_includes_markers(self):
+        meta = {"MediaContainer": {"Metadata": [{
+            "type": "episode", "title": "Ep", "viewOffset": 0,
+            "Media": [{"Part": [{"key": "/e.mkv"}]}],
+            "Marker": [{"type": "intro", "startTimeOffset": 0,
+                        "endTimeOffset": 30000}]}]}}
+        with mock.patch.object(self.c, "_get", return_value=meta) as g:
+            info = self.c.play_info("9")
+        self.assertIn("includeMarkers=1", g.call_args[0][0])
+        self.assertEqual(info["markers"], [{"type": "intro", "start": 0.0, "end": 30.0}])
+
+
 if __name__ == "__main__":
     unittest.main()

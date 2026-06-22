@@ -129,6 +129,7 @@ class App:
         self._plex_queue_pos = 0        # index of the item playing now
         self._plex_last_report = 0.0    # monotonic ts of last timeline heartbeat
         self._plex_lock = threading.Lock()   # guards PlexClient access/rebuild
+        self._plex_markers = []         # intro/credits ranges for the item playing now
 
         # Renderer
         self.renderer = Renderer(
@@ -1610,8 +1611,14 @@ class App:
                                          for s in sections]
             self.config.save()
             hidden = set(self.config.plex_hidden_libraries)
-            rows = [{"type": "watchlist", "title": "MY WATCHLIST", "meta": "",
-                     "playable": False}]
+            rows = [
+                {"type": "search", "title": "SEARCH...", "meta": "",
+                 "playable": False},
+                {"type": "ondeck", "title": "CONTINUE WATCHING", "meta": "",
+                 "playable": False},
+                {"type": "watchlist", "title": "MY WATCHLIST", "meta": "",
+                 "playable": False},
+            ]
             rows += [{"type": "section", "rating_key": s["key"],
                       "title": s["title"].upper(), "meta": "", "playable": False,
                       "section_type": s["type"], "agent": s.get("agent", "")}
@@ -1721,6 +1728,12 @@ class App:
         if t == "watchlist":
             self._ppv_open_watchlist()
             return
+        if t == "ondeck":
+            self._ppv_open_ondeck()
+            return
+        if t == "search":
+            self._ppv_search()
+            return
         if t == "sort":
             self.renderer.menu.open_with(self._sort_submenu(), title="SORT BY")
             self.renderer.mark_dirty()
@@ -1782,10 +1795,11 @@ class App:
         ]
         self._ppv_push(title, rows, crumb)
 
-    def _ppv_open(self, loader, title, sort="", volatile=False):
-        """Load a sortable item list. `loader(sort)` returns rows; the level
-        remembers the loader so the Sort row can reload it in a new order.
-        volatile=True reloads the level every time it's returned to (watchlist)."""
+    def _ppv_open(self, loader, title, sort="", volatile=False, sortable=True):
+        """Load an item list. `loader(sort)` returns rows; the level remembers
+        the loader. sortable=True pins a Sort row (library lists); set False for
+        lists with no meaningful sort (onDeck, search). volatile=True reloads the
+        level every time it's returned to (watchlist, onDeck, search)."""
         r = self.renderer
         r.ppv.set_status("LOADING...")
         r.mark_dirty()
@@ -1797,12 +1811,24 @@ class App:
                 self._ppv_error(str(e) or "Couldn't load that.")
                 return
             self._ppv_push(title, rows, crumb, loader=loader, sort=sort,
-                           volatile=volatile)
+                           volatile=volatile, sortable=sortable)
         threading.Thread(target=work, daemon=True).start()
 
     def _ppv_open_watchlist(self):
         self._ppv_open(lambda s: self._ppv_client().watchlist(sort=s),
                        "MY WATCHLIST", volatile=True)
+
+    def _ppv_open_ondeck(self):
+        # volatile so it reloads (and drops finished items) each time it's opened.
+        self._ppv_open(lambda s: self._ppv_client().on_deck(),
+                       "CONTINUE WATCHING", volatile=True, sortable=False)
+
+    def _ppv_search(self):
+        query = self._osk_get("Search Plex", "")
+        if not query or not query.strip():
+            return
+        self._ppv_open(lambda s, q=query: self._ppv_client().search(q),
+                       f"SEARCH: {query.upper()}", volatile=True, sortable=False)
 
     def _ppv_watchlist_open(self, row):
         guid = row.get("guid")
@@ -2007,6 +2033,8 @@ class App:
             self._plex_duration = None
             self._plex_pos = 0.0
             self._plex_now_rk = rating_key
+            self._plex_markers = info.get("markers") or []
+            r.plexosd.skip_label = ""
             r.plexosd.set_info(info.get("title") or title,
                                info.get("subtitle") or subtitle)
             r.plexosd.paused = False
@@ -2053,6 +2081,8 @@ class App:
             if self._plex_duration is None:
                 self._plex_duration = self.player.get_property("duration")
             r.plexosd.set_progress(pos or 0, self._plex_duration or 0, self._plex_paused)
+            # Skip Intro/Credits: show the button only while pos is inside a marker.
+            self._update_skip_button(pos or 0)
             if r.plexosd.visible:
                 if time.monotonic() > self._plex_osd_until:
                     r.plexosd.hide()
@@ -2065,6 +2095,30 @@ class App:
                 self._plex_report("paused" if self._plex_paused else "playing")
             time.sleep(0.5)
         self._plex_monitor = False
+
+    def _update_skip_button(self, pos):
+        """Show the SKIP button on the OSD only while playback is inside an
+        intro/credits marker; hide it otherwise."""
+        label, end = "", 0.0
+        for mk in self._plex_markers:
+            if mk["start"] <= pos < mk["end"]:
+                label = "SKIP INTRO" if mk["type"] == "intro" else "SKIP CREDITS"
+                end = mk["end"]
+                break
+        osd = self.renderer.plexosd
+        osd.skip_to = end
+        if label != osd.skip_label:
+            osd.skip_label = label      # entered or left a marker — redraw the bar
+            self.renderer.mark_dirty()
+
+    def _plex_skip_marker(self):
+        """Press SKIP: jump to the end of the active marker. For a credits
+        marker this lands at ~EOF and the normal finish/next-episode flow runs."""
+        osd = self.renderer.plexosd
+        if osd.skip_to:
+            self.player.seek(osd.skip_to, "absolute")
+            osd.skip_label = ""         # hide now; the monitor re-evaluates next tick
+            self._plex_show_osd()
 
     def _plex_focus(self, delta):
         osd = self.renderer.plexosd
@@ -2123,6 +2177,9 @@ class App:
         if fid == "volume":
             osd.adjusting = not osd.adjusting   # enter/exit volume adjust mode
             self._plex_show_osd()
+            return
+        if fid == "skip":
+            self._plex_skip_marker()
             return
         if fid == "back10":
             self._plex_seek(-10)
@@ -2184,6 +2241,8 @@ class App:
         self.renderer.plex_playing = False
         self.renderer.plexosd.hide()
         self.renderer.plexosd.adjusting = False
+        self.renderer.plexosd.skip_label = ""
+        self._plex_markers = []
         self._plex_paused = False
         self._plex_now_rk = ""
         self.player.stop()
@@ -2244,19 +2303,22 @@ class App:
         else:
             self._ppv_exit()
 
-    def _ppv_push(self, title, rows, crumb, loader=None, sort="", volatile=False):
+    def _ppv_push(self, title, rows, crumb, loader=None, sort="", volatile=False,
+                  sortable=True):
         # Sortable item lists get a "Sort by..." row pinned at the top so the
         # user can re-order without the context menu.
-        if loader and rows and rows[0].get("type") != "sort":
+        has_sort = bool(loader and sortable and rows
+                        and rows[0].get("type") != "sort")
+        if has_sort:
             label = self._sort_label(sort) or "Default"
             rows = [{"type": "sort", "title": f"Sort by: {label}",
                      "meta": "", "playable": False}] + rows
+        sel0 = 1 if has_sort else 0
         self._ppv_stack.append({"title": title, "rows": rows,
-                                "sel": 1 if loader else 0,
+                                "sel": sel0,
                                 "crumb": crumb, "loader": loader, "sort": sort,
-                                "volatile": volatile})
-        self.renderer.ppv.set_browse(title, rows, crumb,
-                                     sel=1 if loader else 0)
+                                "volatile": volatile, "sortable": sortable})
+        self.renderer.ppv.set_browse(title, rows, crumb, sel=sel0)
         self.renderer.ppv.show()     # ensure visible (e.g. opened from info screen)
         self.renderer.mark_dirty()
 
@@ -2282,7 +2344,8 @@ class App:
         if lvl.get("volatile") and lvl.get("loader"):
             self._ppv_stack.pop()
             self._ppv_open(lvl["loader"], lvl["title"],
-                           sort=lvl.get("sort", ""), volatile=True)
+                           sort=lvl.get("sort", ""), volatile=True,
+                           sortable=lvl.get("sortable", True))
             return
         self.renderer.ppv.set_browse(lvl["title"], lvl["rows"], lvl["crumb"], lvl["sel"])
         self.renderer.ppv.show()
