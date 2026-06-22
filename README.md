@@ -24,7 +24,7 @@ build.
 ## Features
 
 - M3U playlists with an XMLTV program guide, a live picture‑in‑picture preview,
-  channel logos (including animated GIF and APNG), favorites, and categories.
+  channel logos, favorites, and categories.
 - A retro interface: info bar, program guide, scanlines, vignette, and
   channel‑change static that holds until the new stream's first frame is ready.
 - 9 color themes, 5 bundled fonts, a custom theme editor, and saved profiles
@@ -39,6 +39,84 @@ build.
 - Renders at mpv's real window size, so it fits any resolution automatically.
 - A demo mode with built‑in test‑pattern channels, so you can try it with no
   playlist.
+
+## Plex‑Per‑View
+
+Pick **Plex‑Per‑View** from the home screen. The first time, it shows a code to
+enter at plex.tv/link; after that it stays signed in. If your account has Plex
+Home users, it asks who's watching.
+
+From there you can:
+
+- Browse Movie, TV, and Other Videos libraries, including by folder.
+- Filter by genre and sort by title, date added, year, or rating.
+- Open your Plex watchlist.
+- See a detail page per title with poster, summary, and resume point.
+- Play a movie or episode, play a whole show, or shuffle it.
+- Resume where you left off. Cathode reports your position back to the server, so
+  progress and watched state stay in sync with your other devices.
+
+While something is playing, press the context‑menu button for audio and subtitle
+tracks, subtitle font/size/color, and the audio output device. Set streaming
+quality (direct play or a transcode cap) under Options.
+
+Your Plex token is sent to the server in a request header, not in the video URL,
+so it doesn't end up in mpv's log file.
+
+## Options and config
+
+Most settings live under **Options** in the context menu: themes, fonts,
+profiles, the custom theme editor, weather (zip and country), and display. The
+config file is at `~/.config/cathode/config.json` and is written automatically.
+
+Settings you'll only find in the file:
+
+- `main_menu_on_launch` — show the home screen on launch, or boot into the last
+  playlist.
+- `mpv_path` — full path to mpv if it isn't on PATH.
+- `mpv_extra_args` — extra mpv flags, e.g. `["--hwdec=no"]`.
+- `gamepad` — turn the controller reader on or off.
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| ↑ / ↓ | Channel up / down (in the guide, move the selection) |
+| ← / → | Volume down / up (in the guide, scroll through time) |
+| 0–9 | Type a channel number |
+| G | Program guide |
+| I or Tab | Info bar |
+| M | Mute |
+| F | Favorite the current or highlighted channel |
+| C, right‑click, or the corner button | Context menu |
+| W or double‑click | Fullscreen |
+| Enter | Select the highlighted item |
+| Backspace | Delete a character, or go back one menu level |
+| PgUp / PgDn | Jump 10 channels |
+| Q | Quit |
+| Esc | Close whatever's open; never quits |
+
+Hold a navigation key to repeat it. While a menu or the keyboard is open, letter
+and number shortcuts are off until you close it.
+
+### Game controller
+
+A controller works on every build with no setup (XInput on Windows,
+`/dev/input/js*` on Linux, IOKit HID on macOS). Turn it off with
+`"gamepad": false`.
+
+| Button | Action |
+|--------|--------|
+| D‑pad / left stick | Navigate |
+| A | Select |
+| B | Back |
+| X or Start | Program guide |
+| Y | Info bar |
+| Back / View | Context menu |
+| LB / RB | Channel down / up |
+| LT / RT | Volume down / up |
+| L3 / R3 | Mute / fullscreen |
+
 
 ## Install
 
@@ -91,83 +169,6 @@ paste. Press DONE to submit.
 
 To boot straight into your last playlist, set `"main_menu_on_launch": false` in
 the config file. The home screen is still reachable from the context menu.
-
-### Controls
-
-| Key | Action |
-|-----|--------|
-| ↑ / ↓ | Channel up / down (in the guide, move the selection) |
-| ← / → | Volume down / up (in the guide, scroll through time) |
-| 0–9 | Type a channel number |
-| G | Program guide |
-| I or Tab | Info bar |
-| M | Mute |
-| F | Favorite the current or highlighted channel |
-| C, right‑click, or the corner button | Context menu |
-| W or double‑click | Fullscreen |
-| Enter | Select the highlighted item |
-| Backspace | Delete a character, or go back one menu level |
-| PgUp / PgDn | Jump 10 channels |
-| Q | Quit |
-| Esc | Close whatever's open; never quits |
-
-Hold a navigation key to repeat it. While a menu or the keyboard is open, letter
-and number shortcuts are off until you close it.
-
-### Game controller
-
-A controller works on every build with no setup (XInput on Windows,
-`/dev/input/js*` on Linux, IOKit HID on macOS). Turn it off with
-`"gamepad": false`.
-
-| Button | Action |
-|--------|--------|
-| D‑pad / left stick | Navigate |
-| A | Select |
-| B | Back |
-| X or Start | Program guide |
-| Y | Info bar |
-| Back / View | Context menu |
-| LB / RB | Channel down / up |
-| LT / RT | Volume down / up |
-| L3 / R3 | Mute / fullscreen |
-
-## Plex‑Per‑View
-
-Pick **Plex‑Per‑View** from the home screen. The first time, it shows a code to
-enter at plex.tv/link; after that it stays signed in. If your account has Plex
-Home users, it asks who's watching.
-
-From there you can:
-
-- Browse Movie, TV, and Other Videos libraries, including by folder.
-- Filter by genre and sort by title, date added, year, or rating.
-- Open your Plex watchlist.
-- See a detail page per title with poster, summary, and resume point.
-- Play a movie or episode, play a whole show, or shuffle it.
-- Resume where you left off. Cathode reports your position back to the server, so
-  progress and watched state stay in sync with your other devices.
-
-While something is playing, press the context‑menu button for audio and subtitle
-tracks, subtitle font/size/color, and the audio output device. Set streaming
-quality (direct play or a transcode cap) under Options.
-
-Your Plex token is sent to the server in a request header, not in the video URL,
-so it doesn't end up in mpv's log file.
-
-## Options and config
-
-Most settings live under **Options** in the context menu: themes, fonts,
-profiles, the custom theme editor, weather (zip and country), and display. The
-config file is at `~/.config/cathode/config.json` and is written automatically.
-
-Settings you'll only find in the file:
-
-- `main_menu_on_launch` — show the home screen on launch, or boot into the last
-  playlist.
-- `mpv_path` — full path to mpv if it isn't on PATH.
-- `mpv_extra_args` — extra mpv flags, e.g. `["--hwdec=no"]`.
-- `gamepad` — turn the controller reader on or off.
 
 ## Building from source
 
