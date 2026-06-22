@@ -24,7 +24,7 @@ build.
 ## Features
 
 - M3U playlists with an XMLTV program guide, a live picture‑in‑picture preview,
-  channel logos (including animated GIF and APNG), favorites, and categories.
+  channel logos, favorites, and categories.
 - A retro interface: info bar, program guide, scanlines, vignette, and
   channel‑change static that holds until the new stream's first frame is ready.
 - 9 color themes, 5 bundled fonts, a custom theme editor, and saved profiles
