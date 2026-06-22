@@ -112,11 +112,21 @@ def package(app_dir):
                 rel = os.path.join("Cathode", os.path.relpath(full, app_dir))
                 z.write(full, rel.replace(os.sep, "/"))
                 n += 1
-        # Ship the README alongside the binary so users have the docs offline.
-        readme = os.path.join(ROOT, "README.md")
-        if os.path.exists(readme):
-            z.write(readme, "Cathode/README.md")
-            n += 1
+        # Ship the README + license notices alongside the binary (offline docs +
+        # GPL/OFL/CC compliance for the bundled mpv and fonts).
+        for top in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+            p = os.path.join(ROOT, top)
+            if os.path.exists(p):
+                z.write(p, f"Cathode/{top}")
+                n += 1
+        lic_dir = os.path.join(ROOT, "LICENSES")
+        for dp, _dn, fn in os.walk(lic_dir):
+            for f in fn:
+                full = os.path.join(dp, f)
+                rel = os.path.join("Cathode", "LICENSES",
+                                   os.path.relpath(full, lic_dir))
+                z.write(full, rel.replace(os.sep, "/"))
+                n += 1
     mb = os.path.getsize(out_zip) / 1024 / 1024
     log(f"DONE -> {out_zip}  ({n} files, {mb:.1f} MB)")
 

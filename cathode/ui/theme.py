@@ -172,7 +172,7 @@ _ACTIVE_FONT: Optional[str] = None   # explicit font file path override
 # Candidate retro/monospace fonts to look for on the system (fallback search)
 _FONT_CANDIDATES = [
     "VCR_OSD_MONO.ttf", "PxPlus_IBM_VGA8.ttf", "Glass_TTY_VT220.ttf",
-    "PixelForge.otf",
+    "Handjet.ttf", "DotGothic16-Regular.ttf",
     "LiberationMono-Bold.ttf", "LiberationMono-Regular.ttf",
     "UbuntuMono-Bold.ttf", "UbuntuMono-Regular.ttf",
     "FreeMono.ttf",
@@ -204,9 +204,10 @@ _FONT_REGISTRY = {
     "ibm":        (["PxPlus_IBM_VGA8.ttf", "Px437_IBM_VGA8.ttf",
                     "PxPlus IBM VGA8.ttf"], "PxPlus IBM VGA"),
     "vt220":      (["Glass_TTY_VT220.ttf"], "Glass TTY VT220"),
-    "pixelforge": (["PixelForge.otf", "PixelForge.ttf"], "Pixel Forge"),
+    "handjet":    (["Handjet.ttf"], "Handjet"),
+    "dotgothic":  (["DotGothic16-Regular.ttf", "DotGothic16.ttf"], "DotGothic16"),
 }
-FONT_ORDER = ["vcr", "ibm", "vt220", "pixelforge"]
+FONT_ORDER = ["vcr", "ibm", "vt220", "handjet", "dotgothic"]
 
 # Fonts offered only for subtitles (by discovered key), never as the UI font.
 _SUBTITLE_ONLY_KEYS = {"x_closedcaption"}

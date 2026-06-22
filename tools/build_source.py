@@ -20,10 +20,11 @@ OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", "rewrite")
 # Top-level files to include (non-Windows install scripts).
 TOP_FILES = [
     "main.py", "requirements.txt", "README.md",
+    "LICENSE", "THIRD_PARTY_NOTICES.md",
     "cathode.sh", "install.sh", "install-service.sh", "make-shortcut.sh",
     "install-macos.sh",
 ]
-TREE_DIRS = ["cathode", "assets", "tools"]
+TREE_DIRS = ["cathode", "assets", "tools", "LICENSES"]
 
 EXCLUDE_DIRS = {"__pycache__", "_winbuild", "_linuxbuild", "_macbuild",
                 "preview_out", ".git"}

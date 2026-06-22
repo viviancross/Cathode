@@ -64,6 +64,7 @@ class MainMenu:
         self.font_title = get_font(max(28, int(h * 0.085)))
         self.font_sub = get_font(max(12, int(h * 0.024)))
         self.font_btn = get_font(max(16, int(h * 0.034)))
+        self.font_foot = get_font(max(11, int(h * 0.020)))   # corner credits
         # Pre-scale the logo to ~26% of screen height.
         self._logo = None
         if self._logo_src is not None:
@@ -170,14 +171,21 @@ class MainMenu:
         sub_y = title_y + (bb[3] - bb[1]) + int(self.height * 0.012)
         self._centered(d, "R E T R O   I P T V", self.font_sub, sub_y, YELLOW)
 
-        # Version footer (matches the build version)
+        # Corner footer: version bottom-left, credit bottom-right (small, inside
+        # the inner frame).
         try:
             from .. import __version__ as _ver
         except Exception:
             _ver = ""
+        pad = max(8, int(self.width * 0.012))
+        fh = d.textbbox((0, 0), "Ag", font=self.font_foot)[3]
+        fy = self.height - m - pad - fh
         if _ver:
-            self._centered(d, f"v{_ver}", self.font_sub,
-                           self.height - int(self.height * 0.05), GRAY)
+            d.text((m + pad, fy), f"v{_ver}", font=self.font_foot, fill=GRAY)
+        credit = "made by vivian cross"
+        cw = d.textbbox((0, 0), credit, font=self.font_foot)[2]
+        d.text((self.width - m - pad - cw, fy), credit,
+               font=self.font_foot, fill=GRAY)
 
         # Buttons
         for (i, x0, y0, x1, y1) in self._button_rects():

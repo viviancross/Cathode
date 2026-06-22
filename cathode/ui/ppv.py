@@ -215,6 +215,9 @@ class PPVScreen:
                      cy + int(self.height * 0.30), CHANNEL_GREEN)
         msg = self.auth_msg or "Waiting for you to link..."
         self._center(d, msg, self.f_meta, cy + int(self.height * 0.42), GRAY)
+        # Trademark disclaimer — Cathode is an independent Plex client.
+        self._center(d, "Cathode is not affiliated with or endorsed by Plex.",
+                     self.f_foot, self.height - int(self.height * 0.10), GRAY)
         cancel = "[B] CANCEL" if self.input_mode == "gamepad" else "[ESC] CANCEL"
         self._center(d, cancel, self.f_foot,
                      self.height - int(self.height * 0.06), WHITE_DIM)

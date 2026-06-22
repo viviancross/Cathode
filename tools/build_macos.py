@@ -33,6 +33,10 @@ def build():
         "--windowed", "--name", "Cathode",
         "--distpath", distpath, "--workpath", workpath, "--specpath", WORK,
         "--add-data", f"{os.path.join(ROOT, 'assets')}:assets",   # ':' on macOS
+        "--add-data", f"{os.path.join(ROOT, 'LICENSES')}:LICENSES",
+        "--add-data", f"{os.path.join(ROOT, 'README.md')}:.",
+        "--add-data", f"{os.path.join(ROOT, 'LICENSE')}:.",
+        "--add-data", f"{os.path.join(ROOT, 'THIRD_PARTY_NOTICES.md')}:.",
     ]
     icns = os.path.join(ROOT, "assets", "cathode.icns")
     if os.path.isfile(icns):
