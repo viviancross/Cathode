@@ -27,3 +27,7 @@ tools/preview_out/
 # Runtime / logs
 *.log
 config.json
+
+# Third-party agent skills (installed via `skills add`, not part of Cathode)
+.agents/
+skills-lock.json
