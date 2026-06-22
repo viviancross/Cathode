@@ -236,5 +236,58 @@ class TestDiscover(unittest.TestCase):
                 self.c.discover_server()
 
 
+class TestFolderBrowsing(unittest.TestCase):
+    def setUp(self):
+        self.c = plex.PlexClient("cid", token="acct")
+        self.c.server = "http://server:32400"
+        self.c._server_token = "srvtok"
+
+    def test_folder_url_absolute_passthrough(self):
+        d = {"key": "/library/sections/2/folder?parent=44159"}
+        self.assertEqual(self.c._folder_url("2", d),
+                         "/library/sections/2/folder?parent=44159")
+
+    def test_folder_url_relative_rebuild(self):
+        d = {"key": "folder?parent=44159"}
+        self.assertEqual(self.c._folder_url("2", d),
+                         "/library/sections/2/folder?parent=44159")
+
+    def test_folder_url_bare_id_or_rating_key(self):
+        self.assertEqual(self.c._folder_url("2", {"ratingKey": 99}),
+                         "/library/sections/2/folder?parent=99")
+        self.assertEqual(self.c._folder_url("2", {"key": "12345"}),
+                         "/library/sections/2/folder?parent=12345")
+
+    def test_non_playable_metadata_becomes_folder_not_children(self):
+        # A folder returned as a Metadata node with no playable Part must be
+        # routed back through the folder endpoint, never /children (404).
+        data = {"MediaContainer": {
+            "Directory": [{"key": "/library/sections/2/folder?parent=10",
+                           "title": "Sub"}],
+            "Metadata": [
+                {"type": "clip", "ratingKey": 5, "title": "Clip",
+                 "Media": [{"Part": [{"key": "/p.mkv"}]}]},      # playable video
+                {"type": "", "ratingKey": 77, "title": "NestedFolder"},  # folder-as-metadata
+            ]}}
+        with mock.patch.object(self.c, "_get", return_value=data):
+            rows = self.c.folder_items("/library/sections/2/folder", section="2")
+        by_title = {r["title"]: r for r in rows}
+        self.assertEqual(by_title["Sub"]["type"], "folder")
+        self.assertTrue(by_title["Clip"]["playable"])
+        self.assertEqual(by_title["NestedFolder"]["type"], "folder")
+        self.assertEqual(by_title["NestedFolder"]["folder"],
+                         "/library/sections/2/folder?parent=77")
+        # section is threaded onto folder rows for deeper navigation
+        self.assertEqual(by_title["NestedFolder"]["section"], "2")
+
+    def test_folder_unavailable_wraps_404(self):
+        import urllib.error
+        def boom(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "Not Found", {}, None)
+        with mock.patch.object(self.c, "_get", side_effect=boom):
+            with self.assertRaises(plex.PlexError):
+                self.c.folder_items("/library/sections/2/folder", section="2")
+
+
 if __name__ == "__main__":
     unittest.main()
