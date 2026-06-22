@@ -46,8 +46,8 @@ class App:
         "Classic Blue":   {"theme": "blue",  "font": "vcr",        "scanline_alpha": 40},
         "Amber Terminal": {"theme": "amber", "font": "vt220",      "scanline_alpha": 50},
         "Green Phosphor": {"theme": "green", "font": "ibm",        "scanline_alpha": 50},
-        "Synthwave":      {"theme": "synth", "font": "pixelforge", "scanline_alpha": 40},
-        "Commodore":      {"theme": "c64",   "font": "pixelforge", "scanline_alpha": 40},
+        "Synthwave":      {"theme": "synth", "font": "handjet", "scanline_alpha": 40},
+        "Commodore":      {"theme": "c64",   "font": "dotgothic", "scanline_alpha": 40},
         "Monochrome":     {"theme": "mono",  "font": "dejavu",     "scanline_alpha": 30},
     }
 

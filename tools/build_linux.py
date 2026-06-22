@@ -54,9 +54,13 @@ def package(app_dir):
     log("creating tar.gz (preserves the executable bit)...")
     with tarfile.open(out, "w:gz") as t:
         t.add(app_dir, arcname="Cathode")
-        readme = os.path.join(ROOT, "README.md")
-        if os.path.exists(readme):
-            t.add(readme, arcname="Cathode/README.md")
+        for top in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+            p = os.path.join(ROOT, top)
+            if os.path.exists(p):
+                t.add(p, arcname=f"Cathode/{top}")
+        lic = os.path.join(ROOT, "LICENSES")
+        if os.path.isdir(lic):
+            t.add(lic, arcname="Cathode/LICENSES")
     mb = os.path.getsize(out) / 1024 / 1024
     log(f"DONE -> {out}  ({mb:.1f} MB)")
     log("Run it with:  tar xzf <file>.tar.gz && ./Cathode/Cathode")

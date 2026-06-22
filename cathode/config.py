@@ -60,7 +60,7 @@ class Config:
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance
-    font: str = "vcr"              # vcr | ibm | vt220 | pixelforge | dejavu
+    font: str = "vcr"              # vcr | ibm | vt220 | handjet | dotgothic
     theme: str = "blue"           # blue | amber | green | vhs | mono | custom | ...
     # Custom palette saved by the theme editor: {bg,accent,accent2,text -> [r,g,b]}
     custom_palette: dict = field(default_factory=dict)   # legacy (migrated)

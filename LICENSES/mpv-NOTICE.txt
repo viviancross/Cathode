@@ -1,0 +1,32 @@
+mpv — bundled in the Cathode Windows portable build
+===================================================
+
+The file `mpv.exe` distributed in the Cathode Windows portable zip is an
+unmodified binary from the shinchiro mpv Windows builds:
+
+    https://github.com/shinchiro/mpv-winbuild-cmake
+
+mpv is free software licensed under the GNU General Public License, version 2
+or later (GPLv2+). These Windows builds are compiled with GPL-licensed
+components, so the combined binary is covered by the GPL.
+
+    mpv project:        https://github.com/mpv-player/mpv
+    mpv license (GPL):  https://github.com/mpv-player/mpv/blob/master/LICENSE.GPL
+
+Cathode does not link mpv as a library. It runs mpv.exe as a separate process
+and controls it over mpv's JSON IPC. Cathode and mpv are combined only by
+aggregation on the same medium; each retains its own license.
+
+WRITTEN OFFER FOR SOURCE CODE
+-----------------------------
+The complete corresponding source code for the bundled mpv binary is publicly
+available at the URLs above:
+
+  * The mpv source: https://github.com/mpv-player/mpv (tag matching the bundled
+    version — see the version reported by `mpv --version`).
+  * The exact Windows build recipe and the corresponding source/toolchain:
+    https://github.com/shinchiro/mpv-winbuild-cmake and its release that
+    produced the bundled mpv.exe.
+
+If those URLs are unavailable, the corresponding source can be requested
+through the Cathode project's repository issue tracker.
