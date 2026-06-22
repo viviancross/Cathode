@@ -72,6 +72,10 @@ class ContextMenu:
     def _items(self) -> List[MenuItem]:
         return self._page[0] if self._page else []
 
+    def _back_present(self) -> bool:
+        # Submenu pages show a clickable/highlightable Back row at the bottom.
+        return len(self._stack) > 1
+
     def _select_first(self):
         p = self._page
         if not p:
@@ -83,15 +87,18 @@ class ContextMenu:
 
     def move(self, delta: int):
         p = self._page
-        if not p or not p[0]:
+        if not p:
             return
         n = len(p[0])
+        total = n + (1 if self._back_present() else 0)   # back is the row at index n
+        if total == 0:
+            return
         i = p[1]
         if i < 0:                      # nothing highlighted yet (mouse off-menu)
             i = -1 if delta > 0 else 0  # first Down -> 0, first Up -> last
-        for _ in range(n + 1):
-            i = (i + delta) % n
-            if p[0][i].enabled:
+        for _ in range(total + 1):
+            i = (i + delta) % total
+            if i == n or p[0][i].enabled:   # the Back row (i == n) is always selectable
                 break
         p[1] = i
 
@@ -103,7 +110,12 @@ class ContextMenu:
 
     def activate(self):
         p = self._page
-        if not p or not p[0] or p[1] < 0:   # nothing highlighted -> no-op
+        if not p or p[1] < 0:                # nothing highlighted -> no-op
+            return
+        if self._back_present() and p[1] == len(p[0]):   # the Back row
+            self.back()
+            return
+        if not p[0] or p[1] >= len(p[0]):
             return
         item = p[0][p[1]]
         if not item.enabled:
@@ -151,8 +163,8 @@ class ContextMenu:
         if not p:
             return
         idx = self.hit_test(x, y)
-        if idx is not None and p[0][idx].enabled:
-            p[1] = idx
+        if idx is not None and (idx == len(p[0]) or p[0][idx].enabled):
+            p[1] = idx          # idx == len(items) is the Back row
         else:
             p[1] = -1
 
@@ -160,7 +172,7 @@ class ContextMenu:
 
     def _geometry(self):
         items = self._items()
-        rows = len(items) + 1  # + title row
+        rows = len(items) + 1 + (1 if self._back_present() else 0)  # title (+ back)
         avail_h = int(self.height * 0.90)
         row_h = max(22, min(int(self.height * 0.052), avail_h // max(rows, 1)))
         pad = max(8, int(self.height * 0.018))
@@ -180,10 +192,20 @@ class ContextMenu:
             rects.append((i, px, ry, px + pw, ry + row_h))
         return rects
 
+    def _back_rect(self):
+        if not self._back_present():
+            return None
+        px, py, pw, ph, row_h, pad = self._geometry()
+        ry = py + pad + row_h + len(self._items()) * row_h   # below the last item
+        return (px, ry, px + pw, ry + row_h)
+
     def hit_test(self, x: int, y: int) -> Optional[int]:
         for (i, x0, y0, x1, y1) in self._row_rects():
             if x0 <= x <= x1 and y0 <= y <= y1:
                 return i
+        br = self._back_rect()
+        if br and br[0] <= x <= br[2] and br[1] <= y <= br[3]:
+            return len(self._items())     # Back row sentinel
         return None
 
     # ── render ────────────────────────────────────────────────────────────
@@ -225,6 +247,16 @@ class ContextMenu:
                         ry + (row_h - self._th(d, right)) // 2),
                        right, font=self.font,
                        fill=CYAN if it.submenu is not None else WHITE_DIM)
+
+        # Back row (submenus only) — highlightable + clickable.
+        br = self._back_rect()
+        if br:
+            bx0, by0, bx1, by1 = br
+            if sel == len(items):
+                d.rectangle([px + 4, by0, px + pw - 4, by1], fill=GUIDE_SELECTED)
+            label = "< Back"
+            d.text((px + pad + 6, by0 + (row_h - self._th(d, label)) // 2),
+                   label, font=self.font, fill=CYAN)
         return img
 
     @staticmethod

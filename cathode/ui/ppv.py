@@ -135,6 +135,31 @@ class PPVScreen:
                 return i
         return None
 
+    def _back_rect(self):
+        x0 = int(self.width * 0.04)
+        y0 = int(self.height * 0.155)
+        w = max(86, int(self.width * 0.10))
+        h = max(26, int(self.height * 0.045))
+        return (x0, y0, x0 + w, y0 + h)
+
+    def hit_back(self, x, y) -> bool:
+        if self.mode != "browse":
+            return False
+        bx0, by0, bx1, by1 = self._back_rect()
+        return bx0 <= x <= bx1 and by0 <= y <= by1
+
+    def _menu_rect(self):
+        _, by0, _, by1 = self._back_rect()
+        w = max(86, int(self.width * 0.10))
+        x1 = int(self.width * 0.96)
+        return (x1 - w, by0, x1, by1)
+
+    def hit_menu(self, x, y) -> bool:
+        if self.mode != "browse":
+            return False
+        mx0, my0, mx1, my1 = self._menu_rect()
+        return mx0 <= x <= mx1 and my0 <= y <= my1
+
     def set_hover(self, x, y):
         i = self.hit_test(x, y)
         if i is not None:
@@ -164,6 +189,24 @@ class PPVScreen:
             d.text((int(self.width * 0.04), y), self.crumb, font=self.f_meta, fill=GRAY)
             y += self._th(d, self.crumb, self.f_meta) + int(self.height * 0.014)
         self._center(d, self.title.upper(), self.f_title, y, WHITE)
+
+        # Back button (clickable; keyboard/controller also back out with ESC/B).
+        bx0, by0, bx1, by1 = self._back_rect()
+        d.rectangle([bx0, by0, bx1, by1], fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
+                    outline=OSD_BORDER, width=2)
+        bl = "< BACK"
+        d.text((bx0 + 10, by0 + (by1 - by0 - self._th(d, bl, self.f_foot)) // 2),
+               bl, font=self.f_foot, fill=CYAN)
+
+        # Menu button (clickable; opens the Plex context menu).
+        mx0, my0, mx1, my1 = self._menu_rect()
+        d.rectangle([mx0, my0, mx1, my1], fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
+                    outline=OSD_BORDER, width=2)
+        ml = "MENU ="
+        mw = self._tw(d, ml, self.f_foot)
+        d.text((mx0 + (mx1 - mx0 - mw) // 2,
+                my0 + (my1 - my0 - self._th(d, ml, self.f_foot)) // 2),
+               ml, font=self.f_foot, fill=CYAN)
 
         # List panel
         x0, top, x1, bottom = self._panel()

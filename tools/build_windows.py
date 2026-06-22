@@ -15,8 +15,8 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)   # so `import cathode` works when run from tools/
-# Rewrite release zips land in builds/rewrite/ (matches build_source.py).
-BUILDS = os.path.join(os.path.dirname(ROOT), "builds", "rewrite")
+# Release zips land in builds/2.0/ (matches the other build scripts).
+BUILDS = os.path.join(os.path.dirname(ROOT), "builds", "2.0")
 WORK = os.path.join(ROOT, "_winbuild")
 MPV_DIR = os.path.join(WORK, "mpv")
 
@@ -100,7 +100,7 @@ def package(app_dir):
     import cathode
     ver = cathode.__version__
     os.makedirs(BUILDS, exist_ok=True)
-    out_zip = os.path.join(BUILDS, f"cathode-ppv-windows-{ver}-portable.zip")
+    out_zip = os.path.join(BUILDS, f"cathode-windows-{ver}-portable.zip")
     if os.path.exists(out_zip):
         os.remove(out_zip)
     log("zipping portable build...")

@@ -85,9 +85,9 @@ class PlexClient:
         with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
             return json.loads(r.read() or b"{}")
 
-    def _post(self, url: str) -> dict:
+    def _post(self, url: str, token: Optional[str] = None) -> dict:
         req = urllib.request.Request(url, data=b"", method="POST",
-                                     headers=self._headers())
+                                     headers=self._headers(token))
         with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL) as r:
             return json.loads(r.read() or b"{}")
 
@@ -111,23 +111,42 @@ class PlexClient:
 
     # ── server discovery ──────────────────────────────────────────────────
 
-    def discover_server(self) -> str:
-        """Find a reachable Plex Media Server and remember it. Returns its base
-        URL, or raises PlexError. Prefers a local connection, then remote.
-
-        Candidates are probed in parallel with a short timeout so a dead remote
-        / relay address can't stall the whole connect for 15s each in series."""
+    def _server_resources(self) -> List[dict]:
+        """All Plex Media Servers (owned + shared) linked to this account."""
         url = (f"{PLEX_TV}/api/v2/resources"
                "?includeHttps=1&includeRelay=1")
         data = self._get(url)
         resources = data if isinstance(data, list) else data.get("resources", [])
-        servers = [r for r in resources
-                   if "server" in (r.get("provides") or "")]
+        return [r for r in resources if "server" in (r.get("provides") or "")]
+
+    def list_servers(self) -> List[dict]:
+        """Owned + shared servers for the server picker: [{id, title, owned}].
+        `id` is the clientIdentifier passed back to discover_server(prefer=...)."""
+        out = []
+        for r in self._server_resources():
+            cid = r.get("clientIdentifier")
+            if cid:
+                out.append({"id": cid, "title": r.get("name", "?"),
+                            "owned": bool(r.get("owned"))})
+        # Owned first, then alphabetical.
+        out.sort(key=lambda s: (0 if s["owned"] else 1, s["title"].lower()))
+        return out
+
+    def discover_server(self, prefer: str = "") -> str:
+        """Find a reachable Plex Media Server and remember it. Returns its base
+        URL, or raises PlexError. `prefer` is a clientIdentifier to try first
+        (the user's chosen server); otherwise owned servers come first. Within a
+        server, local connections beat remote beat relay.
+
+        Candidates are probed in parallel with a short timeout so a dead remote
+        / relay address can't stall the whole connect for 15s each in series."""
+        servers = self._server_resources()
         if not servers:
             raise PlexError("No Plex Media Server is linked to this account.")
-        # Build a preference-ordered candidate list: owned servers first, and
-        # within each, local connections before remote before relay.
-        servers.sort(key=lambda r: 0 if r.get("owned") else 1)
+        # Preference order: the chosen server first (if any), then owned.
+        servers.sort(key=lambda r: (
+            0 if prefer and r.get("clientIdentifier") == prefer else 1,
+            0 if r.get("owned") else 1))
         candidates = []   # (uri, token) in descending preference
         for r in servers:
             conns = sorted(r.get("connections") or [],
@@ -180,18 +199,6 @@ class PlexClient:
                 out.append({"key": d.get("key"), "title": d.get("title", "?"),
                             "type": d.get("type"), "agent": d.get("agent", "")})
         return out
-
-    @staticmethod
-    def _join(path: str, sort: str = "") -> str:
-        if not sort:
-            return path
-        return f"{path}{'&' if '?' in path else '?'}sort={sort}"
-
-    def section_items(self, key: str, sort: str = "") -> List[dict]:
-        data = self._get(self._join(
-            f"{self.server}/library/sections/{key}/all", sort),
-            token=self._server_token)
-        return [_meta_row(m) for m in _container(data, "Metadata")]
 
     def is_other_videos(self, section: dict) -> bool:
         """Home-video / 'Other Videos' libraries support folder browsing."""
@@ -402,10 +409,17 @@ class PlexClient:
                         "protected": bool(u.get("protected") or u.get("hasPassword"))})
         return [u for u in out if u["uuid"]]
 
-    def switch_user(self, uuid: str) -> str:
-        """Switch to a Home user; returns that user's auth token (or '')."""
-        data = self._post(
-            f"{PLEX_TV}/api/v2/home/users/{uuid}/switch", token=self.admin_token)
+    def switch_user(self, uuid: str, pin: str = "") -> str:
+        """Switch to a Home user; returns that user's auth token (or '').
+        PIN-protected users require the 4-digit `pin`; a wrong/empty PIN returns
+        '' (the server rejects the switch)."""
+        url = f"{PLEX_TV}/api/v2/home/users/{uuid}/switch"
+        if pin:
+            url += f"?pin={urllib.parse.quote(pin)}"
+        try:
+            data = self._post(url, token=self.admin_token)
+        except urllib.error.HTTPError:
+            return ""          # 401/403 on a bad PIN
         token = data.get("authToken") or data.get("authentication_token") or ""
         if token:
             self.token = token

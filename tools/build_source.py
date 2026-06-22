@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the cross-platform source zip (Linux / macOS).
 
-Writes cathode-ppv-source-<version>.zip with forward-slash paths so it extracts
+Writes cathode-linux-macos-<version>.zip with forward-slash paths so it extracts
 cleanly on Linux. Bundles the Linux/SteamOS (install.sh) and macOS
 (install-macos.sh) install scripts; the Windows ones are left out.
 """
@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import cathode  # noqa: E402
 
-OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", "rewrite")
+OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", "2.0")
 
 # Top-level files to include (non-Windows install scripts).
 TOP_FILES = [
@@ -41,7 +41,7 @@ def _excluded(name):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     ver = cathode.__version__
-    out = os.path.join(OUT_DIR, f"cathode-ppv-source-{ver}.zip")
+    out = os.path.join(OUT_DIR, f"cathode-linux-macos-{ver}.zip")
     if os.path.exists(out):
         os.remove(out)
 

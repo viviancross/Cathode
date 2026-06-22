@@ -17,7 +17,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-BUILDS = os.path.join(os.path.dirname(ROOT), "builds")
+BUILDS = os.path.join(os.path.dirname(ROOT), "builds", "2.0")
 WORK = os.path.join(ROOT, "_macbuild")
 
 

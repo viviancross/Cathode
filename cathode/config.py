@@ -23,7 +23,6 @@ class Config:
     osd_timeout_info: float = 6.0 # seconds OSD stays visible when manually shown
 
     # Channel-change static
-    static_duration: float = 0.35  # (legacy) seconds of static noise
     reveal_duration: float = 0.3   # seconds to fade static out once stream is up
     tune_timeout: float = 12.0     # max seconds to hold static if stream stalls
 
@@ -47,6 +46,8 @@ class Config:
     plex_token: str = ""           # plex.tv account token (set via the PIN sign-in)
     plex_client_id: str = ""       # stable X-Plex-Client-Identifier (auto-generated)
     plex_server: str = ""          # cached base URL of the chosen server
+    plex_server_id: str = ""       # chosen server's clientIdentifier (blank = auto)
+    plex_servers: list = field(default_factory=list)   # cached [{id,title,owned}]
     plex_user_token: str = ""      # selected Plex Home user's token (blank = account)
     plex_user_id: str = ""         # selected Home user uuid
     plex_user_name: str = ""       # selected Home user display name
@@ -98,6 +99,9 @@ class Config:
     # Extra raw mpv arguments (advanced / troubleshooting), e.g.
     # ["--gpu-context=wayland"] or ["--hwdec=no"] for Game Mode display issues.
     mpv_extra_args: list = field(default_factory=list)
+
+    # Check GitHub Releases for a newer version on launch (notify only).
+    update_check: bool = True
 
     # Explicit path to the mpv executable (e.g. "C:/mpv/mpv.exe") for when it
     # isn't on PATH. Empty = auto-detect.

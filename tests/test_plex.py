@@ -86,13 +86,6 @@ class TestURLBuilding(unittest.TestCase):
         self.assertEqual(self.c._abs_url("library/x"),
                          "http://server:32400/library/x")
 
-    def test_join_sort(self):
-        self.assertEqual(plex.PlexClient._join("/p"), "/p")
-        self.assertEqual(plex.PlexClient._join("/p", "year:desc"),
-                         "/p?sort=year:desc")
-        self.assertEqual(plex.PlexClient._join("/p?x=1", "year:desc"),
-                         "/p?x=1&sort=year:desc")
-
     def test_transcode_url_has_no_token(self):
         url = self.c._transcode_url("123", 4000, 30)
         self.assertNotIn("X-Plex-Token", url)
@@ -369,6 +362,85 @@ class TestOnDeckSearchMarkers(unittest.TestCase):
             info = self.c.play_info("9")
         self.assertIn("includeMarkers=1", g.call_args[0][0])
         self.assertEqual(info["markers"], [{"type": "intro", "start": 0.0, "end": 30.0}])
+
+
+class TestUsersAndServers(unittest.TestCase):
+    def setUp(self):
+        self.c = plex.PlexClient("cid", token="acct", admin_token="acct")
+        self.c.server = "http://server:32400"
+        self.c._server_token = "srvtok"
+
+    def test_switch_user_sends_pin(self):
+        cap = {}
+
+        def fake_post(url, token=None):
+            cap["url"] = url
+            return {"authToken": "usertok"}
+
+        with mock.patch.object(self.c, "_post", side_effect=fake_post):
+            tok = self.c.switch_user("uuid-1", pin="4321")
+        self.assertEqual(tok, "usertok")
+        self.assertIn("pin=4321", cap["url"])
+        self.assertEqual(self.c.token, "usertok")
+
+    def test_switch_user_without_pin_has_no_pin_query(self):
+        cap = {}
+
+        def fake_post(url, token=None):
+            cap["url"] = url
+            return {"authToken": "t"}
+
+        with mock.patch.object(self.c, "_post", side_effect=fake_post):
+            self.c.switch_user("uuid-1")
+        self.assertNotIn("pin=", cap["url"])
+
+    def test_switch_user_bad_pin_returns_empty(self):
+        import urllib.error
+
+        def boom(url, token=None):
+            raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, None)
+
+        with mock.patch.object(self.c, "_post", side_effect=boom):
+            self.assertEqual(self.c.switch_user("uuid-1", pin="0000"), "")
+
+    def test_list_servers_parses_and_sorts_owned_first(self):
+        resources = [
+            {"provides": "server", "name": "Shared", "clientIdentifier": "B",
+             "owned": False},
+            {"provides": "server", "name": "Mine", "clientIdentifier": "A",
+             "owned": True},
+            {"provides": "client", "name": "Phone"},     # not a server
+        ]
+        with mock.patch.object(self.c, "_get", return_value=resources):
+            servers = self.c.list_servers()
+        self.assertEqual([s["id"] for s in servers], ["A", "B"])  # owned first
+        self.assertEqual(servers[0]["title"], "Mine")
+        self.assertTrue(servers[0]["owned"])
+
+    def test_discover_prefers_chosen_server(self):
+        resources = [
+            {"provides": "server", "owned": True, "clientIdentifier": "OWN",
+             "accessToken": "t1", "connections": [{"uri": "http://own", "local": True}]},
+            {"provides": "server", "owned": False, "clientIdentifier": "CHOSEN",
+             "accessToken": "t2", "connections": [{"uri": "http://chosen", "local": True}]},
+        ]
+        with mock.patch.object(self.c, "_get", return_value=resources), \
+                mock.patch.object(self.c, "_reachable", return_value=True):
+            url = self.c.discover_server(prefer="CHOSEN")
+        self.assertEqual(url, "http://chosen")
+        self.assertEqual(self.c._server_token, "t2")
+
+    def test_discover_default_prefers_owned(self):
+        resources = [
+            {"provides": "server", "owned": False, "clientIdentifier": "S",
+             "accessToken": "t2", "connections": [{"uri": "http://shared", "local": True}]},
+            {"provides": "server", "owned": True, "clientIdentifier": "O",
+             "accessToken": "t1", "connections": [{"uri": "http://owned", "local": True}]},
+        ]
+        with mock.patch.object(self.c, "_get", return_value=resources), \
+                mock.patch.object(self.c, "_reachable", return_value=True):
+            url = self.c.discover_server()
+        self.assertEqual(url, "http://owned")
 
 
 if __name__ == "__main__":
