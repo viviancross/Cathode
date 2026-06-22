@@ -1,0 +1,8 @@
+
+# Build scratch + bytecode
+_winbuild/
+_linuxbuild/
+_macbuild/
+__pycache__/
+*.pyc
+tools/preview_out/

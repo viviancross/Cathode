@@ -80,6 +80,7 @@ class App:
                 "XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
         runtime_dir = os.path.join(cache_base, "cathode")
         os.makedirs(runtime_dir, exist_ok=True)
+        self._runtime_dir = runtime_dir       # also holds downloaded updates
         overlay_path = os.path.join(runtime_dir, "overlay.bgra")
 
         # Appearance: resolve + apply the active color theme (migrating any
@@ -171,6 +172,12 @@ class App:
         self._start_channel = start_channel
         self._quit = False
 
+        # Sleep timer + idle screensaver.
+        self._last_input = time.monotonic()
+        self._sleep_deadline = None          # monotonic ts, or None when off
+        self._screensaver_delay = 180        # seconds idle before the screensaver
+        self._pending_apply = None           # apply-script path, run on quit
+
     # ── Public entry point ────────────────────────────────────────────────
 
     def run(self):
@@ -236,6 +243,13 @@ class App:
             })
 
         print("[cathode] Ready.")
+
+        # Background ticker: sleep timer + idle screensaver.
+        threading.Thread(target=self._housekeeping_loop, daemon=True).start()
+
+        # One-shot update check on launch (notify only).
+        if self.config.update_check:
+            threading.Thread(target=self._update_check_launch, daemon=True).start()
 
         # Block until mpv exits
         try:
@@ -575,7 +589,7 @@ class App:
             "ENTER": self._grid_select, "KP_ENTER": self._grid_select,
             "ESC": self._handle_escape,
             "SPACE": self._space_key,
-            "MBTN_RIGHT": self._toggle_context_menu, "MBTN_LEFT": self._menu_click,
+            "MBTN_RIGHT": self._right_click, "MBTN_LEFT": self._menu_click,
             "WHEEL_UP": self._wheel_up, "WHEEL_DOWN": self._wheel_down,
             "ctrl+v": self._osk_paste, "ctrl+c": self._osk_copy,
         }
@@ -643,8 +657,133 @@ class App:
 
     def _after_key(self):
         """Runs after every keyboard/mouse key handler (player.on_after_key)."""
+        self._mark_activity()
         self._set_input_mode("key")
         self._sync_nav_repeat()
+
+    def _mark_activity(self) -> bool:
+        """Record input + dismiss the screensaver. Returns True if this input
+        only woke the screensaver (caller may swallow it)."""
+        self._last_input = time.monotonic()
+        if self.renderer.screensaver.active:
+            self.renderer.screensaver.active = False
+            self.renderer.update()
+            return True
+        return False
+
+    # ── Sleep timer + screensaver ─────────────────────────────────────────
+
+    def _actively_playing(self) -> bool:
+        """True when video is actually on screen (don't screensaver over it)."""
+        r = self.renderer
+        if r.state == UIState.CHANNEL_CHANGING:
+            return True
+        if r.plex_playing:
+            return not self._plex_paused      # paused Plex is fair game
+        return r.state == UIState.WATCHING    # live TV
+
+    def _housekeeping_loop(self):
+        while not self._quit:
+            now = time.monotonic()
+            if self._sleep_deadline and now >= self._sleep_deadline:
+                self._sleep_deadline = None
+                self._sleep_fire()
+            ss = self.renderer.screensaver
+            if ss.active:
+                ss.step()
+                self.renderer.update()
+                time.sleep(0.05)              # ~20fps while bouncing
+                continue
+            if (not self._actively_playing()
+                    and now - self._last_input >= self._screensaver_delay):
+                ss.reset()
+                ss.active = True
+                self.renderer.update()
+            time.sleep(0.5)
+
+    def _sleep_fire(self):
+        """Sleep timer elapsed — pause whatever's playing."""
+        if self.renderer.plex_playing:
+            if not self._plex_paused:
+                self._plex_toggle_pause()
+        else:
+            self.player.set_pause(True)
+        self.renderer.show_notification("Sleep timer — paused", 4.0)
+
+    SLEEP_OPTIONS = [("Off", 0), ("15 minutes", 15), ("30 minutes", 30),
+                     ("60 minutes", 60)]
+
+    def _sleep_submenu(self):
+        # Only "Off" carries a checkmark (when no timer is running); we don't
+        # track which preset is active once set.
+        active = self._sleep_deadline is not None
+        return [MenuItem(label, checked=(mins == 0 and not active),
+                         action=lambda m=mins: self._set_sleep_timer(m),
+                         close_after=False)
+                for label, mins in self.SLEEP_OPTIONS]
+
+    def _set_sleep_timer(self, minutes):
+        if minutes:
+            self._sleep_deadline = time.monotonic() + minutes * 60
+            self.renderer.show_notification(f"Sleep timer set: {minutes} min", 3.0)
+        else:
+            self._sleep_deadline = None
+            self.renderer.show_notification("Sleep timer off", 3.0)
+        self.renderer.menu.replace_page(self._sleep_submenu())
+        self.renderer.mark_dirty()
+
+    # ── Update check (GitHub Releases — notify + download, no self-overwrite) ─
+
+    def _update_check_launch(self):
+        """Quiet check on launch: only speak up if a newer version exists."""
+        from . import updater, __version__
+        try:
+            latest = updater.check_latest()
+        except updater.UpdateError:
+            return
+        if latest and updater.is_newer(latest["tag"], __version__):
+            self.renderer.show_notification(
+                f"Update {latest['tag']} available — Check for Updates in the menu", 6.0)
+
+    def _check_updates(self):
+        """Menu action: check, and if newer download the matching asset."""
+        from . import updater, __version__
+        self.renderer.show_notification("Checking for updates...", 3.0)
+
+        def work():
+            try:
+                latest = updater.check_latest()
+            except updater.UpdateError as e:
+                self.renderer.show_notification(f"Update check failed: {e}", 5.0)
+                return
+            if not latest or not updater.is_newer(latest["tag"], __version__):
+                self.renderer.show_notification(
+                    f"Up to date (v{__version__})", 4.0)
+                return
+            asset = updater.pick_asset(latest["assets"])
+            if not asset:
+                self.renderer.show_notification(
+                    f"{latest['tag']} available, but no build for this platform", 6.0)
+                return
+            self.renderer.show_notification(
+                f"Downloading {latest['tag']}...", 5.0)
+            updates_dir = os.path.join(self._runtime_dir, "updates")
+            try:
+                dest = updater.download(asset["url"], updates_dir, asset["name"])
+            except updater.UpdateError as e:
+                self.renderer.show_notification(f"Download failed: {e}", 5.0)
+                return
+            # Stage an install script that runs after Cathode exits, so the next
+            # launch is the new version (never overwrites the running build).
+            try:
+                self._pending_apply = updater.write_apply_script(
+                    dest, updater.install_dir(), updates_dir)
+                self.renderer.show_notification(
+                    f"Update {latest['tag']} ready — installs when you quit Cathode", 8.0)
+            except Exception:
+                self.renderer.show_notification(
+                    f"Update downloaded — {dest}", 8.0)
+        threading.Thread(target=work, daemon=True).start()
 
     def _sync_nav_repeat(self):
         """Toggle arrow-key repeat to match the current UI mode. Called after
@@ -729,7 +868,8 @@ class App:
         elif r.plexinfo.open:
             self._plex_info_back()
         elif r.plex_playing:
-            if r.plexosd.adjusting:
+            if r.plexosd.scrubbing or r.plexosd.adjusting:
+                r.plexosd.scrubbing = False
                 r.plexosd.adjusting = False
                 self._plex_show_osd()
             elif r.plexosd.visible:
@@ -756,6 +896,19 @@ class App:
 
     def _toggle_fullscreen(self):
         self._set_fullscreen(not self._fullscreen)
+
+    def _right_click(self):
+        """Right mouse button: 'back' while in a menu/list/dialog (so the UI is
+        fully mouse-driveable); the context-menu toggle only while a video is
+        playing (or on the bare home/live screen)."""
+        r = self.renderer
+        in_nav = (r.menu.open or r.osk.open or r.editor.open or r.ppv.open
+                  or r.plexinfo.open or r.main_menu.open
+                  or r.state == UIState.GUIDE_OPEN)
+        if in_nav:
+            self._handle_escape()
+        else:
+            self._toggle_context_menu()
 
     def _toggle_context_menu(self):
         if self.renderer.osk.open:
@@ -801,6 +954,12 @@ class App:
             return
         if self.renderer.ppv.open:
             x, y = self._last_mouse
+            if self.renderer.ppv.hit_back(x, y):
+                self._ppv_back()
+                return
+            if self.renderer.ppv.hit_menu(x, y):
+                self._toggle_context_menu()
+                return
             i = self.renderer.ppv.hit_test(x, y)
             if i is not None:
                 self.renderer.ppv.sel = i
@@ -845,7 +1004,8 @@ class App:
         elif r.plexinfo.open:
             self._plex_info_back()
         elif r.plex_playing:
-            if r.plexosd.adjusting:
+            if r.plexosd.scrubbing or r.plexosd.adjusting:
+                r.plexosd.scrubbing = False
                 r.plexosd.adjusting = False
                 self._plex_show_osd()
             elif r.plexosd.visible:
@@ -882,6 +1042,8 @@ class App:
         """Called from the gamepad reader thread.  Dispatch on its own thread so
         a blocking handler (e.g. the on-screen keyboard) can't freeze input."""
         self._set_input_mode("gamepad")
+        if self._mark_activity():
+            return            # this press only woke the screensaver
         threading.Thread(target=self._gamepad_dispatch,
                          args=(name, is_repeat), daemon=True).start()
 
@@ -999,6 +1161,11 @@ class App:
         # Only update hover state and request a coalesced repaint; never render
         # here (that would flood the reader and freeze input).
         self._last_mouse = (x, y)
+        self._last_input = time.monotonic()
+        if self.renderer.screensaver.active:
+            self.renderer.screensaver.active = False
+            self.renderer.mark_dirty()   # cheap; never render on the reader thread
+            return
         self._set_input_mode("key")
         if self.renderer.osk.open:
             self.renderer.osk.set_hover(x, y)
@@ -1099,6 +1266,8 @@ class App:
             MenuItem("Keyboard Shortcuts", submenu=self._keyboard_keys_submenu),
             MenuItem("Gamepad Buttons", submenu=self._gamepad_keys_submenu),
             MenuItem("Display", submenu=self._display_submenu),
+            MenuItem("Sleep Timer", submenu=self._sleep_submenu),
+            MenuItem("Check for Updates", action=self._check_updates),
         ]
 
     # ── Input remapping menus ─────────────────────────────────────────────
@@ -1163,13 +1332,52 @@ class App:
         if not self.config.plex_token:
             return [MenuItem("(not signed in — open Plex-Per-View)", enabled=False)]
         user = self.config.plex_user_name or "Account"
-        return [
+        items = [
             MenuItem(f"Quality: {self.config.plex_quality}",
                      submenu=self._plex_quality_submenu),
             MenuItem("Libraries", submenu=self._plex_libraries_submenu),
+        ]
+        # Server picker only when more than one server is available.
+        if len(self.config.plex_servers) > 1:
+            items.append(MenuItem("Server", submenu=self._plex_servers_submenu))
+        items += [
             MenuItem(f"User: {user}", action=self._plex_change_user),
             MenuItem("Unlink Plex Account", action=self._plex_unlink),
         ]
+        return items
+
+    def _plex_servers_submenu(self):
+        servers = self.config.plex_servers
+        if not servers:
+            return [MenuItem("(open Plex-Per-View first)", enabled=False)]
+        cur = self.config.plex_server_id
+        return [MenuItem(s["title"] + ("" if s.get("owned") else "  (shared)"),
+                         checked=(s["id"] == cur),
+                         action=lambda i=s["id"]: self._plex_set_server(i),
+                         close_after=False)
+                for s in servers]
+
+    def _plex_set_server(self, server_id):
+        if server_id == self.config.plex_server_id:
+            return
+        self.config.plex_server_id = server_id
+        self.config.plex_server = ""        # drop cached base URL; rediscover
+        self.config.save()
+        self._plex_reset()                  # rebuild client, then reconnect
+        self.renderer.menu.replace_page(self._plex_servers_submenu())
+        self.renderer.mark_dirty()
+        # Re-enter the library from the chosen server (off the menu thread).
+        self._plex_end()
+        self._ppv_stack = []
+        self.renderer.plexinfo.close()
+        self.renderer.ppv.mode = "browse"
+        self.renderer.ppv.rows = []
+        self.renderer.ppv.show()
+        self.renderer.ppv.set_status("CONNECTING...")
+        self._ppv_return_menu = self.renderer.main_menu.open
+        self.renderer.menu.close()
+        self.renderer.main_menu.close()
+        self._ppv_connect()
 
     def _plex_libraries_submenu(self):
         secs = self.config.plex_sections
@@ -1601,14 +1809,19 @@ class App:
         def work():
             try:
                 client = self._ppv_client()
-                client.discover_server()
+                client.discover_server(prefer=self.config.plex_server_id)
                 sections = client.sections()
             except Exception as e:
                 self._ppv_error(str(e) or "Couldn't reach Plex.")
                 return
-            # Cache the library list so the show/hide menu works any time.
+            # Cache the library list (show/hide menu) + the server list (server
+            # picker) so both menus work without another round-trip.
             self.config.plex_sections = [{"key": s["key"], "title": s["title"]}
                                          for s in sections]
+            try:
+                self.config.plex_servers = client.list_servers()
+            except Exception:
+                pass
             self.config.save()
             hidden = set(self.config.plex_hidden_libraries)
             rows = [
@@ -1677,26 +1890,40 @@ class App:
                 return
             rows = [{"type": "user", "rating_key": u["uuid"],
                      "title": u["title"], "meta": "PIN" if u["protected"] else "",
+                     "protected": u["protected"],
                      "playable": False} for u in users]
             self._ppv_stack = []
             self._ppv_push("WHO'S WATCHING?", rows, "Plex-Per-View")
         threading.Thread(target=work, daemon=True).start()
 
-    def _ppv_pick_user(self, uuid, name):
+    def _ppv_pick_user(self, uuid, name, protected=False):
         r = self.renderer
-        r.ppv.set_status("SWITCHING...")
-        r.mark_dirty()
+
         def work():
-            try:
-                token = self._ppv_client().switch_user(uuid)
-            except Exception:
-                token = ""
+            token = ""
+            while True:
+                pin = ""
+                if protected:
+                    pin = self._osk_get(f"Enter PIN for {name}", "")
+                    if not pin:
+                        # Cancelled — don't switch; return to the user list.
+                        self._ppv_choose_user(force=True)
+                        return
+                r.ppv.set_status("SWITCHING...")
+                r.mark_dirty()
+                try:
+                    token = self._ppv_client().switch_user(uuid, pin)
+                except Exception:
+                    token = ""
+                if token or not protected:
+                    break                       # success, or non-protected failure
+                r.show_notification("Wrong PIN — try again", 2.5)
             if token:
                 self.config.plex_user_token = token
                 self.config.plex_user_id = uuid
                 self.config.plex_user_name = name
             else:
-                # Couldn't switch (e.g. PIN-protected) — stay on the account.
+                # Non-protected switch failed — stay on the account.
                 self.config.plex_user_token = ""
                 self.config.plex_user_id = ""
                 self.config.plex_user_name = ""
@@ -1723,7 +1950,7 @@ class App:
         title = row.get("title", "")
         rk = row.get("rating_key")
         if t == "user":
-            self._ppv_pick_user(rk, title)
+            self._ppv_pick_user(rk, title, row.get("protected", False))
             return
         if t == "watchlist":
             self._ppv_open_watchlist()
@@ -2124,16 +2351,17 @@ class App:
         osd = self.renderer.plexosd
         if osd.adjusting:
             return   # volume is selected for adjustment — Up/Down is locked
+        osd.scrubbing = False    # moving the highlight ends scrub mode
         osd.focus_next() if delta > 0 else osd.focus_prev()
         self._plex_show_osd()
 
     def _plex_dpad(self, direction):
-        """Left/Right: adjust the selected volume, or scrub the timeline. Buttons
-        don't move on Left/Right (Up/Down navigates the bar)."""
+        """Left/Right: adjust volume (when selected), scrub the timeline (when
+        selected), else move the highlight."""
         osd = self.renderer.plexosd
         if osd.adjusting:
             self._plex_vol(direction > 0)
-        elif osd.focused_id() == "timeline":
+        elif osd.scrubbing:
             self._plex_seek(10 * direction)
         else:
             self._plex_focus(direction)   # Left/Right also move the highlight
@@ -2181,6 +2409,10 @@ class App:
         if fid == "skip":
             self._plex_skip_marker()
             return
+        if fid == "timeline":
+            osd.scrubbing = not osd.scrubbing   # select/deselect to scrub
+            self._plex_show_osd()
+            return
         if fid == "back10":
             self._plex_seek(-10)
         elif fid == "fwd10":
@@ -2189,7 +2421,7 @@ class App:
             self._plex_skip(-1)
         elif fid == "next":
             self._plex_skip(1)
-        elif fid in ("playpause", "timeline"):
+        elif fid == "playpause":
             self._plex_toggle_pause()
         elif fid == "stop":
             self._plex_stop()
@@ -2241,6 +2473,7 @@ class App:
         self.renderer.plex_playing = False
         self.renderer.plexosd.hide()
         self.renderer.plexosd.adjusting = False
+        self.renderer.plexosd.scrubbing = False
         self.renderer.plexosd.skip_label = ""
         self._plex_markers = []
         self._plex_paused = False
@@ -2765,6 +2998,14 @@ class App:
             self._gamepad_reader.stop()
         self.renderer.stop()
         self.player.terminate()
+        # A downloaded update installs now (after we exit), so the next launch
+        # runs the new version.
+        if self._pending_apply:
+            try:
+                from . import updater
+                updater.spawn_apply(self._pending_apply)
+            except Exception:
+                pass
 
     # ── Playlist loading (with first-run / retry prompt) ──────────────────
 

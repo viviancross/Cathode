@@ -173,12 +173,7 @@ class GamepadReader:
         JS_SIZE = 8                       # struct js_event { u32 time; s16 val; u8 type; u8 num; }
         while self._running:
             if fd is None:
-                paths = sorted(glob.glob("/dev/input/js*"))
-                if paths:
-                    try:
-                        fd = os.open(paths[0], os.O_RDONLY | os.O_NONBLOCK)
-                    except OSError:
-                        fd = None
+                fd = self._open_js()
                 if fd is None:
                     time.sleep(1.0)
                     continue
@@ -217,6 +212,30 @@ class GamepadReader:
                 os.close(fd)
             except OSError:
                 pass
+
+    @staticmethod
+    def _open_js():
+        """Open the first LIVE /dev/input/js* node.
+
+        On reconnect the kernel often gives the pad a new minor (js1) while the
+        old node (js0) lingers until udev reaps it. The stale node still opens
+        but every read raises ENODEV, so always grabbing js0 traps the reader on
+        a dead device. Probe each node and skip the dead ones."""
+        for path in sorted(glob.glob("/dev/input/js*")):
+            try:
+                f = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            try:
+                os.read(f, 8)            # probe: live -> data/BlockingIOError
+            except BlockingIOError:
+                return f                 # live, just no events queued yet
+            except OSError:
+                os.close(f)              # dead/stale node — skip it
+                continue
+            else:
+                return f                 # live (consumed one init event)
+        return None
 
     @staticmethod
     def _linux_signals(btns, axes):

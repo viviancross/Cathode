@@ -19,6 +19,7 @@ from .mainmenu import MainMenu
 from .ppv import PPVScreen
 from .plexosd import PlexOSD
 from .plexinfo import PlexInfoScreen
+from .screensaver import Screensaver
 from .effects import (
     make_scanline_cache,
     make_vignette,
@@ -81,6 +82,7 @@ class Renderer:
         self.ppv = PPVScreen(width, height)   # Plex-Per-View browse screen
         self.plexinfo = PlexInfoScreen(width, height)   # Plex item info page
         self.plexosd = PlexOSD(width, height)  # Plex playback control bar
+        self.screensaver = Screensaver(width, height)   # idle bouncing-logo overlay
         self.plex_playing = False             # a Plex item is the current video
 
         # CRT scanline / vignette toggles (driven by the theme editor)
@@ -162,6 +164,7 @@ class Renderer:
             self.ppv.refresh_fonts()
             self.plexinfo.refresh_fonts()
             self.plexosd.refresh_fonts()
+            self.screensaver.refresh_fonts()
 
     def resize(self, width: int, height: int):
         """Re-render at a new window resolution (e.g. handheld <-> docked)."""
@@ -182,6 +185,7 @@ class Renderer:
             self.ppv.resize(width, height)
             self.plexinfo.resize(width, height)
             self.plexosd.resize(width, height)
+            self.screensaver.resize(width, height)
         # Re-fit the video preview to the new geometry if the guide is open.
         self._apply_video_box()
 
@@ -418,6 +422,8 @@ class Renderer:
                 self.end_channel_change(self._pending_osd_timeout)
                 # fall through to render the now-WATCHING frame
             frame = self._render()
+            if self.screensaver.active:
+                frame = Image.alpha_composite(frame, self.screensaver.render())
         self._push_to_mpv(frame)
 
     def _render(self) -> Image.Image:

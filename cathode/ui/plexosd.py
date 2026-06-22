@@ -48,6 +48,7 @@ class PlexOSD:
         self.volume = 80
         self.muted = False
         self.adjusting = False    # volume is selected for Left/Right adjustment
+        self.scrubbing = False    # timeline is selected for Left/Right scrubbing
         self.focus = 0            # index into the current item list; default = timeline
         self.skip_label = ""      # "SKIP INTRO"/"SKIP CREDITS" while a marker is active ("" = none)
         self.skip_to = 0.0        # seconds to seek to when SKIP is pressed
@@ -211,7 +212,9 @@ class PlexOSD:
             d.rectangle([tx0, midy - 3, fx, midy + 3], fill=CHANNEL_GREEN)
             d.ellipse([fx - 6, midy - 6, fx + 6, midy + 6], fill=CHANNEL_GREEN)
         if fid == "timeline":
-            d.rectangle([tx0 - 6, ty0, tx1 + 6, ty1], outline=CHANNEL_GREEN, width=2)
+            col = CYAN if self.scrubbing else CHANNEL_GREEN   # brighten while scrubbing
+            d.rectangle([tx0 - 6, ty0, tx1 + 6, ty1], outline=col,
+                        width=3 if self.scrubbing else 2)
 
         # Bottom row
         for (name, ax0, ay0, ax1, ay1) in self._bottom_rects():
