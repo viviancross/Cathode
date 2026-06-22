@@ -414,10 +414,12 @@ class PlexClient:
     # ── playback ──────────────────────────────────────────────────────────
 
     def play_info(self, rating_key: str, quality: str = "Original") -> dict:
-        """Fresh metadata for one item: {url, offset, title, subtitle}.
+        """Fresh metadata for one item: {url, offset, title, subtitle, markers}.
         Direct play unless a transcode `quality` preset is given."""
-        data = self._get(f"{self.server}/library/metadata/{rating_key}",
-                         token=self._server_token)
+        # includeMarkers=1 returns intro/credits ranges for Skip Intro/Credits.
+        data = self._get(
+            f"{self.server}/library/metadata/{rating_key}?includeMarkers=1",
+            token=self._server_token)
         items = _container(data, "Metadata")
         if not items:
             raise PlexError("This item is no longer available.")
@@ -436,8 +438,32 @@ class PlexClient:
         # Auth travels in a header, not the URL query, so the token never lands
         # in mpv's log file. The caller passes these to the player.
         return {"url": url, "offset": offset, "title": title,
-                "subtitle": subtitle,
+                "subtitle": subtitle, "markers": _markers(m),
                 "headers": {"X-Plex-Token": self._server_token}}
+
+    def on_deck(self) -> List[dict]:
+        """The server's "Continue Watching" — in-progress items + next-up
+        episodes, already ranked by Plex. Browse rows via the normal path."""
+        data = self._get(f"{self.server}/library/onDeck", token=self._server_token)
+        return [_meta_row(m) for m in _container(data, "Metadata")]
+
+    def search(self, query: str, limit: int = 50) -> List[dict]:
+        """Search the libraries for movies, shows, and episodes. Uses the typed
+        /library/search endpoint so only playable library types come back."""
+        if not query.strip():
+            return []
+        q = urllib.parse.urlencode({
+            "query": query,
+            "searchTypes": "movies,tv",   # library types; results are movie/show/episode
+            "limit": str(limit),
+        })
+        data = self._get(f"{self.server}/library/search?{q}",
+                         token=self._server_token)
+        rows = []
+        for m in _search_metadata(data):
+            if m.get("type") in ("movie", "show", "episode"):
+                rows.append(_meta_row(m))
+        return rows
 
     def report_timeline(self, rating_key: str, time_s: float, duration_s: float,
                         state: str = "stopped"):
@@ -478,6 +504,36 @@ def _container(data: dict, key: str) -> list:
     mc = data.get("MediaContainer", {}) if isinstance(data, dict) else {}
     val = mc.get(key, [])
     return val if isinstance(val, list) else []
+
+
+def _markers(meta: dict) -> list:
+    """Intro/credits ranges for an item: [{type, start, end}] in seconds.
+    Plex gives offsets in ms under Metadata.Marker[]."""
+    out = []
+    for mk in meta.get("Marker", []) or []:
+        typ = mk.get("type", "")
+        if typ not in ("intro", "credits"):
+            continue
+        start = int(mk.get("startTimeOffset", 0)) / 1000.0
+        end = int(mk.get("endTimeOffset", 0)) / 1000.0
+        if end > start:
+            out.append({"type": typ, "start": start, "end": end})
+    return out
+
+
+def _search_metadata(data: dict) -> list:
+    """Metadata rows from /library/search, which may return either a flat
+    Metadata list (older servers) or SearchResult[] each wrapping a Metadata
+    (newer servers)."""
+    meta = _container(data, "Metadata")
+    if meta:
+        return meta
+    out = []
+    for r in _container(data, "SearchResult"):
+        m = r.get("Metadata")
+        if isinstance(m, dict):
+            out.append(m)
+    return out
 
 
 def _first_part(meta: dict) -> Optional[str]:
