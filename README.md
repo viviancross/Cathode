@@ -7,7 +7,7 @@ your M3U channels like it's 80s/90s cable TV — phosphor‑glow program guide, 
 scanlines, channel‑change snow, and on‑screen menus that scale from the Deck's
 screen to 1080p when docked.
 
-**Version: 1.0**
+**Version: 2.0 (pre-release)**
 
 <br clear="left">
 
@@ -16,10 +16,12 @@ screen to 1080p when docked.
 - **M3U + XMLTV** with a full program guide and a live picture‑in‑picture preview.
 - **Retro cable‑TV UI** — info bar, CRT scanlines, vignette, and channel‑change
   static that holds until the new stream's first frame is ready, then fades in.
-- **Themes & fonts** — 9 color themes, 5 retro fonts, a custom theme editor, and
+- **Themes & fonts** — 9 color themes, 4 retro fonts, a custom theme editor, and
   saved look **profiles**, all switchable live.
 - **Weather in the guide** — set your country + zip and the guide header shows
   current conditions, temperature, humidity, rain chance, and your city.
+- **Plex-Per-View** — sign in to Plex and browse + watch your library on demand,
+  styled like a retro cable pay-per-view menu. Resumes where you left off.
 - **Channel logos** (including animated GIF/APNG), favorites, and categories
   pulled from your XMLTV/M3U data.
 - **On‑screen everything** — context menu and on‑screen keyboard, fully usable
@@ -61,14 +63,12 @@ A prebuilt **`cathode-linux-<ver>.tar.gz`** runs without a venv (extract, then
 `./Cathode/Cathode`) but still needs mpv installed (`flatpak install flathub
 io.mpv.Mpv` or your distro's `mpv`).
 
-### macOS
-
-Run **`Cathode.app`** from `cathode-macos-<ver>.zip` (first launch: right‑click →
-**Open**, since it's unsigned) and `brew install mpv`. Or from source:
+### macOS (from source)
 
 ```bash
 chmod +x install-macos.sh cathode.sh
-./install-macos.sh && ./cathode.sh
+./install-macos.sh        # installs mpv (Homebrew) + a local venv
+./cathode.sh              # or: ./cathode.sh --demo
 ```
 
 ### Other Linux (from source)
@@ -159,8 +159,8 @@ Main Menu / Quit
 ## Customizing
 
 **Themes & fonts** — 9 themes (Classic Blue, Amber CRT, Green Phosphor, VHS
-Magenta, Monochrome, Commodore 64, Red Alert, Synthwave, Ice) and 5 bundled fonts
-(VCR OSD Mono, PxPlus IBM VGA, Glass TTY VT220, Pixel Forge, DejaVu Sans Mono).
+Magenta, Monochrome, Commodore 64, Red Alert, Synthwave, Ice) and 4 bundled fonts
+(VCR OSD Mono, PxPlus IBM VGA, Glass TTY VT220, Pixel Forge).
 Drop any `.ttf`/`.otf` into **`assets/fonts/`** and it appears in **Options ▸
 Themes ▸ Font** automatically. **Profiles** bundle theme + font + scanline
 intensity + CRT/vignette toggles; save your own with **Save current as…**.
@@ -192,6 +192,13 @@ connected screens; pick one to move the window there (it rescales automatically)
 
 **Playlists** (**Options ▸ Playlists**) — save multiple IPTV sources and switch
 instantly; it reloads channels + guide and retunes.
+
+**Plex-Per-View** (home screen or the context menu) — an on-demand front end for
+your Plex library, styled like a 90s cable pay-per-view listing. First use shows
+a code to enter at **plex.tv/link** (no password typing); after that it's
+remembered. Browse libraries → titles → seasons/episodes and press **Select** to
+play. It uses direct play (mpv streams the original file) and resumes from where
+you stopped. Sign-in token is stored in `config.json` (`plex_token`).
 
 ---
 

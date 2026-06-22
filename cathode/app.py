@@ -11,6 +11,7 @@ from typing import Optional, List
 from .config import Config
 from .player import Player
 from . import playlist as m3u
+from . import plex
 from . import weather
 from .epg import EPG
 from .playlist import Channel
@@ -111,6 +112,23 @@ class App:
         self._fullscreen = fullscreen   # tracked so Esc can exit fullscreen
         self._active_profile = None     # last-applied look profile (for editor "Save")
         self._last_mouse = (0, 0)       # last reported mouse position
+        self._input_mode = "key"        # "key" or "gamepad" — drives nav hints
+
+        # Plex-Per-View
+        self._plex = None               # lazy PlexClient
+        self._ppv_stack = []            # browse levels: [{title, rows, sel, crumb}]
+        self._ppv_pin_id = None
+        self._plex_paused = False
+        self._plex_duration = None
+        self._plex_monitor = False
+        self._plex_osd_until = 0.0
+        self._plex_pos = 0.0            # last known playback position (s)
+        self._plex_now_rk = ""          # ratingKey of the item playing now
+        self._plex_info_data = None     # detail dict for the info screen
+        self._plex_queue = []           # ordered ratingKeys (Play All / Shuffle)
+        self._plex_queue_pos = 0        # index of the item playing now
+        self._plex_last_report = 0.0    # monotonic ts of last timeline heartbeat
+        self._plex_lock = threading.Lock()   # guards PlexClient access/rebuild
 
         # Renderer
         self.renderer = Renderer(
@@ -134,6 +152,7 @@ class App:
             os.path.join(runtime_dir, "logos"),
             on_loaded=self.renderer.mark_dirty,
             user_agent=config.user_agent)
+        self.renderer.plexinfo.logos = self.renderer.logos   # posters
 
         # Current weather for the guide header (off unless a zip is configured)
         from .weather import Weather
@@ -228,6 +247,7 @@ class App:
     # ── Channel navigation ────────────────────────────────────────────────
 
     def _tune(self, idx: int, initial: bool = False):
+        self._plex_end()                 # entering live TV ends any Plex stream
         idx = idx % len(self.channels)
         self._ch_idx = idx
         ch = self.channels[idx]
@@ -340,12 +360,15 @@ class App:
         muted = self.player.toggle_mute()
         self.config.muted = muted
         self.renderer.muted = muted
+        self.renderer.plexosd.muted = muted
         self.renderer.show_volume_osd()
         self.renderer.update()
 
     # ── Guide ────────────────────────────────────────────────────────────
 
     def _toggle_guide(self):
+        if self.renderer.plex_playing:
+            return   # the program guide is disabled during Plex playback
         if self.renderer.state == UIState.GUIDE_OPEN:
             self.renderer.close_guide()
         else:
@@ -414,6 +437,12 @@ class App:
             self.renderer.menu.move_up(); self.renderer.mark_dirty(); return
         if self.renderer.main_menu.open:
             self.renderer.main_menu.move_up(); self.renderer.mark_dirty(); return
+        if self.renderer.ppv.open:
+            self.renderer.ppv.move_up(); self.renderer.mark_dirty(); return
+        if self.renderer.plexinfo.open:
+            self.renderer.plexinfo.move(-1); self.renderer.mark_dirty(); return
+        if self.renderer.plex_playing:
+            self._plex_focus(-1); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             self.renderer.guide.move_up()
             self.renderer.update()
@@ -429,6 +458,12 @@ class App:
             self.renderer.menu.move_down(); self.renderer.mark_dirty(); return
         if self.renderer.main_menu.open:
             self.renderer.main_menu.move_down(); self.renderer.mark_dirty(); return
+        if self.renderer.ppv.open:
+            self.renderer.ppv.move_down(); self.renderer.mark_dirty(); return
+        if self.renderer.plexinfo.open:
+            self.renderer.plexinfo.move(1); self.renderer.mark_dirty(); return
+        if self.renderer.plex_playing:
+            self._plex_focus(1); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             self.renderer.guide.move_down()
             self.renderer.update()
@@ -441,9 +476,15 @@ class App:
         if self.renderer.editor.open:
             self.renderer.editor.left(); self.renderer.mark_dirty(); return
         if self.renderer.menu.open:
-            self.renderer.menu.back(); self.renderer.mark_dirty(); return
+            return  # arrows don't navigate the context menu (Up/Down + Enter/Back)
         if self.renderer.main_menu.open:
             return  # home screen has no horizontal navigation
+        if self.renderer.ppv.open:
+            self.renderer.ppv.scroll(-10); self.renderer.mark_dirty(); return
+        if self.renderer.plexinfo.open:
+            self.renderer.plexinfo.move(-1); self.renderer.mark_dirty(); return
+        if self.renderer.plex_playing:
+            self._plex_dpad(-1); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             self.renderer.guide.move_left()
             self.renderer.update()
@@ -456,9 +497,15 @@ class App:
         if self.renderer.editor.open:
             self.renderer.editor.right(); self.renderer.mark_dirty(); return
         if self.renderer.menu.open:
-            self.renderer.menu.activate(); self._after_menu_action(); return
+            return  # arrows don't navigate the context menu (Up/Down + Enter/Back)
         if self.renderer.main_menu.open:
             return  # home screen has no horizontal navigation
+        if self.renderer.ppv.open:
+            self.renderer.ppv.scroll(10); self.renderer.mark_dirty(); return
+        if self.renderer.plexinfo.open:
+            self.renderer.plexinfo.move(1); self.renderer.mark_dirty(); return
+        if self.renderer.plex_playing:
+            self._plex_dpad(1); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             self.renderer.guide.move_right()
             self.renderer.update()
@@ -480,6 +527,12 @@ class App:
             self.renderer.menu.activate(); self._after_menu_action(); return
         if self.renderer.main_menu.open:
             self.renderer.main_menu.press(); return
+        if self.renderer.ppv.open:
+            self._ppv_select(); return
+        if self.renderer.plexinfo.open:
+            self._plex_info_activate(); return
+        if self.renderer.plex_playing:
+            self._plex_activate(); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             if self.renderer.guide.focus == "category":
                 return   # category selector: use Left/Right to change it
@@ -509,15 +562,9 @@ class App:
         import string
         p = self.player
 
-        # Letter hotkeys → action when NOT in a dialog (the char router also
-        # uses this map). Both cases map to the same action.
-        self._hotkey_actions = {
-            "g": self._toggle_guide, "i": self._show_info, "m": self._toggle_mute,
-            "f": self._toggle_favorite, "c": self._toggle_context_menu,
-            "w": self._toggle_fullscreen, "q": self._quit_app,
-        }
-        for ch, act in list(self._hotkey_actions.items()):
-            self._hotkey_actions[ch.upper()] = act
+        # Letter hotkeys → action (built from the remappable bindings; the char
+        # router uses this map).
+        self._build_hotkeys()
 
         # Navigation / dialog keys — always active.  Both Enter keys behave the
         # same: press/select the highlighted item (no separate "confirm").
@@ -526,15 +573,17 @@ class App:
             "LEFT": self._guide_left, "RIGHT": self._guide_right,
             "ENTER": self._grid_select, "KP_ENTER": self._grid_select,
             "ESC": self._handle_escape,
-            "SPACE": lambda: self._char_typed(" "),
+            "SPACE": self._space_key,
             "MBTN_RIGHT": self._toggle_context_menu, "MBTN_LEFT": self._menu_click,
+            "WHEEL_UP": self._wheel_up, "WHEEL_DOWN": self._wheel_down,
             "ctrl+v": self._osk_paste, "ctrl+c": self._osk_copy,
         }
         for key, handler in nav.items():
             p.bind_key(key, handler)
-        # Backspace deletes a char / backs out a menu — repeatable so holding it
-        # chews through a long string in the text-entry dialogs.
-        p.bind_key("BS", self._osk_backspace, repeatable=True)
+        # Backspace = universal one-level back (same as the controller's B):
+        # deletes a char in the keyboard, else backs out menu / screen.
+        # Repeatable so holding it chews through a long string in text entry.
+        p.bind_key("BS", self._gamepad_back, repeatable=True)
 
         # Arrow keys are made repeatable on the fly (only while a menu / OSK /
         # editor / guide is open) so a held key cycles items or moves sliders,
@@ -542,14 +591,13 @@ class App:
         self._nav_handlers = {"UP": self._guide_up, "DOWN": self._guide_down,
                               "LEFT": self._guide_left, "RIGHT": self._guide_right}
         self._nav_repeat_on = False
-        p.on_after_key = self._sync_nav_repeat
+        p.on_after_key = self._after_key
 
         # Non-character hotkeys — ignored while a dialog is open.
         hotkeys = {
             "TAB": self._show_info,
             "PGUP":  lambda: self._tune(max(0, self._ch_idx - 10)),
             "PGDWN": lambda: self._tune(min(len(self.channels) - 1, self._ch_idx + 10)),
-            "MBTN_LEFT_DBL": self._toggle_fullscreen,
         }
         for key, handler in hotkeys.items():
             p.bind_key(key, self._guard_hotkey(handler), name=f"hk_{key}")
@@ -575,12 +623,27 @@ class App:
 
     def _dialog_open(self) -> bool:
         return (self.renderer.osk.open or self.renderer.menu.open
-                or self.renderer.editor.open or self.renderer.main_menu.open)
+                or self.renderer.editor.open or self.renderer.main_menu.open
+                or self.renderer.ppv.open or self.renderer.plexinfo.open)
 
     def _nav_context_active(self) -> bool:
         r = self.renderer
         return (r.osk.open or r.menu.open or r.editor.open or r.main_menu.open
+                or r.ppv.open or r.plexinfo.open or r.plex_playing
                 or r.state == UIState.GUIDE_OPEN)
+
+    def _set_input_mode(self, mode):
+        """Track the active input device so the on-screen hints match it."""
+        if mode == self._input_mode:
+            return
+        self._input_mode = mode
+        self.renderer.ppv.input_mode = mode
+        self.renderer.mark_dirty()
+
+    def _after_key(self):
+        """Runs after every keyboard/mouse key handler (player.on_after_key)."""
+        self._set_input_mode("key")
+        self._sync_nav_repeat()
 
     def _sync_nav_repeat(self):
         """Toggle arrow-key repeat to match the current UI mode. Called after
@@ -646,10 +709,9 @@ class App:
         self.renderer.update()
 
     def _handle_escape(self):
-        """Esc never quits — it's the failsafe that always gets you out. It
-        FULLY closes any open dialog (re-enabling the hotkeys), then dismisses
-        guide → OSD → exits fullscreen, in that order.  (Backspace backs out of
-        a menu one level at a time; Esc exits the whole thing.)"""
+        """Esc never quits. It backs out: a dialog/screen first, then a menu one
+        level at a time (like Backspace and the controller's Back), then the
+        guide → OSD. It does not toggle fullscreen."""
         r = self.renderer
         if r.osk.open:
             r.osk.cancel()      # _osk_get's cancel cb resumes the blocked action
@@ -659,17 +721,31 @@ class App:
             r.editor.close()    # close + revert unsaved changes
             self._editor_close()
         elif r.menu.open:
-            r.menu.close()      # exit the entire menu, not just one level
+            r.menu.back()       # back out one submenu level (closes at the root)
             r.update()
+        elif r.ppv.open:
+            self._ppv_back()        # one level (exits PPV only at the root)
+        elif r.plexinfo.open:
+            self._plex_info_back()
+        elif r.plex_playing:
+            if r.plexosd.adjusting:
+                r.plexosd.adjusting = False
+                self._plex_show_osd()
+            elif r.plexosd.visible:
+                r.plexosd.hide(); r.mark_dirty()   # back closes the OSD bar
+            else:
+                self._confirm_leave_plex()
         elif r.state == UIState.GUIDE_OPEN:
             r.close_guide()
             r.update()
         elif r.osd_visible:
             r.hide_osd()
             r.update()
-        elif self._fullscreen:
-            self._set_fullscreen(False)
-        # else: nothing — Esc is not a quit shortcut.
+        elif (self.channels and not r.main_menu.open
+              and r.state == UIState.WATCHING):
+            self._confirm_leave_live()
+        # else: nothing — Esc is not a quit shortcut and no longer toggles
+        # fullscreen.
 
     # ── Fullscreen / context menu / mouse ─────────────────────────────────
 
@@ -686,6 +762,9 @@ class App:
         m = self.renderer.menu
         if m.open:
             m.close()
+        elif (self.renderer.ppv.open or self.renderer.plexinfo.open
+              or self.renderer.plex_playing):
+            m.open_with(self._build_plex_menu(), title="PLEX-PER-VIEW")
         else:
             m.open_with(self._build_menu(), title="CATHODE")
         self.renderer.mark_dirty()
@@ -719,6 +798,28 @@ class App:
             self.renderer.main_menu.click(x, y)
             self.renderer.mark_dirty()
             return
+        if self.renderer.ppv.open:
+            x, y = self._last_mouse
+            i = self.renderer.ppv.hit_test(x, y)
+            if i is not None:
+                self.renderer.ppv.sel = i
+                self._ppv_select()
+            return
+        if self.renderer.plexinfo.open:
+            x, y = self._last_mouse
+            i = self.renderer.plexinfo.hit_test(x, y)
+            if i is not None:
+                self.renderer.plexinfo.focus = i
+                self._plex_info_activate()
+            return
+        if self.renderer.plex_playing:
+            x, y = self._last_mouse
+            name = self.renderer.plexosd.hit_test(x, y)
+            if self.renderer.plexosd.visible and name:
+                self._plex_click(name, x)
+            else:
+                self._plex_show_osd()
+            return
         # No dialog open: the corner button opens the menu; clicking elsewhere
         # reveals the info bar (and the button) for touch/mouse users.
         x, y = self._last_mouse
@@ -727,15 +828,6 @@ class App:
         else:
             self.renderer.show_osd(timeout=self.config.osd_timeout_info)
             self.renderer.update()
-
-    def _osk_backspace(self):
-        """Backspace: delete a char in the keyboard, or back out of a menu."""
-        if self.renderer.osk.open:
-            self.renderer.osk.backspace()
-            self.renderer.mark_dirty()
-        elif self.renderer.menu.open:
-            self.renderer.menu.back()
-            self.renderer.mark_dirty()
 
     def _gamepad_back(self):
         """B button: context-aware step back — delete a char / leave a sub-menu /
@@ -747,16 +839,48 @@ class App:
             r.editor.close(); self._editor_close()
         elif r.menu.open:
             r.menu.back(); r.mark_dirty()
+        elif r.ppv.open:
+            self._ppv_back()
+        elif r.plexinfo.open:
+            self._plex_info_back()
+        elif r.plex_playing:
+            if r.plexosd.adjusting:
+                r.plexosd.adjusting = False
+                self._plex_show_osd()
+            elif r.plexosd.visible:
+                r.plexosd.hide(); r.mark_dirty()
+            else:
+                self._confirm_leave_plex()
         elif r.state == UIState.GUIDE_OPEN:
             r.close_guide(); r.update()
         elif r.osd_visible:
             r.hide_osd(); r.update()
+        elif (self.channels and not r.main_menu.open
+              and r.state == UIState.WATCHING):
+            self._confirm_leave_live()
+
+    def _confirm_leave_plex(self):
+        items = [
+            MenuItem("Keep Watching", action=lambda: None),
+            MenuItem("Return to Browse", action=self._plex_stop),
+        ]
+        self.renderer.menu.open_with(items, title="LEAVE VIDEO?")
+        self.renderer.mark_dirty()
+
+    def _confirm_leave_live(self):
+        items = [
+            MenuItem("Keep Watching", action=lambda: None),
+            MenuItem("Return to Main Menu", action=self._open_main_menu),
+        ]
+        self.renderer.menu.open_with(items, title="LEAVE LIVE TV?")
+        self.renderer.mark_dirty()
 
     # ── Native gamepad reader fallback (when mpv lacks SDL) ────────────────
 
     def _gamepad_action(self, name: str, is_repeat: bool = False):
         """Called from the gamepad reader thread.  Dispatch on its own thread so
         a blocking handler (e.g. the on-screen keyboard) can't freeze input."""
+        self._set_input_mode("gamepad")
         threading.Thread(target=self._gamepad_dispatch,
                          args=(name, is_repeat), daemon=True).start()
 
@@ -775,17 +899,96 @@ class App:
         if fn:
             fn()
 
+    def _wheel(self, delta):
+        r = self.renderer
+        if r.menu.open:
+            r.menu.move(delta); r.mark_dirty()
+        elif r.ppv.open:
+            r.ppv.scroll(delta); r.mark_dirty()
+        elif r.state == UIState.GUIDE_OPEN:
+            for _ in range(abs(delta)):
+                (r.guide.move_down if delta > 0 else r.guide.move_up)()
+            r.update()
+        elif r.plex_playing or r.plexinfo.open:
+            pass  # ignore wheel during plex playback / info screen
+        else:
+            (self._channel_up if delta < 0 else self._channel_down)()
+
+    def _wheel_up(self):
+        self._wheel(-1)
+
+    def _wheel_down(self):
+        self._wheel(1)
+
+    def _lb_action(self):
+        if self.renderer.ppv.open:
+            self.renderer.ppv.scroll(-10); self.renderer.mark_dirty()
+        elif not self._dialog_open():
+            self._channel_down()
+
+    def _rb_action(self):
+        if self.renderer.ppv.open:
+            self.renderer.ppv.scroll(10); self.renderer.mark_dirty()
+        elif not self._dialog_open():
+            self._channel_up()
+
+    # ── Remappable hotkeys (keyboard letters + gamepad buttons) ───────────
+
+    # (action_id, label, default key, default gamepad button)
+    INPUT_ACTIONS = [
+        ("guide",        "Program Guide", "g", "x"),
+        ("info",         "Info Bar",      "i", "y"),
+        ("mute",         "Mute",          "m", "l3"),
+        ("favorite",     "Favorite",      "f", ""),
+        ("menu",         "Context Menu",  "c", "back"),
+        ("fullscreen",   "Fullscreen",    "w", ""),
+        ("quit",         "Quit",          "q", ""),
+        ("channel_up",   "Channel Up / Scroll",   "", "rb"),
+        ("channel_down", "Channel Down / Scroll", "", "lb"),
+        ("vol_up",       "Volume Up",     "", "rt"),
+        ("vol_down",     "Volume Down",   "", "lt"),
+    ]
+    KEY_CHOICES = list("abcdefghijklmnopqrstuvwxyz")
+    PAD_CHOICES = ["x", "y", "start", "back", "guide", "lb", "rb", "lt", "rt", "l3", "r3"]
+
+    def _action_callables(self):
+        return {
+            "guide": self._toggle_guide, "info": self._show_info,
+            "mute": self._toggle_mute, "favorite": self._toggle_favorite,
+            "menu": self._toggle_context_menu, "fullscreen": self._toggle_fullscreen,
+            "quit": self._quit_app,
+            "channel_up": self._rb_action, "channel_down": self._lb_action,
+            "vol_up": self._vol_up, "vol_down": self._vol_down,
+        }
+
+    def _resolved_keys(self) -> dict:
+        out = {a: dk for a, _, dk, _ in self.INPUT_ACTIONS}
+        out.update({a: k for a, k in (self.config.key_bindings or {}).items()})
+        return out
+
+    def _resolved_pad(self) -> dict:
+        out = {a: db for a, _, _, db in self.INPUT_ACTIONS}
+        out.update({a: b for a, b in (self.config.gamepad_bindings or {}).items()})
+        return out
+
+    def _build_hotkeys(self):
+        calls = self._action_callables()
+        self._hotkey_actions = {}
+        for action, key in self._resolved_keys().items():
+            if key and action in calls:
+                self._hotkey_actions[key] = calls[action]
+                self._hotkey_actions[key.upper()] = calls[action]
+
     def _build_gamepad_buttons(self):
         g = self._guard_hotkey
-        self._gamepad_buttons = {
-            "a": self._grid_select, "b": self._gamepad_back,
-            "x": g(self._toggle_guide), "start": g(self._toggle_guide),
-            "y": g(self._show_info),
-            "back": g(self._toggle_context_menu), "guide": g(self._toggle_context_menu),
-            "lb": g(self._channel_down), "rb": g(self._channel_up),
-            "lt": g(self._vol_down), "rt": g(self._vol_up),
-            "l3": g(self._toggle_mute), "r3": g(self._toggle_fullscreen),
-        }
+        calls = self._action_callables()
+        # channel up/down handle the PPV-scroll guard themselves; guard the rest.
+        unguarded = {"channel_up", "channel_down"}
+        self._gamepad_buttons = {"a": self._grid_select, "b": self._gamepad_back}
+        for action, button in self._resolved_pad().items():
+            if button and action in calls:
+                fn = calls[action]
+                self._gamepad_buttons[button] = fn if action in unguarded else g(fn)
 
     def _after_menu_action(self):
         self.renderer.mark_dirty()
@@ -795,6 +998,7 @@ class App:
         # Only update hover state and request a coalesced repaint; never render
         # here (that would flood the reader and freeze input).
         self._last_mouse = (x, y)
+        self._set_input_mode("key")
         if self.renderer.osk.open:
             self.renderer.osk.set_hover(x, y)
             self.renderer.mark_dirty()
@@ -807,6 +1011,16 @@ class App:
         elif self.renderer.main_menu.open:
             self.renderer.main_menu.set_hover(x, y)
             self.renderer.mark_dirty()
+        elif self.renderer.ppv.open:
+            pass  # mouse movement does NOT change the PPV highlight; use the
+                  # wheel to scroll, click to activate
+
+        elif self.renderer.plexinfo.open:
+            self.renderer.plexinfo.set_hover(x, y)
+            self.renderer.mark_dirty()
+        elif self.renderer.plex_playing:
+            self.renderer.plexosd.set_hover(x, y)
+            self._plex_show_osd()
         else:
             over = self.renderer.osd_visible and self.renderer.menu_button_hit(x, y)
             if over != self.renderer._menu_btn_hover:
@@ -845,7 +1059,6 @@ class App:
         is_fav = fav is not None and fav.number in self._favorites
         return [
             MenuItem("Program Guide", action=self._toggle_guide, hint="G"),
-            MenuItem("Info Bar", action=self._show_info, hint="I"),
             MenuItem("Remove Favorite" if is_fav else "Add Favorite",
                      action=self._toggle_favorite, hint="F", checked=is_fav),
             MenuItem("Channel Up", action=self._channel_up, hint="[^]"),
@@ -854,18 +1067,291 @@ class App:
             MenuItem("Volume Down", action=self._vol_down, hint="[<]", close_after=False),
             MenuItem("Mute", action=self._toggle_mute, hint="M",
                      checked=self.player.muted),
+            MenuItem("Plex-Per-View", action=self._open_ppv),
             MenuItem("Playlists", submenu=self._playlists_submenu),
             MenuItem("Options", submenu=self._options_submenu),
             MenuItem("Main Menu", action=self._open_main_menu),
             MenuItem("Quit", action=self._quit_app, hint="Q"),
         ]
 
+    def _build_plex_menu(self):
+        """The context menu shown in Plex-Per-View mode (browse or playback)."""
+        items = [
+            MenuItem("Mute", action=self._toggle_mute, hint="M",
+                     checked=self.player.muted),
+        ]
+        if self.renderer.plex_playing:
+            items.append(MenuItem("Audio & Subtitles", submenu=self._plex_av_submenu))
+        items += [
+            MenuItem("Live TV", submenu=self._playlists_submenu),
+            MenuItem("Options", submenu=self._options_submenu),
+            MenuItem("Main Menu", action=self._open_main_menu),
+            MenuItem("Quit", action=self._quit_app, hint="Q"),
+        ]
+        return items
+
     def _options_submenu(self):
         return [
             MenuItem("Themes", submenu=self._themes_submenu),
             MenuItem("Weather", submenu=self._weather_submenu),
+            MenuItem("Plex", submenu=self._plex_options_submenu),
+            MenuItem("Keyboard Shortcuts", submenu=self._keyboard_keys_submenu),
+            MenuItem("Gamepad Buttons", submenu=self._gamepad_keys_submenu),
             MenuItem("Display", submenu=self._display_submenu),
         ]
+
+    # ── Input remapping menus ─────────────────────────────────────────────
+
+    def _keyboard_keys_submenu(self):
+        keys = self._resolved_keys()
+        return [MenuItem(f"{label}: {(keys.get(aid) or '').upper() or '(none)'}",
+                         submenu=(lambda a=aid: self._key_choice_submenu(a)))
+                for aid, label, _, _ in self.INPUT_ACTIONS]
+
+    def _key_choice_submenu(self, action):
+        cur = self._resolved_keys().get(action, "")
+        items = [MenuItem("(none)", checked=(not cur), close_after=False,
+                          action=lambda: self._set_key(action, ""))]
+        items += [MenuItem(k.upper(), checked=(k == cur), close_after=False,
+                           action=lambda key=k: self._set_key(action, key))
+                  for k in self.KEY_CHOICES]
+        return items
+
+    def _set_key(self, action, key):
+        binds = self._resolved_keys()
+        if key:                       # free this key from any other action
+            for a in list(binds):
+                if binds[a] == key and a != action:
+                    binds[a] = ""
+        binds[action] = key
+        self.config.key_bindings = binds
+        self.config.save()
+        self._build_hotkeys()
+        self.renderer.menu.replace_page(self._key_choice_submenu(action))
+        self.renderer.mark_dirty()
+
+    def _gamepad_keys_submenu(self):
+        pad = self._resolved_pad()
+        return [MenuItem(f"{label}: {(pad.get(aid) or '').upper() or '(none)'}",
+                         submenu=(lambda a=aid: self._pad_choice_submenu(a)))
+                for aid, label, _, _ in self.INPUT_ACTIONS]
+
+    def _pad_choice_submenu(self, action):
+        cur = self._resolved_pad().get(action, "")
+        items = [MenuItem("(none)", checked=(not cur), close_after=False,
+                          action=lambda: self._set_pad(action, ""))]
+        items += [MenuItem(b.upper(), checked=(b == cur), close_after=False,
+                           action=lambda btn=b: self._set_pad(action, btn))
+                  for b in self.PAD_CHOICES]
+        return items
+
+    def _set_pad(self, action, button):
+        binds = self._resolved_pad()
+        if button:
+            for a in list(binds):
+                if binds[a] == button and a != action:
+                    binds[a] = ""
+        binds[action] = button
+        self.config.gamepad_bindings = binds
+        self.config.save()
+        self._build_gamepad_buttons()
+        self.renderer.menu.replace_page(self._pad_choice_submenu(action))
+        self.renderer.mark_dirty()
+
+    def _plex_options_submenu(self):
+        if not self.config.plex_token:
+            return [MenuItem("(not signed in — open Plex-Per-View)", enabled=False)]
+        user = self.config.plex_user_name or "Account"
+        return [
+            MenuItem(f"Quality: {self.config.plex_quality}",
+                     submenu=self._plex_quality_submenu),
+            MenuItem("Libraries", submenu=self._plex_libraries_submenu),
+            MenuItem(f"User: {user}", action=self._plex_change_user),
+            MenuItem("Unlink Plex Account", action=self._plex_unlink),
+        ]
+
+    def _plex_libraries_submenu(self):
+        secs = self.config.plex_sections
+        if not secs:
+            return [MenuItem("(open Plex-Per-View first)", enabled=False)]
+        hidden = set(self.config.plex_hidden_libraries)
+        # A check means the library is shown; toggling hides/shows it.
+        return [MenuItem(s["title"], checked=(s["key"] not in hidden),
+                         action=lambda k=s["key"]: self._plex_toggle_library(k),
+                         close_after=False)
+                for s in secs]
+
+    def _plex_toggle_library(self, key):
+        hidden = list(self.config.plex_hidden_libraries)
+        if key in hidden:
+            hidden.remove(key)
+        else:
+            hidden.append(key)
+        self.config.plex_hidden_libraries = hidden
+        self.config.save()
+        self.renderer.menu.replace_page(self._plex_libraries_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_quality_submenu(self):
+        cur = self.config.plex_quality
+        return [MenuItem(q, action=lambda x=q: self._plex_set_quality(x),
+                         checked=(q == cur), close_after=False)
+                for q in plex.QUALITY_OPTIONS]
+
+    def _plex_set_quality(self, q):
+        self.config.plex_quality = q
+        self.config.save()
+        self.renderer.menu.replace_page(self._plex_quality_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_change_user(self):
+        r = self.renderer
+        self._plex_end()
+        r.plexinfo.close()
+        self._ppv_return_menu = r.main_menu.open
+        r.menu.close()
+        r.main_menu.close()
+        self._ppv_stack = []
+        r.ppv.mode = "browse"
+        r.ppv.rows = []
+        r.ppv.show()
+        r.mark_dirty()
+        self._ppv_choose_user(force=True)
+
+    def _plex_unlink(self):
+        self._plex_end()
+        self.config.plex_token = ""
+        self.config.plex_user_token = ""
+        self.config.plex_user_id = ""
+        self.config.plex_user_name = ""
+        self.config.save()
+        self._plex_reset()      # forces the PIN sign-in again next time
+        self.renderer.show_notification("Plex account unlinked", 3.0)
+        self.renderer.mark_dirty()
+
+    # ── Plex audio / subtitle settings ────────────────────────────────────
+
+    SUB_SIZES = [("Small", 28), ("Medium", 38), ("Large", 52), ("Extra Large", 68)]
+    SUB_COLORS = [("White", "#FFFFFFFF"), ("Yellow", "#FFFFFF00"),
+                  ("Cyan", "#FF00FFFF"), ("Green", "#FF00FF00"),
+                  ("Black", "#FF000000")]
+
+    def _plex_av_submenu(self):
+        return [
+            MenuItem("Audio Track", submenu=self._plex_audio_tracks_submenu),
+            MenuItem("Audio Device", submenu=self._plex_audio_devices_submenu),
+            MenuItem("Subtitle Track", submenu=self._plex_sub_tracks_submenu),
+            MenuItem("Subtitle Font", submenu=self._plex_sub_font_submenu),
+            MenuItem("Subtitle Size", submenu=self._plex_sub_size_submenu),
+            MenuItem("Subtitle Color", submenu=self._plex_sub_color_submenu),
+        ]
+
+    @staticmethod
+    def _track_label(t) -> str:
+        bits = [str(t["id"])]
+        if t.get("lang"):
+            bits.append(t["lang"])
+        if t.get("title"):
+            bits.append(t["title"])
+        return ": ".join([bits[0], " ".join(bits[1:])]) if len(bits) > 1 else bits[0]
+
+    def _plex_audio_tracks_submenu(self):
+        tracks = self.player.get_tracks()["audio"]
+        if not tracks:
+            return [MenuItem("(no audio tracks)", enabled=False)]
+        return [MenuItem(self._track_label(t), checked=t["selected"], close_after=False,
+                         action=lambda i=t["id"]: self._plex_set_audio_track(i))
+                for t in tracks]
+
+    def _plex_set_audio_track(self, tid):
+        self.player.set_audio_track(tid)
+        self.renderer.menu.replace_page(self._plex_audio_tracks_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_sub_tracks_submenu(self):
+        tracks = self.player.get_tracks()["sub"]
+        none_sel = not any(t["selected"] for t in tracks)
+        items = [MenuItem("Off", checked=none_sel, close_after=False,
+                          action=lambda: self._plex_set_sub_track("no"))]
+        for t in tracks:
+            items.append(MenuItem(self._track_label(t), checked=t["selected"],
+                         close_after=False,
+                         action=lambda i=t["id"]: self._plex_set_sub_track(i)))
+        return items
+
+    def _plex_set_sub_track(self, tid):
+        self.player.set_sub_track(tid)
+        self.renderer.menu.replace_page(self._plex_sub_tracks_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_audio_devices_submenu(self):
+        devs = self.player.get_audio_devices()
+        if not devs:
+            return [MenuItem("(no devices)", enabled=False)]
+        cur = self.config.audio_device or "auto"
+        return [MenuItem((d["desc"] or d["name"])[:38], checked=(d["name"] == cur),
+                         close_after=False,
+                         action=lambda n=d["name"]: self._plex_set_audio_device(n))
+                for d in devs]
+
+    def _plex_set_audio_device(self, name):
+        self.player.set_audio_device(name)
+        self.config.audio_device = "" if name == "auto" else name
+        self.config.save()
+        self.renderer.menu.replace_page(self._plex_audio_devices_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_sub_font_submenu(self):
+        cur = self.config.sub_font
+        items = [MenuItem("Default", checked=(not cur), close_after=False,
+                          action=lambda: self._plex_set_sub_font(""))]
+        for k in theme.available_fonts(include_subtitle_only=True):
+            items.append(MenuItem(theme.font_label(k), checked=(k == cur),
+                         close_after=False,
+                         action=lambda key=k: self._plex_set_sub_font(key)))
+        return items
+
+    def _plex_set_sub_font(self, key):
+        self.config.sub_font = key
+        self.config.save()
+        fam = theme.font_family(key) if key else "sans-serif"
+        self.player.apply_sub_style(font=fam)
+        self.renderer.menu.replace_page(self._plex_sub_font_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_sub_size_submenu(self):
+        cur = self.config.sub_size
+        return [MenuItem(name, checked=(sz == cur), close_after=False,
+                         action=lambda s=sz: self._plex_set_sub_size(s))
+                for name, sz in self.SUB_SIZES]
+
+    def _plex_set_sub_size(self, sz):
+        self.config.sub_size = sz
+        self.config.save()
+        self.player.apply_sub_style(size=sz)
+        self.renderer.menu.replace_page(self._plex_sub_size_submenu())
+        self.renderer.mark_dirty()
+
+    def _plex_sub_color_submenu(self):
+        cur = self.config.sub_color
+        return [MenuItem(name, checked=(hexc == cur), close_after=False,
+                         action=lambda c=hexc: self._plex_set_sub_color(c))
+                for name, hexc in self.SUB_COLORS]
+
+    def _plex_set_sub_color(self, hexc):
+        self.config.sub_color = hexc
+        self.config.save()
+        self.player.apply_sub_style(color=hexc)
+        self.renderer.menu.replace_page(self._plex_sub_color_submenu())
+        self.renderer.mark_dirty()
+
+    def _apply_plex_av(self):
+        """Apply the persisted subtitle style + audio device to the new stream."""
+        if self.config.audio_device:
+            self.player.set_audio_device(self.config.audio_device)
+        fam = theme.font_family(self.config.sub_font) if self.config.sub_font else None
+        self.player.apply_sub_style(font=fam, size=self.config.sub_size,
+                                    color=self.config.sub_color)
 
     def _themes_submenu(self):
         return [
@@ -1014,7 +1500,11 @@ class App:
     # ── Main menu / home screen ───────────────────────────────────────────
 
     def _open_main_menu(self):
-        """Return to the home screen (from the context menu)."""
+        """Return to the home screen (from the context menu / leave prompt)."""
+        self._plex_end()
+        self.player.stop()       # stop live TV too — home screen is not playback
+        self.renderer.plexinfo.close()
+        self.renderer.ppv.close()
         self.renderer.menu.close()
         self.renderer.main_menu.show(self._main_menu_select)
         self.renderer.update()
@@ -1024,6 +1514,8 @@ class App:
             self._main_new_playlist()
         elif key == "load":
             self._main_load_playlist()
+        elif key == "plex":
+            self._open_ppv()
         elif key == "options":
             self._main_options()
         elif key == "exit":
@@ -1061,8 +1553,757 @@ class App:
         self.renderer.menu.open_with(items, title="OPTIONS")
         self.renderer.mark_dirty()
 
+    # ── Plex-Per-View ─────────────────────────────────────────────────────
+
+    def _ppv_client(self):
+        # Locked so a token change (_plex_reset from sign-in / unlink) can't race
+        # an in-flight worker into building two clients or seeing a torn state.
+        with self._plex_lock:
+            if self._plex is None:
+                if not self.config.plex_client_id:
+                    self.config.plex_client_id = plex.new_client_id()
+                    self.config.save()
+                from . import __version__
+                self._plex = plex.PlexClient(
+                    self.config.plex_client_id,
+                    token=self.config.plex_user_token or self.config.plex_token,
+                    admin_token=self.config.plex_token, version=__version__)
+            return self._plex
+
+    def _plex_reset(self):
+        """Drop the cached client so the next _ppv_client() rebuilds it with the
+        current token (after sign-in, user switch, or unlink)."""
+        with self._plex_lock:
+            self._plex = None
+
+    def _open_ppv(self):
+        """Enter Plex-Per-View (from the home screen or context menu)."""
+        r = self.renderer
+        self._plex_end()                 # opening the library ends any stream
+        r.plexinfo.close()
+        self._ppv_return_menu = r.main_menu.open   # came from the home screen?
+        r.menu.close()
+        r.main_menu.close()
+        self._ppv_stack = []
+        r.ppv.mode = "browse"
+        r.ppv.rows = []
+        r.ppv.show()
+        r.ppv.set_status("CONNECTING...")
+        r.mark_dirty()
+        if self._ppv_client().token:
+            self._ppv_connect()
+        else:
+            self._ppv_begin_auth()
+
+    def _ppv_connect(self):
+        """Discover the server and list libraries (background)."""
+        def work():
+            try:
+                client = self._ppv_client()
+                client.discover_server()
+                sections = client.sections()
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't reach Plex.")
+                return
+            # Cache the library list so the show/hide menu works any time.
+            self.config.plex_sections = [{"key": s["key"], "title": s["title"]}
+                                         for s in sections]
+            self.config.save()
+            hidden = set(self.config.plex_hidden_libraries)
+            rows = [{"type": "watchlist", "title": "MY WATCHLIST", "meta": "",
+                     "playable": False}]
+            rows += [{"type": "section", "rating_key": s["key"],
+                      "title": s["title"].upper(), "meta": "", "playable": False,
+                      "section_type": s["type"], "agent": s.get("agent", "")}
+                     for s in sections if s["key"] not in hidden]
+            self._ppv_push("CHOOSE A LIBRARY", rows, "Plex-Per-View")
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_begin_auth(self):
+        def work():
+            try:
+                pin = self._ppv_client().request_pin()
+            except Exception:
+                self._ppv_error("Couldn't start Plex sign-in.")
+                return
+            self._ppv_pin_id = pin["id"]
+            self.renderer.ppv.set_auth(pin["code"], pin["link"])
+            self.renderer.mark_dirty()
+            self._ppv_poll_auth()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_poll_auth(self):
+        import time
+        deadline = time.monotonic() + 300
+        r = self.renderer
+        while (r.ppv.open and r.ppv.mode == "auth"
+               and time.monotonic() < deadline):
+            try:
+                token = self._ppv_client().poll_pin(self._ppv_pin_id)
+            except Exception:
+                token = None
+            if token:
+                self.config.plex_token = token
+                self.config.plex_user_token = ""   # account level until a user is picked
+                self.config.save()
+                self._plex_reset()                 # rebuild with the new token
+                r.ppv.set_status("CONNECTING...")
+                r.mark_dirty()
+                self._ppv_choose_user()
+                return
+            time.sleep(2.0)
+
+    def _ppv_choose_user(self, force: bool = False):
+        """After linking (or via Change User), show the Plex Home users. Falls
+        through to the library when there's only one user or none are found."""
+        r = self.renderer
+        r.ppv.show()
+        r.ppv.set_status("LOADING USERS...")
+        r.mark_dirty()
+        def work():
+            try:
+                users = self._ppv_client().home_users()
+            except Exception:
+                users = []
+            if len(users) <= 1:
+                self._ppv_connect()        # single user / not a Home — just go
+                return
+            rows = [{"type": "user", "rating_key": u["uuid"],
+                     "title": u["title"], "meta": "PIN" if u["protected"] else "",
+                     "playable": False} for u in users]
+            self._ppv_stack = []
+            self._ppv_push("WHO'S WATCHING?", rows, "Plex-Per-View")
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_pick_user(self, uuid, name):
+        r = self.renderer
+        r.ppv.set_status("SWITCHING...")
+        r.mark_dirty()
+        def work():
+            try:
+                token = self._ppv_client().switch_user(uuid)
+            except Exception:
+                token = ""
+            if token:
+                self.config.plex_user_token = token
+                self.config.plex_user_id = uuid
+                self.config.plex_user_name = name
+            else:
+                # Couldn't switch (e.g. PIN-protected) — stay on the account.
+                self.config.plex_user_token = ""
+                self.config.plex_user_id = ""
+                self.config.plex_user_name = ""
+            self.config.save()
+            self._ppv_stack = []
+            self._ppv_connect()
+        threading.Thread(target=work, daemon=True).start()
+
+    SORT_OPTIONS = [
+        ("Title (A-Z)", "titleSort:asc"), ("Title (Z-A)", "titleSort:desc"),
+        ("Date Added (Newest)", "addedAt:desc"), ("Date Added (Oldest)", "addedAt:asc"),
+        ("Year (Newest)", "year:desc"), ("Year (Oldest)", "year:asc"),
+        ("Rating (Highest)", "rating:desc"), ("Rating (Lowest)", "rating:asc"),
+    ]
+
+    def _ppv_select(self):
+        r = self.renderer
+        if self._ppv_stack:
+            self._ppv_stack[-1]["sel"] = r.ppv.sel
+        row = r.ppv.current()
+        if not row:
+            return
+        t = row.get("type")
+        title = row.get("title", "")
+        rk = row.get("rating_key")
+        if t == "user":
+            self._ppv_pick_user(rk, title)
+            return
+        if t == "watchlist":
+            self._ppv_open_watchlist()
+            return
+        if t == "sort":
+            self.renderer.menu.open_with(self._sort_submenu(), title="SORT BY")
+            self.renderer.mark_dirty()
+            return
+        if row.get("watchlist"):             # an item from the watchlist
+            self._ppv_watchlist_open(row)
+            return
+        if row.get("playable"):
+            self._ppv_show_info(row)         # open the info screen first
+            return
+        if t == "section":
+            stype = row.get("section_type")
+            if self._ppv_client().is_other_videos({"agent": row.get("agent", "")}):
+                self._ppv_other_videos(rk, title)
+            elif stype in ("movie", "show"):
+                self._ppv_categories(rk, title, stype)
+            else:
+                self._ppv_open(
+                    lambda s, k=rk: self._ppv_client().section_filter(k, sort=s), title)
+        elif t in ("all", "allvideos"):
+            self._ppv_open(
+                lambda s, k=rk: self._ppv_client().section_filter(k, sort=s), title)
+        elif t == "genre":
+            gid = row.get("genre_id")
+            self._ppv_open(
+                lambda s, k=rk, g=gid: self._ppv_client().section_filter(
+                    k, genre_id=g, sort=s), title)
+        elif t == "folderview":
+            self._ppv_load_folder(f"/library/sections/{rk}/folder", "FOLDERS")
+        elif t == "folder":
+            self._ppv_load_folder(row.get("folder"), title)
+        elif t == "show":
+            self._ppv_show_info(row)         # series info screen (Play All/etc.)
+        else:
+            self._ppv_open(
+                lambda s, k=rk: self._ppv_client().children(k, sort=s), title)
+
+    def _ppv_load_folder(self, path, title):
+        r = self.renderer
+        r.ppv.set_status("LOADING...")
+        r.mark_dirty()
+        crumb = " / ".join(l["title"] for l in self._ppv_stack) or "Plex-Per-View"
+        def work():
+            try:
+                rows = self._ppv_client().folder_items(path)
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't load that folder.")
+                return
+            self._ppv_push(title, rows, crumb)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_other_videos(self, key, title):
+        crumb = " / ".join(l["title"] for l in self._ppv_stack) or "Plex-Per-View"
+        rows = [
+            {"type": "allvideos", "rating_key": key, "title": "ALL VIDEOS",
+             "meta": "", "playable": False},
+            {"type": "folderview", "rating_key": key, "title": "BY FOLDER",
+             "meta": "", "playable": False},
+        ]
+        self._ppv_push(title, rows, crumb)
+
+    def _ppv_open(self, loader, title, sort="", volatile=False):
+        """Load a sortable item list. `loader(sort)` returns rows; the level
+        remembers the loader so the Sort row can reload it in a new order.
+        volatile=True reloads the level every time it's returned to (watchlist)."""
+        r = self.renderer
+        r.ppv.set_status("LOADING...")
+        r.mark_dirty()
+        crumb = " / ".join(l["title"] for l in self._ppv_stack) or "Plex-Per-View"
+        def work():
+            try:
+                rows = loader(sort)
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't load that.")
+                return
+            self._ppv_push(title, rows, crumb, loader=loader, sort=sort,
+                           volatile=volatile)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_open_watchlist(self):
+        self._ppv_open(lambda s: self._ppv_client().watchlist(sort=s),
+                       "MY WATCHLIST", volatile=True)
+
+    def _ppv_watchlist_open(self, row):
+        guid = row.get("guid")
+        typ = row.get("type")
+        title = row.get("title", "")
+        r = self.renderer
+        r.ppv.set_status("FINDING...")
+        r.mark_dirty()
+        def work():
+            rk = self._ppv_client().find_on_server(guid)
+            if not rk:
+                self._ppv_error("Not in your library.")
+                return
+            if typ in ("movie", "episode", "show"):
+                self._ppv_show_info({"rating_key": rk})
+            else:
+                self._ppv_open(
+                    lambda s, k=rk: self._ppv_client().children(k, sort=s), title)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_set_sort(self, sort):
+        if not self._ppv_stack or not self._ppv_stack[-1].get("loader"):
+            return
+        lvl = self._ppv_stack.pop()
+        self._ppv_open(lvl["loader"], lvl["title"], sort=sort)
+
+    def _sort_submenu(self):
+        cur = self._ppv_stack[-1].get("sort", "") if self._ppv_stack else ""
+        return [MenuItem(name, checked=(val == cur),
+                         action=lambda v=val: self._ppv_set_sort(v))
+                for name, val in self.SORT_OPTIONS]
+
+    def _ppv_categories(self, section_key, title, stype):
+        r = self.renderer
+        r.ppv.set_status("LOADING...")
+        r.mark_dirty()
+        crumb = " / ".join(l["title"] for l in self._ppv_stack) or "Plex-Per-View"
+        all_label = "ALL MOVIES" if stype == "movie" else "ALL SHOWS"
+        def work():
+            try:
+                genres = self._ppv_client().genres(section_key)
+            except Exception:
+                genres = []
+            rows = [{"type": "all", "rating_key": section_key, "title": all_label,
+                     "meta": "", "playable": False}]
+            for g in genres:
+                rows.append({"type": "genre", "rating_key": section_key,
+                             "genre_id": g["id"], "title": g["title"].upper(),
+                             "meta": "", "playable": False})
+            self._ppv_push(title, rows, crumb)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ppv_show_info(self, row):
+        rk = row.get("rating_key")
+        r = self.renderer
+        r.ppv.set_status("LOADING...")
+        r.mark_dirty()
+        def work():
+            try:
+                detail = self._ppv_client().item_detail(rk)
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't load info.")
+                return
+            self._plex_info_data = detail
+            kind = detail.get("type", "")
+            kind = kind if kind in ("show", "episode") else "default"
+            on_wl = self._plex_watchlist_has(detail.get("guid", "")) \
+                if kind != "episode" else False
+            r.ppv.close()
+            r.plexinfo.show(detail, watchlisted=on_wl, kind=kind)
+            r.update()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _plex_info_activate(self):
+        fid = self.renderer.plexinfo.focused_id()
+        if fid == "play":
+            self._plex_info_play()
+        elif fid == "playall":
+            self._plex_show_playall(shuffle=False)
+        elif fid == "shuffle":
+            self._plex_show_playall(shuffle=True)
+        elif fid == "seasons":
+            self._plex_show_seasons()
+        elif fid == "watchlist":
+            self._plex_info_watchlist()
+        elif fid == "back":
+            self._plex_info_back()
+
+    def _plex_show_seasons(self):
+        d = self._plex_info_data or {}
+        rk = d.get("rating_key")
+        title = d.get("title", "")
+        self.renderer.plexinfo.close()
+        self.renderer.ppv.show()     # bring PPV back so LOADING/list is visible
+        self._ppv_open(
+            lambda s, k=rk: self._ppv_client().children(k, sort=s), title)
+
+    def _plex_show_playall(self, shuffle=False):
+        d = self._plex_info_data or {}
+        rk = d.get("rating_key")
+        self.renderer.mark_dirty()
+        def work():
+            try:
+                eps = self._ppv_client().all_episodes(rk)
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't load episodes.")
+                return
+            if not eps:
+                self._ppv_error("No episodes to play.")
+                return
+            if shuffle:
+                import random
+                random.shuffle(eps)
+            self._plex_queue = eps
+            self._plex_queue_pos = 0
+            self._ppv_play(eps[0], d.get("title", ""), resume=False,
+                           keep_queue=True)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _plex_info_play(self):
+        d = self._plex_info_data or {}
+        if d.get("offset", 0) > 5:
+            self._ppv_resume_prompt(d)
+        else:
+            self._ppv_play(d.get("rating_key"), d.get("title", ""),
+                           d.get("subtitle", ""), resume=False)
+
+    def _plex_watchlist_has(self, guid):
+        """Best-effort check whether `guid` is on the user's watchlist. Matches
+        on the full guid or its trailing metadata id (server vs Discover guids
+        share the id)."""
+        if not guid:
+            return False
+        try:
+            wl = self._ppv_client().watchlist()
+        except Exception:
+            return False
+        gid = guid.rstrip("/").split("/")[-1]
+        for r in wl:
+            wg = r.get("guid", "")
+            if wg == guid or (gid and wg.rstrip("/").split("/")[-1] == gid):
+                return True
+        return False
+
+    def _plex_info_watchlist(self):
+        d = self._plex_info_data or {}
+        guid = d.get("guid", "")
+        info = self.renderer.plexinfo
+        add = not info.watchlisted
+        def work():
+            if self._ppv_client().watchlist_set(guid, add):
+                info.watchlisted = add
+            self.renderer.mark_dirty()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _plex_info_back(self):
+        self.renderer.plexinfo.close()
+        if self._ppv_stack:
+            self._ppv_show_top()   # reloads watchlist so removed items disappear
+        self.renderer.update()
+
+    def _ppv_resume_prompt(self, row):
+        rk = row.get("rating_key")
+        title = row.get("title", "")
+        sub = row.get("subtitle") or row.get("meta", "")
+        ts = self._fmt_time(row.get("offset", 0))
+        items = [
+            MenuItem(f"Resume from {ts}",
+                     action=lambda: self._ppv_play(rk, title, sub, resume=True)),
+            MenuItem("Start from Beginning",
+                     action=lambda: self._ppv_play(rk, title, sub, resume=False)),
+        ]
+        self.renderer.menu.open_with(items, title="RESUME?")
+        self.renderer.mark_dirty()
+
+    @staticmethod
+    def _fmt_time(s) -> str:
+        s = max(0, int(s or 0))
+        h, m, sec = s // 3600, (s % 3600) // 60, s % 60
+        return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+    def _ppv_play(self, rating_key, title, subtitle="", resume=True,
+                  keep_queue=False):
+        if not keep_queue:
+            self._plex_queue = []    # a one-off play cancels any episode queue
+            self._plex_queue_pos = 0
+        r = self.renderer
+        r.menu.close()               # in case the resume prompt opened it
+        r.plexinfo.close()
+        r.ppv.set_status("STARTING...")
+        r.mark_dirty()
+        def work():
+            try:
+                info = self._ppv_client().play_info(rating_key, self.config.plex_quality)
+            except Exception as e:
+                self._ppv_error(str(e) or "Couldn't play that.")
+                return
+            r.ppv.close()
+            r.state = UIState.WATCHING
+            r.plex_playing = True
+            self._plex_paused = False
+            self._plex_duration = None
+            self._plex_pos = 0.0
+            self._plex_now_rk = rating_key
+            r.plexosd.set_info(info.get("title") or title,
+                               info.get("subtitle") or subtitle)
+            r.plexosd.paused = False
+            r.plexosd.adjusting = False
+            r.plexosd.focus = 0          # default highlight on the timeline
+            r.plexosd.volume = self.config.volume
+            r.plexosd.muted = self.config.muted
+            start = info.get("offset", 0) if resume else 0
+            self.player.play(info["url"], start=start,
+                             headers=info.get("headers"))
+            self._apply_plex_av()        # subtitle style + audio device
+            self._plex_show_osd()
+            self._start_plex_monitor()
+            r.update()
+        threading.Thread(target=work, daemon=True).start()
+
+    # ── Plex playback controls ────────────────────────────────────────────
+
+    def _space_key(self):
+        if self.renderer.plex_playing:
+            self._plex_toggle_pause()
+        else:
+            self._char_typed(" ")
+
+    def _plex_show_osd(self):
+        import time
+        self.renderer.plexosd.show()
+        self._plex_osd_until = time.monotonic() + 5.0
+        self.renderer.mark_dirty()
+
+    def _start_plex_monitor(self):
+        if self._plex_monitor:
+            return
+        self._plex_monitor = True
+        threading.Thread(target=self._plex_monitor_loop, daemon=True).start()
+
+    def _plex_monitor_loop(self):
+        import time
+        r = self.renderer
+        while self._plex_monitor and r.plex_playing:
+            pos = self.player.get_property("time-pos")
+            if pos is not None:
+                self._plex_pos = pos
+            if self._plex_duration is None:
+                self._plex_duration = self.player.get_property("duration")
+            r.plexosd.set_progress(pos or 0, self._plex_duration or 0, self._plex_paused)
+            if r.plexosd.visible:
+                if time.monotonic() > self._plex_osd_until:
+                    r.plexosd.hide()
+                r.mark_dirty()
+            # Heartbeat: tell the server our position every ~10s so Now-Playing
+            # and cross-device "Continue Watching" stay current mid-stream.
+            now = time.monotonic()
+            if pos is not None and now - self._plex_last_report >= 10:
+                self._plex_last_report = now
+                self._plex_report("paused" if self._plex_paused else "playing")
+            time.sleep(0.5)
+        self._plex_monitor = False
+
+    def _plex_focus(self, delta):
+        osd = self.renderer.plexosd
+        if osd.adjusting:
+            return   # volume is selected for adjustment — Up/Down is locked
+        osd.focus_next() if delta > 0 else osd.focus_prev()
+        self._plex_show_osd()
+
+    def _plex_dpad(self, direction):
+        """Left/Right: adjust the selected volume, or scrub the timeline. Buttons
+        don't move on Left/Right (Up/Down navigates the bar)."""
+        osd = self.renderer.plexosd
+        if osd.adjusting:
+            self._plex_vol(direction > 0)
+        elif osd.focused_id() == "timeline":
+            self._plex_seek(10 * direction)
+        else:
+            self._plex_focus(direction)   # Left/Right also move the highlight
+
+    def _plex_vol(self, up):
+        self._unmute_if_muted()
+        vol = self.player.volume_up(5) if up else self.player.volume_down(5)
+        self.config.volume = vol
+        self.renderer.volume = vol
+        self.renderer.plexosd.volume = vol
+        self.renderer.plexosd.muted = False
+        self._plex_show_osd()
+
+    def _plex_seek(self, delta):
+        self.player.seek(delta, "relative")
+        self._plex_show_osd()
+
+    def _plex_skip(self, delta):
+        """Skip to the next/previous episode (in a Play All / Shuffle queue) or,
+        for anything else (a movie), the next/previous chapter."""
+        q = self._plex_queue
+        if q:
+            pos = self._plex_queue_pos + delta
+            if 0 <= pos < len(q):
+                self._plex_report("stopped")   # save outgoing episode position
+                self._plex_queue_pos = pos
+                self._ppv_play(q[pos], "", resume=False, keep_queue=True)
+            return
+        self.player.chapter_skip(delta)
+        self._plex_show_osd()
+
+    def _plex_toggle_pause(self):
+        self._plex_paused = not self._plex_paused
+        self.player.set_pause(self._plex_paused)
+        self.renderer.plexosd.paused = self._plex_paused
+        self._plex_show_osd()
+
+    def _plex_activate(self):
+        osd = self.renderer.plexosd
+        fid = osd.focused_id()
+        if fid == "volume":
+            osd.adjusting = not osd.adjusting   # enter/exit volume adjust mode
+            self._plex_show_osd()
+            return
+        if fid == "back10":
+            self._plex_seek(-10)
+        elif fid == "fwd10":
+            self._plex_seek(10)
+        elif fid == "prev":
+            self._plex_skip(-1)
+        elif fid == "next":
+            self._plex_skip(1)
+        elif fid in ("playpause", "timeline"):
+            self._plex_toggle_pause()
+        elif fid == "stop":
+            self._plex_stop()
+        elif fid == "menu":
+            self._toggle_context_menu()
+
+    def _plex_click(self, name, x):
+        osd = self.renderer.plexosd
+        if name == "timeline":
+            frac = osd.seek_fraction(x)
+            if frac is not None and self._plex_duration:
+                self.player.seek(frac * self._plex_duration, "absolute")
+        elif name == "volume":
+            frac = osd.volume_fraction(x)
+            if frac is not None:
+                vol = self.player.set_volume(int(frac * 100))
+                self.config.volume = vol
+                self.renderer.volume = vol
+                osd.volume = vol
+                osd.muted = False
+        else:
+            osd.focus_to(name)
+            self._plex_activate()
+        self._plex_show_osd()
+
+    def _plex_report(self, state: str, finished: bool = False):
+        """Best-effort timeline report for the item playing now. `finished`
+        reports the full duration so Plex marks it watched and clears resume."""
+        rk = self._plex_now_rk
+        if not rk:
+            return
+        dur = self._plex_duration or 0
+        t = dur if (finished and dur) else self._plex_pos
+        threading.Thread(
+            target=lambda: self._ppv_client().report_timeline(rk, t, dur, state=state),
+            daemon=True).start()
+
+    def _cache_offset(self, rk: str, offset: int):
+        """Reflect a new resume point in the cached browse rows so re-selecting
+        the item offers to resume (or starts over once watched)."""
+        if rk and self._ppv_stack:
+            for row in self._ppv_stack[-1]["rows"]:
+                if row.get("rating_key") == rk and row.get("playable"):
+                    row["offset"] = offset
+
+    def _plex_teardown(self):
+        """Tear down playback state + stop mpv (no server report, no nav)."""
+        self._plex_monitor = False
+        self.renderer.plex_playing = False
+        self.renderer.plexosd.hide()
+        self.renderer.plexosd.adjusting = False
+        self._plex_paused = False
+        self._plex_now_rk = ""
+        self.player.stop()
+
+    def _plex_end(self):
+        """Stop Plex playback and tear down (no navigation)."""
+        if not self.renderer.plex_playing:
+            return
+        # Save the resume point on the server (Plex clears it if we finished).
+        rk, pos, dur = self._plex_now_rk, self._plex_pos, self._plex_duration or 0
+        if rk and pos > 1:
+            self._plex_report("stopped")
+            self._cache_offset(rk, 0 if (dur > 0 and pos > dur - 30) else int(pos))
+        self._plex_teardown()
+
+    def _plex_finished(self):
+        """Current item reached its end: report it watched, clear the resume
+        point, and return to the item's info screen (or the browse list)."""
+        if not self.renderer.plex_playing:
+            return
+        rk = self._plex_now_rk
+        self._plex_report("stopped", finished=True)
+        self._cache_offset(rk, 0)
+        self._plex_teardown()
+        if self._plex_info_data:
+            self._plex_info_data["offset"] = 0
+            self.renderer.plexinfo.show(
+                self._plex_info_data,
+                watchlisted=self.renderer.plexinfo.watchlisted)
+            self.renderer.update()
+        elif self._ppv_stack:
+            lvl = self._ppv_stack[-1]
+            self.renderer.ppv.set_browse(lvl["title"], lvl["rows"],
+                                         lvl["crumb"], lvl["sel"])
+            self.renderer.ppv.show()
+            self.renderer.update()
+        else:
+            self._ppv_exit()
+
+    def _plex_stop(self):
+        """Stop button / Esc: end playback and return to the item's info screen."""
+        was_playing = self.renderer.plex_playing
+        pos, dur = self._plex_pos, self._plex_duration or 0
+        self._plex_end()
+        if not was_playing:
+            return
+        if self._plex_info_data:
+            self._plex_info_data["offset"] = 0 if (dur and pos > dur - 30) else int(pos)
+            self.renderer.plexinfo.show(self._plex_info_data,
+                                        watchlisted=self.renderer.plexinfo.watchlisted)
+            self.renderer.update()
+        elif self._ppv_stack:
+            lvl = self._ppv_stack[-1]
+            self.renderer.ppv.set_browse(lvl["title"], lvl["rows"],
+                                         lvl["crumb"], lvl["sel"])
+            self.renderer.ppv.show()
+            self.renderer.update()
+        else:
+            self._ppv_exit()
+
+    def _ppv_push(self, title, rows, crumb, loader=None, sort="", volatile=False):
+        # Sortable item lists get a "Sort by..." row pinned at the top so the
+        # user can re-order without the context menu.
+        if loader and rows and rows[0].get("type") != "sort":
+            label = self._sort_label(sort) or "Default"
+            rows = [{"type": "sort", "title": f"Sort by: {label}",
+                     "meta": "", "playable": False}] + rows
+        self._ppv_stack.append({"title": title, "rows": rows,
+                                "sel": 1 if loader else 0,
+                                "crumb": crumb, "loader": loader, "sort": sort,
+                                "volatile": volatile})
+        self.renderer.ppv.set_browse(title, rows, crumb,
+                                     sel=1 if loader else 0)
+        self.renderer.ppv.show()     # ensure visible (e.g. opened from info screen)
+        self.renderer.mark_dirty()
+
+    def _sort_label(self, val):
+        for name, v in self.SORT_OPTIONS:
+            if v == val:
+                return name
+        return "" if val else "Default"
+
+    def _ppv_back(self):
+        if len(self._ppv_stack) <= 1:
+            self._ppv_exit()
+            return
+        self._ppv_stack.pop()
+        self._ppv_show_top()
+
+    def _ppv_show_top(self):
+        """Re-show the top browse level. Volatile levels (watchlist) reload from
+        the server so changes made deeper (e.g. removed from watchlist) appear."""
+        if not self._ppv_stack:
+            return
+        lvl = self._ppv_stack[-1]
+        if lvl.get("volatile") and lvl.get("loader"):
+            self._ppv_stack.pop()
+            self._ppv_open(lvl["loader"], lvl["title"],
+                           sort=lvl.get("sort", ""), volatile=True)
+            return
+        self.renderer.ppv.set_browse(lvl["title"], lvl["rows"], lvl["crumb"], lvl["sel"])
+        self.renderer.ppv.show()
+        self.renderer.mark_dirty()
+
+    def _ppv_exit(self):
+        self.renderer.ppv.close()
+        self.renderer.plexinfo.close()
+        self._ppv_stack = []
+        if getattr(self, "_ppv_return_menu", False) or not self.channels:
+            self.renderer.main_menu.show(self._main_menu_select)
+        self.renderer.update()
+
+    def _ppv_error(self, msg):
+        self.renderer.ppv.set_status(msg)
+        self.renderer.mark_dirty()
+
     def _start_from_playlist(self, pl):
         """Leave the home screen, load the chosen playlist + EPG, and tune in."""
+        self._plex_end()
+        self.renderer.plexinfo.close()
         self.renderer.menu.close()
         self.config.playlist_url = pl.get("playlist_url", "")
         self.config.epg_url = pl.get("epg_url", "")
@@ -1401,12 +2642,38 @@ class App:
         self.config.save()
         self._shutdown()
 
-    def _on_eof(self):
-        """Called by mpv (on the IPC reader thread) when a stream ends — retry
-        the current channel. Done on a separate thread so the 2s wait never
-        blocks the reader (which would freeze all input)."""
+    def _on_eof(self, reason: str = "eof"):
+        """Called by mpv (on the IPC reader thread) when a stream ends. `reason`
+        is "eof" (played to the end) or "error" (stream broke). Work is offloaded
+        to a thread so the reader is never blocked (which would freeze input)."""
+        if self._quit:
+            return
+        if self.renderer.plex_playing:
+            # A stream error mid-playback is NOT a finish: save the resume point
+            # and return to the info screen — don't mark the item watched or
+            # advance the queue.
+            if reason != "eof":
+                threading.Thread(target=self._plex_stop, daemon=True).start()
+                return
+            # Episode queue (Play All / Shuffle): mark the finished episode
+            # watched and advance to the next.
+            if self._plex_queue and self._plex_queue_pos + 1 < len(self._plex_queue):
+                self._plex_report("stopped", finished=True)
+                self._cache_offset(self._plex_now_rk, 0)
+                self._plex_queue_pos += 1
+                nxt = self._plex_queue[self._plex_queue_pos]
+                threading.Thread(
+                    target=lambda: self._ppv_play(nxt, "", resume=False,
+                                                  keep_queue=True),
+                    daemon=True).start()
+                return
+            self._plex_queue = []        # queue exhausted (or single item)
+            # Reached the end: mark watched and return to the info screen instead
+            # of pausing on a black frame.
+            threading.Thread(target=self._plex_finished, daemon=True).start()
+            return
         print("[cathode] Stream ended; retrying…")
-        if not self._quit and self.channels:
+        if self.channels:
             threading.Thread(target=self._retry_current, daemon=True).start()
 
     def _retry_current(self):

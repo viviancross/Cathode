@@ -20,6 +20,7 @@ from .theme import (
 _BUTTONS = [
     ("new",     "New Playlist"),
     ("load",    "Load Playlist"),
+    ("plex",    "Plex-Per-View"),
     ("options", "Options"),
     ("exit",    "Exit"),
 ]
@@ -104,20 +105,22 @@ class MainMenu:
     # ── geometry / mouse ──────────────────────────────────────────────────
 
     def _button_rects(self):
+        n = len(_BUTTONS)
         bw = int(self.width * 0.40)
-        bh = max(40, int(self.height * 0.085))
-        gap = max(10, int(self.height * 0.022))
         x0 = (self.width - bw) // 2
-        total = len(_BUTTONS) * bh + (len(_BUTTONS) - 1) * gap
-        # Buttons sit in the lower half, below the logo/title block.
-        top = int(self.height * 0.50)
-        if top + total > self.height - int(self.height * 0.05):
-            top = self.height - int(self.height * 0.05) - total
-        out = []
-        for i in range(len(_BUTTONS)):
-            y0 = top + i * (bh + gap)
-            out.append((i, x0, y0, x0 + bw, y0 + bh))
-        return out
+        gap = max(8, int(self.height * 0.018))
+        # Fit the buttons in the band between the title block and the inner
+        # border, shrinking them so every option stays inside the box.
+        m = max(16, int(self.width * 0.03))          # matches the border inset
+        region_top = int(self.height * 0.50)
+        region_bottom = self.height - m - int(self.height * 0.04)
+        avail = max(1, region_bottom - region_top)
+        bh = min(int(self.height * 0.085), (avail - (n - 1) * gap) // n)
+        bh = max(24, bh)
+        total = n * bh + (n - 1) * gap
+        top = region_top + max(0, (avail - total) // 2)   # center in the band
+        return [(i, x0, top + i * (bh + gap), x0 + bw, top + i * (bh + gap) + bh)
+                for i in range(n)]
 
     def hit_test(self, x, y):
         for (i, x0, y0, x1, y1) in self._button_rects():

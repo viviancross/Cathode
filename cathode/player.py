@@ -99,6 +99,8 @@ class Player:
         self._transport = None
         self._running = False
         self._exited = threading.Event()
+        self._resume_to = None          # one-shot seek (s) applied on next load
+        self._unpause_on_start = False  # force play on next file load (keep-open)
         self._cmd: List[str] = []
         self._proc: Optional[subprocess.Popen] = None
 
@@ -198,6 +200,9 @@ class Player:
             "--cursor-autohide-fs-only=no",
             "--vo=gpu",
             "--hwdec=auto-safe",
+            # Deinterlace only frames flagged interlaced (480i etc.); progressive
+            # content passes through untouched.
+            "--vf=bwdif=deint=1",
             f"--volume={self._volume}",
             f"--user-agent={self.user_agent}",
             f"--geometry={self.width}x{self.height}",
@@ -210,6 +215,20 @@ class Player:
             "--msg-level=all=v",
         ]
         args.append("--fullscreen=yes" if self.fullscreen else "--fullscreen=no")
+        # Make Cathode's bundled fonts available to the subtitle renderer so the
+        # subtitle-font picker can use them.
+        try:
+            from .ui import theme
+            fdir = theme.fonts_dir()
+            if fdir:
+                args.append(f"--sub-fonts-dir={fdir}")
+        except Exception:
+            pass
+        # X11 + the default GLX context can paint a black wedge over half the
+        # video on some drivers; the EGL backend avoids it. Only under X11.
+        if (sys.platform.startswith("linux") and os.environ.get("DISPLAY")
+                and not os.environ.get("WAYLAND_DISPLAY")):
+            args.append("--gpu-context=x11egl")
         # NB: mpv's own SDL gamepad input is intentionally NOT used — the app
         # has a native gamepad reader (cathode/gamepad.py) that works on every
         # mpv build (incl. the SDL-less Flatpak mpv), so we never pass
@@ -441,17 +460,24 @@ class Player:
                     threading.Thread(target=_run, daemon=True).start()
         elif event == "playback-restart":
             # First frame of a newly-loaded file is now on screen.
+            if self._resume_to is not None:
+                t, self._resume_to = self._resume_to, None
+                self._send({"command": ["seek", t, "absolute"]})
+            if getattr(self, "_unpause_on_start", False):
+                self._unpause_on_start = False
+                self._paused = False
+                self._set_property("pause", False)
             if self._on_playback_started:
                 self._on_playback_started()
         elif event == "end-file":
             reason = msg.get("reason", "")
             if reason in ("eof", "error") and self._on_eof:
-                self._on_eof()
+                self._on_eof(reason)
         elif event == "property-change":
             name = msg.get("name")
             if name == "eof-reached" and msg.get("data") is True:
                 if self._on_eof:
-                    self._on_eof()
+                    self._on_eof("eof")
             elif name == "osd-width":
                 self._osd_w = msg.get("data") or 0
                 self._maybe_resize()
@@ -487,11 +513,76 @@ class Player:
 
     # ── Playback ───────────────────────────────────────────────────────────
 
-    def play(self, url: str):
+    def play(self, url: str, start: float = 0, headers: Optional[dict] = None):
+        # `start` (seconds) resumes mid-file; applied once the file loads.
+        self._resume_to = float(start) if start and start > 0 else None
+        # A fresh load must always play: --keep-open pauses mpv at the previous
+        # file's EOF, and that pause=yes would otherwise carry into this one.
+        self._unpause_on_start = True
+        self._paused = False
+        # Per-request HTTP headers (e.g. Plex auth token) — kept out of the URL
+        # so the token never lands in mpv's logs. ALWAYS set the property (empty
+        # to clear) so a Plex token can't leak onto the next live-TV stream.
+        self._set_property(
+            "http-header-fields",
+            [f"{k}: {v}" for k, v in headers.items()] if headers else [])
         self._send({"command": ["loadfile", url, "replace"]})
 
     def stop(self):
         self._send({"command": ["stop"]})
+
+    def seek(self, seconds: float, mode: str = "relative"):
+        self._send({"command": ["seek", seconds, mode]})
+
+    def chapter_skip(self, delta: int):
+        """Jump +/- chapters (no-op in mpv if the file has none)."""
+        self._send({"command": ["add", "chapter", int(delta)]})
+
+    # ── audio / subtitle tracks + styling ────────────────────────────────
+
+    def get_tracks(self) -> dict:
+        """Current file's audio + subtitle tracks: {'audio': [...], 'sub': [...]}."""
+        tl = self.get_property("track-list") or []
+        out = {"audio": [], "sub": []}
+        for t in tl:
+            typ = t.get("type")
+            if typ in ("audio", "sub"):
+                out[typ].append({
+                    "id": t.get("id"),
+                    "title": t.get("title") or "",
+                    "lang": t.get("lang") or "",
+                    "selected": bool(t.get("selected")),
+                })
+        return out
+
+    def set_audio_track(self, tid):
+        self._set_property("aid", tid)
+
+    def set_sub_track(self, tid):
+        self._set_property("sid", tid)
+
+    def get_audio_devices(self) -> list:
+        dl = self.get_property("audio-device-list") or []
+        return [{"name": d.get("name"),
+                 "desc": d.get("description") or d.get("name")} for d in dl]
+
+    def set_audio_device(self, name):
+        self._set_property("audio-device", name or "auto")
+
+    def apply_sub_style(self, font=None, size=None, color=None):
+        if font:
+            self._set_property("sub-font", font)
+            self._set_property("sub-ass-override", "force")   # apply to ASS subs too
+        if size:
+            self._set_property("sub-font-size", size)
+        if color:
+            self._set_property("sub-color", color)
+
+    def set_pause(self, paused: bool):
+        self._set_property("pause", bool(paused))
+
+    def toggle_pause(self):
+        self._send({"command": ["cycle", "pause"]})
 
     def toggle_fullscreen(self):
         self._send({"command": ["cycle", "fullscreen"]})
@@ -560,6 +651,10 @@ class Player:
 
     def volume_down(self, step: int = 5) -> int:
         self.volume = self._volume - step
+        return self._volume
+
+    def set_volume(self, vol: int) -> int:
+        self.volume = max(0, min(100, int(vol)))
         return self._volume
 
     def toggle_mute(self) -> bool:
