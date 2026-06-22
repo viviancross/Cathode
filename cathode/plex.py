@@ -197,13 +197,17 @@ class PlexClient:
         """Home-video / 'Other Videos' libraries support folder browsing."""
         return "none" in (section.get("agent") or "")
 
-    def folder_items(self, path: str) -> List[dict]:
-        """A folder's contents: nested folders (Directory) + videos (Metadata).
+    def folder_items(self, path: str, section: str = "") -> List[dict]:
+        """A folder's contents in an Other Videos library: nested folders +
+        videos.
 
-        Plex folder/Directory `key`s come in several shapes — a full URL, an
-        absolute path (`/library/...`), or a bare relative fragment. Normalize
-        so the request always hits a valid endpoint (a missing leading slash
-        was producing 404s when descending into sub-folders)."""
+        Plex returns subfolders as Directory entries and video files as Metadata
+        carrying a Media/Part. Some servers also return folder-like Metadata with
+        no playable part — treat anything non-playable as a folder so selecting
+        it descends via the folder endpoint, NOT /library/metadata/{id}/children
+        (which 404s for a folder and surfaced as "HTTP Error 404: Not Found").
+        `section` is the library section key, used to rebuild a folder URL when
+        Plex hands back a relative or bare key."""
         url = self._abs_url(path)
         try:
             data = self._get(url, token=self._server_token)
@@ -211,14 +215,33 @@ class PlexClient:
             raise PlexError(f"Folder unavailable ({e.code}).")
         rows = []
         for d in _container(data, "Directory"):
-            k = d.get("key")
-            if not k:
-                continue
-            rows.append({"type": "folder", "folder": k,
+            rows.append({"type": "folder", "folder": self._folder_url(section, d),
+                         "section": section,
                          "title": d.get("title") or d.get("name", "?"),
                          "meta": "", "playable": False})
-        rows += [_meta_row(m) for m in _container(data, "Metadata")]
+        for m in _container(data, "Metadata"):
+            row = _meta_row(m)
+            if row["playable"]:
+                rows.append(row)
+            else:
+                rows.append({"type": "folder",
+                             "folder": self._folder_url(section, m),
+                             "section": section,
+                             "title": row["title"], "meta": "", "playable": False})
         return rows
+
+    def _folder_url(self, section: str, node: dict) -> str:
+        """URL that lists a folder node's contents. Use an absolute key Plex
+        already gave us; otherwise rebuild from the section + the node's id as
+        /library/sections/{section}/folder?parent={id}."""
+        k = node.get("key") or ""
+        if k.startswith("http") or k.startswith("/"):
+            return k
+        if "parent=" in k:                       # relative 'folder?parent=123'
+            return f"/library/sections/{section}/folder?{k.split('?', 1)[-1]}"
+        rid = (k.rstrip("/").split("/")[-1] if k else "") \
+            or str(node.get("ratingKey") or node.get("id") or "")
+        return f"/library/sections/{section}/folder?parent={rid}"
 
     def _abs_url(self, path: str) -> str:
         """Resolve a Plex `key`/path to an absolute URL against the server."""

@@ -1749,23 +1749,23 @@ class App:
                 lambda s, k=rk, g=gid: self._ppv_client().section_filter(
                     k, genre_id=g, sort=s), title)
         elif t == "folderview":
-            self._ppv_load_folder(f"/library/sections/{rk}/folder", "FOLDERS")
+            self._ppv_load_folder(f"/library/sections/{rk}/folder", "FOLDERS", rk)
         elif t == "folder":
-            self._ppv_load_folder(row.get("folder"), title)
+            self._ppv_load_folder(row.get("folder"), title, row.get("section", ""))
         elif t == "show":
             self._ppv_show_info(row)         # series info screen (Play All/etc.)
         else:
             self._ppv_open(
                 lambda s, k=rk: self._ppv_client().children(k, sort=s), title)
 
-    def _ppv_load_folder(self, path, title):
+    def _ppv_load_folder(self, path, title, section=""):
         r = self.renderer
         r.ppv.set_status("LOADING...")
         r.mark_dirty()
         crumb = " / ".join(l["title"] for l in self._ppv_stack) or "Plex-Per-View"
         def work():
             try:
-                rows = self._ppv_client().folder_items(path)
+                rows = self._ppv_client().folder_items(path, section)
             except Exception as e:
                 self._ppv_error(str(e) or "Couldn't load that folder.")
                 return
