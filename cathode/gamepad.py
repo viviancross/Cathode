@@ -73,15 +73,21 @@ class GamepadReader:
             del held[d]
 
     def _run(self):
-        try:
-            if os.name == "nt":
-                self._run_xinput()
-            elif sys.platform == "darwin":
-                self._run_macos()
-            else:
-                self._run_linux_js()
-        except Exception:
-            pass   # a gamepad reader failure must never take the app down
+        # Re-enter the platform loop if it ever exits or throws (e.g. a pad
+        # disconnect breaks a read). Without this the reader would die on the
+        # first hiccup and never pick a reconnected controller back up.
+        while self._running:
+            try:
+                if os.name == "nt":
+                    self._run_xinput()
+                elif sys.platform == "darwin":
+                    self._run_macos()
+                else:
+                    self._run_linux_js()
+            except Exception:
+                pass
+            if self._running:
+                time.sleep(0.5)
 
     # ── Windows: XInput ───────────────────────────────────────────────────
 
@@ -112,29 +118,50 @@ class GamepadReader:
                0x1000: "a", 0x2000: "b", 0x4000: "x", 0x8000: "y"}
         st = _STATE()
         state = {"buttons": set(), "held": {}}
+        # Microsoft explicitly warns: polling XInputGetState on disconnected user
+        # indices is expensive and can prevent re-detection. Only re-scan empty
+        # slots once per second; the connected slot keeps polling at _POLL.
+        connected = -1
+        next_scan = 0.0
         while self._running:
-            found = False
-            for i in range(4):
-                if xinput.XInputGetState(i, ctypes.byref(st)) == 0:
-                    found = True
-                    g = st.Gamepad
-                    wb = g.wButtons
-                    dirs = set()
-                    if wb & 0x0001: dirs.add("up")
-                    if wb & 0x0002: dirs.add("down")
-                    if wb & 0x0004: dirs.add("left")
-                    if wb & 0x0008: dirs.add("right")
-                    if g.sThumbLY > _STICK_TH: dirs.add("up")
-                    if g.sThumbLY < -_STICK_TH: dirs.add("down")
-                    if g.sThumbLX < -_STICK_TH: dirs.add("left")
-                    if g.sThumbLX > _STICK_TH: dirs.add("right")
-                    buttons = {name for bit, name in BTN.items() if wb & bit}
-                    if g.bLeftTrigger > 30: buttons.add("lt")
-                    if g.bRightTrigger > 30: buttons.add("rt")
-                    self._process(dirs, buttons, state)
-                    break
-            if not found:
+            now = time.monotonic()
+            try:
+                indices = ([connected] if connected >= 0 else []) + (
+                    [i for i in range(4) if i != connected]
+                    if now >= next_scan else [])
+                if not indices:
+                    time.sleep(_POLL); continue
+                found = False
+                for i in indices:
+                    if xinput.XInputGetState(i, ctypes.byref(st)) == 0:
+                        connected = i
+                        found = True
+                        g = st.Gamepad
+                        wb = g.wButtons
+                        dirs = set()
+                        if wb & 0x0001: dirs.add("up")
+                        if wb & 0x0002: dirs.add("down")
+                        if wb & 0x0004: dirs.add("left")
+                        if wb & 0x0008: dirs.add("right")
+                        if g.sThumbLY > _STICK_TH: dirs.add("up")
+                        if g.sThumbLY < -_STICK_TH: dirs.add("down")
+                        if g.sThumbLX < -_STICK_TH: dirs.add("left")
+                        if g.sThumbLX > _STICK_TH: dirs.add("right")
+                        buttons = {name for bit, name in BTN.items() if wb & bit}
+                        if g.bLeftTrigger > 30: buttons.add("lt")
+                        if g.bRightTrigger > 30: buttons.add("rt")
+                        self._process(dirs, buttons, state)
+                        break
+                if not found:
+                    if connected >= 0:               # the controller just dropped
+                        connected = -1
+                        state["buttons"].clear(); state["held"].clear()
+                    next_scan = now + 1.0            # throttle re-detect scans
+            except Exception:
+                # Never let a transient ctypes hiccup kill the reader.
+                connected = -1
                 state["buttons"].clear(); state["held"].clear()
+                next_scan = now + 1.0
             time.sleep(_POLL)
 
     # ── Linux: /dev/input/js* ─────────────────────────────────────────────
@@ -156,10 +183,14 @@ class GamepadReader:
                     time.sleep(1.0)
                     continue
                 btns, axes = {}, {}
+            disconnected = False
             try:
                 while True:
                     data = os.read(fd, JS_SIZE)
-                    if not data or len(data) < JS_SIZE:
+                    if not data:           # 0-byte read = EOF = device gone
+                        disconnected = True
+                        break
+                    if len(data) < JS_SIZE:
                         break
                     _t, value, typ, num = struct.unpack("IhBB", data)
                     typ &= ~0x80          # strip the "init" flag
@@ -170,11 +201,14 @@ class GamepadReader:
             except BlockingIOError:
                 pass
             except OSError:               # disconnected
+                disconnected = True
+            if disconnected:
                 try:
                     os.close(fd)
                 except OSError:
                     pass
                 fd = None
+                state["buttons"].clear(); state["held"].clear()
                 continue
             self._process(*self._linux_signals(btns, axes), state)
             time.sleep(_POLL)

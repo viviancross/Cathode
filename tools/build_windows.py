@@ -100,7 +100,7 @@ def package(app_dir):
     import cathode
     ver = cathode.__version__
     os.makedirs(BUILDS, exist_ok=True)
-    out_zip = os.path.join(BUILDS, f"cathode-windows-{ver}-portable.zip")
+    out_zip = os.path.join(BUILDS, f"cathode-ppv-windows-{ver}-portable.zip")
     if os.path.exists(out_zip):
         os.remove(out_zip)
     log("zipping portable build...")

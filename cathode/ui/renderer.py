@@ -16,6 +16,9 @@ from .menu import ContextMenu
 from .osk import OnScreenKeyboard
 from .editor import ThemeEditor
 from .mainmenu import MainMenu
+from .ppv import PPVScreen
+from .plexosd import PlexOSD
+from .plexinfo import PlexInfoScreen
 from .effects import (
     make_scanline_cache,
     make_vignette,
@@ -49,7 +52,6 @@ class Renderer:
     STATIC_FPS   = 60   # frames/sec during the channel-change static
     STATIC_BLOCK = 5    # static "particle" size in px (bigger = coarser tube TV)
     CLOCK_TICK   = 1.0  # seconds between clock-only refreshes
-    ANIM_TICK    = 1.0 / 30  # seconds between repaints for animated logos (30fps)
 
     def __init__(
         self,
@@ -76,6 +78,10 @@ class Renderer:
         self.osk = OnScreenKeyboard(width, height)
         self.editor = ThemeEditor(width, height)
         self.main_menu = MainMenu(width, height)
+        self.ppv = PPVScreen(width, height)   # Plex-Per-View browse screen
+        self.plexinfo = PlexInfoScreen(width, height)   # Plex item info page
+        self.plexosd = PlexOSD(width, height)  # Plex playback control bar
+        self.plex_playing = False             # a Plex item is the current video
 
         # CRT scanline / vignette toggles (driven by the theme editor)
         self.crt_on = True
@@ -153,6 +159,9 @@ class Renderer:
             self.osk.refresh_fonts()
             self.editor.refresh_fonts()
             self.main_menu.refresh_fonts()
+            self.ppv.refresh_fonts()
+            self.plexinfo.refresh_fonts()
+            self.plexosd.refresh_fonts()
 
     def resize(self, width: int, height: int):
         """Re-render at a new window resolution (e.g. handheld <-> docked)."""
@@ -170,6 +179,9 @@ class Renderer:
             self.osk.resize(width, height)
             self.editor.resize(width, height)
             self.main_menu.resize(width, height)
+            self.ppv.resize(width, height)
+            self.plexinfo.resize(width, height)
+            self.plexosd.resize(width, height)
         # Re-fit the video preview to the new geometry if the guide is open.
         self._apply_video_box()
 
@@ -420,6 +432,22 @@ class Renderer:
                 img = Image.alpha_composite(img, self.osk.render())
             return img
 
+        # ── Plex-Per-View browse screen (opaque) ──────────────────────────
+        if self.ppv.open:
+            img = self.ppv.render()
+            if self.menu.open:
+                img = Image.alpha_composite(img, self.menu.render())
+            if self.osk.open:
+                img = Image.alpha_composite(img, self.osk.render())
+            return img
+
+        # ── Plex item info screen (opaque) ────────────────────────────────
+        if self.plexinfo.open:
+            img = self.plexinfo.render()
+            if self.menu.open:
+                img = Image.alpha_composite(img, self.menu.render())
+            return img
+
         now_mono = time.monotonic()
 
         # ── Auto-hide OSD ─────────────────────────────────────────────────
@@ -447,6 +475,22 @@ class Renderer:
                 guide_img = Image.alpha_composite(guide_img, self.osk.render())
             self._maybe_notify(guide_img)
             return guide_img
+
+        # ── Plex-Per-View playback (its own control bar, not the channel OSD) ─
+        if self.plex_playing:
+            frame = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
+            if self.plexosd.visible:
+                frame = Image.alpha_composite(frame, self.plexosd.render())
+            if self.crt_on:
+                frame = Image.alpha_composite(frame, self.scanlines)
+            if self.vignette_on:
+                frame = Image.alpha_composite(frame, self.vignette)
+            if self.menu.open:
+                frame = Image.alpha_composite(frame, self.menu.render())
+            if self.osk.open:
+                frame = Image.alpha_composite(frame, self.osk.render())
+            self._maybe_notify(frame)
+            return frame
 
         # ── Base: fully transparent (video shows through) ─────────────────
         # (The channel-change static + reveal fade are handled entirely by the
@@ -619,41 +663,35 @@ class Renderer:
         """
         frame_budget = 1.0 / self.STATIC_FPS
         next_clock = time.monotonic()
-        next_anim = time.monotonic()
         while self._running:
-            if self.state == UIState.CHANNEL_CHANGING:
-                t0 = time.monotonic()
-                self.update()
-                # Sleep only the remainder of the frame budget so the actual
-                # rate approaches STATIC_FPS instead of (render + full sleep).
-                time.sleep(max(0.0, frame_budget - (time.monotonic() - t0)))
-                next_clock = time.monotonic()  # reset slow tick
-            else:
-                now = time.monotonic()
-                if self._dirty:
-                    # Coalesced repaint requested by input (e.g. mouse hover,
-                    # menu/keyboard interaction) — render at most every poll.
-                    self._dirty = False
+            # A render error must never kill this thread — that would freeze all
+            # graphics (OSD, guide, menus, static) until the app is restarted.
+            try:
+                if self.state == UIState.CHANNEL_CHANGING:
+                    t0 = time.monotonic()
                     self.update()
-                    next_clock = now + self.CLOCK_TICK
-                elif self._logos_animating() and now >= next_anim:
-                    # Advance animated channel logos while they're on screen.
-                    next_anim = now + self.ANIM_TICK
-                    self.update()
-                elif now >= next_clock:
-                    next_clock = now + self.CLOCK_TICK
-                    # Only tick the OSD clock while plainly watching.
-                    if (self.state != UIState.GUIDE_OPEN
-                            and not self.menu.open and not self.osk.open
-                            and not self.editor.open and not self.main_menu.open):
+                    # Sleep only the remainder of the frame budget so the actual
+                    # rate approaches STATIC_FPS instead of (render + full sleep).
+                    time.sleep(max(0.0, frame_budget - (time.monotonic() - t0)))
+                    next_clock = time.monotonic()  # reset slow tick
+                else:
+                    now = time.monotonic()
+                    if self._dirty:
+                        # Coalesced repaint requested by input (e.g. mouse hover,
+                        # menu/keyboard interaction) — render at most every poll.
+                        self._dirty = False
                         self.update()
+                        next_clock = now + self.CLOCK_TICK
+                    elif now >= next_clock:
+                        next_clock = now + self.CLOCK_TICK
+                        # Only tick the OSD clock while plainly watching.
+                        if (self.state != UIState.GUIDE_OPEN
+                                and not self.menu.open and not self.osk.open
+                                and not self.editor.open and not self.main_menu.open):
+                            self.update()
+                    time.sleep(0.02)
+            except Exception:
                 time.sleep(0.02)
-
-    def _logos_animating(self) -> bool:
-        """True when an animated logo is loaded AND logos are actually on screen
-        (the info bar or the guide), so we only repaint when it shows."""
-        return (self.logos is not None and self.logos.has_animation()
-                and (self.osd_visible or self.state == UIState.GUIDE_OPEN))
 
     def mark_dirty(self):
         """Request a repaint on the next render-thread tick (coalesces many

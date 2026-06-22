@@ -120,7 +120,8 @@ def apply_theme(name: str) -> str:
     _install(pal)
     for modname in ("cathode.ui.osd", "cathode.ui.guide", "cathode.ui.renderer",
                     "cathode.ui.menu", "cathode.ui.osk", "cathode.ui.editor",
-                    "cathode.ui.mainmenu"):
+                    "cathode.ui.mainmenu", "cathode.ui.ppv", "cathode.ui.plexosd",
+                    "cathode.ui.plexinfo"):
         mod = sys.modules.get(modname)
         if mod:
             for k, v in pal.items():
@@ -172,7 +173,6 @@ _ACTIVE_FONT: Optional[str] = None   # explicit font file path override
 _FONT_CANDIDATES = [
     "VCR_OSD_MONO.ttf", "PxPlus_IBM_VGA8.ttf", "Glass_TTY_VT220.ttf",
     "PixelForge.otf",
-    "DejaVuSansMono-Bold.ttf", "DejaVuSansMono.ttf",
     "LiberationMono-Bold.ttf", "LiberationMono-Regular.ttf",
     "UbuntuMono-Bold.ttf", "UbuntuMono-Regular.ttf",
     "FreeMono.ttf",
@@ -205,10 +205,11 @@ _FONT_REGISTRY = {
                     "PxPlus IBM VGA8.ttf"], "PxPlus IBM VGA"),
     "vt220":      (["Glass_TTY_VT220.ttf"], "Glass TTY VT220"),
     "pixelforge": (["PixelForge.otf", "PixelForge.ttf"], "Pixel Forge"),
-    "dejavu":     (["DejaVuSansMono-Bold.ttf", "DejaVuSansMono.ttf"],
-                   "DejaVu Sans Mono"),
 }
-FONT_ORDER = ["vcr", "ibm", "vt220", "pixelforge", "dejavu"]
+FONT_ORDER = ["vcr", "ibm", "vt220", "pixelforge"]
+
+# Fonts offered only for subtitles (by discovered key), never as the UI font.
+_SUBTITLE_ONLY_KEYS = {"x_closedcaption"}
 _active_font_key = "vcr"
 
 
@@ -273,6 +274,26 @@ def _font_path(key: str) -> Optional[str]:
     return disc[0] if disc else None
 
 
+def fonts_dir() -> Optional[str]:
+    """The bundled fonts directory (for mpv's --sub-fonts-dir)."""
+    for d in _asset_font_dirs():
+        if os.path.isdir(d):
+            return os.path.abspath(d)
+    return None
+
+
+def font_family(key: str) -> Optional[str]:
+    """The internal family name of font `key` (used as mpv's sub-font)."""
+    path = _font_path(key)
+    if not path:
+        return None
+    try:
+        from PIL import ImageFont
+        return ImageFont.truetype(path, 20).getname()[0]
+    except Exception:
+        return None
+
+
 def _find_any_monospace() -> Optional[str]:
     for name in _FONT_CANDIDATES:
         path = _find_font(name)
@@ -281,10 +302,13 @@ def _find_any_monospace() -> Optional[str]:
     return None
 
 
-def available_fonts() -> List[str]:
-    """Selectable font keys: registry fonts that resolve + auto-discovered ones."""
+def available_fonts(include_subtitle_only: bool = False) -> List[str]:
+    """Selectable font keys: registry fonts that resolve + auto-discovered ones.
+    Subtitle-only fonts (e.g. Closed Caption) are excluded unless asked for."""
     out = [k for k in FONT_ORDER if _resolve_font_key(k)]
     for k in _discovered_fonts():
+        if k in _SUBTITLE_ONLY_KEYS and not include_subtitle_only:
+            continue
         if k not in out:
             out.append(k)
     return out
