@@ -5,7 +5,8 @@
 A retro IPTV player. It plays your M3U channels like old cable TV: a phosphor‑glow
 program guide, CRT scanlines, channel‑change static, and on‑screen menus you can
 drive with a keyboard, a mouse, or a game controller. It runs on the Steam Deck,
-Linux, Windows, and macOS, and scales from the Deck's screen to a 1080p TV.
+Linux, Windows, and macOS, and renders at the window's real size, so it looks
+right on the Deck's screen and on a docked 1080p TV.
 
 **Version 2.0**
 
@@ -15,10 +16,10 @@ Linux, Windows, and macOS, and scales from the Deck's screen to a 1080p TV.
 
 Cathode doesn't decode video itself. It runs **mpv** as a separate process and
 talks to it over mpv's JSON IPC (a socket on Linux/macOS, a named pipe on
-Windows). mpv plays the video and audio; Cathode draws the whole interface in
-Python with Pillow and composites it over the video using mpv's `overlay-add`.
-Because mpv runs as its own process, Cathode works with the Flatpak mpv on the
-Deck without any special build.
+Windows). mpv handles video and audio. Cathode draws the interface in Python
+with Pillow and paints it over the video with mpv's `overlay-add`. Running mpv
+as its own process is also why the Flatpak mpv works on the Deck with no special
+build.
 
 ## Features
 
@@ -222,6 +223,6 @@ a trademark of Plex Inc.; Cathode is an independent client for a Plex server you
 already own.
 
 The bundled fonts and the bundled mpv (Windows only) keep their own licenses.
-mpv runs as a separate process rather than being linked in. Details and
-attributions are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
+Cathode runs mpv as its own process and never links it as a library. Details
+and attributions are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
 [`LICENSES/`](LICENSES/).
