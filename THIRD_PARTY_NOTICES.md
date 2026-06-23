@@ -16,8 +16,9 @@ or sponsored by any of these projects or their authors.
 | VCR OSD Mono | Riciery Leal | CC BY 4.0 | https://www.dafont.com/vcr-osd-mono.font |
 | PxPlus IBM VGA8 | VileR (int10h.org) | CC BY-SA 4.0 | https://int10h.org/oldschool-pc-fonts/ |
 | Glass TTY VT220 | Viacheslav Slavinsky | Public domain (Unlicense) | https://github.com/svofski/glasstty |
-| Handjet | The Handjet Project Authors | SIL OFL 1.1 | https://github.com/rosettatype/Handjet |
-| DotGothic16 | The DotGothic16 Project Authors (Fontworks) | SIL OFL 1.1 | https://github.com/fontworks-fonts/DotGothic16 |
+| Pixel Operator | Jayvee Enaguas (HarvettFox96) | CC0 1.0 (public domain) | https://notabug.org/HarvettFox96/ttf-pixeloperator |
+| VT323 | The VT323 Project Authors (Peter Hull) | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/vt323 |
+| Jersey 10 | Sarah Cadigan-Fried | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/jersey10 |
 | Space Mono (file name `Closed_Caption.ttf`) | Colophon Foundry / The Space Mono Project Authors | SIL OFL 1.1 | https://github.com/googlefonts/spacemono |
 
 Notes:

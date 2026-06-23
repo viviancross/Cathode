@@ -46,8 +46,8 @@ class App:
         "Classic Blue":   {"theme": "blue",  "font": "vcr",        "scanline_alpha": 40},
         "Amber Terminal": {"theme": "amber", "font": "vt220",      "scanline_alpha": 50},
         "Green Phosphor": {"theme": "green", "font": "ibm",        "scanline_alpha": 50},
-        "Synthwave":      {"theme": "synth", "font": "handjet", "scanline_alpha": 40},
-        "Commodore":      {"theme": "c64",   "font": "dotgothic", "scanline_alpha": 40},
+        "Synthwave":      {"theme": "synth", "font": "vt323", "scanline_alpha": 40},
+        "Commodore":      {"theme": "c64",   "font": "pixelop", "scanline_alpha": 40},
         "Monochrome":     {"theme": "mono",  "font": "dejavu",     "scanline_alpha": 30},
     }
 
@@ -126,6 +126,7 @@ class App:
         self._plex_pos = 0.0            # last known playback position (s)
         self._plex_now_rk = ""          # ratingKey of the item playing now
         self._plex_info_data = None     # detail dict for the info screen
+        self._plex_info_kind = "default"  # button set for the info screen (show/episode/default)
         self._plex_queue = []           # ordered ratingKeys (Play All / Shuffle)
         self._plex_queue_pos = 0        # index of the item playing now
         self._plex_last_report = 0.0    # monotonic ts of last timeline heartbeat
@@ -171,12 +172,7 @@ class App:
 
         self._start_channel = start_channel
         self._quit = False
-
-        # Sleep timer + idle screensaver.
-        self._last_input = time.monotonic()
-        self._sleep_deadline = None          # monotonic ts, or None when off
-        self._screensaver_delay = 180        # seconds idle before the screensaver
-        self._pending_apply = None           # apply-script path, run on quit
+        self._pending_apply = None           # update apply-script path, run on quit
 
     # ── Public entry point ────────────────────────────────────────────────
 
@@ -211,6 +207,7 @@ class App:
         # Set volume
         self.player.volume = self.config.volume
         self.player.muted  = self.config.muted
+        self.player.set_aspect(self.config.video_aspect)   # reapplied per file
 
         # Track the mouse so the on-screen menu button and dialogs are clickable.
         self.player.set_mouse_tracking(True)
@@ -243,9 +240,6 @@ class App:
             })
 
         print("[cathode] Ready.")
-
-        # Background ticker: sleep timer + idle screensaver.
-        threading.Thread(target=self._housekeeping_loop, daemon=True).start()
 
         # One-shot update check on launch (notify only).
         if self.config.update_check:
@@ -495,7 +489,7 @@ class App:
         if self.renderer.main_menu.open:
             return  # home screen has no horizontal navigation
         if self.renderer.ppv.open:
-            self.renderer.ppv.scroll(-10); self.renderer.mark_dirty(); return
+            self.renderer.ppv.nav_horizontal(-1); self.renderer.mark_dirty(); return
         if self.renderer.plexinfo.open:
             self.renderer.plexinfo.move(-1); self.renderer.mark_dirty(); return
         if self.renderer.plex_playing:
@@ -516,7 +510,7 @@ class App:
         if self.renderer.main_menu.open:
             return  # home screen has no horizontal navigation
         if self.renderer.ppv.open:
-            self.renderer.ppv.scroll(10); self.renderer.mark_dirty(); return
+            self.renderer.ppv.nav_horizontal(1); self.renderer.mark_dirty(); return
         if self.renderer.plexinfo.open:
             self.renderer.plexinfo.move(1); self.renderer.mark_dirty(); return
         if self.renderer.plex_playing:
@@ -550,7 +544,8 @@ class App:
             self._plex_activate(); return
         if self.renderer.state == UIState.GUIDE_OPEN:
             if self.renderer.guide.focus == "category":
-                return   # category selector: use Left/Right to change it
+                self._open_category_menu()   # scrollable dropdown of categories
+                return
             ch = self.renderer.guide.selected_channel()
             if ch is None:
                 return
@@ -562,6 +557,21 @@ class App:
         else:
             self.renderer.show_osd(timeout=self.config.osd_timeout_info)
             self.renderer.update()
+
+    def _open_category_menu(self):
+        """Scrollable dropdown of the guide's categories (XMLTV genres + All /
+        Favorites). Reuses the context menu, which now scrolls long lists."""
+        g = self.renderer.guide
+        cur = g.current_category()
+        items = [MenuItem(c, checked=(c == cur),
+                          action=lambda name=c: self._pick_category(name))
+                 for c in g.categories]
+        self.renderer.menu.open_with(items, title="CATEGORIES")
+        self.renderer.mark_dirty()
+
+    def _pick_category(self, name):
+        self.renderer.guide.set_category(name)
+        self.renderer.update()
 
     # ── Key registration ──────────────────────────────────────────────────
 
@@ -657,80 +667,8 @@ class App:
 
     def _after_key(self):
         """Runs after every keyboard/mouse key handler (player.on_after_key)."""
-        self._mark_activity()
         self._set_input_mode("key")
         self._sync_nav_repeat()
-
-    def _mark_activity(self) -> bool:
-        """Record input + dismiss the screensaver. Returns True if this input
-        only woke the screensaver (caller may swallow it)."""
-        self._last_input = time.monotonic()
-        if self.renderer.screensaver.active:
-            self.renderer.screensaver.active = False
-            self.renderer.update()
-            return True
-        return False
-
-    # ── Sleep timer + screensaver ─────────────────────────────────────────
-
-    def _actively_playing(self) -> bool:
-        """True when video is actually on screen (don't screensaver over it)."""
-        r = self.renderer
-        if r.state == UIState.CHANNEL_CHANGING:
-            return True
-        if r.plex_playing:
-            return not self._plex_paused      # paused Plex is fair game
-        return r.state == UIState.WATCHING    # live TV
-
-    def _housekeeping_loop(self):
-        while not self._quit:
-            now = time.monotonic()
-            if self._sleep_deadline and now >= self._sleep_deadline:
-                self._sleep_deadline = None
-                self._sleep_fire()
-            ss = self.renderer.screensaver
-            if ss.active:
-                ss.step()
-                self.renderer.update()
-                time.sleep(0.05)              # ~20fps while bouncing
-                continue
-            if (not self._actively_playing()
-                    and now - self._last_input >= self._screensaver_delay):
-                ss.reset()
-                ss.active = True
-                self.renderer.update()
-            time.sleep(0.5)
-
-    def _sleep_fire(self):
-        """Sleep timer elapsed — pause whatever's playing."""
-        if self.renderer.plex_playing:
-            if not self._plex_paused:
-                self._plex_toggle_pause()
-        else:
-            self.player.set_pause(True)
-        self.renderer.show_notification("Sleep timer — paused", 4.0)
-
-    SLEEP_OPTIONS = [("Off", 0), ("15 minutes", 15), ("30 minutes", 30),
-                     ("60 minutes", 60)]
-
-    def _sleep_submenu(self):
-        # Only "Off" carries a checkmark (when no timer is running); we don't
-        # track which preset is active once set.
-        active = self._sleep_deadline is not None
-        return [MenuItem(label, checked=(mins == 0 and not active),
-                         action=lambda m=mins: self._set_sleep_timer(m),
-                         close_after=False)
-                for label, mins in self.SLEEP_OPTIONS]
-
-    def _set_sleep_timer(self, minutes):
-        if minutes:
-            self._sleep_deadline = time.monotonic() + minutes * 60
-            self.renderer.show_notification(f"Sleep timer set: {minutes} min", 3.0)
-        else:
-            self._sleep_deadline = None
-            self.renderer.show_notification("Sleep timer off", 3.0)
-        self.renderer.menu.replace_page(self._sleep_submenu())
-        self.renderer.mark_dirty()
 
     # ── Update check (GitHub Releases — notify + download, no self-overwrite) ─
 
@@ -746,43 +684,76 @@ class App:
                 f"Update {latest['tag']} available — Check for Updates in the menu", 6.0)
 
     def _check_updates(self):
-        """Menu action: check, and if newer download the matching asset."""
+        """Menu action: checking screen -> result -> confirm -> download with a
+        progress bar -> 'restart to apply'.  Declining or finishing returns the
+        user to the menu they were on."""
         from . import updater, __version__
-        self.renderer.show_notification("Checking for updates...", 3.0)
+        snap = self.renderer.menu.snapshot()   # capture the menu to return to
 
         def work():
+            # 1. Checking screen.
+            self.renderer.menu.open_with(
+                [MenuItem("Contacting GitHub…", enabled=False)],
+                title="CHECKING FOR UPDATES")
+            self.renderer.update()
             try:
                 latest = updater.check_latest()
             except updater.UpdateError as e:
-                self.renderer.show_notification(f"Update check failed: {e}", 5.0)
+                self._update_done(snap, "UPDATE CHECK FAILED", str(e))
                 return
+            # 2. Already current.
             if not latest or not updater.is_newer(latest["tag"], __version__):
-                self.renderer.show_notification(
-                    f"Up to date (v{__version__})", 4.0)
+                self._update_done(snap, "UP TO DATE",
+                                  f"You're on the latest version (v{__version__}).")
                 return
+            tag = latest["tag"]
             asset = updater.pick_asset(latest["assets"])
             if not asset:
-                self.renderer.show_notification(
-                    f"{latest['tag']} available, but no build for this platform", 6.0)
+                self._update_done(snap, "UPDATE AVAILABLE",
+                    f"{tag} is available, but there's no build for this platform.")
                 return
-            self.renderer.show_notification(
-                f"Downloading {latest['tag']}...", 5.0)
+            # 3. Confirm download/install.
+            if not self._confirm_yesno("UPDATE AVAILABLE",
+                    f"{tag} is available. Download and install it?",
+                    yes="Download", no="Not now"):
+                self.renderer.menu.restore(snap)   # No -> back to last menu
+                self.renderer.update()
+                return
+            # 4. Download with a progress bar.
+            self.renderer.menu.close()
             updates_dir = os.path.join(self._runtime_dir, "updates")
+            last = [0.0]
+
+            def prog(done, total):
+                now = time.monotonic()
+                if total and done < total and now - last[0] < 0.1:
+                    return                       # throttle repaints
+                last[0] = now
+                frac = (done / total) if total else 0.0
+                mb = done / 1024 / 1024
+                if total:
+                    lbl = f"Downloading {tag}   {mb:.1f} / {total/1024/1024:.1f} MB"
+                else:
+                    lbl = f"Downloading {tag}   {mb:.1f} MB"
+                self.renderer.set_download_progress(lbl, frac)
+
             try:
-                dest = updater.download(asset["url"], updates_dir, asset["name"])
+                dest = updater.download(asset["url"], updates_dir, asset["name"],
+                                        on_progress=prog, total=asset.get("size", 0))
             except updater.UpdateError as e:
-                self.renderer.show_notification(f"Download failed: {e}", 5.0)
+                self.renderer.clear_download_progress()
+                self._update_done(snap, "DOWNLOAD FAILED", str(e))
                 return
-            # Stage an install script that runs after Cathode exits, so the next
-            # launch is the new version (never overwrites the running build).
+            self.renderer.clear_download_progress()
+            # 5. Stage the apply-on-quit script and tell the user to restart.
             try:
                 self._pending_apply = updater.write_apply_script(
                     dest, updater.install_dir(), updates_dir)
-                self.renderer.show_notification(
-                    f"Update {latest['tag']} ready — installs when you quit Cathode", 8.0)
             except Exception:
-                self.renderer.show_notification(
-                    f"Update downloaded — {dest}", 8.0)
+                pass
+            self._update_done(snap, "UPDATE READY",
+                              "Downloaded. Restart Cathode to finish installing.")
+
         threading.Thread(target=work, daemon=True).start()
 
     def _sync_nav_repeat(self):
@@ -927,7 +898,8 @@ class App:
         """Left mouse button: press the hovered key / activate the hovered item,
         or click the on-screen menu button."""
         if self.renderer.osk.open:
-            self.renderer.osk.press()
+            x, y = self._last_mouse
+            self.renderer.osk.click(x, y)
             self.renderer.mark_dirty()
             return
         if self.renderer.editor.open:
@@ -962,6 +934,7 @@ class App:
                 return
             i = self.renderer.ppv.hit_test(x, y)
             if i is not None:
+                self.renderer.ppv.bar_focus = None   # clicking a row leaves the bar
                 self.renderer.ppv.sel = i
                 self._ppv_select()
             return
@@ -980,9 +953,16 @@ class App:
             else:
                 self._plex_show_osd()
             return
+        x, y = self._last_mouse
+        # Guide open: clicking the category bar opens the category dropdown.
+        if self.renderer.state == UIState.GUIDE_OPEN:
+            bx0, by0, bx1, by1 = self.renderer.guide.category_bar_px()
+            if bx0 <= x <= bx1 and by0 <= y <= by1:
+                self.renderer.guide.focus = "category"
+                self._open_category_menu()
+            return
         # No dialog open: the corner button opens the menu; clicking elsewhere
         # reveals the info bar (and the button) for touch/mouse users.
-        x, y = self._last_mouse
         if self.renderer.osd_visible and self.renderer.menu_button_hit(x, y):
             self._toggle_context_menu()
         else:
@@ -1042,8 +1022,6 @@ class App:
         """Called from the gamepad reader thread.  Dispatch on its own thread so
         a blocking handler (e.g. the on-screen keyboard) can't freeze input."""
         self._set_input_mode("gamepad")
-        if self._mark_activity():
-            return            # this press only woke the screensaver
         threading.Thread(target=self._gamepad_dispatch,
                          args=(name, is_repeat), daemon=True).start()
 
@@ -1055,6 +1033,13 @@ class App:
             if is_repeat and not self._nav_context_active():
                 return
             nav[name]()
+            return
+        # Bumpers move the text caret while the on-screen keyboard is open
+        # (physical LB/RB, regardless of any channel-up/down remap).
+        if self.renderer.osk.open and name in ("lb", "rb"):
+            (self.renderer.osk.cursor_left if name == "lb"
+             else self.renderer.osk.cursor_right)()
+            self.renderer.mark_dirty()
             return
         if is_repeat:
             return
@@ -1110,6 +1095,7 @@ class App:
         ("channel_down", "Channel Down / Scroll", "", "lb"),
         ("vol_up",       "Volume Up",     "", "rt"),
         ("vol_down",     "Volume Down",   "", "lt"),
+        ("aspect",       "Aspect Ratio",  "", "r3"),
     ]
     KEY_CHOICES = list("abcdefghijklmnopqrstuvwxyz")
     PAD_CHOICES = ["x", "y", "start", "back", "guide", "lb", "rb", "lt", "rt", "l3", "r3"]
@@ -1122,6 +1108,7 @@ class App:
             "quit": self._quit_app,
             "channel_up": self._rb_action, "channel_down": self._lb_action,
             "vol_up": self._vol_up, "vol_down": self._vol_down,
+            "aspect": self._cycle_aspect,
         }
 
     def _resolved_keys(self) -> dict:
@@ -1145,8 +1132,9 @@ class App:
     def _build_gamepad_buttons(self):
         g = self._guard_hotkey
         calls = self._action_callables()
-        # channel up/down handle the PPV-scroll guard themselves; guard the rest.
-        unguarded = {"channel_up", "channel_down"}
+        # channel up/down scroll-guard themselves; aspect is global (works in any
+        # context).  Guard the rest so they no-op while a dialog is selected.
+        unguarded = {"channel_up", "channel_down", "aspect"}
         self._gamepad_buttons = {"a": self._grid_select, "b": self._gamepad_back}
         for action, button in self._resolved_pad().items():
             if button and action in calls:
@@ -1161,11 +1149,6 @@ class App:
         # Only update hover state and request a coalesced repaint; never render
         # here (that would flood the reader and freeze input).
         self._last_mouse = (x, y)
-        self._last_input = time.monotonic()
-        if self.renderer.screensaver.active:
-            self.renderer.screensaver.active = False
-            self.renderer.mark_dirty()   # cheap; never render on the reader thread
-            return
         self._set_input_mode("key")
         if self.renderer.osk.open:
             self.renderer.osk.set_hover(x, y)
@@ -1220,6 +1203,55 @@ class App:
         self.renderer.update()
         return result["value"]
 
+    def _confirm_notice(self, title: str, message: str):
+        """Show a modal notice the user must acknowledge, and BLOCK until they
+        press OK.  Used so a playlist failure is seen before the entry prompts
+        reappear.  Safe from a handler thread (input runs on the reader thread)."""
+        ev = threading.Event()
+        items = [
+            MenuItem(message, enabled=False),
+            MenuItem("OK", action=ev.set),
+        ]
+        self.renderer.menu.open_with(items, title=title)
+        self.renderer.update()
+        self._sync_nav_repeat()
+        ev.wait()
+        self.renderer.menu.close()
+        self._sync_nav_repeat()
+        self.renderer.update()
+
+    def _confirm_yesno(self, title: str, message: str,
+                       yes: str = "Yes", no: str = "No") -> bool:
+        """Modal yes/no the user must answer; BLOCKS until they pick. Returns
+        True for yes.  Safe from a handler thread (input runs on the reader)."""
+        ev = threading.Event()
+        res = {"v": False}
+
+        def pick(v):
+            res["v"] = v
+            ev.set()
+
+        items = [
+            MenuItem(message, enabled=False),
+            MenuItem(yes, action=lambda: pick(True)),
+            MenuItem(no, action=lambda: pick(False)),
+        ]
+        self.renderer.menu.open_with(items, title=title)
+        self.renderer.update()
+        self._sync_nav_repeat()
+        ev.wait()
+        self.renderer.menu.close()
+        self._sync_nav_repeat()
+        self.renderer.update()
+        return res["v"]
+
+    def _update_done(self, snap, title: str, message: str):
+        """End an update flow: show a message (OK), then return the user to the
+        menu they started from."""
+        self._confirm_notice(title, message)
+        self.renderer.menu.restore(snap)
+        self.renderer.update()
+
     # ── Context menu tree ─────────────────────────────────────────────────
 
     def _build_menu(self):
@@ -1265,8 +1297,8 @@ class App:
             MenuItem("Plex", submenu=self._plex_options_submenu),
             MenuItem("Keyboard Shortcuts", submenu=self._keyboard_keys_submenu),
             MenuItem("Gamepad Buttons", submenu=self._gamepad_keys_submenu),
+            MenuItem("Audio Device", submenu=self._plex_audio_devices_submenu),
             MenuItem("Display", submenu=self._display_submenu),
-            MenuItem("Sleep Timer", submenu=self._sleep_submenu),
             MenuItem("Check for Updates", action=self._check_updates),
         ]
 
@@ -1448,7 +1480,6 @@ class App:
     def _plex_av_submenu(self):
         return [
             MenuItem("Audio Track", submenu=self._plex_audio_tracks_submenu),
-            MenuItem("Audio Device", submenu=self._plex_audio_devices_submenu),
             MenuItem("Subtitle Track", submenu=self._plex_sub_tracks_submenu),
             MenuItem("Subtitle Font", submenu=self._plex_sub_font_submenu),
             MenuItem("Subtitle Size", submenu=self._plex_sub_size_submenu),
@@ -1621,13 +1652,38 @@ class App:
 
     def _display_submenu(self):
         items = [MenuItem("Fullscreen", action=self._toggle_fullscreen, hint="W",
-                          checked=self._fullscreen, close_after=False)]
+                          checked=self._fullscreen, close_after=False),
+                 MenuItem("Aspect Ratio", submenu=self._aspect_submenu)]
         for i, name in enumerate(self.player.get_displays()):
             # close_after=False so picking a display keeps the menu open.
             items.append(MenuItem(name or f"Display {i}",
                          action=lambda idx=i: self._switch_display(idx),
                          close_after=False))
         return items
+
+    def _aspect_submenu(self):
+        cur = self.config.video_aspect
+        return [MenuItem(m, checked=(m == cur), close_after=False,
+                         action=lambda x=m: self._set_aspect(x, from_menu=True))
+                for m in self.player.ASPECTS]
+
+    def _set_aspect(self, mode, from_menu=False):
+        self.config.video_aspect = mode
+        self.config.save()
+        self.player.set_aspect(mode)
+        if from_menu:
+            self.renderer.menu.replace_page(self._aspect_submenu())
+            self.renderer.mark_dirty()
+        else:
+            self.renderer.show_notification(f"Aspect: {mode}", 2.5)
+
+    def _cycle_aspect(self):
+        """R3: step to the next aspect ratio (works globally; persists and
+        applies to the current and next video)."""
+        opts = self.player.ASPECTS
+        cur = self.config.video_aspect
+        i = (opts.index(cur) + 1) % len(opts) if cur in opts else 0
+        self._set_aspect(opts[i])
 
     def _switch_display(self, index: int):
         """Move the window to monitor `index`, preserving the current windowed /
@@ -1661,7 +1717,7 @@ class App:
         return items
 
     def _delete_playlist_submenu(self):
-        items = [MenuItem(p.get("name", "?"),
+        items = [MenuItem(p.get("name", "?"), close_after=False,
                           action=lambda pl=p: self._delete_playlist(pl))
                  for p in self.config.playlists]
         if not items:
@@ -1686,8 +1742,15 @@ class App:
     def _delete_playlist(self, pl):
         if pl in self.config.playlists:
             self.config.playlists.remove(pl)
+            # Clear the active URL if we just deleted the active playlist, so it
+            # doesn't reappear as a synthetic "Current" entry in Load Playlist.
+            if pl.get("playlist_url") == self.config.playlist_url:
+                self.config.playlist_url = ""
+                self.config.epg_url = ""
             self.config.save()
             print(f"[cathode] Deleted playlist: {pl.get('name')}")
+        self.renderer.menu.replace_page(self._delete_playlist_submenu())
+        self.renderer.mark_dirty()
 
     def _switch_playlist(self, pl):
         """Switch to a saved playlist: reload channels + EPG and retune."""
@@ -1941,6 +2004,11 @@ class App:
 
     def _ppv_select(self):
         r = self.renderer
+        # Top bar (Back / Menu) is focusable by D-pad/keyboard.
+        if r.ppv.bar_focus == "back":
+            self._ppv_back(); return
+        if r.ppv.bar_focus == "menu":
+            self._toggle_context_menu(); return
         if self._ppv_stack:
             self._ppv_stack[-1]["sel"] = r.ppv.sel
         row = r.ppv.current()
@@ -2122,6 +2190,7 @@ class App:
             self._plex_info_data = detail
             kind = detail.get("type", "")
             kind = kind if kind in ("show", "episode") else "default"
+            self._plex_info_kind = kind          # remembered for return-to-info
             on_wl = self._plex_watchlist_has(detail.get("guid", "")) \
                 if kind != "episode" else False
             r.ppv.close()
@@ -2504,7 +2573,8 @@ class App:
             self._plex_info_data["offset"] = 0
             self.renderer.plexinfo.show(
                 self._plex_info_data,
-                watchlisted=self.renderer.plexinfo.watchlisted)
+                watchlisted=self.renderer.plexinfo.watchlisted,
+                kind=getattr(self, "_plex_info_kind", "default"))
             self.renderer.update()
         elif self._ppv_stack:
             lvl = self._ppv_stack[-1]
@@ -2525,7 +2595,8 @@ class App:
         if self._plex_info_data:
             self._plex_info_data["offset"] = 0 if (dur and pos > dur - 30) else int(pos)
             self.renderer.plexinfo.show(self._plex_info_data,
-                                        watchlisted=self.renderer.plexinfo.watchlisted)
+                                        watchlisted=self.renderer.plexinfo.watchlisted,
+                                        kind=getattr(self, "_plex_info_kind", "default"))
             self.renderer.update()
         elif self._ppv_stack:
             lvl = self._ppv_stack[-1]
@@ -3020,17 +3091,22 @@ class App:
             err = ""
             if url:
                 print("[cathode] Loading playlist…")
+                self.renderer.show_notification("Loading playlist…", 120.0)
                 try:
                     chans = m3u.load(url, user_agent=self.config.user_agent)
                     if chans:
                         self.channels = chans
+                        self.renderer.clear_notification()
                         break
                     err = "playlist has no channels"
                 except Exception as e:
-                    err = str(e)[:60]
+                    err = str(e)[:120]
+                self.renderer.clear_notification()
                 print(f"[cathode] Could not load playlist: {err}")
-            prompt = "Enter M3U playlist URL" + (f"  -  ({err})" if err else "")
-            m3u_url = self._osk_get(prompt, url)
+                # Make the user acknowledge the failure before re-prompting.
+                self._confirm_notice("PLAYLIST FAILED",
+                                     f"Couldn't load playlist: {err}")
+            m3u_url = self._osk_get("Enter M3U playlist URL", url)
             if not m3u_url:
                 if allow_cancel:
                     print("[cathode] Playlist entry cancelled.")

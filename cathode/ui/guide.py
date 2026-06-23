@@ -7,8 +7,9 @@ from typing import List, Optional, TYPE_CHECKING
 
 from PIL import Image, ImageDraw
 
+from . import theme
 from .theme import (
-    get_font,
+    get_font, measure, text_wh,
     GUIDE_BG, GUIDE_HEADER_BG, GUIDE_ROW_ODD, GUIDE_ROW_EVEN,
     GUIDE_CURRENT, GUIDE_SELECTED, GUIDE_ONAIR, GUIDE_TIME_BG, GUIDE_BORDER,
     WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
@@ -44,7 +45,7 @@ def _wrap_text(draw, text: str, font, max_w: int, max_lines: int) -> list:
     lines, cur = [], ""
     for word in text.split():
         trial = (cur + " " + word).strip()
-        if draw.textlength(trial, font=font) <= max_w or not cur:
+        if measure(draw, trial, font) <= max_w or not cur:
             cur = trial
         else:
             lines.append(cur)
@@ -62,19 +63,16 @@ def _wrap_text(draw, text: str, font, max_w: int, max_lines: int) -> list:
 
 
 def _text_size(draw: ImageDraw.Draw, text: str, font) -> tuple:
-    bb = draw.textbbox((0, 0), text, font=font)
-    return bb[2] - bb[0], bb[3] - bb[1]
+    return text_wh(draw, text, font)
 
 
 def _truncate(text: str, draw: ImageDraw.Draw, font, max_w: int) -> str:
     if not text:
         return ""
-    tw, _ = _text_size(draw, text, font)
-    if tw <= max_w:
+    if measure(draw, text, font) <= max_w:
         return text
-    while text and tw > max_w:
+    while text and measure(draw, text + "...", font) > max_w:
         text = text[:-1]
-        tw, _ = _text_size(draw, text + "...", font)
     return text + "..."
 
 
@@ -334,9 +332,9 @@ class Guide:
                 epg, is_selected, is_current,
             )
         if not vis:
-            draw.text((self.grid_x + 8, self.grid_y + 8),
-                      "No channels in this category",
-                      font=self.font_small, fill=GRAY)
+            self._text((self.grid_x + 8, self.grid_y + 8),
+                       "No channels in this category",
+                       self.font_small, GRAY)
 
         # ── Scroll indicators ─────────────────────────────────────────────
         if self.scroll_offset > 0:
@@ -354,6 +352,12 @@ class Guide:
 
     # ── Private render helpers ────────────────────────────────────────────────
 
+    def _text(self, xy, text, font, fill, stroke_width=0, stroke_fill=None):
+        """Draw cached text onto the current frame (self._img). Heavy pixel fonts
+        only rasterize each string once; repeats are a cheap alpha-paste."""
+        theme.draw_text(self._img, xy, text, font, fill,
+                        stroke_width=stroke_width, stroke_fill=stroke_fill)
+
     def _draw_header(self, draw: ImageDraw.Draw, now: datetime):
         draw.rectangle([0, 0, self.width, self.header_h], fill=GUIDE_HEADER_BG)
         draw.rectangle(
@@ -363,9 +367,9 @@ class Guide:
 
         # Title
         tw, th = _text_size(draw, _GUIDE_TITLE, self.font_title)
-        draw.text(
+        self._text(
             ((self.width - tw) // 2, (self.header_h - th) // 2),
-            _GUIDE_TITLE, font=self.font_title, fill=YELLOW,
+            _GUIDE_TITLE, self.font_title, YELLOW,
         )
 
         # Current time (right)
@@ -377,9 +381,9 @@ class Guide:
         )
         tw2, _ = _text_size(draw, time_str, self.font_time)
         clock_x = self.width - tw2 - self.pad
-        draw.text(
+        self._text(
             (clock_x, (self.header_h - th) // 2),
-            time_str, font=self.font_time, fill=CYAN,
+            time_str, self.font_time, CYAN,
         )
 
         # Weather on the LEFT (roomy, so it never truncates).  The keybind hint
@@ -415,8 +419,8 @@ class Guide:
         lh = _text_size(draw, "Ag", f)[1] + 3
         ty = (self.header_h - (lh * 2 - 3)) // 2
         tx = left + icon_sz + gap
-        draw.text((tx, ty), line1, font=f, fill=WHITE)
-        draw.text((tx, ty + lh), line2, font=f, fill=WHITE_DIM)
+        self._text((tx, ty), line1, f, WHITE)
+        self._text((tx, ty + lh), line2, f, WHITE_DIM)
 
     def _draw_weather_icon(self, draw, x, y, s, cat):
         """Small vector glyph for the current condition (drawn, not an asset)."""
@@ -470,15 +474,15 @@ class Guide:
         draw.rectangle([x0, y0, x1, y1], fill=bg, outline=OSD_BORDER, width=1)
         cat = self.current_category()
         # Arrows on both sides
-        draw.text((x0 + 6, y0 + (y1 - y0 - 14) // 2), "<",
-                  font=self.font_small, fill=YELLOW if focused else CYAN)
-        draw.text((x1 - 14, y0 + (y1 - y0 - 14) // 2), ">",
-                  font=self.font_small, fill=YELLOW if focused else CYAN)
+        self._text((x0 + 6, y0 + (y1 - y0 - 14) // 2), "<",
+                   self.font_small, YELLOW if focused else CYAN)
+        self._text((x1 - 14, y0 + (y1 - y0 - 14) // 2), ">",
+                   self.font_small, YELLOW if focused else CYAN)
         label = _truncate(cat, draw, self.font_small, (x1 - x0) - 36)
         lb = draw.textbbox((0, 0), label, font=self.font_small)
         lx = x0 + ((x1 - x0) - (lb[2] - lb[0])) // 2
-        draw.text((lx, y0 + (y1 - y0 - (lb[3] - lb[1])) // 2 - lb[1]),
-                  label, font=self.font_small, fill=WHITE if focused else WHITE_DIM)
+        self._text((lx, y0 + (y1 - y0 - (lb[3] - lb[1])) // 2 - lb[1]),
+                   label, self.font_small, WHITE if focused else WHITE_DIM)
 
     def _draw_detail_panel(self, draw, channels, epg, current_channel_idx, now, vis):
         """Top info panel: currently-playing channel (left) + metadata for the
@@ -502,7 +506,7 @@ class Guide:
             lb = draw.textbbox((0, 0), lbl, font=self.font_small)
             draw.rectangle([bx0 + 2, by0 + 2, bx0 + (lb[2] - lb[0]) + 16,
                             by0 + (lb[3] - lb[1]) + 12], fill=OSD_BG)
-            draw.text((bx0 + 8, by0 + 6), lbl, font=self.font_small, fill=ORANGE)
+            self._text((bx0 + 8, by0 + 6), lbl, self.font_small, ORANGE)
 
         # ── Right: category selector (top) + metadata for the SELECTED program
         cx0, cy0, cx1, cy1 = self.category_bar_px()
@@ -515,31 +519,31 @@ class Guide:
             sel = vis[sel_idx]
             scid = epg.resolve_channel_id(sel.epg_id, sel.name) if epg else None
             sprog = epg.current_program(scid, now) if (epg and scid) else None
-            draw.text((rx, r_top), _truncate(f"{sel.number}  {sel.name}", draw,
-                      self.font_small, rw), font=self.font_small, fill=YELLOW)
+            self._text((rx, r_top), _truncate(f"{sel.number}  {sel.name}", draw,
+                       self.font_small, rw), self.font_small, YELLOW)
             y = r_top + int(h2 * 0.16)
             if sprog:
-                draw.text((rx, y), _truncate(sprog.title, draw,
-                          self.font_panel_title, rw),
-                          font=self.font_panel_title, fill=WHITE)
+                self._text((rx, y), _truncate(sprog.title, draw,
+                           self.font_panel_title, rw),
+                           self.font_panel_title, WHITE)
                 y += int(h2 * 0.26)
                 meta = _prog_range(sprog)
                 if sprog.episode:
                     meta += "   " + sprog.episode
                 if sprog.category:
                     meta += "   " + sprog.category
-                draw.text((rx, y), _truncate(meta, draw, self.font_panel_text, rw),
-                          font=self.font_panel_text, fill=CYAN)
+                self._text((rx, y), _truncate(meta, draw, self.font_panel_text, rw),
+                           self.font_panel_text, CYAN)
                 y += int(h2 * 0.20)
                 lh = int(self.height * 0.028 * 1.35) + 2
                 max_lines = max(1, (bottom - y) // lh)
                 for ln in _wrap_text(draw, sprog.description or "",
                                      self.font_panel_text, rw, max_lines):
-                    draw.text((rx, y), ln, font=self.font_panel_text, fill=WHITE_DIM)
+                    self._text((rx, y), ln, self.font_panel_text, WHITE_DIM)
                     y += lh
             else:
-                draw.text((rx, y), "No program information",
-                          font=self.font_panel_text, fill=GRAY)
+                self._text((rx, y), "No program information",
+                           self.font_panel_text, GRAY)
 
     def _draw_time_ruler(
         self,
@@ -556,9 +560,9 @@ class Guide:
             [self.pad, ry, self.pad + self.ch_col_w, ry + rh],
             fill=GUIDE_TIME_BG,
         )
-        draw.text(
+        self._text(
             (self.pad + 6, ry + 4),
-            "CHANNEL", font=self.font_small, fill=CYAN,
+            "CHANNEL", self.font_small, CYAN,
         )
 
         # Time slots at 30-min intervals
@@ -577,7 +581,7 @@ class Guide:
             label = t.astimezone().strftime("%I:%M %p").lstrip("0")
             x = self.grid_x + int(i * slot_w)
             draw.line([x, ry, x, ry + rh], fill=GUIDE_BORDER, width=1)
-            draw.text((x + 4, ry + 4), label, font=self.font_small, fill=WHITE)
+            self._text((x + 4, ry + 4), label, self.font_small, WHITE)
 
         # "Now" line
         now_offset = (now - window_start).total_seconds() / 60
@@ -643,11 +647,11 @@ class Guide:
         nw, nh = _text_size(draw, name_str, self.font_small)
         total_w = tw + (gap + nw if name_str else 0)
         start_x = col_x0 + max(4, (self.ch_col_w - total_w) // 2)
-        draw.text((start_x, text_y), num_str, font=self.font_ch,
-                  fill=YELLOW if is_current else WHITE)
+        self._text((start_x, text_y), num_str, self.font_ch,
+                   YELLOW if is_current else WHITE)
         if name_str:
-            draw.text((start_x + tw + gap, text_y + (th - nh) // 2), name_str,
-                      font=self.font_small, fill=CYAN if is_current else WHITE_DIM)
+            self._text((start_x + tw + gap, text_y + (th - nh) // 2), name_str,
+                       self.font_small, CYAN if is_current else WHITE_DIM)
 
         # Program grid area background
         draw.rectangle(
@@ -663,17 +667,17 @@ class Guide:
 
         # EPG programs
         if epg is None:
-            draw.text(
+            self._text(
                 (self.grid_x + 8, row_y + (row_h - 16) // 2),
-                "No EPG data", font=self.font_small, fill=GRAY,
+                "No EPG data", self.font_small, GRAY,
             )
             return
 
         channel_epg_id = epg.resolve_channel_id(ch.epg_id, ch.name)
         if not channel_epg_id:
-            draw.text(
+            self._text(
                 (self.grid_x + 8, row_y + (row_h - 16) // 2),
-                ch.name, font=self.font_small, fill=GRAY,
+                ch.name, self.font_small, GRAY,
             )
             return
 
@@ -706,9 +710,9 @@ class Guide:
             title = _truncate(prog.title, draw, self.font_prog, pw - 8)
             tw2, th2 = _text_size(draw, title, self.font_prog)
             if pw > 20 and title:
-                draw.text(
+                self._text(
                     (px + 4, row_y + (row_h - th2) // 2),
-                    title, font=self.font_prog, fill=cell_text,
+                    title, self.font_prog, cell_text,
                 )
 
     def _draw_scroll_arrow(self, draw: ImageDraw.Draw, up: bool):

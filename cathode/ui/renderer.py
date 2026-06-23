@@ -19,7 +19,6 @@ from .mainmenu import MainMenu
 from .ppv import PPVScreen
 from .plexosd import PlexOSD
 from .plexinfo import PlexInfoScreen
-from .screensaver import Screensaver
 from .effects import (
     make_scanline_cache,
     make_vignette,
@@ -82,7 +81,6 @@ class Renderer:
         self.ppv = PPVScreen(width, height)   # Plex-Per-View browse screen
         self.plexinfo = PlexInfoScreen(width, height)   # Plex item info page
         self.plexosd = PlexOSD(width, height)  # Plex playback control bar
-        self.screensaver = Screensaver(width, height)   # idle bouncing-logo overlay
         self.plex_playing = False             # a Plex item is the current video
 
         # CRT scanline / vignette toggles (driven by the theme editor)
@@ -109,6 +107,11 @@ class Renderer:
         self.notification: str = ""
         self.notification_until: float = 0.0
         self._notif_timer = None
+
+        # Download progress overlay (update downloads) — None when inactive.
+        self._dl_active: bool = False
+        self._dl_label: str = ""
+        self._dl_frac: float = 0.0
 
         # Coalesced-repaint flag (set by input, drained by the render thread)
         self._dirty: bool = False
@@ -164,7 +167,6 @@ class Renderer:
             self.ppv.refresh_fonts()
             self.plexinfo.refresh_fonts()
             self.plexosd.refresh_fonts()
-            self.screensaver.refresh_fonts()
 
     def resize(self, width: int, height: int):
         """Re-render at a new window resolution (e.g. handheld <-> docked)."""
@@ -185,7 +187,6 @@ class Renderer:
             self.ppv.resize(width, height)
             self.plexinfo.resize(width, height)
             self.plexosd.resize(width, height)
-            self.screensaver.resize(width, height)
         # Re-fit the video preview to the new geometry if the guide is open.
         self._apply_video_box()
 
@@ -266,6 +267,52 @@ class Renderer:
         self._notif_timer.daemon = True
         self._notif_timer.start()
         self.update()
+
+    def clear_notification(self):
+        self.notification = ""
+        self.notification_until = 0.0
+        if self._notif_timer is not None:
+            self._notif_timer.cancel()
+            self._notif_timer = None
+        self.update()
+
+    def set_download_progress(self, label: str, frac: float):
+        """Show/refresh the centered download progress bar (frac 0..1)."""
+        self._dl_active = True
+        self._dl_label = label
+        self._dl_frac = max(0.0, min(1.0, frac))
+        self.update()
+
+    def clear_download_progress(self):
+        self._dl_active = False
+        self.update()
+
+    def _draw_download_progress(self, frame: Image.Image):
+        from .menu import OSD_BG, OSD_BORDER, WHITE, CHANNEL_GREEN
+        d = ImageDraw.Draw(frame)
+        w, h = self.width, self.height
+        bw = int(w * 0.5)
+        bh = int(h * 0.16)
+        bx = (w - bw) // 2
+        by = (h - bh) // 2
+        d.rectangle([0, 0, w, h], fill=(0, 0, 0, 120))            # dim behind
+        d.rectangle([bx, by, bx + bw, by + bh],
+                    fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 245), outline=OSD_BORDER, width=2)
+        font = get_font(max(15, int(h * 0.026)))
+        pct = int(self._dl_frac * 100)
+        label = self._dl_label or "Downloading…"
+        d.text((bx + 20, by + 18), label, font=font, fill=WHITE)
+        # Bar
+        m = 20
+        bar_x0, bar_x1 = bx + m, bx + bw - m
+        bar_y0 = by + bh - 40
+        bar_y1 = bar_y0 + 18
+        d.rectangle([bar_x0, bar_y0, bar_x1, bar_y1], outline=OSD_BORDER, width=1)
+        fill_w = int((bar_x1 - bar_x0 - 2) * self._dl_frac)
+        if fill_w > 0:
+            d.rectangle([bar_x0 + 1, bar_y0 + 1, bar_x0 + 1 + fill_w, bar_y1 - 1],
+                        fill=CHANNEL_GREEN)
+        d.text((bar_x1 - 44, bar_y0 - 24), f"{pct}%", font=font, fill=CHANNEL_GREEN)
 
     def _draw_notification(self, frame: Image.Image):
         """A centered pill near the top of the screen."""
@@ -422,8 +469,8 @@ class Renderer:
                 self.end_channel_change(self._pending_osd_timeout)
                 # fall through to render the now-WATCHING frame
             frame = self._render()
-            if self.screensaver.active:
-                frame = Image.alpha_composite(frame, self.screensaver.render())
+            if self._dl_active:
+                self._draw_download_progress(frame)
         self._push_to_mpv(frame)
 
     def _render(self) -> Image.Image:

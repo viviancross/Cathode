@@ -8,7 +8,8 @@ live at runtime.
 
 from __future__ import annotations
 
-from PIL import ImageFont
+from collections import OrderedDict
+from PIL import Image, ImageDraw, ImageFont
 import os
 import sys
 from typing import Optional, List
@@ -118,6 +119,7 @@ def apply_theme(name: str) -> str:
     _active_theme = name
     pal = PALETTES[name]
     _install(pal)
+    clear_text_cache()   # palette changes the fills baked into cached text tiles
     for modname in ("cathode.ui.osd", "cathode.ui.guide", "cathode.ui.renderer",
                     "cathode.ui.menu", "cathode.ui.osk", "cathode.ui.editor",
                     "cathode.ui.mainmenu", "cathode.ui.ppv", "cathode.ui.plexosd",
@@ -172,7 +174,7 @@ _ACTIVE_FONT: Optional[str] = None   # explicit font file path override
 # Candidate retro/monospace fonts to look for on the system (fallback search)
 _FONT_CANDIDATES = [
     "VCR_OSD_MONO.ttf", "PxPlus_IBM_VGA8.ttf", "Glass_TTY_VT220.ttf",
-    "Handjet.ttf", "DotGothic16-Regular.ttf",
+    "PixelOperator.ttf", "VT323-Regular.ttf", "Jersey10-Regular.ttf",
     "LiberationMono-Bold.ttf", "LiberationMono-Regular.ttf",
     "UbuntuMono-Bold.ttf", "UbuntuMono-Regular.ttf",
     "FreeMono.ttf",
@@ -204,10 +206,11 @@ _FONT_REGISTRY = {
     "ibm":        (["PxPlus_IBM_VGA8.ttf", "Px437_IBM_VGA8.ttf",
                     "PxPlus IBM VGA8.ttf"], "PxPlus IBM VGA"),
     "vt220":      (["Glass_TTY_VT220.ttf"], "Glass TTY VT220"),
-    "handjet":    (["Handjet.ttf"], "Handjet"),
-    "dotgothic":  (["DotGothic16-Regular.ttf", "DotGothic16.ttf"], "DotGothic16"),
+    "pixelop":    (["PixelOperator.ttf"], "Pixel Operator"),
+    "vt323":      (["VT323-Regular.ttf"], "VT323"),
+    "jersey":     (["Jersey10-Regular.ttf"], "Jersey 10"),
 }
-FONT_ORDER = ["vcr", "ibm", "vt220", "handjet", "dotgothic"]
+FONT_ORDER = ["vcr", "ibm", "vt220", "pixelop", "vt323", "jersey"]
 
 # Fonts offered only for subtitles (by discovered key), never as the UI font.
 _SUBTITLE_ONLY_KEYS = {"x_closedcaption"}
@@ -324,6 +327,7 @@ def set_font(key: str) -> bool:
     _active_font_key = key
     _ACTIVE_FONT = path
     _FONT_CACHE.clear()
+    clear_text_cache()
     return True
 
 
@@ -363,6 +367,17 @@ def get_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     if font_path:
         try:
             font = ImageFont.truetype(font_path, size)
+            # Normalize on VISIBLE glyph height (ascender->descender ink), not the
+            # nominal size or the line box. Pixel fonts pack big internal leading,
+            # so sizing by line height renders them tiny; targeting the glyph box
+            # makes every font fill the requested px and stay consistent in the
+            # menus/OSD without overflowing.
+            bb = font.getbbox("Ag")
+            gh = bb[3] - bb[1]
+            if gh > 0 and abs(gh - size) > 1:
+                adj = max(6, int(round(size * size / gh)))
+                if adj != size:
+                    font = ImageFont.truetype(font_path, adj)
         except Exception:
             font = None
     if font is None:
@@ -373,5 +388,138 @@ def get_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
         except TypeError:
             font = ImageFont.load_default()
 
+    try:
+        font._cid = key   # stamp identity for the text-raster cache
+    except Exception:
+        pass
     _FONT_CACHE[key] = font
     return font
+
+
+# ── Text rendering cache ──────────────────────────────────────────────────────
+# Some pixel fonts (e.g. VT323, Jersey 10) store each glyph as dozens of square
+# contours, so FreeType is ~7x slower to rasterize AND measure them — the guide
+# redraws ~100 strings per repaint and would lag. These caches make re-drawing
+# the SAME string/size/colour near-free, so ANY font (current or future, however
+# heavy) only pays the rasterization cost once. Transparent for fast fonts.
+
+_TILE_CACHE: "OrderedDict" = OrderedDict()   # (cid,text,fill,sw,sf) -> RGBA tile
+_MEASURE_CACHE: dict = {}                     # (cid,text[,'wh']) -> width / (w,h)
+_TEXT_CACHE_MAX = 4096
+
+
+def clear_text_cache():
+    _TILE_CACHE.clear()
+    _MEASURE_CACHE.clear()
+
+
+def measure(draw, text: str, font) -> float:
+    """Cached draw.textlength(text, font). Pure function of (font, text)."""
+    cid = getattr(font, "_cid", None)
+    if cid is None or not text:
+        return draw.textlength(text, font=font)
+    k = (cid, text)
+    v = _MEASURE_CACHE.get(k)
+    if v is None:
+        v = draw.textlength(text, font=font)
+        _MEASURE_CACHE[k] = v
+    return v
+
+
+def text_wh(draw, text: str, font) -> tuple:
+    """Cached ink size (w, h) from textbbox((0,0)) — same value the UI uses for
+    centering. Pure function of (font, text)."""
+    cid = getattr(font, "_cid", None)
+    if cid is None:
+        bb = draw.textbbox((0, 0), text, font=font)
+        return bb[2] - bb[0], bb[3] - bb[1]
+    k = (cid, text, "wh")
+    v = _MEASURE_CACHE.get(k)
+    if v is None:
+        bb = draw.textbbox((0, 0), text, font=font)
+        v = (bb[2] - bb[0], bb[3] - bb[1])
+        _MEASURE_CACHE[k] = v
+    return v
+
+
+def draw_text(img, xy, text: str, font, fill, stroke_width: int = 0,
+              stroke_fill=None):
+    """Cached equivalent of ImageDraw.Draw(img).text(xy, text, font, fill, ...).
+
+    Rasterizes `text` into a small RGBA tile once and alpha-pastes it on repeats.
+    Tiles are drawn at (0,0); pasting at (x,y) reproduces a direct draw exactly
+    when the ink starts at/after the origin (true for the UI fonts). Falls back
+    to a direct draw for empty text, no cache id, negative bearings, or when the
+    tile would overflow the image (alpha_composite can't clip)."""
+    x, y = int(xy[0]), int(xy[1])
+    cid = getattr(font, "_cid", None)
+    if not text or cid is None:
+        ImageDraw.Draw(img).text((x, y), text, font=font, fill=fill,
+                                 stroke_width=stroke_width, stroke_fill=stroke_fill)
+        return
+    k = (cid, text, fill, stroke_width, stroke_fill)
+    tile = _TILE_CACHE.get(k)
+    if tile is None:
+        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        l, t, r, b = probe.textbbox((0, 0), text, font=font,
+                                    stroke_width=stroke_width)
+        if l < 0 or t < 0 or r <= 0 or b <= 0:
+            ImageDraw.Draw(img).text((x, y), text, font=font, fill=fill,
+                                     stroke_width=stroke_width, stroke_fill=stroke_fill)
+            return
+        tile = Image.new("RGBA", (r + 1, b + 1), (0, 0, 0, 0))
+        ImageDraw.Draw(tile).text((0, 0), text, font=font, fill=fill,
+                                  stroke_width=stroke_width, stroke_fill=stroke_fill)
+        _TILE_CACHE[k] = tile
+        if len(_TILE_CACHE) > _TEXT_CACHE_MAX:
+            _TILE_CACHE.popitem(last=False)
+    else:
+        _TILE_CACHE.move_to_end(k)
+    tw, th = tile.size
+    if x < 0 or y < 0 or x + tw > img.width or y + th > img.height:
+        ImageDraw.Draw(img).text((x, y), text, font=font, fill=fill,
+                                 stroke_width=stroke_width, stroke_fill=stroke_fill)
+        return
+    img.alpha_composite(tile, (x, y))
+
+
+def wrap_lines(draw, text: str, font, max_w: int, max_lines: int = 2) -> list:
+    """Word-wrap `text` into at most `max_lines` lines that each fit `max_w` px.
+    Overflow past the last line is folded into it and ellipsized; an over-wide
+    single word is ellipsized too. Use for titles that should drop to the next
+    line instead of being cut off."""
+    if max_w <= 0 or not text:
+        return [text]
+    words = text.split() or [text]
+    lines, cur = [], ""
+    for w in words:
+        trial = w if not cur else f"{cur} {w}"
+        if not cur or measure(draw, trial, font) <= max_w:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    if len(lines) > max_lines:
+        lines[max_lines - 1] += " " + " ".join(lines[max_lines:])
+        lines = lines[:max_lines]
+    return [ellipsize(draw, ln, font, max_w) for ln in lines]
+
+
+def ellipsize(draw, text: str, font, max_w: int) -> str:
+    """Trim `text` to fit `max_w` pixels, adding an ellipsis. Returns it
+    unchanged if it already fits. Use for any label drawn into a fixed box so
+    long titles / wide fonts never run past their boundary."""
+    if not text or max_w <= 0:
+        return text
+    try:
+        if measure(draw, text, font) <= max_w:
+            return text
+        ell = "…"
+        t = text
+        while t and measure(draw, t + ell, font) > max_w:
+            t = t[:-1]
+        return (t + ell) if t else ell
+    except Exception:
+        return text

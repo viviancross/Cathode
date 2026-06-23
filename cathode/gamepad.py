@@ -170,14 +170,41 @@ class GamepadReader:
         state = {"buttons": set(), "held": {}}
         btns, axes = {}, {}
         fd = None
-        JS_SIZE = 8                       # struct js_event { u32 time; s16 val; u8 type; u8 num; }
+        cur_path = None
+        seen = set()              # js node paths seen last scan (to spot NEW ones)
+        last_scan = 0.0
+        JS_SIZE = 8               # struct js_event { u32 time; s16 val; u8 type; u8 num; }
+
+        def drop():
+            nonlocal fd, cur_path
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            fd, cur_path = None, None
+            state["buttons"].clear(); state["held"].clear()
+
         while self._running:
+            now = time.monotonic()
+            # Rescan ~1s for plug/unplug. The read loop alone can't be trusted to
+            # notice a disconnect: a removed pad's js node sometimes lingers and
+            # keeps returning EAGAIN instead of ENODEV, so the reader would sit on
+            # a dead fd forever. Reattach when our node vanished OR a new node
+            # appeared (a reconnect commonly comes back as a higher js minor).
+            if now - last_scan >= 1.0:
+                last_scan = now
+                paths = set(glob.glob("/dev/input/js*"))
+                if fd is not None and (cur_path not in paths or (paths - seen)):
+                    drop()
+                seen = paths
             if fd is None:
-                fd = self._open_js()
+                fd, cur_path = self._open_js()
                 if fd is None:
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                     continue
                 btns, axes = {}, {}
+
             disconnected = False
             try:
                 while True:
@@ -198,44 +225,36 @@ class GamepadReader:
             except OSError:               # disconnected
                 disconnected = True
             if disconnected:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-                fd = None
-                state["buttons"].clear(); state["held"].clear()
+                drop()
                 continue
             self._process(*self._linux_signals(btns, axes), state)
             time.sleep(_POLL)
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
+        drop()
 
     @staticmethod
     def _open_js():
-        """Open the first LIVE /dev/input/js* node.
+        """Open the live /dev/input/js* node, newest first. Returns (fd, path)
+        or (None, None).
 
         On reconnect the kernel often gives the pad a new minor (js1) while the
-        old node (js0) lingers until udev reaps it. The stale node still opens
-        but every read raises ENODEV, so always grabbing js0 traps the reader on
-        a dead device. Probe each node and skip the dead ones."""
-        for path in sorted(glob.glob("/dev/input/js*")):
+        old node (js0) lingers until udev reaps it. Newest-first plus an ioctl
+        liveness probe (JSIOCGNAME, which fails on a dead node and — unlike a
+        read — never consumes a queued input event) avoids latching onto the
+        stale node."""
+        import fcntl
+        JSIOCGNAME = 0x80806A13       # JSIOCGNAME(128): _IOR('j', 0x13, 128)
+        for path in sorted(glob.glob("/dev/input/js*"), reverse=True):
             try:
                 f = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
             except OSError:
                 continue
             try:
-                os.read(f, 8)            # probe: live -> data/BlockingIOError
-            except BlockingIOError:
-                return f                 # live, just no events queued yet
+                fcntl.ioctl(f, JSIOCGNAME, bytearray(128))   # fails on a dead node
             except OSError:
-                os.close(f)              # dead/stale node — skip it
+                os.close(f)
                 continue
-            else:
-                return f                 # live (consumed one init event)
-        return None
+            return f, path
+        return None, None
 
     @staticmethod
     def _linux_signals(btns, axes):

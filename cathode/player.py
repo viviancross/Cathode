@@ -101,6 +101,7 @@ class Player:
         self._exited = threading.Event()
         self._resume_to = None          # one-shot seek (s) applied on next load
         self._unpause_on_start = False  # force play on next file load (keep-open)
+        self._aspect = "Original"       # video aspect mode, reapplied per file
         self._cmd: List[str] = []
         self._proc: Optional[subprocess.Popen] = None
 
@@ -467,6 +468,7 @@ class Player:
                 self._unpause_on_start = False
                 self._paused = False
                 self._set_property("pause", False)
+            self._apply_aspect()       # reassert aspect on the freshly loaded file
             if self._on_playback_started:
                 self._on_playback_started()
         elif event == "end-file":
@@ -577,6 +579,23 @@ class Player:
             self._set_property("sub-font-size", size)
         if color:
             self._set_property("sub-color", color)
+
+    ASPECTS = ["Original", "Stretch", "4:3", "16:9", "16:10"]
+
+    def set_aspect(self, mode: str):
+        """Force a video aspect ratio. Stored + reapplied on each loaded file."""
+        self._aspect = mode if mode in self.ASPECTS else "Original"
+        self._apply_aspect()
+
+    def _apply_aspect(self):
+        mode = getattr(self, "_aspect", "Original")
+        if mode == "Stretch":
+            self._set_property("keepaspect", False)        # fill window, ignore AR
+            self._set_property("video-aspect-override", "-1")
+        else:
+            self._set_property("keepaspect", True)
+            ratio = {"4:3": "4:3", "16:9": "16:9", "16:10": "16:10"}.get(mode, "-1")
+            self._set_property("video-aspect-override", ratio)  # -1 = use file's AR
 
     def set_pause(self, paused: bool):
         self._set_property("pause", bool(paused))

@@ -88,8 +88,11 @@ def pick_asset(assets: List[dict]) -> Optional[dict]:
     return None
 
 
-def download(url: str, dest_dir: str, name: str = "") -> str:
-    """Stream a release asset to dest_dir; returns the saved path."""
+def download(url: str, dest_dir: str, name: str = "",
+             on_progress=None, total: int = 0) -> str:
+    """Stream a release asset to dest_dir; returns the saved path. `on_progress`,
+    if given, is called as on_progress(bytes_done, bytes_total) as it streams
+    (bytes_total is 0 when the server doesn't report a length)."""
     os.makedirs(dest_dir, exist_ok=True)
     name = name or os.path.basename(url.split("?", 1)[0]) or "cathode-update"
     dest = os.path.join(dest_dir, name)
@@ -97,11 +100,18 @@ def download(url: str, dest_dir: str, name: str = "") -> str:
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL) as r, \
                 open(dest, "wb") as f:
+            clen = total or int(r.headers.get("Content-Length") or 0)
+            done = 0
+            if on_progress:
+                on_progress(0, clen)
             while True:
                 chunk = r.read(65536)
                 if not chunk:
                     break
                 f.write(chunk)
+                done += len(chunk)
+                if on_progress:
+                    on_progress(done, clen)
     except Exception as e:
         raise UpdateError(str(e) or "Download failed.")
     return dest

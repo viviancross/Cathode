@@ -30,6 +30,7 @@ class Config:
     scanline_alpha: int = 40       # 0-255 alpha for scanline overlay
 
     # CRT effect toggles (driven by the theme editor)
+    video_aspect: str = "Original" # Original | Stretch | 4:3 | 16:9 | 16:10
     crt_enabled: bool = True       # CRT scanline overlay on/off
     vignette_enabled: bool = True  # corner vignette on/off
 
@@ -61,7 +62,7 @@ class Config:
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance
-    font: str = "vcr"              # vcr | ibm | vt220 | handjet | dotgothic
+    font: str = "vcr"              # vcr | ibm | vt220 | pixelop | vt323 | jersey
     theme: str = "blue"           # blue | amber | green | vhs | mono | custom | ...
     # Custom palette saved by the theme editor: {bg,accent,accent2,text -> [r,g,b]}
     custom_palette: dict = field(default_factory=dict)   # legacy (migrated)

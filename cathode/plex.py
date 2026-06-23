@@ -457,9 +457,19 @@ class PlexClient:
 
     def on_deck(self) -> List[dict]:
         """The server's "Continue Watching" — in-progress items + next-up
-        episodes, already ranked by Plex. Browse rows via the normal path."""
+        episodes, already ranked by Plex. Episodes show the show name + a
+        zero-padded SxxExx (e.g. "Archer S02E09")."""
         data = self._get(f"{self.server}/library/onDeck", token=self._server_token)
-        return [_meta_row(m) for m in _container(data, "Metadata")]
+        rows = []
+        for m in _container(data, "Metadata"):
+            row = _meta_row(m)
+            if m.get("type") == "episode":
+                show = m.get("grandparentTitle") or ""
+                s, e = m.get("parentIndex"), m.get("index")
+                if show and s is not None and e is not None:
+                    row["title"] = f"{show} S{int(s):02d}E{int(e):02d}"
+            rows.append(row)
+        return rows
 
     def search(self, query: str, limit: int = 50) -> List[dict]:
         """Search the libraries for movies, shows, and episodes. Uses the typed

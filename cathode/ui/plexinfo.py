@@ -13,8 +13,8 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    CHANNEL_GREEN, GUIDE_SELECTED,
+    get_font, ellipsize, wrap_lines, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN,
+    YELLOW, GRAY, CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 # Button sets per item kind. "show" = a TV series; "episode" = a single
@@ -139,14 +139,18 @@ class PlexInfoScreen:
         # Text column (right)
         tx = px + pw + m
         ty = py
-        d.text((tx, ty), self.data.get("title", ""), font=self.f_title, fill=WHITE)
-        ty += self._th(d, "Ag", self.f_title) + 10
+        col_w = self.width - tx - m            # right column width; wrap to it
+        title_lh = self._th(d, "Ag", self.f_title) + 6
+        for ln in wrap_lines(d, self.data.get("title", ""), self.f_title, col_w, 3):
+            d.text((tx, ty), ln, font=self.f_title, fill=WHITE)
+            ty += title_lh
+        ty += 4
         meta = self.data.get("subtitle", "")
         dur = self.data.get("duration", 0)
         if dur:
             meta = (meta + "    " if meta else "") + _fmt(dur)
         if meta:
-            d.text((tx, ty), meta, font=self.f_sub, fill=CYAN)
+            d.text((tx, ty), ellipsize(d, meta, self.f_sub, col_w), font=self.f_sub, fill=CYAN)
             ty += self._th(d, "Ag", self.f_sub) + 14
         off = self.data.get("offset", 0)
         if off and off > 5:
