@@ -2,7 +2,9 @@
 
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,6 +45,25 @@ class TestAssetMatch(unittest.TestCase):
         with mock.patch.object(updater.os, "name", "posix"):
             self.assertIsNone(updater.pick_asset(
                 [{"name": "cathode-windows-2.1-portable.zip", "url": "u", "size": 1}]))
+
+
+class TestDownloadProgress(unittest.TestCase):
+    def test_streams_and_reports_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src.bin")
+            payload = b"x" * (200 * 1024)            # 200 KB -> several chunks
+            with open(src, "wb") as f:
+                f.write(payload)
+            url = Path(src).as_uri()                 # file:// URL, no network
+            calls = []
+            dest = updater.download(url, os.path.join(tmp, "out"), "got.bin",
+                                    on_progress=lambda d, t: calls.append((d, t)),
+                                    total=len(payload))
+            with open(dest, "rb") as f:
+                self.assertEqual(f.read(), payload)  # file landed intact
+            self.assertTrue(calls)
+            self.assertEqual(calls[-1][0], len(payload))   # ends at 100%
+            self.assertEqual(calls[-1][1], len(payload))   # total carried through
 
 
 if __name__ == "__main__":

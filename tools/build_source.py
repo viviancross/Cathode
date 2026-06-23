@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import cathode  # noqa: E402
 
-OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", "2.0")
+OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", cathode.__version__)
 
 # Top-level files to include (non-Windows install scripts).
 TOP_FILES = [
@@ -55,7 +55,10 @@ def main():
         for d in TREE_DIRS:
             base = os.path.join(ROOT, d)
             for root, dirs, files in os.walk(base):
-                dirs[:] = [x for x in dirs if x not in EXCLUDE_DIRS]
+                # Skip EXCLUDE_DIRS and ALL dot-directories (.git, .impeccable
+                # and any other AI-agent tool cache) so they never ship.
+                dirs[:] = [x for x in dirs
+                           if x not in EXCLUDE_DIRS and not x.startswith(".")]
                 for f in files:
                     if _excluded(f):
                         continue

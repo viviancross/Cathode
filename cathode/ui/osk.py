@@ -34,9 +34,12 @@ class OnScreenKeyboard:
         self.height = height
         self.open = False
         self.text = ""
+        self.cursor = 0           # caret index into self.text
         self.prompt = ""
         self._shift = False
         self._sel = [0, 0]
+        self._field_box = None    # (x0,y0,x1,y1) of the text field, last render
+        self._field_start = 0     # first visible char index, last render
         self._on_done: Optional[Callable] = None
         self._on_cancel: Optional[Callable] = None
         self._build_fonts()
@@ -59,6 +62,7 @@ class OnScreenKeyboard:
              on_cancel: Optional[Callable] = None):
         self.prompt = prompt
         self.text = initial or ""
+        self.cursor = len(self.text)
         self._shift = False
         self._sel = [0, 0]
         self._on_done = on_done
@@ -90,6 +94,13 @@ class OnScreenKeyboard:
     def move_left(self):  self.move(0, -1)
     def move_right(self): self.move(0, 1)
 
+    # text caret (bumpers / click) — distinct from the key-grid selection above
+    def cursor_left(self):
+        self.cursor = max(0, self.cursor - 1)
+
+    def cursor_right(self):
+        self.cursor = min(len(self.text), self.cursor + 1)
+
     def press(self):
         """Activate the highlighted on-screen key (the 'Select' action)."""
         cell = _ROWS[self._sel[0]][self._sel[1]]
@@ -103,29 +114,37 @@ class OnScreenKeyboard:
         if cell == "SHIFT":
             self._shift = not self._shift
         elif cell == "SPACE":
-            self.text += " "
+            self._insert_at(" ")
         elif cell == "DEL":
-            self.text = self.text[:-1]
+            self.backspace()
         elif cell == "CLR":
             self.text = ""
+            self.cursor = 0
         elif cell == "CANCEL":
             self._finish(None)
         elif cell == "DONE":
             self._finish(self.text)
         else:
-            self.text += cell.upper() if (self._shift and cell.isalpha()) else cell
+            self._insert_at(cell.upper() if (self._shift and cell.isalpha()) else cell)
 
     def cancel(self):
         self._finish(None)
 
+    def _insert_at(self, s: str):
+        self.text = self.text[:self.cursor] + s + self.text[self.cursor:]
+        self.cursor += len(s)
+
     def backspace(self):
-        self.text = self.text[:-1]
+        """Delete the char before the caret."""
+        if self.cursor > 0:
+            self.text = self.text[:self.cursor - 1] + self.text[self.cursor:]
+            self.cursor -= 1
 
     def insert(self, text: str):
-        """Append typed or pasted text (newlines stripped)."""
+        """Insert typed or pasted text at the caret (newlines stripped)."""
         if not text:
             return
-        self.text += text.replace("\r", "").replace("\n", "")
+        self._insert_at(text.replace("\r", "").replace("\n", ""))
 
     # ── geometry / hit-test / render ──────────────────────────────────────
 
@@ -164,12 +183,31 @@ class OnScreenKeyboard:
             self._sel = [hit[0], hit[1]]
 
     def click(self, x, y):
+        if self._place_caret(x, y):
+            return True
         hit = self.hit_test(x, y)
         if hit:
             self._sel = [hit[0], hit[1]]
             self.press()
             return True
         return False
+
+    def _place_caret(self, x, y) -> bool:
+        """Click inside the text field -> move the caret to the nearest gap."""
+        box = self._field_box
+        if not box or not (box[0] <= x <= box[2] and box[1] <= y <= box[3]):
+            return False
+        d = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+        fx = box[0] + 8                       # matches the text draw origin
+        start = self._field_start
+        best, best_dx = self.cursor, None
+        for i in range(start, len(self.text) + 1):
+            cx = fx + d.textlength(self.text[start:i], font=self.font)
+            dx = abs(cx - x)
+            if best_dx is None or dx < best_dx:
+                best, best_dx = i, dx
+        self.cursor = best
+        return True
 
     def render(self) -> Image.Image:
         img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
@@ -196,14 +234,24 @@ class OnScreenKeyboard:
                hint, font=self.font_small, fill=GRAY)
         # Text field
         fy = py + int(self.height * 0.06)
-        d.rectangle([px + pad, fy, px + pw - pad, fy + field_h - 6], fill=BLACK)
-        d.rectangle([px + pad, fy, px + pw - pad, fy + field_h - 6],
-                    outline=OSD_BORDER, width=1)
-        shown = self.text + "_"
-        # keep the end visible for long URLs
-        while shown and d.textlength(shown, font=self.font) > (pw - 2 * pad - 16):
-            shown = shown[1:]
-        d.text((px + pad + 8, fy + 6), shown, font=self.font, fill=CHANNEL_GREEN)
+        fy1 = fy + field_h - 6
+        d.rectangle([px + pad, fy, px + pw - pad, fy1], fill=BLACK)
+        d.rectangle([px + pad, fy, px + pw - pad, fy1], outline=OSD_BORDER, width=1)
+        self._field_box = (px + pad, fy, px + pw - pad, fy1)
+        fx = px + pad + 8
+        avail = pw - 2 * pad - 16
+        # Horizontal scroll: pick a visible window that keeps the caret in view.
+        start = 0
+        while d.textlength(self.text[start:self.cursor], font=self.font) > avail:
+            start += 1
+        end = len(self.text)
+        while end > start and d.textlength(self.text[start:end], font=self.font) > avail:
+            end -= 1
+        self._field_start = start
+        d.text((fx, fy + 6), self.text[start:end], font=self.font, fill=CHANNEL_GREEN)
+        # Caret
+        cx = fx + d.textlength(self.text[start:self.cursor], font=self.font)
+        d.line([cx, fy + 5, cx, fy1 - 5], fill=WHITE, width=2)
 
         # Keys
         for (r, c, x0, y0, x1, y1) in self._key_rects():

@@ -13,7 +13,7 @@ from typing import Callable, List, Optional
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
+    get_font, ellipsize, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
     CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
@@ -46,6 +46,20 @@ class ContextMenu:
     def _build_fonts(self):
         self.font = get_font(max(14, int(self.height * 0.030)))
         self.font_title = get_font(max(16, int(self.height * 0.034)))
+        # Measure real ink heights so rows fit the active font and text centers
+        # exactly (any bundled or user font, no overlap).
+        d = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+        ib = d.textbbox((0, 0), "Ag", font=self.font)
+        tb = d.textbbox((0, 0), "Ag", font=self.font_title)
+        self._item_ink = ib[3] - ib[1]
+        self._title_ink = tb[3] - tb[1]
+
+    @staticmethod
+    def _vy(d, text, font, ry, row_h):
+        """Y to draw `text` so its ink is vertically centered in [ry, ry+row_h]
+        (subtracts the glyph bbox top, which plain (row_h - h)//2 ignores)."""
+        bb = d.textbbox((0, 0), text or "X", font=font)
+        return ry + (row_h - (bb[3] - bb[1])) // 2 - bb[1]
 
     def resize(self, width: int, height: int):
         self.width, self.height = width, height
@@ -62,6 +76,21 @@ class ContextMenu:
     def close(self):
         self.open = False
         self._stack = []
+
+    def snapshot(self):
+        """Capture the open menu (stack + highlights) so a modal dialog can
+        replace it and later return the user to exactly where they were."""
+        if not self.open or not self._stack:
+            return None
+        return [[list(items), idx, title] for items, idx, title in self._stack]
+
+    def restore(self, snap):
+        """Reopen a snapshot taken by snapshot() (or close if it was None)."""
+        if not snap:
+            self.close()
+            return
+        self._stack = [[list(items), idx, title] for items, idx, title in snap]
+        self.open = True
 
     # ── navigation ────────────────────────────────────────────────────────
 
@@ -170,12 +199,37 @@ class ContextMenu:
 
     # ── geometry (shared by render + hit_test) ────────────────────────────
 
-    def _geometry(self):
-        items = self._items()
-        rows = len(items) + 1 + (1 if self._back_present() else 0)  # title (+ back)
-        avail_h = int(self.height * 0.90)
-        row_h = max(22, min(int(self.height * 0.052), avail_h // max(rows, 1)))
+    def _row_h(self) -> int:
+        # Fit the tallest text (title or item) + padding, so no row overlaps.
+        ink = max(getattr(self, "_item_ink", 0), getattr(self, "_title_ink", 0))
+        return max(22, int(self.height * 0.052), ink + max(10, int(self.height * 0.020)))
+
+    def _max_visible(self) -> int:
+        """How many item rows fit, reserving the pinned title (+ Back) rows."""
+        row_h = self._row_h()
         pad = max(8, int(self.height * 0.018))
+        avail = int(self.height * 0.90) - pad * 2
+        reserved = 1 + (1 if self._back_present() else 0)   # title (+ back)
+        return max(1, avail // row_h - reserved)
+
+    def _window(self):
+        """(first_visible_index, count) of the scrolling item window, kept around
+        the current selection so a long category/library list scrolls instead of
+        squashing."""
+        n = len(self._items())
+        mv = self._max_visible()
+        if n <= mv:
+            return 0, n
+        sel = self._page[1] if self._page else 0
+        anchor = sel if 0 <= sel < n else n - 1     # Back row -> anchor last item
+        first = max(0, min(anchor - mv // 2, n - mv))
+        return first, mv
+
+    def _geometry(self):
+        row_h = self._row_h()
+        pad = max(8, int(self.height * 0.018))
+        _, count = self._window()
+        rows = 1 + count + (1 if self._back_present() else 0)   # title + window (+ back)
         panel_w = max(int(self.width * 0.32), 260)
         panel_h = pad * 2 + row_h * rows
         px = int(self.width * 0.06)
@@ -183,20 +237,22 @@ class ContextMenu:
         return px, py, panel_w, panel_h, row_h, pad
 
     def _row_rects(self):
-        """List of (index, x0, y0, x1, y1) for each item row."""
+        """(global_index, x0, y0, x1, y1) for each *visible* item row."""
         px, py, pw, ph, row_h, pad = self._geometry()
-        first = py + pad + row_h          # below the title row
+        first, count = self._window()
+        top = py + pad + row_h            # below the title row
         rects = []
-        for i in range(len(self._items())):
-            ry = first + i * row_h
-            rects.append((i, px, ry, px + pw, ry + row_h))
+        for vi in range(count):
+            ry = top + vi * row_h
+            rects.append((first + vi, px, ry, px + pw, ry + row_h))
         return rects
 
     def _back_rect(self):
         if not self._back_present():
             return None
         px, py, pw, ph, row_h, pad = self._geometry()
-        ry = py + pad + row_h + len(self._items()) * row_h   # below the last item
+        _, count = self._window()
+        ry = py + pad + row_h + count * row_h     # below the last visible row
         return (px, ry, px + pw, ry + row_h)
 
     def hit_test(self, x: int, y: int) -> Optional[int]:
@@ -221,30 +277,40 @@ class ContextMenu:
         d.rectangle([px, py, px + pw, py + ph], fill=OSD_BG)
         d.rectangle([px, py, px + pw, py + ph], outline=OSD_BORDER, width=2)
 
-        # Title
+        # Title (ink centered in its row; divider sits a few px below the row).
         title = self._page[2]
-        d.text((px + pad + 6, py + pad + (row_h - self._th(d, title)) // 2),
+        d.text((px + pad + 6, self._vy(d, title, self.font_title, py + pad, row_h)),
                title, font=self.font_title, fill=YELLOW)
-        d.line([px + pad, py + pad + row_h - 3, px + pw - pad, py + pad + row_h - 3],
+        d.line([px + pad, py + pad + row_h - 2, px + pw - pad, py + pad + row_h - 2],
                fill=OSD_BORDER, width=1)
 
         items = self._items()
         sel = self._page[1]
-        first = py + pad + row_h
-        for i, it in enumerate(items):
-            ry = first + i * row_h
+        win_first, win_count = self._window()
+        # Scroll arrows when the list overflows the window.
+        if win_first > 0:
+            d.text((px + pw - pad - 14, self._vy(d, "^", self.font, py + pad, row_h)),
+                   "^", font=self.font, fill=CYAN)
+        if win_first + win_count < len(items):
+            d.text((px + pw - pad - 14,
+                    self._vy(d, "v", self.font, py + pad + win_count * row_h, row_h)),
+                   "v", font=self.font, fill=CYAN)
+        for (i, rx0, ry, rx1, ry1) in self._row_rects():
+            it = items[i]
             if i == sel:
                 d.rectangle([px + 4, ry, px + pw - 4, ry + row_h], fill=GUIDE_SELECTED)
             color = WHITE if it.enabled else GRAY
             mark = "* " if it.checked else "   "
-            label = mark + it.label
-            d.text((px + pad + 6, ry + (row_h - self._th(d, label)) // 2),
-                   label, font=self.font, fill=(CHANNEL_GREEN if it.checked else color))
             right = it.hint or (">" if it.submenu is not None else "")
+            right_w = (d.textbbox((0, 0), right, font=self.font)[2]) if right else 0
+            # Fit the label between the left padding and the right hint/arrow.
+            label_max = pw - (pad + 6) - (right_w + pad + 10) - pad
+            mark_w = int(d.textlength(mark, font=self.font))
+            label = mark + ellipsize(d, it.label, self.font, label_max - mark_w)
+            d.text((px + pad + 6, self._vy(d, label, self.font, ry, row_h)),
+                   label, font=self.font, fill=(CHANNEL_GREEN if it.checked else color))
             if right:
-                rb = d.textbbox((0, 0), right, font=self.font)
-                d.text((px + pw - pad - (rb[2] - rb[0]),
-                        ry + (row_h - self._th(d, right)) // 2),
+                d.text((px + pw - pad - right_w, self._vy(d, right, self.font, ry, row_h)),
                        right, font=self.font,
                        fill=CYAN if it.submenu is not None else WHITE_DIM)
 
@@ -255,7 +321,7 @@ class ContextMenu:
             if sel == len(items):
                 d.rectangle([px + 4, by0, px + pw - 4, by1], fill=GUIDE_SELECTED)
             label = "< Back"
-            d.text((px + pad + 6, by0 + (row_h - self._th(d, label)) // 2),
+            d.text((px + pad + 6, self._vy(d, label, self.font, by0, row_h)),
                    label, font=self.font, fill=CYAN)
         return img
 

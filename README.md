@@ -8,7 +8,7 @@ drive with a keyboard, a mouse, or a game controller. It runs on the Steam Deck,
 Linux, Windows, and macOS, and renders at the window's real size, so it looks
 right on the Deck's screen and on a docked 1080p TV.
 
-**Version 2.0**
+**Version 2.1**
 
 <br clear="left">
 
@@ -31,15 +31,13 @@ build.
   Skip Intro / Skip Credits. See its own section below.
 - **Retro interface** — info bar, program guide, CRT scanlines, vignette, and
   channel-change static that holds until the new stream's first frame is ready.
-- **Themes and fonts** — 9 color themes, 5 bundled fonts, a custom theme editor,
+- **Themes and fonts** — 9 color themes, 6 bundled fonts, a custom theme editor,
   and saved profiles. Drop your own font into `assets/fonts/` and it appears in
   the menu.
 - **Weather strip** — current conditions, temperature, city, humidity, and rain
   chance in the guide header, from wttr.in. No API key.
 - **Full on-screen control** — every action has an on-screen control, so it
   works with a mouse alone and in Steam Deck Game Mode with no desktop dialogs.
-- **Sleep timer and screensaver** — pause after a set time; a bouncing-logo
-  screensaver after a few minutes idle.
 - **Update check** — checks GitHub for a newer release and downloads it; see
   Updating below.
 - **Demo mode** — built-in test-pattern channels, so you can try it with no
@@ -115,7 +113,8 @@ M3U URL, and an optional XMLTV URL. Demo mode skips straight to the test
 channels.
 
 Text fields use an on-screen keyboard that also takes real typing and Ctrl+V
-paste. Press DONE to submit.
+paste. The bumpers (LB/RB) move the text cursor, and you can click the field to
+place it. Press DONE to submit.
 
 To boot straight into your last playlist, set `"main_menu_on_launch": false` in
 the config file. The home screen is still reachable from the context menu.
@@ -158,9 +157,10 @@ defaults; remap them under **Options > Gamepad Buttons**.
 | X | Program guide |
 | Y | Info bar |
 | Back / View | Context menu |
-| LB / RB | Channel down / up |
+| LB / RB | Channel down / up (move the text cursor when the keyboard is open) |
 | LT / RT | Volume down / up |
 | L3 | Mute |
+| R3 | Cycle video aspect ratio |
 
 ## Plex-Per-View
 
@@ -206,8 +206,9 @@ Open the context menu (right-click while watching, the corner button, or `C`).
   conditions.
 - **Plex** — streaming quality, which libraries to show, server, and user.
 - **Keyboard Shortcuts** and **Gamepad Buttons** — remap inputs.
-- **Display** — fullscreen and monitor selection.
-- **Sleep Timer** — Off / 15 / 30 / 60 minutes; when it fires, playback pauses.
+- **Audio Device** — pick the audio output device.
+- **Display** — fullscreen, monitor selection, and **Aspect Ratio** (Original,
+  Stretch, 4:3, 16:9, 16:10; also on the controller's R3).
 - **Check for Updates** — see below.
 
 ### Config file
@@ -272,7 +273,6 @@ cathode/
   ui/
     renderer.py      compositing and the channel-change state machine
     mainmenu.py guide.py osd.py menu.py osk.py editor.py theme.py effects.py
-    screensaver.py
     ppv.py plexinfo.py plexosd.py    (Plex-Per-View screens)
 assets/   fonts and icons
 tools/    build and preview scripts

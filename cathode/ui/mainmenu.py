@@ -206,6 +206,10 @@ class MainMenu:
         return img
 
     def _centered(self, d, text, font, y, color):
+        # Place the VISIBLE ink at (centered, y): subtract the glyph bbox left/top
+        # so the title sits at the same spot under the logo for every font. Pixel
+        # fonts (VT323, Jersey 10, Pixel Operator) carry big top bearing, so
+        # without this they'd drop well below the logo.
         bb = d.textbbox((0, 0), text, font=font)
         w = bb[2] - bb[0]
-        d.text(((self.width - w) // 2 - bb[0], y), text, font=font, fill=color)
+        d.text(((self.width - w) // 2 - bb[0], y - bb[1]), text, font=font, fill=color)

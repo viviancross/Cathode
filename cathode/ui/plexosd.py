@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW,
+    get_font, ellipsize, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW,
     CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
@@ -55,11 +55,13 @@ class PlexOSD:
         self._build_fonts()
 
     def _build_fonts(self):
+        # Sizes harmonized with the context menu (title 0.034h, body 0.030h,
+        # small 0.024h) so text looks even across the menus and the OSD.
         h = self.height
-        self.f_title = get_font(max(15, int(h * 0.032)))
-        self.f_sub = get_font(max(11, int(h * 0.022)))
-        self.f_time = get_font(max(11, int(h * 0.022)))
-        self.f_btn = get_font(max(12, int(h * 0.025)))
+        self.f_title = get_font(max(16, int(h * 0.034)))
+        self.f_sub = get_font(max(12, int(h * 0.024)))
+        self.f_time = get_font(max(12, int(h * 0.024)))
+        self.f_btn = get_font(max(14, int(h * 0.030)))
 
     def resize(self, w, h):
         self.width, self.height = w, h
@@ -118,8 +120,9 @@ class PlexOSD:
     def _timeline_rect(self) -> Tuple[int, int, int, int]:
         x0, y0, x1, y1 = self._panel()
         pad = max(10, int(self.width * 0.012))
-        el_w = 70
-        du_w = 70
+        # Reserve room for the elapsed / duration time labels (scaled, so the
+        # bigger time font never runs under the timeline bar).
+        el_w = du_w = max(84, int(self.width * 0.07))
         by = y0 + int((y1 - y0) * 0.40)   # up high so the button row fits below
         return x0 + pad + el_w, by - 9, x1 - pad - du_w, by + 9
 
@@ -188,12 +191,15 @@ class PlexOSD:
         pad = max(10, int(self.width * 0.012))
         fid = self.focused_id()
 
-        # Title (+ subtitle inline)
-        d.text((x0 + pad, y0 + pad // 2), self.title or "", font=self.f_title, fill=WHITE)
+        # Title (+ subtitle inline) — clipped so neither runs past the panel.
+        inner = (x1 - x0) - 2 * pad
+        title_max = inner if not self.subtitle else int(inner * 0.62)
+        title_t = ellipsize(d, self.title or "", self.f_title, title_max)
+        d.text((x0 + pad, y0 + pad // 2), title_t, font=self.f_title, fill=WHITE)
         if self.subtitle:
-            tw = d.textbbox((0, 0), (self.title or "") + "  ", font=self.f_title)[2]
-            d.text((x0 + pad + tw, y0 + pad // 2 + 4), self.subtitle,
-                   font=self.f_sub, fill=CYAN)
+            tw = d.textbbox((0, 0), title_t + "  ", font=self.f_title)[2]
+            sub_t = ellipsize(d, self.subtitle, self.f_sub, inner - tw)
+            d.text((x0 + pad + tw, y0 + pad // 2 + 4), sub_t, font=self.f_sub, fill=CYAN)
 
         # Timeline
         tx0, ty0, tx1, ty1 = self._timeline_rect()

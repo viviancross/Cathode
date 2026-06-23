@@ -15,14 +15,25 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)   # so `import cathode` works when run from tools/
-# Release zips land in builds/2.0/ (matches the other build scripts).
-BUILDS = os.path.join(os.path.dirname(ROOT), "builds", "2.0")
+import cathode  # noqa: E402
+# Release zips land in builds/<version>/ (matches the other build scripts).
+BUILDS = os.path.join(os.path.dirname(ROOT), "builds", cathode.__version__)
 WORK = os.path.join(ROOT, "_winbuild")
 MPV_DIR = os.path.join(WORK, "mpv")
 
 
 def log(msg):
     print(f"[build] {msg}", flush=True)
+
+
+def strip_dot_dirs(root):
+    """Delete any dot-directories under `root` (e.g. .impeccable AI-tool caches
+    PyInstaller copied in from assets/) so no agent tooling ships in a release."""
+    import shutil
+    for dp, dn, _fn in os.walk(root):
+        for d in [x for x in dn if x.startswith(".")]:
+            shutil.rmtree(os.path.join(dp, d), ignore_errors=True)
+            dn.remove(d)
 
 
 def _ensure_7zr():
@@ -99,6 +110,7 @@ def build(mpv_exe):
 def package(app_dir):
     import cathode
     ver = cathode.__version__
+    strip_dot_dirs(app_dir)            # no AI-tool dot-dirs in the release
     os.makedirs(BUILDS, exist_ok=True)
     out_zip = os.path.join(BUILDS, f"cathode-windows-{ver}-portable.zip")
     if os.path.exists(out_zip):
