@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 from PIL import Image, ImageDraw
 
+from . import theme
 from .theme import (
     get_font, OSD_BG, OSD_BORDER,
     CYAN, YELLOW, WHITE, WHITE_DIM, GRAY,
@@ -109,101 +110,98 @@ class OSD:
         next_x = int(self.width * 0.45)
         info_col_w = next_x - info_x - 16   # width before the NEXT column
 
+        # ── Vertical row stack ────────────────────────────────────────────
+        # Rows are placed by MEASURED ink height (not fixed bar-fractions), and
+        # each line is drawn with its ink top on the row line. The progress bar
+        # sits just below the title's real ink, so nothing strikes through the
+        # text for ANY font (compact or tall pixel fonts), now or future.
+        def _rh(font):
+            return _text_size(draw, "Ag", font)[1]
+        gap = max(2, int(bh * 0.05))
+        y_name = by + int(bh * 0.10)
+        y_prog = y_name + _rh(self.font_large) + gap
+        pb_h   = 4
+        pb_y   = y_prog + _rh(self.font_medium) + max(2, gap // 2)
+        y_time = pb_y + pb_h + max(2, gap // 2)
+
         # ── Channel number (left of name, themed color) + name ────────────
-        name_y = by + int(bh * 0.12)
         name_x = info_x
+        num_str = str(channel.number)
         if logo is not None:
             # Logo fills the box, so show the number beside the name.
-            num_str = str(channel.number)
-            draw.text((info_x, name_y), num_str, font=self.font_large,
-                      fill=CHANNEL_GREEN)
+            self._t(img, draw, info_x, y_name, num_str, self.font_large, CHANNEL_GREEN)
             name_x = info_x + _text_size(draw, num_str, self.font_large)[0] + 12
         else:
             # No logo → the number stays big in the box.
-            num_str = str(channel.number)
             tw, th = _text_size(draw, num_str, self.font_huge)
-            draw.text((nb_x + (nb_w - tw) // 2, nb_y + (nb_h - th) // 2),
-                      num_str, font=self.font_huge, fill=CHANNEL_GREEN)
-        draw.text((name_x, name_y),
-                  _fit(draw, channel.name, self.font_large, info_col_w - (name_x - info_x)),
-                  font=self.font_large, fill=WHITE)
+            self._t(img, draw, nb_x + (nb_w - tw) // 2, nb_y + (nb_h - th) // 2,
+                    num_str, self.font_huge, CHANNEL_GREEN)
+        self._t(img, draw, name_x, y_name,
+                _fit(draw, channel.name, self.font_large, info_col_w - (name_x - info_x)),
+                self.font_large, WHITE)
 
         # ── Current program ───────────────────────────────────────────────
-        prog_y = by + int(bh * 0.45)
         if current_prog:
             prog_str = current_prog.title
             if current_prog.episode:
                 prog_str += f"  {current_prog.episode}"
-            draw.text((info_x, prog_y),
-                      _fit(draw, prog_str, self.font_medium, info_col_w),
-                      font=self.font_medium, fill=CYAN)
+            self._t(img, draw, info_x, y_prog,
+                    _fit(draw, prog_str, self.font_medium, info_col_w),
+                    self.font_medium, CYAN)
 
-            # Progress bar
+            # Progress bar (below the title ink)
             progress = current_prog.progress_at(datetime.now(timezone.utc))
-            pb_x = info_x
-            pb_y = by + int(bh * 0.68)
             pb_w = int(bw * 0.40)
-            pb_h = 4
-            draw.rectangle([pb_x, pb_y, pb_x + pb_w, pb_y + pb_h], fill=GRAY)
+            draw.rectangle([info_x, pb_y, info_x + pb_w, pb_y + pb_h], fill=GRAY)
             draw.rectangle(
-                [pb_x, pb_y, pb_x + int(pb_w * progress), pb_y + pb_h],
+                [info_x, pb_y, info_x + int(pb_w * progress), pb_y + pb_h],
                 fill=GREEN,
             )
 
             # Time range
-            time_str = _prog_time_range(current_prog)
-            draw.text(
-                (info_x, by + int(bh * 0.78)),
-                time_str, font=self.font_small, fill=WHITE_DIM,
-            )
-
+            self._t(img, draw, info_x, y_time,
+                    _prog_time_range(current_prog), self.font_small, WHITE_DIM)
         else:
-            draw.text((info_x, prog_y), "No program info", font=self.font_medium, fill=GRAY)
+            self._t(img, draw, info_x, y_prog, "No program info",
+                    self.font_medium, GRAY)
 
         # ── Next program ──────────────────────────────────────────────────
         if next_prog:
             # Clip the NEXT title so it stops before the clock on the right.
             next_col_w = (bx + bw) - next_x - int(self.width * 0.10)
-            draw.text(
-                (next_x, name_y),
-                "NEXT",
-                font=self.font_small, fill=ORANGE,
-            )
-            draw.text(
-                (next_x, prog_y),
-                _fit(draw, next_prog.title, self.font_medium, next_col_w),
-                font=self.font_medium, fill=WHITE_DIM,
-            )
-            draw.text(
-                (next_x, by + int(bh * 0.78)),
-                _prog_time_range(next_prog),
-                font=self.font_small, fill=GRAY,
-            )
+            self._t(img, draw, next_x, y_name, "NEXT", self.font_small, ORANGE)
+            self._t(img, draw, next_x, y_prog,
+                    _fit(draw, next_prog.title, self.font_medium, next_col_w),
+                    self.font_medium, WHITE_DIM)
+            self._t(img, draw, next_x, y_time,
+                    _prog_time_range(next_prog), self.font_small, GRAY)
 
         # ── Clock (right side) ────────────────────────────────────────────
         clock_str = _time_str()
         clock_x = bx + bw - 12
-        clock_y = by + int(bh * 0.12)
         tw, th = _text_size(draw, clock_str, self.font_large)
-        draw.text(
-            (clock_x - tw, clock_y),
-            clock_str, font=self.font_large, fill=YELLOW,
-        )
+        self._t(img, draw, clock_x - tw, y_name, clock_str, self.font_large, YELLOW)
 
-        # ── Group / category tag ──────────────────────────────────────────
+        # ── Group / category tag (below the clock) ────────────────────────
         if channel.group:
             group_str = channel.group.upper()[:20]
             tw2, _ = _text_size(draw, group_str, self.font_small)
-            draw.text(
-                (clock_x - tw2, clock_y + th + 6),
-                group_str, font=self.font_small, fill=CYAN,
-            )
+            self._t(img, draw, clock_x - tw2, y_prog, group_str, self.font_small, CYAN)
 
         # ── Volume indicator ──────────────────────────────────────────────
         if show_volume:
             _draw_volume(draw, bx + bw // 2, by - 50, volume, muted, self.font_medium)
 
         return img
+
+    def _t(self, img, draw, x, y, text, font, fill):
+        """Draw cached text with its visible ink top at `y` — subtracts the glyph
+        top bearing so every font lands on the row line (tall pixel fonts carry
+        big top bearing and would otherwise sit low and collide)."""
+        if not text:
+            return
+        bb = draw.textbbox((0, 0), text, font=font)
+        theme.draw_text(img, (int(x), int(y - bb[1])), text, font, fill)
 
 
 def _draw_volume(
