@@ -243,10 +243,8 @@ class PPVScreen:
             self._render_auth(d)
             return img
 
-        # Breadcrumb (left), then the current level title (centered).
-        if self.crumb:
-            d.text((int(self.width * 0.04), y), self.crumb, font=self.f_meta, fill=GRAY)
-            y += self._th(d, self.crumb, self.f_meta) + int(self.height * 0.014)
+        # Current level title (centered). The breadcrumb/path is drawn in the
+        # footer (below) so it never collides with the Back button up here.
         self._center(d, self.title.upper(), self.f_title, y, WHITE)
 
         # Back button (clickable; also reachable by D-pad/keyboard — Up from the
@@ -255,20 +253,14 @@ class PPVScreen:
         d.rectangle([bx0, by0, bx1, by1], fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
                     outline=CHANNEL_GREEN if self.bar_focus == "back" else OSD_BORDER,
                     width=3 if self.bar_focus == "back" else 2)
-        bl = "< BACK"
-        d.text((bx0 + 10, by0 + (by1 - by0 - self._th(d, bl, self.f_foot)) // 2),
-               bl, font=self.f_foot, fill=CYAN)
+        self._btn_label(d, "< BACK", self.f_foot, bx0, by0, bx1, by1, CYAN)
 
         # Menu button (clickable; opens the Plex context menu).
         mx0, my0, mx1, my1 = self._menu_rect()
         d.rectangle([mx0, my0, mx1, my1], fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
                     outline=CHANNEL_GREEN if self.bar_focus == "menu" else OSD_BORDER,
                     width=3 if self.bar_focus == "menu" else 2)
-        ml = "MENU ="
-        mw = self._tw(d, ml, self.f_foot)
-        d.text((mx0 + (mx1 - mx0 - mw) // 2,
-                my0 + (my1 - my0 - self._th(d, ml, self.f_foot)) // 2),
-               ml, font=self.f_foot, fill=CYAN)
+        self._btn_label(d, "MENU =", self.f_foot, mx0, my0, mx1, my1, CYAN)
 
         # List panel
         x0, top, x1, bottom = self._panel()
@@ -313,7 +305,16 @@ class PPVScreen:
             foot = f"[D-PAD] BROWSE    [A] {act}    [B] BACK"
         else:
             foot = f"[UP/DN] BROWSE    [ENTER] {act}    [ESC] BACK"
-        self._center(d, foot, self.f_foot, self.height - int(self.height * 0.06), WHITE_DIM)
+        foot_y = self.height - int(self.height * 0.06)
+        self._center(d, foot, self.f_foot, foot_y, WHITE_DIM)
+
+        # Breadcrumb / current path — bottom-left, clipped so it stops before the
+        # centered hint text.
+        if self.crumb:
+            cmax = (self.width - self._tw(d, foot, self.f_foot)) // 2 \
+                - int(self.width * 0.06)
+            ctxt = ellipsize(d, self.crumb, self.f_foot, max(40, cmax))
+            d.text((int(self.width * 0.04), foot_y), ctxt, font=self.f_foot, fill=GRAY)
         return img
 
     def _render_auth(self, d):
@@ -341,6 +342,15 @@ class PPVScreen:
     def _center(self, d, text, font, y, color):
         w = self._tw(d, text, font)
         d.text(((self.width - w) // 2, y), text, font=font, fill=color)
+
+    def _btn_label(self, d, text, font, x0, y0, x1, y1, color):
+        """Center `text` in the button box on BOTH axes, subtracting the glyph
+        bbox offset so it's truly centered for any font (tall pixel fonts carry
+        big left/top bearing and would otherwise sit low and off-center)."""
+        bb = d.textbbox((0, 0), text, font=font)
+        lx = x0 + (x1 - x0 - (bb[2] - bb[0])) // 2 - bb[0]
+        ly = y0 + (y1 - y0 - (bb[3] - bb[1])) // 2 - bb[1]
+        d.text((lx, ly), text, font=font, fill=color)
 
     @staticmethod
     def _tw(d, text, font) -> int:

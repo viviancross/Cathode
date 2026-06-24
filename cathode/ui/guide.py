@@ -85,7 +85,8 @@ class Guide:
     TIME_ROW_H_FRAC  = 0.045
     ROW_H_FRAC       = 0.075
     CH_COL_W_FRAC    = 0.14
-    DETAIL_PANEL_FRAC = 0.30   # height of the info panel in the "detail" layout
+    DETAIL_PANEL_FRAC = 0.36   # height of the info panel in the "detail" layout
+                               # (tall enough for the synopsis to wrap a few lines)
 
     def __init__(self, width: int, height: int, epg_hours: int = 3):
         self.width = width
@@ -519,28 +520,36 @@ class Guide:
             sel = vis[sel_idx]
             scid = epg.resolve_channel_id(sel.epg_id, sel.name) if epg else None
             sprog = epg.current_program(scid, now) if (epg and scid) else None
-            self._text((rx, r_top), _truncate(f"{sel.number}  {sel.name}", draw,
+            # Stack rows by MEASURED line height + a uniform gap, so spacing is
+            # even and nothing overlaps for any font. Title/meta wrap (never
+            # truncate), and the description fills whatever panel height is left.
+            def _lh(font):
+                return text_wh(draw, "Ag", font)[1]
+            gap = max(4, int(self.height * 0.012))
+            y = r_top
+            self._text((rx, y), _truncate(f"{sel.number}  {sel.name}", draw,
                        self.font_small, rw), self.font_small, YELLOW)
-            y = r_top + int(h2 * 0.16)
+            y += _lh(self.font_small) + gap
             if sprog:
-                self._text((rx, y), _truncate(sprog.title, draw,
-                           self.font_panel_title, rw),
-                           self.font_panel_title, WHITE)
-                y += int(h2 * 0.26)
+                for ln in _wrap_text(draw, sprog.title, self.font_panel_title, rw, 2):
+                    self._text((rx, y), ln, self.font_panel_title, WHITE)
+                    y += _lh(self.font_panel_title)
+                y += gap
                 meta = _prog_range(sprog)
                 if sprog.episode:
                     meta += "   " + sprog.episode
                 if sprog.category:
                     meta += "   " + sprog.category
-                self._text((rx, y), _truncate(meta, draw, self.font_panel_text, rw),
-                           self.font_panel_text, CYAN)
-                y += int(h2 * 0.20)
-                lh = int(self.height * 0.028 * 1.35) + 2
-                max_lines = max(1, (bottom - y) // lh)
+                for ln in _wrap_text(draw, meta, self.font_panel_text, rw, 2):
+                    self._text((rx, y), ln, self.font_panel_text, CYAN)
+                    y += _lh(self.font_panel_text)
+                y += gap
+                dlh = _lh(self.font_panel_text) + max(2, gap // 2)
+                max_lines = max(1, (bottom - y) // dlh)
                 for ln in _wrap_text(draw, sprog.description or "",
                                      self.font_panel_text, rw, max_lines):
                     self._text((rx, y), ln, self.font_panel_text, WHITE_DIM)
-                    y += lh
+                    y += dlh
             else:
                 self._text((rx, y), "No program information",
                            self.font_panel_text, GRAY)
