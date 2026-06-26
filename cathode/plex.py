@@ -367,6 +367,8 @@ class PlexClient:
             "offset": int(m.get("viewOffset", 0)) // 1000, "poster": poster,
             "poster_headers": {"X-Plex-Token": self._server_token} if poster else {},
             "guid": m.get("guid", ""), "type": m.get("type", ""),
+            "grandparent_key": (str(m["grandparentRatingKey"])
+                                if m.get("grandparentRatingKey") else ""),
         }
 
     def all_episodes(self, show_rating_key: str) -> List[str]:
