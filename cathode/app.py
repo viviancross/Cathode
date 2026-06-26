@@ -1069,16 +1069,32 @@ class App:
         self._wheel(1)
 
     def _lb_action(self):
-        if self.renderer.ppv.open:
+        if self.renderer.plex_playing:
+            self._plex_skip(-1)           # Plex playback: prev episode/chapter
+        elif self.renderer.ppv.open:
             self.renderer.ppv.scroll(-10); self.renderer.mark_dirty()
         elif not self._dialog_open():
             self._channel_down()
 
     def _rb_action(self):
-        if self.renderer.ppv.open:
+        if self.renderer.plex_playing:
+            self._plex_skip(1)            # Plex playback: next episode/chapter
+        elif self.renderer.ppv.open:
             self.renderer.ppv.scroll(10); self.renderer.mark_dirty()
         elif not self._dialog_open():
             self._channel_up()
+
+    def _lt_action(self):
+        if self.renderer.plex_playing:
+            self._plex_seek(-10)          # Plex playback: jump back 10s
+        else:
+            self._vol_down()
+
+    def _rt_action(self):
+        if self.renderer.plex_playing:
+            self._plex_seek(10)           # Plex playback: jump forward 10s
+        else:
+            self._vol_up()
 
     # ── Remappable hotkeys (keyboard letters + gamepad buttons) ───────────
 
@@ -1107,7 +1123,7 @@ class App:
             "menu": self._toggle_context_menu, "fullscreen": self._toggle_fullscreen,
             "quit": self._quit_app,
             "channel_up": self._rb_action, "channel_down": self._lb_action,
-            "vol_up": self._vol_up, "vol_down": self._vol_down,
+            "vol_up": self._rt_action, "vol_down": self._lt_action,
             "aspect": self._cycle_aspect,
         }
 
@@ -2249,8 +2265,46 @@ class App:
         if d.get("offset", 0) > 5:
             self._ppv_resume_prompt(d)
         else:
-            self._ppv_play(d.get("rating_key"), d.get("title", ""),
-                           d.get("subtitle", ""), resume=False)
+            self._plex_begin_play(d, resume=False)
+
+    def _plex_begin_play(self, detail, resume):
+        """Play `detail`. For a TV episode, queue the rest of the show from this
+        episode on, so playback continues in sequence after it finishes (works
+        whether the episode was picked from the show page or Continue Watching).
+        Movies / clips / a final episode just play on their own."""
+        rk = detail.get("rating_key")
+        title = detail.get("title", "")
+        sub = detail.get("subtitle") or detail.get("meta", "")
+        show_key = detail.get("grandparent_key")
+        if detail.get("type") != "episode" or not show_key:
+            self._ppv_play(rk, title, sub, resume=resume)
+            return
+        self.renderer.ppv.set_status("STARTING...")
+        self.renderer.mark_dirty()
+        def work():
+            try:
+                eps = self._ppv_client().all_episodes(show_key)
+            except Exception:
+                eps = []
+            queue = self._episode_queue(eps, str(rk))
+            if queue:
+                self._plex_queue = queue
+                self._plex_queue_pos = 0
+                self._ppv_play(queue[0], title, sub, resume=resume,
+                               keep_queue=True)
+            else:
+                self._ppv_play(rk, title, sub, resume=resume)
+        threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _episode_queue(eps, rk):
+        """Episode rating_keys from `rk` to the end of the show, or [] if `rk`
+        isn't found or is already the last episode (nothing to queue after it)."""
+        try:
+            idx = eps.index(rk)
+        except ValueError:
+            return []
+        return eps[idx:] if idx < len(eps) - 1 else []
 
     def _plex_watchlist_has(self, guid):
         """Best-effort check whether `guid` is on the user's watchlist. Matches
@@ -2287,15 +2341,12 @@ class App:
         self.renderer.update()
 
     def _ppv_resume_prompt(self, row):
-        rk = row.get("rating_key")
-        title = row.get("title", "")
-        sub = row.get("subtitle") or row.get("meta", "")
         ts = self._fmt_time(row.get("offset", 0))
         items = [
             MenuItem(f"Resume from {ts}",
-                     action=lambda: self._ppv_play(rk, title, sub, resume=True)),
+                     action=lambda: self._plex_begin_play(row, resume=True)),
             MenuItem("Start from Beginning",
-                     action=lambda: self._ppv_play(rk, title, sub, resume=False)),
+                     action=lambda: self._plex_begin_play(row, resume=False)),
         ]
         self.renderer.menu.open_with(items, title="RESUME?")
         self.renderer.mark_dirty()
