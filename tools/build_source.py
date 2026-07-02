@@ -19,7 +19,7 @@ OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", cathode.__version__)
 
 # Top-level files to include (non-Windows install scripts).
 TOP_FILES = [
-    "main.py", "requirements.txt", "README.md",
+    "main.py", "requirements.txt", "README.md", "CHANGELOG.md",
     "LICENSE", "THIRD_PARTY_NOTICES.md",
     "cathode.sh", "install.sh", "install-service.sh", "make-shortcut.sh",
     "install-macos.sh",

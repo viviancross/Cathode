@@ -13,29 +13,17 @@ query string, plus the saved resume offset.
 from __future__ import annotations
 
 import json
-import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 from typing import List, Optional
 
+from .net import SSL as _SSL
+
 PLEX_TV = "https://plex.tv"
 LINK_URL = "https://plex.tv/link"
 _TIMEOUT = 15
-
-
-def _ssl_context() -> ssl.SSLContext:
-    # macOS Python often ships without a usable CA bundle, so HTTPS to plex.tv
-    # fails verification. Use certifi's bundle when present.
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return ssl.create_default_context()
-
-
-_SSL = _ssl_context()
 
 # Transcode quality presets shown in Plex Options. "Original" = direct play (no
 # transcode, max quality); the rest cap the video bitrate (kbps).
@@ -388,7 +376,8 @@ class PlexClient:
         tok = self.admin_token or self.token
         for host in ("https://discover.provider.plex.tv",
                      "https://metadata.provider.plex.tv"):
-            url = f"{host}/actions/{action}?ratingKey={rk}&X-Plex-Token={tok}"
+            # Token in the header only (see _headers) — never in the URL.
+            url = f"{host}/actions/{action}?ratingKey={rk}"
             try:
                 req = urllib.request.Request(url, method="PUT",
                                              headers=self._headers(token=tok))
@@ -429,9 +418,14 @@ class PlexClient:
 
     # ── playback ──────────────────────────────────────────────────────────
 
-    def play_info(self, rating_key: str, quality: str = "Original") -> dict:
-        """Fresh metadata for one item: {url, offset, title, subtitle, markers}.
-        Direct play unless a transcode `quality` preset is given."""
+    def play_info(self, rating_key: str, quality: str = "Original",
+                  resume: bool = True) -> dict:
+        """Fresh metadata for one item: {url, offset, time_base, title,
+        subtitle, markers}. Direct play unless a transcode `quality` preset is
+        given. With resume=False the saved viewOffset is ignored, so "Start
+        from Beginning" really starts at 0 even through the transcoder.
+        `time_base` is the absolute second the stream's clock starts at (the
+        transcode offset) — mpv's time-pos must be shifted by it."""
         # includeMarkers=1 returns intro/credits ranges for Skip Intro/Credits.
         data = self._get(
             f"{self.server}/library/metadata/{rating_key}?includeMarkers=1",
@@ -443,18 +437,20 @@ class PlexClient:
         part = _first_part(m)
         if not part:
             raise PlexError("No playable file for this item.")
-        offset = int(m.get("viewOffset", 0)) // 1000   # ms -> s
+        offset = int(m.get("viewOffset", 0)) // 1000 if resume else 0   # ms -> s
         title, subtitle = _display_title(m)
         kbps = _QUALITY.get(quality)
+        time_base = 0
         if kbps:
             url = self._transcode_url(rating_key, kbps, offset)
-            offset = 0          # the transcoder already starts at the offset
+            time_base = offset  # transcoder starts here; mpv's clock starts at 0
+            offset = 0
         else:
             url = f"{self.server}{part}"
         # Auth travels in a header, not the URL query, so the token never lands
         # in mpv's log file. The caller passes these to the player.
-        return {"url": url, "offset": offset, "title": title,
-                "subtitle": subtitle, "markers": _markers(m),
+        return {"url": url, "offset": offset, "time_base": time_base,
+                "title": title, "subtitle": subtitle, "markers": _markers(m),
                 "headers": {"X-Plex-Token": self._server_token}}
 
     def on_deck(self) -> List[dict]:
@@ -494,7 +490,8 @@ class PlexClient:
     def report_timeline(self, rating_key: str, time_s: float, duration_s: float,
                         state: str = "stopped"):
         """Tell the server the current playback position so it saves (or clears,
-        when finished) the resume point. Best-effort."""
+        when finished) the resume point. Best-effort. The token rides in the
+        request header (via _get), never the URL."""
         try:
             q = urllib.parse.urlencode({
                 "ratingKey": rating_key,
@@ -502,10 +499,21 @@ class PlexClient:
                 "state": state,
                 "time": int(max(0, time_s) * 1000),
                 "duration": int(max(0, duration_s) * 1000),
-                "X-Plex-Token": self._server_token,
                 "X-Plex-Client-Identifier": self.client_id,
             })
             self._get(f"{self.server}/:/timeline?{q}", token=self._server_token)
+        except Exception:
+            pass
+
+    def scrobble(self, rating_key: str):
+        """Mark an item watched. The canonical scrobble endpoint is more
+        reliable than a timeline report at t=duration. Best-effort."""
+        try:
+            q = urllib.parse.urlencode({
+                "key": rating_key,
+                "identifier": "com.plexapp.plugins.library",
+            })
+            self._get(f"{self.server}/:/scrobble?{q}", token=self._server_token)
         except Exception:
             pass
 

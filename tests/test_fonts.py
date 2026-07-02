@@ -39,7 +39,8 @@ class TestFontScaling(unittest.TestCase):
         long = "A Very Long Movie Title That Will Not Fit In A Narrow Row"
         out = theme.ellipsize(d, long, f, 200)
         self.assertLessEqual(d.textlength(out, font=f), 200)
-        self.assertTrue(out.endswith("…"))
+        # ASCII "..." — the bundled pixel fonts have no U+2026 glyph.
+        self.assertTrue(out.endswith("..."))
         # Short text passes through untouched.
         self.assertEqual(theme.ellipsize(d, "OK", f, 200), "OK")
 

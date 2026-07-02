@@ -14,6 +14,8 @@ import urllib.parse
 import urllib.request
 from typing import Callable, Optional
 
+from .net import SSL as _SSL
+
 _REFRESH = 900.0   # seconds between refreshes (15 min)
 
 # Countries offered in the Weather menu (ISO-2 code, display name). The code is
@@ -120,7 +122,7 @@ class Weather:
         loc = f"{self.zip},{self.country}" if self.country else self.zip
         url = f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1"
         req = urllib.request.Request(url, headers={"User-Agent": self._ua})
-        j = json.loads(urllib.request.urlopen(req, timeout=12).read())
+        j = json.loads(urllib.request.urlopen(req, timeout=12, context=_SSL).read())
         cur = (j.get("current_condition") or [{}])[0]
         area = (j.get("nearest_area") or [{}])[0]
         return {

@@ -5,8 +5,11 @@ import urllib.request
 import gzip
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
+from io import BytesIO
 from typing import Dict, List, Optional
 import re
+
+from .net import SSL as _SSL
 
 
 @dataclass
@@ -97,69 +100,85 @@ class EPG:
         if data[:2] == b"\x1f\x8b":
             data = gzip.decompress(data)
 
-        root = ET.fromstring(data)
-        self._parse(root)
+        self._parse_stream(BytesIO(data))
 
-    def _parse(self, root: ET.Element):
-        # Parse channel display names + logo icons
-        for ch_el in root.findall("channel"):
-            ch_id = ch_el.get("id", "")
-            for dn_el in ch_el.findall("display-name"):
-                if dn_el.text:
-                    self._display_names[dn_el.text.strip().lower()] = ch_id
-            icon_el = ch_el.find("icon")
-            if icon_el is not None:
-                src = icon_el.get("src", "").strip()
-                if src and ch_id:
-                    self._icons[ch_id] = src
-
-        # Parse programmes
-        for prog_el in root.findall("programme"):
-            ch_id = prog_el.get("channel", "")
-            start_str = prog_el.get("start", "")
-            stop_str = prog_el.get("stop", "")
-            if not (ch_id and start_str and stop_str):
+    def _parse_stream(self, fileobj):
+        """Stream-parse XMLTV with iterparse, clearing elements as they finish,
+        so a huge guide (100MB+) never balloons into a full DOM in RAM."""
+        root = None
+        for event, el in ET.iterparse(fileobj, events=("start", "end")):
+            if event == "start":
+                if root is None:
+                    root = el
                 continue
-            try:
-                start = _parse_xmltv_dt(start_str)
-                stop = _parse_xmltv_dt(stop_str)
-            except ValueError:
-                continue
-
-            title = _text(prog_el, "title")
-            desc = _text(prog_el, "desc")
-            category = _text(prog_el, "category")
-
-            # Episode number
-            ep_nums = prog_el.findall("episode-num")
-            episode = ""
-            for ep in ep_nums:
-                if ep.get("system") == "onscreen":
-                    episode = ep.text.strip() if ep.text else ""
-                    break
-            if not episode and ep_nums:
-                episode = ep_nums[0].text.strip() if ep_nums[0].text else ""
-
-            rating = ""
-            rating_el = prog_el.find("rating/value")
-            if rating_el is not None and rating_el.text:
-                rating = rating_el.text.strip()
-
-            prog = Program(
-                channel_id=ch_id,
-                title=title,
-                start=start,
-                stop=stop,
-                description=desc,
-                category=category,
-                episode=episode,
-                rating=rating,
-            )
-            self._programs.setdefault(ch_id, []).append(prog)
+            if el.tag == "channel":
+                self._parse_channel(el)
+            elif el.tag == "programme":
+                self._parse_programme(el)
+            else:
+                continue        # sub-elements are freed with their parent
+            el.clear()
+            if root is not None:
+                root.clear()    # drop finished children so the tree stays flat
 
         # Sort each channel's programs by start time
         for progs in self._programs.values():
             progs.sort(key=lambda p: p.start)
+
+    def _parse_channel(self, ch_el: ET.Element):
+        """Channel display names + logo icon from one <channel> element."""
+        ch_id = ch_el.get("id", "")
+        for dn_el in ch_el.findall("display-name"):
+            if dn_el.text:
+                self._display_names[dn_el.text.strip().lower()] = ch_id
+        icon_el = ch_el.find("icon")
+        if icon_el is not None:
+            src = icon_el.get("src", "").strip()
+            if src and ch_id:
+                self._icons[ch_id] = src
+
+    def _parse_programme(self, prog_el: ET.Element):
+        """One <programme> element -> a Program in the channel's bucket."""
+        ch_id = prog_el.get("channel", "")
+        start_str = prog_el.get("start", "")
+        stop_str = prog_el.get("stop", "")
+        if not (ch_id and start_str and stop_str):
+            return
+        try:
+            start = _parse_xmltv_dt(start_str)
+            stop = _parse_xmltv_dt(stop_str)
+        except ValueError:
+            return
+
+        title = _text(prog_el, "title")
+        desc = _text(prog_el, "desc")
+        category = _text(prog_el, "category")
+
+        # Episode number
+        ep_nums = prog_el.findall("episode-num")
+        episode = ""
+        for ep in ep_nums:
+            if ep.get("system") == "onscreen":
+                episode = ep.text.strip() if ep.text else ""
+                break
+        if not episode and ep_nums:
+            episode = ep_nums[0].text.strip() if ep_nums[0].text else ""
+
+        rating = ""
+        rating_el = prog_el.find("rating/value")
+        if rating_el is not None and rating_el.text:
+            rating = rating_el.text.strip()
+
+        self._programs.setdefault(ch_id, []).append(Program(
+            channel_id=ch_id,
+            title=title,
+            start=start,
+            stop=stop,
+            description=desc,
+            category=category,
+            episode=episode,
+            rating=rating,
+        ))
 
     def add_programs(self, channel_id: str, programs: List[Program]):
         """Inject programs for a channel (used by demo mode)."""
@@ -231,5 +250,5 @@ class EPG:
 
 def _fetch(url: str, user_agent: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
         return resp.read()

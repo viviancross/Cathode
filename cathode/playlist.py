@@ -5,6 +5,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import List, Optional
 
+from .net import SSL as _SSL
+
 
 @dataclass
 class Channel:
@@ -20,16 +22,25 @@ class Channel:
         return f"[{self.number}] {self.name}"
 
 
-_EXTINF_RE = re.compile(
-    r'#EXTINF:\s*-?\d+\s*'
-    r'(?P<attrs>[^,]*)'
-    r',\s*(?P<name>.+)'
-)
+_EXTINF_RE = re.compile(r'#EXTINF:\s*-?[\d.]+\s*(?P<rest>.*)')
 _ATTR_RE = re.compile(r'(\S+?)="([^"]*)"')
 
 
 def _parse_attrs(attr_str: str) -> dict:
     return dict(_ATTR_RE.findall(attr_str))
+
+
+def _split_attrs_name(rest: str):
+    """Split the EXTINF remainder into (attrs, name) at the first comma that
+    sits OUTSIDE double quotes — attr values may themselves contain commas
+    (e.g. group-title="News, Local")."""
+    in_quotes = False
+    for i, c in enumerate(rest):
+        if c == '"':
+            in_quotes = not in_quotes
+        elif c == "," and not in_quotes:
+            return rest[:i], rest[i + 1:].strip()
+    return rest, ""
 
 
 def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
@@ -44,7 +55,7 @@ def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
 
 def _fetch_url(url: str, user_agent: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
@@ -67,12 +78,12 @@ def _parse(content: str) -> List[Channel]:
         if line.startswith("#EXTINF:"):
             m = _EXTINF_RE.match(line)
             if m:
-                attrs = _parse_attrs(m.group("attrs"))
-                name = m.group("name").strip()
-                pending_meta = {
-                    "name": name,
-                    "attrs": attrs,
-                }
+                attr_str, name = _split_attrs_name(m.group("rest"))
+                if name:
+                    pending_meta = {
+                        "name": name,
+                        "attrs": _parse_attrs(attr_str),
+                    }
             continue
 
         if line.startswith("#"):

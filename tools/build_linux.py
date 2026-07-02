@@ -66,7 +66,8 @@ def package(app_dir):
     log("creating tar.gz (preserves the executable bit)...")
     with tarfile.open(out, "w:gz") as t:
         t.add(app_dir, arcname="Cathode")
-        for top in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+        for top in ("README.md", "CHANGELOG.md", "LICENSE",
+                    "THIRD_PARTY_NOTICES.md"):
             p = os.path.join(ROOT, top)
             if os.path.exists(p):
                 t.add(p, arcname=f"Cathode/{top}")
