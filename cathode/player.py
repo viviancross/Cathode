@@ -47,6 +47,7 @@ class Player:
         mpv_path: str = "",      # explicit path to mpv(.exe), optional
         ar_delay: int = 300,     # ms before a held key repeats
         ar_rate: int = 8,        # held-key repeats per second
+        verbose_log: bool = False,   # mpv --msg-level=all=v (large log files)
     ):
         self.width = width
         self.height = height
@@ -66,6 +67,7 @@ class Player:
         self._extra_args = list(extra_args or [])
         self._ar_delay = int(ar_delay)
         self._ar_rate = int(ar_rate)
+        self._verbose_log = bool(verbose_log)
         self._mpv_log = os.path.join(runtime_dir, "mpv.log")
         self._proc_log = os.path.join(runtime_dir, "mpv-stdout.log")
 
@@ -210,10 +212,11 @@ class Player:
             "--title=Cathode",
             "--cache=yes",
             "--demuxer-max-bytes=64MiB",
-            # Verbose log to a file — invaluable for diagnosing Game Mode video
-            # problems where there's no terminal to read.
+            # Log to a file — invaluable for diagnosing Game Mode video problems
+            # where there's no terminal to read. Verbose only on request: an
+            # all=v log grows unbounded over hours of playback.
             f"--log-file={self._mpv_log}",
-            "--msg-level=all=v",
+            "--msg-level=all=v" if self._verbose_log else "--msg-level=all=info",
         ]
         args.append("--fullscreen=yes" if self.fullscreen else "--fullscreen=no")
         # Make Cathode's bundled fonts available to the subtitle renderer so the
@@ -571,7 +574,7 @@ class Player:
     def set_audio_device(self, name):
         self._set_property("audio-device", name or "auto")
 
-    def apply_sub_style(self, font=None, size=None, color=None):
+    def apply_sub_style(self, font=None, size=None, color=None, back=None):
         if font:
             self._set_property("sub-font", font)
             self._set_property("sub-ass-override", "force")   # apply to ASS subs too
@@ -579,6 +582,17 @@ class Player:
             self._set_property("sub-font-size", size)
         if color:
             self._set_property("sub-color", color)
+        if back is not None:
+            # back="" clears the box; a color enables it. Newer mpv needs
+            # sub-border-style=background-box for sub-back-color to show; on
+            # older builds the unknown property is a harmless IPC error and
+            # the back-color's alpha alone draws the box.
+            if back:
+                self._set_property("sub-back-color", back)
+                self._set_property("sub-border-style", "background-box")
+            else:
+                self._set_property("sub-back-color", "#00000000")
+                self._set_property("sub-border-style", "outline-and-shadow")
 
     ASPECTS = ["Original", "Stretch", "4:3", "16:9", "16:10"]
 

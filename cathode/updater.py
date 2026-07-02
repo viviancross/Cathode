@@ -10,28 +10,20 @@ Stdlib only (urllib + json + ssl; certifi if present, like cathode.plex).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
-import ssl
 import sys
+import urllib.error
 import urllib.request
 from typing import List, Optional, Tuple
+
+from .net import SSL as _SSL
 
 REPO = "viviancross/Cathode"
 _API = f"https://api.github.com/repos/{REPO}/releases/latest"
 _TIMEOUT = 15
-
-
-def _ssl_context() -> ssl.SSLContext:
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return ssl.create_default_context()
-
-
-_SSL = _ssl_context()
 
 
 def parse_version(s: str) -> Tuple[int, ...]:
@@ -115,6 +107,37 @@ def download(url: str, dest_dir: str, name: str = "",
     except Exception as e:
         raise UpdateError(str(e) or "Download failed.")
     return dest
+
+
+def find_checksum_asset(assets: List[dict], name: str) -> Optional[dict]:
+    """The '<name>.sha256' sidecar asset for a release file, or None if the
+    release doesn't publish one (verification is then skipped)."""
+    want = (name + ".sha256").lower()
+    for a in assets:
+        if a.get("name", "").lower() == want:
+            return a
+    return None
+
+
+def verify_sha256(path: str, checksum_url: str):
+    """Compare the downloaded file's sha256 against the sidecar's hex digest.
+    Raises UpdateError on mismatch or an unreadable/malformed sidecar."""
+    req = urllib.request.Request(checksum_url,
+                                 headers={"User-Agent": "Cathode-Updater"})
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL) as r:
+            text = r.read(4096).decode("utf-8", "replace")
+    except Exception as e:
+        raise UpdateError(f"Couldn't fetch the update checksum: {e}")
+    m = re.search(r"\b[0-9a-fA-F]{64}\b", text)
+    if not m:
+        raise UpdateError("The update checksum file is malformed.")
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    if h.hexdigest().lower() != m.group(0).lower():
+        raise UpdateError("The downloaded update failed checksum verification.")
 
 
 def install_dir() -> str:

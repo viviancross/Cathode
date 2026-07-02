@@ -473,33 +473,30 @@ class Renderer:
                 self._draw_download_progress(frame)
         self._push_to_mpv(frame)
 
+    def _overlay_dialogs(self, img: Image.Image) -> Image.Image:
+        """Composite the shared modal layers (menu, editor, keyboard) on top.
+        EVERY screen branch must end with this — a dialog that renders in one
+        context but not another becomes an invisible input trap."""
+        if self.menu.open:
+            img = Image.alpha_composite(img, self.menu.render())
+        if self.editor.open:
+            img = Image.alpha_composite(img, self.editor.render())
+        if self.osk.open:   # keyboard on top of everything
+            img = Image.alpha_composite(img, self.osk.render())
+        return img
+
     def _render(self) -> Image.Image:
         # ── Main menu / home screen (opaque, covers everything) ───────────
         if self.main_menu.open:
-            img = self.main_menu.render()
-            if self.menu.open:
-                img = Image.alpha_composite(img, self.menu.render())
-            if self.editor.open:
-                img = Image.alpha_composite(img, self.editor.render())
-            if self.osk.open:
-                img = Image.alpha_composite(img, self.osk.render())
-            return img
+            return self._overlay_dialogs(self.main_menu.render())
 
         # ── Plex-Per-View browse screen (opaque) ──────────────────────────
         if self.ppv.open:
-            img = self.ppv.render()
-            if self.menu.open:
-                img = Image.alpha_composite(img, self.menu.render())
-            if self.osk.open:
-                img = Image.alpha_composite(img, self.osk.render())
-            return img
+            return self._overlay_dialogs(self.ppv.render())
 
         # ── Plex item info screen (opaque) ────────────────────────────────
         if self.plexinfo.open:
-            img = self.plexinfo.render()
-            if self.menu.open:
-                img = Image.alpha_composite(img, self.menu.render())
-            return img
+            return self._overlay_dialogs(self.plexinfo.render())
 
         now_mono = time.monotonic()
 
@@ -520,12 +517,7 @@ class Renderer:
             )
             if self.crt_on:
                 guide_img = Image.alpha_composite(guide_img, self.scanlines)
-            if self.menu.open:
-                guide_img = Image.alpha_composite(guide_img, self.menu.render())
-            if self.editor.open:
-                guide_img = Image.alpha_composite(guide_img, self.editor.render())
-            if self.osk.open:   # keyboard on top of everything
-                guide_img = Image.alpha_composite(guide_img, self.osk.render())
+            guide_img = self._overlay_dialogs(guide_img)
             self._maybe_notify(guide_img)
             return guide_img
 
@@ -538,10 +530,7 @@ class Renderer:
                 frame = Image.alpha_composite(frame, self.scanlines)
             if self.vignette_on:
                 frame = Image.alpha_composite(frame, self.vignette)
-            if self.menu.open:
-                frame = Image.alpha_composite(frame, self.menu.render())
-            if self.osk.open:
-                frame = Image.alpha_composite(frame, self.osk.render())
+            frame = self._overlay_dialogs(frame)
             self._maybe_notify(frame)
             return frame
 
@@ -587,12 +576,7 @@ class Renderer:
             self._draw_menu_button(frame)
 
         # ── Context menu / theme editor / keyboard (on top of everything) ─
-        if self.menu.open:
-            frame = Image.alpha_composite(frame, self.menu.render())
-        if self.editor.open:
-            frame = Image.alpha_composite(frame, self.editor.render())
-        if self.osk.open:   # keyboard renders above the editor when naming
-            frame = Image.alpha_composite(frame, self.osk.render())
+        frame = self._overlay_dialogs(frame)
 
         self._maybe_notify(frame)
         return frame

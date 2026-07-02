@@ -46,6 +46,7 @@ def build():
         "--add-data", f"{os.path.join(ROOT, 'assets')}:assets",   # ':' on macOS
         "--add-data", f"{os.path.join(ROOT, 'LICENSES')}:LICENSES",
         "--add-data", f"{os.path.join(ROOT, 'README.md')}:.",
+        "--add-data", f"{os.path.join(ROOT, 'CHANGELOG.md')}:.",
         "--add-data", f"{os.path.join(ROOT, 'LICENSE')}:.",
         "--add-data", f"{os.path.join(ROOT, 'THIRD_PARTY_NOTICES.md')}:.",
     ]

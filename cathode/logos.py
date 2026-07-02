@@ -18,6 +18,10 @@ from PIL import Image
 
 
 class LogoStore:
+    _ORIG_MAX = 256      # full-size images kept in RAM (posters add up fast)
+    _RESIZED_MAX = 1024  # fitted variants; cleared wholesale when exceeded
+    _DISK_MAX = 400      # on-disk cache files; pruned oldest-first at startup
+
     def __init__(self, cache_dir: str, on_loaded: Optional[Callable] = None,
                  user_agent: str = "Cathode/1.0"):
         self.cache_dir = cache_dir
@@ -32,6 +36,25 @@ class LogoStore:
         self._inflight = set()
         self._auth: Dict[str, dict] = {}    # url -> extra request headers (e.g. Plex token)
         self._lock = threading.Lock()
+        threading.Thread(target=self._prune_disk, daemon=True).start()
+
+    def _prune_disk(self):
+        """Trim the on-disk cache to _DISK_MAX files, oldest (mtime) first, so
+        years of channel logos + Plex posters can't grow it without bound."""
+        try:
+            files = [os.path.join(self.cache_dir, f)
+                     for f in os.listdir(self.cache_dir)]
+            files = [f for f in files if os.path.isfile(f)]
+            if len(files) <= self._DISK_MAX:
+                return
+            files.sort(key=os.path.getmtime)
+            for p in files[:len(files) - self._DISK_MAX]:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        except OSError:
+            pass
 
     def get(self, url: str, max_w: int, max_h: int,
             headers: Optional[dict] = None) -> Optional[Image.Image]:
@@ -56,6 +79,8 @@ class LogoStore:
             return None
         fitted = self._fit(orig, max_w, max_h)
         with self._lock:
+            if len(self._resized) >= self._RESIZED_MAX:
+                self._resized.clear()   # ponytail: crude cap; re-fits are cheap
             self._resized[key] = fitted
         return fitted
 
@@ -101,6 +126,10 @@ class LogoStore:
             img = None
         with self._lock:
             self._orig[url] = img
+            while len(self._orig) > self._ORIG_MAX:
+                # dicts iterate in insertion order — evict the oldest; an
+                # evicted image reloads from the disk cache on next request.
+                self._orig.pop(next(iter(self._orig)))
             self._inflight.discard(url)
         if img is not None and self._on_loaded:
             try:

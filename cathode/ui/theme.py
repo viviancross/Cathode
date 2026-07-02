@@ -404,13 +404,20 @@ def get_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
 # heavy) only pays the rasterization cost once. Transparent for fast fonts.
 
 _TILE_CACHE: "OrderedDict" = OrderedDict()   # (cid,text,fill,sw,sf) -> RGBA tile
-_MEASURE_CACHE: dict = {}                     # (cid,text[,'wh']) -> width / (w,h)
+_MEASURE_CACHE: "OrderedDict" = OrderedDict()  # (cid,text[,'wh']) -> width / (w,h)
 _TEXT_CACHE_MAX = 4096
+_MEASURE_CACHE_MAX = 8192   # bounded: EPG titles churn daily on a long-running box
 
 
 def clear_text_cache():
     _TILE_CACHE.clear()
     _MEASURE_CACHE.clear()
+
+
+def _measure_put(k, v):
+    _MEASURE_CACHE[k] = v
+    if len(_MEASURE_CACHE) > _MEASURE_CACHE_MAX:
+        _MEASURE_CACHE.popitem(last=False)
 
 
 def measure(draw, text: str, font) -> float:
@@ -422,7 +429,7 @@ def measure(draw, text: str, font) -> float:
     v = _MEASURE_CACHE.get(k)
     if v is None:
         v = draw.textlength(text, font=font)
-        _MEASURE_CACHE[k] = v
+        _measure_put(k, v)
     return v
 
 
@@ -438,7 +445,7 @@ def text_wh(draw, text: str, font) -> tuple:
     if v is None:
         bb = draw.textbbox((0, 0), text, font=font)
         v = (bb[2] - bb[0], bb[3] - bb[1])
-        _MEASURE_CACHE[k] = v
+        _measure_put(k, v)
     return v
 
 
@@ -483,6 +490,14 @@ def draw_text(img, xy, text: str, font, fill, stroke_width: int = 0,
     img.alpha_composite(tile, (x, y))
 
 
+def fmt_hms(t) -> str:
+    """Seconds -> 'h:mm:ss' / 'm:ss'. Shared by the playback OSDs, the info
+    screen, and the resume prompt."""
+    t = max(0, int(t or 0))
+    h, m, s = t // 3600, (t % 3600) // 60, t % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
 def wrap_lines(draw, text: str, font, max_w: int, max_lines: int = 2) -> list:
     """Word-wrap `text` into at most `max_lines` lines that each fit `max_w` px.
     Overflow past the last line is folded into it and ellipsized; an over-wide
@@ -516,7 +531,7 @@ def ellipsize(draw, text: str, font, max_w: int) -> str:
     try:
         if measure(draw, text, font) <= max_w:
             return text
-        ell = "…"
+        ell = "..."   # ASCII — the bundled pixel fonts have no U+2026 glyph
         t = text
         while t and measure(draw, t + ell, font) > max_w:
             t = t[:-1]

@@ -13,8 +13,8 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, ellipsize, wrap_lines, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN,
-    YELLOW, GRAY, CHANNEL_GREEN, GUIDE_SELECTED,
+    get_font, ellipsize, fmt_hms, wrap_lines, OSD_BG, OSD_BORDER, WHITE,
+    WHITE_DIM, CYAN, YELLOW, GRAY, CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 # Button sets per item kind. "show" = a TV series; "episode" = a single
@@ -154,7 +154,7 @@ class PlexInfoScreen:
             ty += self._th(d, "Ag", self.f_sub) + 14
         off = self.data.get("offset", 0)
         if off and off > 5:
-            d.text((tx, ty), f"Resume at {self._ts(off)}", font=self.f_body, fill=YELLOW)
+            d.text((tx, ty), f"Resume at {fmt_hms(off)}", font=self.f_body, fill=YELLOW)
             ty += self._th(d, "Ag", self.f_body) + 12
         self._wrap(d, self.data.get("summary", ""), self.f_body,
                    tx, ty, self.width - tx - m, WHITE_DIM)
@@ -195,11 +195,6 @@ class PlexInfoScreen:
                 line = test
         if line:
             d.text((x, y), line, font=font, fill=color)
-
-    @staticmethod
-    def _ts(s):
-        s = max(0, int(s)); h, m, sec = s // 3600, (s % 3600) // 60, s % 60
-        return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
 
     def _center_in(self, d, text, font, x0, y0, x1, y1, color):
         bb = d.textbbox((0, 0), text, font=font)

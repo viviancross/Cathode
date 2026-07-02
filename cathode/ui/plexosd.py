@@ -17,8 +17,8 @@ from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, ellipsize, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW,
-    CHANNEL_GREEN, GUIDE_SELECTED,
+    get_font, ellipsize, fmt_hms, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN,
+    YELLOW, CHANNEL_GREEN, GUIDE_SELECTED,
 )
 
 # focus order (left→right, timeline first). `prev`/`next` skip to the previous /
@@ -27,12 +27,6 @@ ITEMS = ["timeline", "prev", "back10", "playpause", "stop", "fwd10", "next",
          "volume", "menu"]
 _LABELS = {"prev": "|<<", "back10": "<< 10", "playpause": "PAUSE", "stop": "STOP",
            "fwd10": "10 >>", "next": ">>|"}
-
-
-def _fmt(t: float) -> str:
-    t = max(0, int(t or 0))
-    h, m, s = t // 3600, (t % 3600) // 60, t % 60
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 class PlexOSD:
@@ -204,9 +198,9 @@ class PlexOSD:
         # Timeline
         tx0, ty0, tx1, ty1 = self._timeline_rect()
         midy = (ty0 + ty1) // 2
-        d.text((x0 + pad, midy - self.f_time.size // 2), _fmt(self.pos),
+        d.text((x0 + pad, midy - self.f_time.size // 2), fmt_hms(self.pos),
                font=self.f_time, fill=WHITE_DIM)
-        du = _fmt(self.dur)
+        du = fmt_hms(self.dur)
         duw = d.textbbox((0, 0), du, font=self.f_time)[2]
         d.text((x1 - pad - duw, midy - self.f_time.size // 2), du,
                font=self.f_time, fill=WHITE_DIM)

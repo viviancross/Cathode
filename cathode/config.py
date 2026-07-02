@@ -59,6 +59,7 @@ class Config:
     sub_font: str = ""             # font key (blank = mpv default sans-serif)
     sub_size: int = 38             # mpv sub-font-size
     sub_color: str = "#FFFFFFFF"   # mpv sub-color (#AARRGGBB)
+    sub_back: str = ""             # mpv sub-back-color (#AARRGGBB; blank = no box)
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance
@@ -108,6 +109,10 @@ class Config:
     # isn't on PATH. Empty = auto-detect.
     mpv_path: str = ""
 
+    # Verbose mpv logging to mpv.log. Off by default — verbose logs grow
+    # unbounded over long sessions; turn on when diagnosing video problems.
+    mpv_verbose_log: bool = False
+
     def __post_init__(self):
         # Serialises save() — many Plex background threads call config.save().
         self._save_lock = threading.Lock()
@@ -143,6 +148,12 @@ class Config:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp, self._path)
+                if os.name != "nt":
+                    try:
+                        # The config holds Plex tokens — keep it owner-only.
+                        os.chmod(self._path, 0o600)
+                    except OSError:
+                        pass
             except Exception as e:
                 print(f"[config] Warning: could not save config: {e}")
                 try:

@@ -126,7 +126,8 @@ def package(app_dir):
                 n += 1
         # Ship the README + license notices alongside the binary (offline docs +
         # GPL/OFL/CC compliance for the bundled mpv and fonts).
-        for top in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+        for top in ("README.md", "CHANGELOG.md", "LICENSE",
+                    "THIRD_PARTY_NOTICES.md"):
             p = os.path.join(ROOT, top)
             if os.path.exists(p):
                 z.write(p, f"Cathode/{top}")
