@@ -13,7 +13,7 @@ from .player import Player
 from . import playlist as m3u
 from .epg import EPG
 from .playlist import Channel
-from .ui.renderer import Renderer, UIState
+from .ui.renderer import Renderer, UIState, fit_aspect
 from .ui import theme
 from .ui.menu import MenuItem
 from .app_menus import MenusMixin
@@ -50,9 +50,20 @@ class App(PlexMixin, MenusMixin):
         start_channel: Optional[int] = None,
         demo: bool = False,
         mpv_backend: str = "auto",
+        connection=None,             # how to reach mpv; see cathode/mpvconn.py
+        ui_max_aspect: float = 0.0,  # platform default; config overrides it
+        ui_min_aspect: float = 0.0,  # ditto, guarding the portrait end
     ):
         self.config     = config
-        self.width      = width
+        # Config wins over the platform's suggestion, so a user who wants the
+        # interface edge to edge on a wide screen can still have it.
+        self._ui_aspect = float(config.ui_max_aspect or ui_max_aspect or 0.0)
+        self._ui_min_aspect = float(config.ui_min_aspect or ui_min_aspect or 0.0)
+        self._surface_size = (width, height)   # the whole display
+        width, height, ox, oy = fit_aspect(width, height, self._ui_aspect,
+                                           self._ui_min_aspect)
+        self._ui_origin = (ox, oy)
+        self.width      = width       # the UI's size, which may be inset
         self.height     = height
         self.demo       = demo
         self.channels:  List[Channel] = []
@@ -100,6 +111,7 @@ class App(PlexMixin, MenusMixin):
             ar_delay=config.nav_repeat_delay,
             ar_rate=config.nav_repeat_rate,
             verbose_log=config.mpv_verbose_log,
+            connection=connection,
         )
         self._fullscreen = fullscreen   # tracked so Esc can exit fullscreen
         self._active_profile = None     # last-applied look profile (for editor "Save")
@@ -119,8 +131,9 @@ class App(PlexMixin, MenusMixin):
         self._plex_now_rk = ""          # ratingKey of the item playing now
         self._plex_info_data = None     # detail dict for the info screen
         self._plex_info_kind = "default"  # button set for the info screen (show/episode/default)
-        self._plex_queue = []           # ordered ratingKeys (Play All / Shuffle)
-        self._plex_queue_pos = 0        # index of the item playing now
+        self._plex_queue = []           # [{rating_key, title, subtitle}] play queue
+        self._plex_queue_pos = 0        # index of the item playing now (-1 = none)
+        self._plex_queue_user = False   # built by hand, so a one-off play keeps it
         self._plex_last_report = 0.0    # monotonic ts of last timeline heartbeat
         self._plex_lock = threading.Lock()   # guards PlexClient access/rebuild
         self._plex_markers = []         # intro/credits ranges for the item playing now
@@ -134,8 +147,14 @@ class App(PlexMixin, MenusMixin):
             scanline_alpha=config.scanline_alpha,
             epg_hours=config.guide_hours,
         )
+        # The UI may be drawn into a centred box inside the display; the
+        # renderer needs both to place the overlay and to convert the guide's
+        # preview box into mpv's surface-relative margins.
+        self.renderer.overlay_pos = self._ui_origin
+        self.renderer.surface_size = self._surface_size
         self.renderer.crt_on = bool(config.crt_enabled)
         self.renderer.vignette_on = bool(config.vignette_enabled)
+        self.renderer.reduce_motion = not bool(config.motion_enabled)
 
         # Favorite channels (persisted set of channel numbers) → guide category
         self._favorites = set(int(n) for n in (config.favorites or []))
@@ -148,6 +167,9 @@ class App(PlexMixin, MenusMixin):
             on_loaded=self.renderer.mark_dirty,
             user_agent=config.user_agent)
         self.renderer.plexinfo.logos = self.renderer.logos   # posters
+        self.renderer.ppv.logos = self.renderer.logos        # poster wall tiles
+        self.renderer.ppv.view = (config.ppv_view
+                                  if config.ppv_view in ("list", "wall") else "list")
 
         # Current weather for the guide header (off unless a zip is configured)
         from .weather import Weather
@@ -206,9 +228,13 @@ class App(PlexMixin, MenusMixin):
 
         # Native gamepad input (XInput on Windows, /dev/input/js* on Linux) —
         # used on every build instead of mpv's SDL gamepad.
+        # The button map translates action names to handlers, and the native
+        # reader is only one thing that can emit those names. Building it only
+        # alongside the reader left _gamepad_action raising AttributeError on
+        # every press whenever the reader was switched off.
+        self._build_gamepad_buttons()
         self._gamepad_reader = None
         if self.config.gamepad:
-            self._build_gamepad_buttons()
             from .gamepad import GamepadReader
             self._gamepad_reader = GamepadReader(self._gamepad_action)
             self._gamepad_reader.start()
@@ -221,7 +247,9 @@ class App(PlexMixin, MenusMixin):
         if self.demo:
             self._tune(self._initial_channel_idx(), initial=True)
         elif self.config.main_menu_on_launch or not self.config.playlist_url:
-            self.renderer.main_menu.show(self._main_menu_select)
+            self._show_home()
+            if not self.config.playlist_url and not self.config.setup_done:
+                self._setup_wizard()          # first run ever — offer setup
             self.renderer.update()
             self._sync_nav_repeat()
         else:
@@ -270,21 +298,27 @@ class App(PlexMixin, MenusMixin):
 
         # Safety net: if the stream never produces a frame, reveal anyway.
         self._tune_timeout = threading.Timer(
-            self.config.tune_timeout, self._finish_tune,
+            self.config.tune_timeout, self._finish_tune, args=(True,),
         )
         self._tune_timeout.daemon = True
         self._tune_timeout.start()
 
     def _on_playback_started(self):
         """mpv displayed the first frame of the newly-loaded stream."""
+        # A frame arriving late (after the timeout) replaces the stand-by card.
+        self.renderer.clear_standby()
         self._finish_tune()
 
-    def _finish_tune(self):
+    def _finish_tune(self, timed_out: bool = False):
         """Reveal the new channel (fade the static out)."""
         if not self._awaiting_playback:
             return
         self._awaiting_playback = False
         self._cancel_tune_timeout()
+        if timed_out:
+            # Dead stream: fade the static into a PLEASE STAND BY card
+            # instead of dead air. Cleared when a frame finally arrives.
+            self.renderer.standby = True
         self.renderer.reveal_channel(osd_timeout=self.config.osd_timeout)
         self.renderer.update()
 
@@ -504,6 +538,13 @@ class App(PlexMixin, MenusMixin):
     def _activate_highlighted(self):
         r = self.renderer
         owner = self._focus_owner()   # "osk" is handled by _grid_select
+        if self._digit_buf and owner in ("live", "guide"):
+            # A typed channel number is pending — Enter/A tunes it now
+            # instead of waiting out the entry timeout.
+            if self._digit_timer:
+                self._digit_timer.cancel()
+            self._commit_digits()
+            return
         if owner == "editor":
             r.editor.press(); r.mark_dirty()
         elif owner == "menu":
@@ -657,7 +698,9 @@ class App(PlexMixin, MenusMixin):
         if mode == self._input_mode:
             return
         self._input_mode = mode
+        self.renderer.input_mode = mode
         self.renderer.ppv.input_mode = mode
+        self.renderer.osk.input_mode = mode
         self.renderer.mark_dirty()
 
     def _after_key(self):
@@ -840,6 +883,9 @@ class App(PlexMixin, MenusMixin):
                 r.menu.activate()
                 self._after_menu_action()
         elif owner == "main_menu":
+            if r.main_menu.hit_logo(x, y):
+                r.degauss()          # CRT degauss easter egg
+                return
             r.main_menu.click(x, y)
             r.mark_dirty()
         elif owner == "ppv":
@@ -1074,6 +1120,12 @@ class App(PlexMixin, MenusMixin):
         # Runs on the IPC reader thread for EVERY mouse move — must stay cheap.
         # Only update hover state and request a coalesced repaint; never render
         # here (that would flood the reader and freeze input).
+        #
+        # Pointer coordinates arrive in the display's space. The UI may be drawn
+        # into a centred box inside that, so shift them into the UI's space or
+        # every hit test is off by the margin.
+        ox, oy = self._ui_origin
+        x, y = x - ox, y - oy
         self._last_mouse = (x, y)
         self._set_input_mode("key")
         r = self.renderer
@@ -1174,6 +1226,12 @@ class App(PlexMixin, MenusMixin):
 
     # ── Main menu / home screen ───────────────────────────────────────────
 
+    def _show_home(self):
+        """Show the home screen; with no playlist configured it grows a
+        'Demo Channels' button plus a first-run hint line."""
+        self.renderer.main_menu.demo_hint = not self.config.playlist_url
+        self.renderer.main_menu.show(self._main_menu_select)
+
     def _open_main_menu(self):
         """Return to the home screen (from the context menu / leave prompt)."""
         self._plex_end()
@@ -1181,7 +1239,7 @@ class App(PlexMixin, MenusMixin):
         self.renderer.plexinfo.close()
         self.renderer.ppv.close()
         self.renderer.menu.close()
-        self.renderer.main_menu.show(self._main_menu_select)
+        self._show_home()
         self.renderer.update()
 
     def _main_menu_select(self, key: str):
@@ -1189,12 +1247,26 @@ class App(PlexMixin, MenusMixin):
             self._main_new_playlist()
         elif key == "load":
             self._main_load_playlist()
+        elif key == "demo":
+            self._start_demo()
         elif key == "plex":
             self._open_ppv()
         elif key == "options":
             self._main_options()
         elif key == "exit":
             self._quit_app()
+
+    def _start_demo(self):
+        """Load the built-in test-pattern channels from the home screen (same
+        set as the --demo flag) so a fresh install has something to play."""
+        from . import demo
+        self.channels = demo.build_channels(self.width, self.height)
+        self.epg = demo.build_epg(self.channels)
+        self.renderer.channels = self.channels
+        self.renderer.epg = self.epg
+        self._rebuild_categories()
+        self.renderer.main_menu.close()
+        self._tune(self._initial_channel_idx(), initial=True)
 
     def _main_new_playlist(self):
         pl = self._add_playlist_dialog()      # OSK prompts (over the home screen)
@@ -1243,7 +1315,7 @@ class App(PlexMixin, MenusMixin):
         ok = self._load_playlist_interactive()
         if not ok or not self.channels:
             # Backed out or nothing loaded — stay on the home screen.
-            self.renderer.main_menu.show(self._main_menu_select)
+            self._show_home()
             self.renderer.update()
             return
         self.renderer.channels = self.channels
@@ -1277,14 +1349,14 @@ class App(PlexMixin, MenusMixin):
             if self._plex_queue and self._plex_queue_pos + 1 < len(self._plex_queue):
                 self._plex_report("stopped", finished=True)
                 self._cache_offset(self._plex_now_rk, 0)
-                self._plex_queue_pos += 1
-                nxt = self._plex_queue[self._plex_queue_pos]
+                nxt = self._plex_queue_pos + 1
                 threading.Thread(
-                    target=lambda: self._ppv_play(nxt, "", resume=False,
-                                                  keep_queue=True),
+                    target=lambda: self._plex_play_queue_at(nxt),
                     daemon=True).start()
                 return
             self._plex_queue = []        # queue exhausted (or single item)
+            self._plex_queue_user = False
+            self._plex_queue_pos = 0
             # Reached the end: mark watched and return to the info screen instead
             # of pausing on a black frame.
             threading.Thread(target=self._plex_finished, daemon=True).start()
@@ -1302,10 +1374,18 @@ class App(PlexMixin, MenusMixin):
         """mpv reported its real window size — re-render the UI to match."""
         if self._quit:
             return
+        # mpv reports the whole surface; the UI may be drawn into a narrower
+        # box inside it, so fit before comparing or resizing.
+        surface = (w, h)
+        w, h, ox, oy = fit_aspect(w, h, self._ui_aspect, self._ui_min_aspect)
         if w == self.renderer.width and h == self.renderer.height:
             return
         print(f"[cathode] Render resolution -> {w}x{h}")
         self.width, self.height = w, h
+        self._surface_size = surface
+        self._ui_origin = (ox, oy)
+        self.renderer.overlay_pos = (ox, oy)
+        self.renderer.surface_size = surface
         self.renderer.resize(w, h)
         self.renderer.update()
 
@@ -1317,6 +1397,9 @@ class App(PlexMixin, MenusMixin):
             self._digit_timer.cancel()
         if getattr(self, "_gamepad_reader", None):
             self._gamepad_reader.stop()
+        # The tube goes dark before the overlay is torn down and mpv is killed —
+        # after this point there is no surface left to draw the collapse on.
+        self.renderer.power_off()
         self.renderer.stop()
         self.player.terminate()
         # A downloaded update installs now (after we exit), so the next launch
@@ -1341,7 +1424,7 @@ class App(PlexMixin, MenusMixin):
             err = ""
             if url:
                 print("[cathode] Loading playlist…")
-                self.renderer.show_notification("Loading playlist…", 120.0)
+                self.renderer.show_notification("Loading playlist...", 120.0)
                 try:
                     chans = m3u.load(url, user_agent=self.config.user_agent)
                     if chans:

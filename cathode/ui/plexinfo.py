@@ -14,22 +14,29 @@ from PIL import Image, ImageDraw
 
 from .theme import (
     get_font, ellipsize, fmt_hms, wrap_lines, OSD_BG, OSD_BORDER, WHITE,
-    WHITE_DIM, CYAN, YELLOW, GRAY, CHANNEL_GREEN, GUIDE_SELECTED,
+    WHITE_DIM, CYAN, YELLOW, INK_MUTED, BTN_PRIMARY_BG, BTN_PRIMARY_TEXT,
+    CHANNEL_GREEN, GUIDE_SELECTED, SEL_TEXT, SCREEN_BG,
 )
 
 # Button sets per item kind. "show" = a TV series; "episode" = a single
 # episode (no watchlist — Plex only watchlists at the series level); movies and
 # other videos use the default play/watchlist/back.
 BUTTON_SETS = {
-    "show": ["playall", "seasons", "shuffle", "watchlist", "back"],
-    "episode": ["play", "back"],
-    "default": ["play", "watchlist", "back"],
+    "show": ["playall", "seasons", "shuffle", "queue", "watchlist", "back"],
+    "episode": ["play", "queue", "back"],
+    "default": ["play", "queue", "watchlist", "back"],
 }
 
 LABELS = {
     "play": "PLAY", "playall": "PLAY ALL", "seasons": "SEASONS",
-    "shuffle": "SHUFFLE", "back": "BACK",
+    "shuffle": "SHUFFLE", "queue": "+ QUEUE", "back": "BACK",
 }
+
+# The one action this page exists for. It keeps an accent border and full-
+# strength label even while the cursor is elsewhere, so "what does this page
+# want me to do" survives moving the focus off it. Focus is still the fill —
+# primacy and focus are different questions and need different answers.
+PRIMARY = {"play", "playall"}
 
 
 def _fmt(t: float) -> str:
@@ -55,7 +62,8 @@ class PlexInfoScreen:
         self.f_title = get_font(max(22, int(h * 0.050)))
         self.f_sub = get_font(max(13, int(h * 0.028)))
         self.f_body = get_font(max(12, int(h * 0.026)))
-        self.f_btn = get_font(max(14, int(h * 0.030)))
+        # Buttons have no fixed font: the row shrinks it to fit (_fitted_btn_font).
+        self.btn_size = max(14, int(h * 0.030))
 
     def resize(self, w, h):
         self.width, self.height = w, h
@@ -87,8 +95,10 @@ class PlexInfoScreen:
         bh = max(40, int(self.height * 0.075))
         # Shrink button width so the whole row fits when there are many buttons.
         avail = int(self.width * 0.94)
-        bw = max(120, min(int(self.width * 0.17),
-                          (avail - gap * (n - 1)) // max(1, n)))
+        # Floor is 80px, not a comfortable 120 — a six-button show page still has
+        # to fit on a 640-wide window.
+        bw = max(80, min(int(self.width * 0.17),
+                         (avail - gap * (n - 1)) // max(1, n)))
         total = bw * n + gap * (n - 1)
         x0 = (self.width - total) // 2
         y = self.height - bh - int(self.height * 0.08)
@@ -116,7 +126,7 @@ class PlexInfoScreen:
         if not self.open:
             return img
         d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, self.width, self.height], fill=(6, 6, 12, 255))
+        d.rectangle([0, 0, self.width, self.height], fill=SCREEN_BG)
         m = max(20, int(self.width * 0.04))
 
         # Poster (left)
@@ -134,7 +144,7 @@ class PlexInfoScreen:
             d.rectangle([px, py, px + pw, py + ph],
                         fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
                         outline=OSD_BORDER, width=2)
-            self._center_in(d, "NO ART", self.f_sub, px, py, px + pw, py + ph, GRAY)
+            self._center_in(d, "NO ART", self.f_sub, px, py, px + pw, py + ph, INK_MUTED)
 
         # Text column (right)
         tx = px + pw + m
@@ -161,20 +171,43 @@ class PlexInfoScreen:
 
         # Buttons
         wl_label = "- WATCHLIST" if self.watchlisted else "+ WATCHLIST"
-        for (i, ax0, ay0, ax1, ay1) in self._button_rects():
-            bid = self.buttons[i]
-            label = wl_label if bid == "watchlist" else LABELS.get(bid, bid.upper())
+        labels = [wl_label if b == "watchlist" else LABELS.get(b, b.upper())
+                  for b in self.buttons]
+        rects = self._button_rects()
+        f_btn = self._fitted_btn_font(d, labels,
+                                      rects[0][3] - rects[0][1] if rects else 0)
+        for (i, ax0, ay0, ax1, ay1) in rects:
+            label = labels[i]
             sel = (i == self.focus)
+            primary = self.buttons[i] in PRIMARY
             fill = (GUIDE_SELECTED[0], GUIDE_SELECTED[1], GUIDE_SELECTED[2], 255) \
                 if sel else (OSD_BG[0], OSD_BG[1], OSD_BG[2], 255)
+            if sel:
+                outline, width, ink = CHANNEL_GREEN, 3, SEL_TEXT
+            elif primary:
+                fill = (BTN_PRIMARY_BG[0], BTN_PRIMARY_BG[1],
+                        BTN_PRIMARY_BG[2], 255)
+                outline, width, ink = CYAN, 2, BTN_PRIMARY_TEXT
+            else:
+                outline, width, ink = OSD_BORDER, 2, WHITE_DIM
             d.rounded_rectangle([ax0, ay0, ax1, ay1], radius=8, fill=fill,
-                                outline=CHANNEL_GREEN if sel else OSD_BORDER,
-                                width=3 if sel else 2)
-            self._center_in(d, label, self.f_btn, ax0, ay0, ax1, ay1,
-                            WHITE if sel else WHITE_DIM)
+                                outline=outline, width=width)
+            self._center_in(d, label, f_btn, ax0, ay0, ax1, ay1, ink)
         return img
 
     # ── helpers ───────────────────────────────────────────────────────────
+
+    def _fitted_btn_font(self, d, labels, bw):
+        """Largest button font whose widest label still fits inside a button.
+        Labels are centered, so an overflowing one spills over its neighbours —
+        a six-button series page in a wide pixel font does exactly that."""
+        size = self.btn_size
+        while size > 9:
+            f = get_font(size)
+            if max(d.textlength(t, font=f) for t in labels) <= bw - 12:
+                return f
+            size -= 1
+        return get_font(10)
 
     def _wrap(self, d, text, font, x, y, maxw, color):
         if not text:

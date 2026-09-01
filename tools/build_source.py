@@ -7,6 +7,7 @@ cleanly on Linux. Bundles the Linux/SteamOS (install.sh) and macOS
 """
 
 import fnmatch
+import hashlib
 import os
 import sys
 import zipfile
@@ -29,13 +30,27 @@ TREE_DIRS = ["cathode", "assets", "tools", "LICENSES"]
 EXCLUDE_DIRS = {"__pycache__", "_winbuild", "_linuxbuild", "_macbuild",
                 "preview_out", ".git"}
 EXCLUDE_PATTERNS = ["*.pyc", "*.pyo", "*.zip"]
-# Windows-install files never belong in the Linux build.
-EXCLUDE_NAMES = {"install-windows.ps1", "cathode.bat"}
+# Windows-install files never belong in the Linux build; make_steam_art.py is
+# a local Steam-library asset helper, not part of the app.
+EXCLUDE_NAMES = {"install-windows.ps1", "cathode.bat", "make_steam_art.py"}
 
 
 def _excluded(name):
     return (name in EXCLUDE_NAMES
             or any(fnmatch.fnmatch(name, p) for p in EXCLUDE_PATTERNS))
+
+
+def write_sha256(path):
+    """Write the '<zip>.sha256' sidecar the in-app updater verifies against
+    (sha256sum format: '<hex digest>  <filename>')."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    side = path + ".sha256"
+    with open(side, "w") as f:
+        f.write(f"{h.hexdigest()}  {os.path.basename(path)}\n")
+    print(f"[build] sha256 -> {side}")
 
 
 def main():
@@ -67,6 +82,7 @@ def main():
                     z.write(full, arc)
                     n += 1
 
+    write_sha256(out)
     mb = os.path.getsize(out) / 1024 / 1024
     print(f"[build] DONE -> {out}  ({n} files, {mb:.2f} MB)")
 

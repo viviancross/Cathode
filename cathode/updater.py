@@ -1,9 +1,14 @@
 """Update check via GitHub Releases — notify + download, never self-overwrite.
 
-Queries the repo's latest release, compares its tag to the running version, and
-(when newer) downloads the asset matching this platform/build into a folder.
-The app then tells the user where it is; installing is manual on purpose, so a
-running Cathode.exe / live Deck install is never clobbered.
+Queries the repo's releases, compares the newest mainline tag to the running
+version, and (when newer) downloads the asset matching this platform/build into
+a folder. The app then tells the user where it is; installing is manual on
+purpose, so a running Cathode.exe / live Deck install is never clobbered.
+
+The port branches (Android, Tizen, PS2, Miyoo) publish to this same repo, so
+this module is deliberately narrow about what counts as an update for the
+desktop app: only a bare version tag, and only an asset named with the desktop
+build's own prefix. See `is_mainline_tag` and `_asset_match`.
 
 Stdlib only (urllib + json + ssl; certifi if present, like cathode.plex).
 """
@@ -22,8 +27,16 @@ from typing import List, Optional, Tuple
 from .net import SSL as _SSL
 
 REPO = "viviancross/Cathode"
-_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+# The release LIST, not /releases/latest. GitHub's "latest" is whichever release
+# was published most recently regardless of its tag, so a port release
+# (android-v3.1, tizen-v3.1) would be handed to the desktop app as its own
+# update. Filtering the list by tag shape is what keeps the ports invisible.
+_API = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
 _TIMEOUT = 15
+
+# A mainline desktop release: a bare version, optionally v-prefixed. Anything
+# carrying a platform prefix or suffix is another build's release, not ours.
+_MAINLINE_TAG = re.compile(r"^v?\d+(?:\.\d+)*$", re.I)
 
 
 def parse_version(s: str) -> Tuple[int, ...]:
@@ -31,6 +44,13 @@ def parse_version(s: str) -> Tuple[int, ...]:
     '2.0.5' -> (2,0,5). No digits -> () (treated as not-newer)."""
     nums = re.findall(r"\d+", s or "")
     return tuple(int(n) for n in nums)
+
+
+def is_mainline_tag(tag: str) -> bool:
+    """True for a desktop release tag ('v3.0', '3.0.1'), false for a port's
+    ('android-v3.0', 'v3.0-tizen', 'nightly'). Port builds share this repo's
+    releases page; the desktop updater must not offer one as an update."""
+    return bool(_MAINLINE_TAG.match((tag or "").strip()))
 
 
 def is_newer(remote: str, local: str) -> bool:
@@ -44,33 +64,58 @@ class UpdateError(Exception):
 
 def _asset_match(name: str) -> bool:
     """Pick the release asset for this OS: Windows gets the portable Windows zip;
-    the Deck, Linux, and macOS all use the cathode-linux-macos source zip."""
+    the Deck, Linux, and macOS all use the cathode-linux-macos source zip.
+
+    Matched on the desktop build's full filename prefix, not on a loose
+    substring. A port release that happened to carry its own windows zip would
+    otherwise be downloaded and staged over the desktop install."""
     n = name.lower()
+    # The sidecar shares the build's whole name, so it matches every prefix the
+    # build does. Today it loses only because the zip happens to sort first.
+    if n.endswith(".sha256"):
+        return False
     if os.name == "nt":
-        return "windows" in n
-    return "linux-macos" in n
+        return n.startswith("cathode-windows-")
+    return n.startswith("cathode-linux-macos-")
+
+
+def _release_entry(data: dict) -> dict:
+    assets = [{"name": a.get("name", ""), "url": a.get("browser_download_url", ""),
+               "size": a.get("size", 0)}
+              for a in (data.get("assets") or []) if a.get("browser_download_url")]
+    return {"tag": data.get("tag_name", ""), "assets": assets}
 
 
 def check_latest() -> Optional[dict]:
-    """Return {tag, assets:[{name,url,size}]} for the latest release, or None if
-    the repo has no releases. Raises UpdateError on network/parse failure."""
+    """Return {tag, assets:[{name,url,size}]} for the newest MAINLINE release, or
+    None if the repo publishes none. Raises UpdateError on network/parse failure.
+
+    Drafts, prereleases and the port builds' releases are all skipped, and the
+    winner is the highest version rather than the most recently published one —
+    publishing a 2.9 patch after 3.0 must not roll anybody back."""
     req = urllib.request.Request(_API, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "Cathode-Updater",
     })
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL) as r:
-            data = json.loads(r.read() or b"{}")
+            data = json.loads(r.read() or b"[]")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None               # no releases published yet
         raise UpdateError(f"GitHub returned {e.code}.")
     except Exception as e:
         raise UpdateError(str(e) or "Couldn't reach GitHub.")
-    assets = [{"name": a.get("name", ""), "url": a.get("browser_download_url", ""),
-               "size": a.get("size", 0)}
-              for a in (data.get("assets") or []) if a.get("browser_download_url")]
-    return {"tag": data.get("tag_name", ""), "assets": assets}
+    if not isinstance(data, list):
+        raise UpdateError("GitHub returned an unexpected response.")
+    mainline = [r for r in data
+                if isinstance(r, dict)
+                and not r.get("draft") and not r.get("prerelease")
+                and is_mainline_tag(r.get("tag_name", ""))]
+    if not mainline:
+        return None
+    return _release_entry(max(mainline,
+                              key=lambda r: parse_version(r.get("tag_name", ""))))
 
 
 def pick_asset(assets: List[dict]) -> Optional[dict]:
@@ -212,4 +257,7 @@ if __name__ == "__main__":   # tiny self-check (no network)
     assert not is_newer("2.0", "2.0")
     assert not is_newer("1.9", "2.0")
     assert not is_newer("bad", "2.0")
+    assert is_mainline_tag("v3.0") and is_mainline_tag("3.0.1")
+    assert not is_mainline_tag("android-v3.0")
+    assert not is_mainline_tag("v3.0-tizen")
     print("updater self-check OK")

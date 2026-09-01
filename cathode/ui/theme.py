@@ -29,11 +29,81 @@ def _mix(a, b, t=0.5):
     return tuple(int(a[i] * (1 - t) + b[i] * t) for i in range(3))
 
 
+def _lum(rgb) -> float:
+    """WCAG relative luminance of an sRGB color."""
+    def f(c):
+        c /= 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2])
+
+
+def contrast(a, b) -> float:
+    """WCAG contrast ratio between two colors (1..21)."""
+    la, lb = _lum(a), _lum(b)
+    hi, lo = (la, lb) if la >= lb else (lb, la)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _ink(cell, light, dark, target=3.0):
+    """Text color readable on the `cell` fill. Keeps the theme's light text
+    when it clears `target` (guide cells are large by WCAG terms, hence 3:1);
+    otherwise whichever ink contrasts more — light accents (mono, ice) turn
+    selection fills near-white, where fixed white text was unreadable.
+
+    Callers whose text is not reliably large pass a higher target: button
+    labels shrink to fit their box, so a six-button row can land near 10px."""
+    if contrast(cell, light) >= target:
+        return light
+    return dark if contrast(cell, dark) > contrast(cell, light) else light
+
+
+def _muted(bg, text, target=4.5):
+    """Secondary-text ink for this theme: the theme's own ink walked toward
+    legibility over its own panel ground, rather than a fixed gray.
+
+    Solved, not chosen. The flat (130,130,140) this replaces measured 3.15:1 on
+    c64 and 4.4:1 on amber/green — under the 4.5:1 body bar on three of nine
+    shipped themes — and being a cool gray it also read as another app's text
+    inside Amber CRT's warm world. Solving per theme also covers the custom
+    palettes the theme editor can build, which no fixed value could.
+    """
+    cand = _mix(bg, text, 0.55)
+    for i in range(11, 21):                  # 0.55 .. 1.00 in twentieths
+        cand = _mix(bg, text, i / 20)
+        if contrast(bg, cand) >= target:
+            break
+    return cand
+
+
+def _primary_bg(bg, accent, ink_d, text, target=4.5):
+    """Ground for the primary button: the panel tinted toward the accent, at
+    whatever strength still leaves the theme's own ink readable on it.
+
+    Tries the accent tint first and darkens instead when no tint can work. On
+    c64 the entire palette is one periwinkle at one lightness, so tinting
+    toward the accent walks the ground *into* the text and measures 3.6:1;
+    there the deliberate answer is a recessed ground rather than a brighter
+    one, which still separates primary from the secondaries' flat panel.
+    """
+    for f in (0.30, 0.22, 0.14):
+        cand = _mix(bg, accent, f)
+        if contrast(cand, text) >= target:
+            return cand
+    for f in (0.25, 0.40, 0.55):
+        cand = _mix(bg, ink_d, f)
+        if contrast(cand, text) >= target:
+            return cand
+    return _mix(bg, ink_d, 0.55)
+
+
 def _build(bg, accent, accent2, hot, text=(255, 255, 255),
            chnum=(40, 255, 90)):
     """Derive a full color set from a few base hues."""
     bg_d = _shift(bg, -18)
     bg_l = _shift(bg, 42)
+    sel = _mix(bg, accent, 0.65)
+    onair = _mix(bg, accent, 0.80)
+    ink_d = _mix(bg_d, (0, 0, 0), 0.5)   # darkest theme tone, for light fills
     return {
         # Channel-number color (vibrant green by default; editable per theme).
         "CHANNEL_GREEN": _a(chnum, 255),
@@ -50,6 +120,30 @@ def _build(bg, accent, accent2, hot, text=(255, 255, 255),
         "GREEN":       (60, 235, 110, 255),
         "GRAY":        (130, 130, 140, 255),
         "GRAY_DARK":   (60, 60, 70, 255),
+        # Third ink step, under WHITE and WHITE_DIM: captions, hints, metadata,
+        # disabled labels. Theme-derived and contrast-solved (see _muted).
+        "INK_MUTED":   _a(_muted(bg, text), 255),
+        # Structural dim — the UNFILLED part of a progress or volume bar. It is
+        # not an ink: it must recede behind its own fill, which is the opposite
+        # of what secondary text needs. GRAY used to be both at once, so it was
+        # simultaneously too dim to read and too bright to sit behind a bar.
+        "TRACK":       _a(_mix(bg_l, text, 0.22), 255),
+        # Dim laid behind a modal panel to push back whatever it opened over.
+        # One value, because it is one idea: the context menu used 90 and the
+        # confirm dialog 120, so the same gesture pushed the background back by
+        # two different amounts depending on which dialog you were in.
+        "SCRIM":       (0, 0, 0, 110),
+        # Ground for the one action a page exists for, when the cursor is NOT on
+        # it. Filled primary against outline-only secondaries; the selection
+        # fill stays brighter still, so focus always outranks primacy instead of
+        # competing with it. A border shade alone couldn't carry this — CYAN and
+        # OSD_BORDER are 50 alpha apart and read as the same button.
+        "BTN_PRIMARY_BG": _a(_primary_bg(bg, accent, ink_d, text), 255),
+        # Label on that ground. Flipped by the same _ink rule the selection
+        # fills use: c64's accent is bright and its "white" is periwinkle, so a
+        # fixed light label measured 3.6:1 there.
+        "BTN_PRIMARY_TEXT": _a(_ink(_primary_bg(bg, accent, ink_d, text),
+                                    text, ink_d, target=4.5), 255),
         "OSD_BG":      _a(bg, 215),
         "OSD_BORDER":  _a(accent, 205),
         "GUIDE_BG":         _a(bg_d, 240),
@@ -57,8 +151,16 @@ def _build(bg, accent, accent2, hot, text=(255, 255, 255),
         "GUIDE_ROW_ODD":    _a(bg, 232),
         "GUIDE_ROW_EVEN":   _a(bg_d, 232),
         "GUIDE_CURRENT":    _a(_mix(bg, accent, 0.45), 240),
-        "GUIDE_SELECTED":   _a(_mix(bg, accent, 0.65), 255),
-        "GUIDE_ONAIR":      _a(_mix(bg, accent, 0.80), 225),
+        "GUIDE_SELECTED":   _a(sel, 255),
+        "GUIDE_ONAIR":      _a(onair, 225),
+        # Text that sits ON the selection / on-air fills. Fixed white text
+        # fails on light-accent themes; these flip to dark ink when needed.
+        "SEL_TEXT":         _a(_ink(sel, text, ink_d), 255),
+        "SEL_TEXT_DIM":     _a(_ink(sel, text, ink_d), 215),
+        "ONAIR_TEXT":       _a(_ink(onair, text, ink_d), 255),
+        # Full-screen page backdrop (main menu, PPV, info, OSK, editor) —
+        # near-black tinted toward the theme bg so every theme drenches.
+        "SCREEN_BG":        _a(_mix(bg, (0, 0, 0), 0.82), 255),
         "GUIDE_TIME_BG":    _a(bg_l, 255),
         "GUIDE_BORDER":     _a(accent, 185),
         "CHNUM_BG":         _a(bg_l, 205),
@@ -217,8 +319,19 @@ _SUBTITLE_ONLY_KEYS = {"x_closedcaption"}
 _active_font_key = "vcr"
 
 
+def _font_search_dirs():
+    """_FONT_DIRS, with the CATHODE_FONTS_DIR override in front.
+
+    Read per call, not at import: _FONT_DIRS is built when this module is first
+    imported, and a packager that sets the override afterwards would otherwise
+    be silently ignored.
+    """
+    env = os.environ.get("CATHODE_FONTS_DIR")
+    return ([env] + _FONT_DIRS) if env else _FONT_DIRS
+
+
 def _find_font(name: str) -> Optional[str]:
-    for d in _FONT_DIRS:
+    for d in _font_search_dirs():
         if not os.path.isdir(d):
             continue
         for root, _dirs, files in os.walk(d):
@@ -241,6 +354,12 @@ def _resolve_font_key(key: str) -> Optional[str]:
 def _asset_font_dirs():
     """Directories where bundled / user-dropped fonts live."""
     dirs = []
+    # An explicit override wins. Needed wherever the package isn't laid out on
+    # a normal filesystem next to assets/ — on Android the .py files are served
+    # from inside the APK, so walking up from __file__ finds nothing.
+    env = os.environ.get("CATHODE_FONTS_DIR")
+    if env:
+        dirs.append(env)
     if getattr(sys, "frozen", False):
         base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
         dirs.append(os.path.join(os.path.dirname(sys.executable), "assets", "fonts"))

@@ -1,31 +1,29 @@
-"""MPV player controlled over a JSON IPC socket.
-
-On Steam Deck / SteamOS the root filesystem is read-only and libmpv is not
-available to a system Python process, so we do NOT use python-mpv (which links
-libmpv in-process).  Instead we launch mpv as a subprocess (typically the
-Flatpak `io.mpv.Mpv`) with `--input-ipc-server=<socket>` and drive it entirely
-over the JSON IPC protocol:
+"""MPV player, driven entirely by mpv's JSON command protocol:
 
     {"command": ["loadfile", url, "replace"]}\n
     {"command": ["overlay-add", ...]}\n
 
+This module knows that vocabulary and nothing about how mpv is reached.  A
+connection object supplies the transport — see `cathode/mpvconn.py`, which
+launches mpv as a subprocess (on Steam Deck / SteamOS the root filesystem is
+read-only and libmpv isn't available to a system Python process, so the desktop
+builds can't link libmpv in-process).  A platform that *can* embed libmpv
+supplies its own connection and everything here is unchanged.
+
 Key presses are handled by binding keys in mpv to a `script-message
 cathode-key <name>` command; mpv echoes these back as `client-message` events
-which we dispatch to Python callbacks.
+which we dispatch to Python callbacks.  `bind_key` keeps its own handler
+registry, so a platform that delivers input itself can call those handlers
+directly instead.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import sys
 import threading
-import time
 from typing import Callable, Dict, List, Optional
-
-from .ipc import make_transport
 
 
 class Player:
@@ -48,6 +46,7 @@ class Player:
         ar_delay: int = 300,     # ms before a held key repeats
         ar_rate: int = 8,        # held-key repeats per second
         verbose_log: bool = False,   # mpv --msg-level=all=v (large log files)
+        connection=None,         # how to reach mpv; see cathode/mpvconn.py
     ):
         self.width = width
         self.height = height
@@ -59,31 +58,26 @@ class Player:
         self._on_mouse_pos = on_mouse_pos
         self._osd_w = 0
         self._osd_h = 0
-        self._flatpak_app = flatpak_app
-        self._backend = backend
-        self._mpv_path = mpv_path or ""
-        self._cmd_override = mpv_command
-        self._resolved_backend = ""
         self._extra_args = list(extra_args or [])
         self._ar_delay = int(ar_delay)
         self._ar_rate = int(ar_rate)
         self._verbose_log = bool(verbose_log)
         self._mpv_log = os.path.join(runtime_dir, "mpv.log")
-        self._proc_log = os.path.join(runtime_dir, "mpv-stdout.log")
 
         os.makedirs(runtime_dir, exist_ok=True)
         self._runtime_dir = runtime_dir
-        self._is_windows = (os.name == "nt")
-        self._is_macos = (sys.platform == "darwin")
-        if self._is_windows:
-            # mpv's IPC server is a Windows named pipe, not a filesystem socket.
-            self._sock_path = r"\\.\pipe\cathode-mpv-%d" % os.getpid()
-        else:
-            self._sock_path = os.path.join(runtime_dir, "mpv.sock")
-            try:
-                os.unlink(self._sock_path)   # remove any stale socket
-            except OSError:
-                pass
+
+        # How mpv is reached. The default runs it as a child process; an
+        # in-process libmpv connection implements the same three methods and
+        # nothing below this line changes.
+        if connection is None:
+            from .mpvconn import SubprocessConnection
+            connection = SubprocessConnection(
+                runtime_dir, flatpak_app=flatpak_app, backend=backend,
+                mpv_path=mpv_path or "", mpv_command=mpv_command,
+                mpv_log=self._mpv_log,
+            )
+        self._conn = connection
 
         # Local cached state (avoids async IPC round-trips for the UI)
         self._volume = 80
@@ -97,93 +91,20 @@ class Player:
         self._pending: Dict[int, list] = {}   # request_id -> [Event, data]
         self._pending_lock = threading.Lock()
 
-        # IPC connection (platform-specific transport: unix socket / named pipe)
+        # Transport to mpv, handed over by the connection once it's up.
         self._transport = None
         self._running = False
         self._exited = threading.Event()
         self._resume_to = None          # one-shot seek (s) applied on next load
         self._unpause_on_start = False  # force play on next file load (keep-open)
         self._aspect = "Original"       # video aspect mode, reapplied per file
-        self._cmd: List[str] = []
-        self._proc: Optional[subprocess.Popen] = None
-
-    # ── Backend detection ──────────────────────────────────────────────────
-
-    def _flatpak_mpv_available(self) -> bool:
-        if not shutil.which("flatpak"):
-            return False
-        try:
-            r = subprocess.run(
-                ["flatpak", "info", self._flatpak_app],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=10,
-            )
-            return r.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            return False
-
-    def _bundled_mpv(self) -> Optional[str]:
-        """Locate an mpv shipped alongside a frozen (PyInstaller) build."""
-        bases = []
-        if getattr(sys, "frozen", False):
-            bases.append(os.path.dirname(sys.executable))
-            mei = getattr(sys, "_MEIPASS", None)
-            if mei:
-                bases.append(mei)
-        for base in bases:
-            for rel in ("mpv.exe", os.path.join("mpv", "mpv.exe"),
-                        "mpv", os.path.join("mpv", "mpv")):
-                p = os.path.join(base, rel)
-                if os.path.isfile(p):
-                    return p
-        return None
-
-    def _mpv_exe(self) -> Optional[str]:
-        """Resolve the mpv executable (config path, then bundled, then PATH)."""
-        if self._mpv_path:
-            if os.path.isfile(self._mpv_path):
-                return self._mpv_path
-            found = shutil.which(self._mpv_path)
-            if found:
-                return found
-        bundled = self._bundled_mpv()
-        if bundled:
-            return bundled
-        for name in ("mpv", "mpv.exe", "mpv.com"):
-            found = shutil.which(name)
-            if found:
-                return found
-        # A GUI-launched macOS .app doesn't inherit the shell PATH, so probe the
-        # standard Homebrew locations directly.
-        if self._is_macos:
-            for p in ("/opt/homebrew/bin/mpv", "/usr/local/bin/mpv"):
-                if os.path.isfile(p):
-                    return p
-        return None
-
-    def _resolve_backend(self) -> str:
-        if self._backend == "flatpak":
-            return "flatpak"
-        if self._backend == "system":
-            return "system"
-        # auto: prefer Flatpak mpv on Linux (Steam Deck), else a system mpv.
-        # macOS uses a system mpv (Homebrew) — never Flatpak.
-        if (not self._is_windows and not self._is_macos
-                and self._flatpak_mpv_available()):
-            return "flatpak"
-        if self._mpv_exe():
-            return "system"
-        # Nothing found — fall back so the error names the right thing:
-        # Flatpak on Linux, a system mpv on Windows/macOS.
-        if self._is_windows or self._is_macos:
-            return "system"
-        return "flatpak"
 
     # ── Launch / connect ───────────────────────────────────────────────────
 
     def _common_args(self) -> List[str]:
+        # mpv options only — how mpv is reached (the IPC endpoint, the Flatpak
+        # wrapper, the executable) belongs to the connection, not here.
         args = [
-            f"--input-ipc-server={self._sock_path}",
             "--no-config",
             "--idle=yes",
             "--force-window=yes",
@@ -241,81 +162,9 @@ class Player:
         args.extend(self._extra_args)
         return args
 
-    def _build_cmd(self) -> List[str]:
-        if self._cmd_override:
-            return self._cmd_override
-        backend = self._resolve_backend()
-        self._resolved_backend = backend
-        if backend == "flatpak":
-            # Share the runtime dir so the IPC socket + overlay buffer reach the
-            # sandboxed mpv.
-            return [
-                "flatpak", "run",
-                f"--filesystem={self._runtime_dir}",
-                self._flatpak_app,
-                *self._common_args(),
-            ]
-        return [self._mpv_exe() or "mpv", *self._common_args()]
-
     def start(self):
-        """Launch mpv and connect the IPC socket."""
-        self._cmd = self._build_cmd()
-        exe = self._cmd[0]
-        if not (shutil.which(exe) or os.path.isfile(exe)):
-            if self._resolved_backend == "flatpak":
-                raise RuntimeError(
-                    f"'flatpak' not found. Install mpv via Flatpak "
-                    f"(flatpak install flathub {self._flatpak_app})."
-                )
-            raise RuntimeError(
-                "mpv not found. Install mpv and make sure 'mpv' runs from a "
-                "terminal (add it to PATH), or set \"mpv_path\" in "
-                "config.json to the full path of mpv.exe. "
-                "Note: mpv.net is a different app — you need plain mpv."
-            )
-
-        # A leftover socket from a crashed run can make the new connection hit a
-        # dead endpoint; remove it so mpv recreates it cleanly.
-        if not self._is_windows:
-            try:
-                if os.path.exists(self._sock_path):
-                    os.unlink(self._sock_path)
-            except OSError:
-                pass
-
-        # Capture the subprocess's own stdout/stderr (flatpak + mpv startup
-        # errors) to a file so failures are visible after the fact in Game Mode.
-        try:
-            self._proc_log_fh = open(self._proc_log, "w")
-        except OSError:
-            self._proc_log_fh = None
-        self._proc = subprocess.Popen(
-            self._cmd,
-            stdout=self._proc_log_fh or subprocess.DEVNULL,
-            stderr=subprocess.STDOUT if self._proc_log_fh else subprocess.DEVNULL,
-        )
-
-        # Wait for the IPC endpoint to appear and connect to it.
-        self._transport = make_transport(self._sock_path)
-        deadline = time.monotonic() + 15.0
-        connected = False
-        while time.monotonic() < deadline:
-            if self._proc.poll() is not None:
-                raise RuntimeError(
-                    f"mpv exited immediately (code {self._proc.returncode}). "
-                    f"See {self._proc_log}"
-                )
-            if self._transport.try_connect():
-                connected = True
-                break
-            time.sleep(0.1)
-        if not connected:
-            raise RuntimeError(
-                "Could not connect to mpv IPC endpoint. mpv is running but never "
-                f"opened its control socket at {self._sock_path}. See "
-                f"{self._mpv_log} and {self._proc_log} for the reason (e.g. an "
-                "unknown option, or a build of mpv without JSON IPC support)."
-            )
+        """Get mpv running and start reading from it."""
+        self._transport = self._conn.connect(self._common_args())
 
         self._running = True
         threading.Thread(target=self._reader, daemon=True).start()
@@ -407,7 +256,7 @@ class Player:
 
     def _enumerate_monitors(self) -> List[str]:
         try:
-            if self._is_windows:
+            if os.name == "nt":
                 import ctypes
                 n = ctypes.windll.user32.GetSystemMetrics(80)  # SM_CMONITORS
                 if n and n > 0:
@@ -711,19 +560,5 @@ class Player:
                 self._transport.close()
             except OSError:
                 pass
-        if self._proc:
-            try:
-                self._proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                self._proc.terminate()
-        if getattr(self, "_proc_log_fh", None):
-            try:
-                self._proc_log_fh.close()
-            except OSError:
-                pass
-        if not self._is_windows:   # the named pipe cleans itself up
-            try:
-                os.unlink(self._sock_path)
-            except OSError:
-                pass
+        self._conn.shutdown()
         self._exited.set()
