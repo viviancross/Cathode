@@ -29,10 +29,23 @@ class Config:
     # Scanline intensity (0.0 = off, 1.0 = heavy)
     scanline_alpha: int = 40       # 0-255 alpha for scanline overlay
 
+    # Widest shape the interface itself is drawn in, as w/h; 0 fills the display.
+    # The UI is laid out for a television, so on anything much wider than 16:9
+    # (a phone in landscape, an ultrawide monitor) filling the screen drags the
+    # menus away from the video. Set 16/9 to keep it TV-shaped and centred.
+    ui_max_aspect: float = 0.0
+    # Narrowest shape the interface is drawn in, as w/h; 0 lets it fill. Guards
+    # the other end from ui_max_aspect: a phone held upright is about 1:2.4, and
+    # a 16:9 box there is a band using a quarter of the screen.
+    ui_min_aspect: float = 0.0
+
     # CRT effect toggles (driven by the theme editor)
     video_aspect: str = "Original" # Original | Stretch | 4:3 | 16:9 | 16:10
     crt_enabled: bool = True       # CRT scanline overlay on/off
     vignette_enabled: bool = True  # corner vignette on/off
+    # Animated transitions. Off resolves each one instantly to its end
+    # state — the same courtesy prefers-reduced-motion buys on the web.
+    motion_enabled: bool = True
 
     # Guide settings
     guide_hours: int = 3           # hours of EPG to show in guide
@@ -55,6 +68,12 @@ class Config:
     plex_quality: str = "Original" # "Original" = direct play, else a transcode preset
     plex_hidden_libraries: list = field(default_factory=list)   # section keys to hide
     plex_sections: list = field(default_factory=list)           # cached [{key,title}]
+    plex_sorts: dict = field(default_factory=dict)   # list key -> "field:dir";
+    # each library reopens with the sort it was last left on
+    # How a library is presented: "list" or "wall" (a grid of posters). List is
+    # the default because it is the better of the two for episodes, where the
+    # titles carry the information and the art is one repeated frame.
+    ppv_view: str = "list"
     # Subtitle styling (independent of the main UI font) + audio output.
     sub_font: str = ""             # font key (blank = mpv default sans-serif)
     sub_size: int = 38             # mpv sub-font-size
@@ -79,6 +98,8 @@ class Config:
     main_menu_on_launch: bool = True  # show the home screen on launch; when
     # false, boot straight into the configured playlist (the menu is still
     # reachable from the context menu). First run always shows the menu.
+    setup_done: bool = False       # the first-run setup wizard already ran once
+    # (it stays reachable from Options > Setup Wizard)
 
     # Input
     gamepad: bool = True           # enable the native gamepad reader (XInput on

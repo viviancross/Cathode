@@ -25,9 +25,25 @@ class TestPPV(unittest.TestCase):
         self.p.set_browse("CHOOSE", _rows(), "crumb")
 
     def test_short_titles_one_line_long_wraps(self):
-        self.assertEqual(self.p._row_lines[0], 1)   # CNN
-        self.assertEqual(self.p._row_lines[1], 2)   # long title wraps
+        # Asked through _row_h_at, which is what forces the measurement: row
+        # heights are computed lazily so that opening a large library doesn't
+        # measure thousands of titles nobody is looking at.
+        short_h = self.p._row_h_at(0)               # CNN
+        long_h = self.p._row_h_at(1)                # long title wraps
+        self.assertGreater(long_h, short_h)
+        self.assertEqual(self.p._row_lines[0], 1)
+        self.assertEqual(self.p._row_lines[1], 2)
         self.p.render()                             # must not raise
+
+    def test_row_heights_are_measured_only_when_needed(self):
+        # The guard against the O(n) open: nothing is measured up front.
+        p = PPVScreen(1280, 720)
+        p.show()
+        p.set_browse("CHOOSE", _rows(), "crumb")
+        self.assertTrue(all(v is None for v in p._row_lines))
+        p._row_h_at(1)
+        self.assertIsNotNone(p._row_lines[1])
+        self.assertIsNone(p._row_lines[2])          # untouched rows stay unmeasured
 
     def test_bar_focus_wraps_around(self):
         self.assertIsNone(self.p.bar_focus)

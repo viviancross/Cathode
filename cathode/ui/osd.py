@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw
 from . import theme
 from .theme import (
     get_font, OSD_BG, OSD_BORDER,
-    CYAN, YELLOW, WHITE, WHITE_DIM, GRAY,
+    CYAN, YELLOW, WHITE, WHITE_DIM, INK_MUTED, TRACK,
     CHNUM_BG, GREEN, RED, ORANGE, CHANNEL_GREEN,
 )
 
@@ -30,13 +30,7 @@ def _prog_time_range(prog: "Program") -> str:
 
 def _fit(draw, text: str, font, max_w: int) -> str:
     """Trim text with an ellipsis so it fits within max_w pixels."""
-    if not text:
-        return ""
-    if draw.textlength(text, font=font) <= max_w:
-        return text
-    while text and draw.textlength(text + "...", font=font) > max_w:
-        text = text[:-1]
-    return (text + "...") if text else ""
+    return theme.ellipsize(draw, text, font, max_w)
 
 
 class OSD:
@@ -152,7 +146,7 @@ class OSD:
             # Progress bar (below the title ink)
             progress = current_prog.progress_at(datetime.now(timezone.utc))
             pb_w = int(bw * 0.40)
-            draw.rectangle([info_x, pb_y, info_x + pb_w, pb_y + pb_h], fill=GRAY)
+            draw.rectangle([info_x, pb_y, info_x + pb_w, pb_y + pb_h], fill=TRACK)
             draw.rectangle(
                 [info_x, pb_y, info_x + int(pb_w * progress), pb_y + pb_h],
                 fill=GREEN,
@@ -163,7 +157,7 @@ class OSD:
                     _prog_time_range(current_prog), self.font_small, WHITE_DIM)
         else:
             self._t(img, draw, info_x, y_prog, "No program info",
-                    self.font_medium, GRAY)
+                    self.font_medium, INK_MUTED)
 
         # ── Next program ──────────────────────────────────────────────────
         if next_prog:
@@ -174,7 +168,7 @@ class OSD:
                     _fit(draw, next_prog.title, self.font_medium, next_col_w),
                     self.font_medium, WHITE_DIM)
             self._t(img, draw, next_x, y_time,
-                    _prog_time_range(next_prog), self.font_small, GRAY)
+                    _prog_time_range(next_prog), self.font_small, INK_MUTED)
 
         # ── Clock (right side) ────────────────────────────────────────────
         clock_str = _time_str()
@@ -225,48 +219,10 @@ def _draw_volume(
         bar_x = cx - 60
         bar_y = cy + h // 2 + 8
         bar_total = 120
-        draw.rectangle([bar_x, bar_y, bar_x + bar_total, bar_y + 6], fill=GRAY)
+        draw.rectangle([bar_x, bar_y, bar_x + bar_total, bar_y + 6], fill=TRACK)
         fill_w = int(bar_total * volume / 100)
         fill_color = GREEN if volume < 80 else YELLOW if volume < 95 else RED
         draw.rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + 6], fill=fill_color)
-
-
-class ChannelFlash:
-    """Big centered channel-number overlay shown briefly on switch."""
-
-    def __init__(self, width: int, height: int):
-        self.width = width
-        self.height = height
-        self.font = get_font(int(height * 0.20))
-        self.font_name = get_font(int(height * 0.05))
-
-    def render(self, channel: Optional["Channel"], alpha: int = 230) -> Image.Image:
-        img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
-        if channel is None:
-            return img
-        draw = ImageDraw.Draw(img)
-
-        num_str = str(channel.number)
-        tw, th = _text_size(draw, num_str, self.font)
-
-        box_w = tw + 60
-        box_h = th + 30
-        bx = (self.width - box_w) // 2
-        by = (self.height - box_h) // 2
-
-        _rounded_rect(
-            draw, bx, by, bx + box_w, by + box_h,
-            radius=10,
-            fill=(*OSD_BG[:3], alpha),   # themed bg with fade alpha
-        )
-        draw.rectangle([bx, by, bx + box_w, by + 3], fill=OSD_BORDER)
-        draw.rectangle([bx, by + box_h - 3, bx + box_w, by + box_h], fill=OSD_BORDER)
-
-        draw.text(
-            (bx + (box_w - tw) // 2, by + (box_h - th) // 2),
-            num_str, font=self.font, fill=YELLOW,
-        )
-        return img
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

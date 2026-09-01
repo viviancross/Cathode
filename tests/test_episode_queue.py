@@ -5,11 +5,19 @@ import unittest
 from cathode.app import App
 
 
+def rows(*keys):
+    return [{"rating_key": k, "title": f"Episode {k}"} for k in keys]
+
+
 class TestEpisodeQueue(unittest.TestCase):
-    eps = ["10", "11", "12", "13"]
+    eps = rows("10", "11", "12", "13")
+
+    def keys(self, queue):
+        return [e["rating_key"] for e in queue]
 
     def test_queues_from_selected_to_end(self):
-        self.assertEqual(App._episode_queue(self.eps, "11"), ["11", "12", "13"])
+        self.assertEqual(self.keys(App._episode_queue(self.eps, "11")),
+                         ["11", "12", "13"])
 
     def test_first_episode_queues_whole_show(self):
         self.assertEqual(App._episode_queue(self.eps, "10"), self.eps)

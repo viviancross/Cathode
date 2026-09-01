@@ -335,6 +335,23 @@ class PlexClient:
                          token=self._server_token)
         return [_meta_row(m) for m in _container(data, "Metadata")]
 
+    def photo_url(self, path: str, w: int, h: int) -> str:
+        """A server-side thumbnail transcode, sized for the box it lands in, so a
+        wall of tiles isn't pulling full-resolution artwork to fill 200px boxes.
+
+        The token stays out of it, as everywhere else: callers pass
+        `poster_headers` to LogoStore, which keeps auth in a header and out of
+        the image cache key."""
+        if not path:
+            return ""
+        q = urllib.parse.urlencode({"width": w, "height": h, "minSize": "1",
+                                    "upscale": "1", "url": path})
+        return f"{self.server}/photo/:/transcode?{q}"
+
+    def poster_headers(self) -> dict:
+        """Auth header for artwork fetched off this server."""
+        return {"X-Plex-Token": self._server_token} if self._server_token else {}
+
     def item_detail(self, rating_key: str) -> dict:
         """Full metadata for the info screen."""
         data = self._get(f"{self.server}/library/metadata/{rating_key}",
@@ -359,11 +376,12 @@ class PlexClient:
                                 if m.get("grandparentRatingKey") else ""),
         }
 
-    def all_episodes(self, show_rating_key: str) -> List[str]:
-        """Ordered rating_keys for every episode in a show (flattened seasons)."""
+    def all_episodes(self, show_rating_key: str) -> List[dict]:
+        """Ordered browse rows for every episode in a show (flattened seasons).
+        Rows, not bare rating_keys, so the play queue can show episode titles."""
         url = f"{self.server}/library/metadata/{show_rating_key}/allLeaves"
         data = self._get(url, token=self._server_token)
-        return [str(m.get("ratingKey")) for m in _container(data, "Metadata")
+        return [_meta_row(m) for m in _container(data, "Metadata")
                 if m.get("ratingKey") is not None]
 
     def watchlist_set(self, guid: str, add: bool = True) -> bool:
@@ -621,4 +639,11 @@ def _meta_row(m: dict) -> dict:
     return {"type": typ, "rating_key": str(m.get("ratingKey", "")),
             "title": title, "meta": "   ".join(bits),
             "playable": playable,
+            # Episodes often carry no thumb of their own; without the parent
+            # fallbacks a season view is a wall of blank tiles.
+            "thumb": (m.get("thumb") or m.get("grandparentThumb")
+                      or m.get("parentThumb") or ""),
+            # Duration comes along so a browse tile can draw a resume bar;
+            # without it the bar has no denominator and silently never appears.
+            "duration": int(m.get("duration", 0)) // 1000,
             "offset": int(m.get("viewOffset", 0)) // 1000}   # resume point (s)

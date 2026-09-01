@@ -8,9 +8,23 @@ drive with a keyboard, a mouse, or a game controller. It runs on the Steam Deck,
 Linux, Windows, and macOS, and renders at the window's real size, so it looks
 right on the Deck's screen and on a docked 1080p TV.
 
-**Version 2.1**
+**Version 3.0**
 
 <br clear="left">
+
+## Screenshots
+
+| The cable guide | Home screen (first run) |
+|---|---|
+| ![Program guide](docs/screenshots/guide.png) | ![Home screen](docs/screenshots/home.png) |
+
+| A dead channel | Plex-Per-View, paused |
+|---|---|
+| ![Please stand by](docs/screenshots/standby.png) | ![Plex playback](docs/screenshots/plex.png) |
+
+Themes restyle everything — the same guide in **vhs**:
+
+![VHS theme](docs/screenshots/guide-vhs.png)
 
 ## How it works
 
@@ -27,10 +41,13 @@ build.
   picture-in-picture preview, channel logos, favorites, and categories pulled
   from your guide data.
 - **Plex-Per-View** — sign in to your Plex server and browse, search, and watch
-  your library on demand, including Continue Watching, your watchlist, and
-  Skip Intro / Skip Credits. See its own section below.
+  your library on demand, including Continue Watching, your watchlist, an
+  editable play queue, and Skip Intro / Skip Credits. See its own section below.
 - **Retro interface** — info bar, program guide, CRT scanlines, vignette, and
   channel-change static that holds until the new stream's first frame is ready.
+  Dead channels get a "PLEASE STAND BY" test-bar card instead of a black
+  screen, and an idle home screen or guide turns into a bouncing-logo
+  screensaver after five minutes.
 - **Themes and fonts** — 9 color themes, 6 bundled fonts, a custom theme editor,
   and saved profiles. Drop your own font into `assets/fonts/` and it appears in
   the menu.
@@ -41,14 +58,17 @@ build.
 - **Update check** — checks GitHub for a newer release and downloads it; see
   Updating below.
 - **Demo mode** — built-in test-pattern channels, so you can try it with no
-  playlist.
+  playlist. With nothing configured, the home screen offers them directly.
 
 ## Install
 
 The Windows download is self-contained. The Steam Deck, Linux, and macOS
 download runs from source and uses a one-time setup script that installs what it
-needs. On first launch, an on-screen keyboard asks for your M3U playlist URL (or
-start with `--demo` to use the built-in test channels).
+needs. First launch runs a short three-step setup — pick a color theme (live
+preview), add your M3U playlist on the on-screen keyboard, sign in to Plex —
+and every step is skippable: skip everything and you land in the built-in demo
+channels. It's rerunnable later from **Options ▸ Setup Wizard**, and the home
+screen keeps a **Demo Channels** button until a playlist is configured.
 
 ### Windows
 
@@ -157,8 +177,8 @@ defaults; remap them under **Options > Gamepad Buttons**.
 | X | Program guide |
 | Y | Info bar |
 | Back / View | Context menu |
-| LB / RB | Channel down / up (move the text cursor when the keyboard is open) |
-| LT / RT | Volume down / up |
+| LB / RB | Channel down / up (previous / next episode during Plex playback; move the text cursor when the keyboard is open) |
+| LT / RT | Volume down / up (jump 10 seconds during Plex playback) |
 | L3 | Mute |
 | R3 | Cycle video aspect ratio |
 
@@ -176,20 +196,33 @@ The library screen has:
 - **Continue Watching** — your in-progress items and next-up episodes.
 - **My Watchlist**.
 - Your **Movie, TV, and Other Videos** libraries, browsable by genre or folder,
-  and sortable by title, date added, year, or rating.
+  and sortable by title, release date, date added, year, or rating. Each library
+  remembers the sort you left it on.
+
+Libraries can be shown as a list or as a **poster wall** — a grid of artwork,
+with a resume bar on anything you're part way through. Switch between them under
+**Options ▸ View**; the choice sticks. The list is the default, and stays the
+better of the two for episodes, where the titles carry the information and the
+art is one repeated frame.
 
 Selecting a title opens a detail page with poster, summary, and resume point.
-From there you can play a movie or episode, play a whole show, or shuffle it.
-Cathode reports your position back to the server, so progress and watched state
-stay in sync with your other Plex apps.
+From there you can play a movie or episode, play a whole show, shuffle it, or
+add it to the play queue with **+ QUEUE** (on a series, that queues every
+episode). Cathode reports your position back to the server, so progress and
+watched state stay in sync with your other Plex apps.
+
+The queue lives under **Play Queue** in the context menu, which lists what's
+lined up and marks what's playing. Open any entry to play it now, move it up or
+down, or drop it — and the whole queue can be cleared from the bottom of the
+list. When one item finishes, the next one starts.
 
 While something is playing, the on-screen control bar handles play/pause,
 skip back/forward, previous/next, volume, and a timeline. The timeline is
 select-then-scrub: press it to start scrubbing, press again (or back out) when
 done. A **Skip Intro** / **Skip Credits** button appears on the bar during those
 sections. Use the context menu for audio and subtitle tracks, subtitle
-font/size/color, and the audio output device. Set streaming quality (direct play
-or a transcode cap) under **Options > Plex**.
+font, size, color, and background box, and the audio output device. Set
+streaming quality (direct play or a transcode cap) under **Options > Plex**.
 
 The browse screen has on-screen **Back** and **Menu** buttons, so the whole flow
 works with a mouse. Your Plex token is sent to the server in a request header,
@@ -230,8 +263,9 @@ than the running version, Cathode downloads the build for your platform (the
 Windows portable zip on Windows, the source zip on the Deck, Linux, and macOS)
 to `~/.cache/cathode/updates/`. It does not overwrite the running program: when
 you quit, a small script installs the downloaded files, so the next launch is the
-new version. With `update_check` on, Cathode also checks quietly on launch and
-tells you when an update is available.
+new version. Downloads are verified against the release's `.sha256` checksum
+file when one is published. With `update_check` on, Cathode also checks quietly
+on launch and tells you when an update is available.
 
 ## Building from source
 

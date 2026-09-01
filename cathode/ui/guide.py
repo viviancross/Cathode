@@ -8,12 +8,14 @@ from typing import List, Optional, TYPE_CHECKING
 from PIL import Image, ImageDraw
 
 from . import theme
+from .effects import draw_smpte_bars
 from .theme import (
     get_font, measure, text_wh,
     GUIDE_BG, GUIDE_HEADER_BG, GUIDE_ROW_ODD, GUIDE_ROW_EVEN,
     GUIDE_CURRENT, GUIDE_SELECTED, GUIDE_ONAIR, GUIDE_TIME_BG, GUIDE_BORDER,
-    WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
+    WHITE, WHITE_DIM, CYAN, YELLOW, RED, INK_MUTED,
     ORANGE, OSD_BORDER, OSD_BG,
+    SEL_TEXT, SEL_TEXT_DIM, ONAIR_TEXT,
 )
 
 if TYPE_CHECKING:
@@ -36,6 +38,19 @@ def _time_label(dt: datetime) -> str:
 
 def _prog_range(prog: "Program") -> str:
     return f"{_time_label(prog.start)} - {_time_label(prog.stop)}"
+
+
+def _is_night() -> bool:
+    h = datetime.now().astimezone().hour
+    return h >= 20 or h < 6
+
+
+def _moon_phase(now: Optional[datetime] = None) -> float:
+    """0..1 through the synodic month (0 = new, 0.5 = full)."""
+    now = now or datetime.now(timezone.utc)
+    ref = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)   # a known new moon
+    days = (now - ref).total_seconds() / 86400.0
+    return (days % 29.530588853) / 29.530588853
 
 
 def _wrap_text(draw, text: str, font, max_w: int, max_lines: int) -> list:
@@ -67,13 +82,7 @@ def _text_size(draw: ImageDraw.Draw, text: str, font) -> tuple:
 
 
 def _truncate(text: str, draw: ImageDraw.Draw, font, max_w: int) -> str:
-    if not text:
-        return ""
-    if measure(draw, text, font) <= max_w:
-        return text
-    while text and measure(draw, text + "...", font) > max_w:
-        text = text[:-1]
-    return text + "..."
+    return theme.ellipsize(draw, text, font, max_w)
 
 
 class Guide:
@@ -88,10 +97,17 @@ class Guide:
     DETAIL_PANEL_FRAC = 0.36   # height of the info panel in the "detail" layout
                                # (tall enough for the synopsis to wrap a few lines)
 
-    def __init__(self, width: int, height: int, epg_hours: int = 3):
+    def __init__(self, width: int, height: int, epg_hours: int = 3,
+                 min_row_h: int = 0):
         self.width = width
         self.height = height
+        # What the user asked for; the window actually drawn is narrowed to fit
+        # (see _compute_geometry), and a resize back to a wide box restores it.
+        self._epg_hours_req = epg_hours
         self.epg_hours = epg_hours
+        # Physical floor for touch hosts (px). A constructor argument, not
+        # an attribute set afterwards: the geometry is computed during init.
+        self.min_row_h = min_row_h
 
         # State (defined before geometry so a resize can clamp against it)
         self.scroll_offset = 0   # index of first visible channel (within category)
@@ -111,18 +127,48 @@ class Guide:
         """Compute layout metrics.  A top info panel (with the live-video preview
         window) pushes the channel grid down and shrinks it."""
         width, height = self.width, self.height
+        # The grid is laid out for a television. Held upright the same fractions
+        # spend the box the wrong way round: a third of the height on the info
+        # panel, a seventh of the width on channel names that then truncate.
+        self.portrait = width < height
         self.pad      = int(width * self.PADDING)
-        self.header_h = int(height * self.HEADER_H_FRAC)
-        self.time_row_h = int(height * self.TIME_ROW_H_FRAC)
-        self.ch_col_w = int(width * self.CH_COL_W_FRAC)
-        self.panel_h = int(height * self.DETAIL_PANEL_FRAC)
+        nominal_header = int(height * (0.052 if self.portrait else self.HEADER_H_FRAC))
+        # The header carries the only close button, so on a touch host it has to
+        # be at least a thumb tall — but the title keeps its nominal size, or it
+        # would grow with the button.
+        self.header_h = max(nominal_header,
+                            (self.min_row_h + 8) if self.min_row_h else 0)
+        self.time_row_h = int(height * (0.034 if self.portrait
+                                        else self.TIME_ROW_H_FRAC))
+        self.ch_col_w = int(width * (0.24 if self.portrait else self.CH_COL_W_FRAC))
+        self.panel_h = int(height * (0.21 if self.portrait
+                                     else self.DETAIL_PANEL_FRAC))
         self.cat_bar_h = max(26, int(height * 0.045))   # category selector strip
         self.time_ruler_y = self.header_h + self.panel_h
+        # Three hours across a phone held upright is a half-hour cell about ten
+        # characters wide, and every programme in it renders as "S...". Fewer
+        # hours of real titles beats more hours of ellipses; what's on now is
+        # what the guide is opened for anyway.
+        self.epg_hours = (min(self._epg_hours_req, 2) if self.portrait
+                          else self._epg_hours_req)
+
+        # A touch host raises the floor: fewer channels on screen, but every one
+        # of them big enough to hit. Proportional rows are ~4mm on a phone.
+        nominal_row = max(1, int(height * self.ROW_H_FRAC),
+                          getattr(self, "min_row_h", 0))
+        # A third of the height on the info panel is still eight or nine rows of
+        # grid on a television. On a short box — a cover screen, a small window,
+        # anything with a touch floor — the same third leaves four, and a guide
+        # showing four channels is a list. The panel gives the rows back.
+        chrome = self.header_h + self.time_row_h + 2 * self.pad
+        if height - chrome - self.panel_h < 6 * nominal_row:
+            self.panel_h = max(int(height * 0.20),
+                               height - chrome - 6 * nominal_row)
+            self.time_ruler_y = self.header_h + self.panel_h
 
         # Fit as many rows as the (remaining) space allows, then stretch row
         # height so the grid fills to the bottom.
         inner_h = height - self.header_h - self.panel_h - self.time_row_h - 2 * self.pad
-        nominal_row = max(1, int(height * self.ROW_H_FRAC))
         self.visible_rows = max(1, inner_h // nominal_row)
         self.row_h = inner_h // self.visible_rows
 
@@ -131,13 +177,29 @@ class Guide:
         self.grid_y = self.time_ruler_y + self.time_row_h
 
         # Fonts
-        self.font_title  = get_font(int(self.header_h * 0.45))
+        self.font_title  = get_font(int(nominal_header * 0.45))
         self.font_time   = get_font(int(self.time_row_h * 0.55))
         self.font_ch     = get_font(int(self.row_h * 0.30))
         self.font_prog   = get_font(int(self.row_h * 0.28))
-        self.font_small  = get_font(int(self.row_h * 0.22))
-        self.font_panel_title = get_font(max(14, int(height * 0.045)))
-        self.font_panel_text  = get_font(max(11, int(height * 0.028)))
+        self._small_px   = int(self.row_h * 0.22)
+        self.font_small  = get_font(self._small_px)
+        # The panel's text is sized against the panel, not the display: upright
+        # the panel is a third of the height it has on a television, and a font
+        # picked from the display would print two lines into it.
+        if self.portrait:
+            self.font_panel_title = get_font(max(14, int(self.panel_h * 0.11)))
+            self.font_panel_text  = get_font(max(11, int(self.panel_h * 0.08)))
+        else:
+            self.font_panel_title = get_font(max(14, int(height * 0.045)))
+            self.font_panel_text  = get_font(max(11, int(height * 0.028)))
+
+        # The close button is sized to its label so it can't clip, and to a
+        # thumb where one is expected.
+        _d = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+        self.close_w = max(96, int(width * 0.085),
+                           int(_d.textlength("X CLOSE", font=self.font_time)) + 24)
+        self.close_h = min(self.header_h - 6,
+                           max(26, self.min_row_h, int(self.header_h * 0.52)))
 
         # Keep the cursor on a visible row after a geometry change
         if self.selected_row > self.visible_rows - 1:
@@ -150,8 +212,47 @@ class Guide:
         top = self.header_h + pad
         bottom = self.header_h + self.panel_h - pad
         lx = pad
-        lw = int(self.width * 0.30)
+        # Shape the window like the video that goes in it. A fixed share of the
+        # width is a 16:9 window only on a panel of one particular height; on a
+        # short one it stretches into a letterbox slot, and upright it becomes a
+        # column that pillarboxes the preview down to a sliver.
+        lw = min(int(self.width * (0.46 if self.portrait else 0.30)),
+                 int((bottom - top) * 16 / 9))
         return (lx, top, lx + lw, bottom)
+
+    def close_rect_px(self):
+        """Pixel rect of the guide's close button, at the right of the header.
+
+        The guide is closed by B / Escape / the guide key, none of which exist on
+        a phone -- and the system back gesture is a step up, not something the
+        screen advertises. So the way out is drawn where it can be seen.
+        """
+        pad = self.pad
+        w, h = self.close_w, self.close_h
+        x1 = self.width - pad
+        y0 = (self.header_h - h) // 2
+        return (x1 - w, y0, x1, y0 + h)
+
+    def hit_row(self, x, y):
+        """Visible grid row under (x, y), or None.
+
+        Covers the channel column and the programme cells alike: on a
+        touchscreen the whole row is the target, because aiming at a particular
+        programme cell to select its channel is a distinction without a
+        difference.
+        """
+        if y < self.grid_y or x < self.pad:
+            return None
+        row = int((y - self.grid_y) // self.row_h)
+        if row < 0 or row >= self.visible_rows:
+            return None
+        if self.scroll_offset + row >= len(self.filtered()):
+            return None          # empty space below the last channel
+        return row
+
+    def hit_close(self, x, y) -> bool:
+        x0, y0, x1, y1 = self.close_rect_px()
+        return x0 <= x <= x1 and y0 <= y <= y1
 
     def category_bar_px(self):
         """Pixel rect of the highlightable category selector (◄ cat ►), a bar
@@ -333,9 +434,19 @@ class Guide:
                 epg, is_selected, is_current,
             )
         if not vis:
-            self._text((self.grid_x + 8, self.grid_y + 8),
+            # Off-air motif: a small test-bar strip above the message.
+            bar_h = max(14, int(self.row_h * 0.5))
+            draw_smpte_bars(draw, self.grid_x + 8, self.grid_y + 8,
+                            self.grid_x + 8 + int(self.grid_w * 0.32),
+                            self.grid_y + 8 + bar_h)
+            line_h = _text_size(draw, "Ag", self.font_small)[1] + 8
+            ty = self.grid_y + 8 + bar_h + 10
+            self._text((self.grid_x + 8, ty),
                        "No channels in this category",
-                       self.font_small, GRAY)
+                       self.font_small, INK_MUTED)
+            self._text((self.grid_x + 8, ty + line_h),
+                       "Pick another category above with < >",
+                       self.font_small, WHITE_DIM)
 
         # ── Scroll indicators ─────────────────────────────────────────────
         if self.scroll_offset > 0:
@@ -366,14 +477,14 @@ class Guide:
             fill=OSD_BORDER,
         )
 
-        # Title
+        # The title, the clock and the close button share one row, and which of
+        # them has to give way depends on how wide that row is — not on which
+        # way round the box happens to be. Both concessions are made by
+        # measurement, so a phone upright, a cover screen and a television all
+        # get a header that fits.
         tw, th = _text_size(draw, _GUIDE_TITLE, self.font_title)
-        self._text(
-            ((self.width - tw) // 2, (self.header_h - th) // 2),
-            _GUIDE_TITLE, self.font_title, YELLOW,
-        )
-
-        # Current time (right)
+        # The close button owns the right edge; the clock sits inside it.
+        cx0, cy0, cx1, cy1 = self.close_rect_px()
         local = now.astimezone()
         time_str = (
             local.strftime("%I:%M:%S %p").lstrip("0")
@@ -381,17 +492,45 @@ class Guide:
             + str(local.day)
         )
         tw2, _ = _text_size(draw, time_str, self.font_time)
-        clock_x = self.width - tw2 - self.pad
+        centred = (self.width - tw) // 2
+        # First concession: seconds and the date, the least useful of what's
+        # here, in exchange for a centred title.
+        if centred + tw > cx0 - 2 * self.pad - tw2:
+            time_str = local.strftime("%I:%M %p").lstrip("0")
+            tw2, _ = _text_size(draw, time_str, self.font_time)
+        clock_x = cx0 - self.pad - tw2
+        # Second: the title stops being centred and takes the left edge, so the
+        # row reads left to right — what this is, the weather, the time, the way
+        # out — instead of printing itself over the clock.
+        title_left = centred if centred + tw <= clock_x - self.pad else self.pad
+        self._text(
+            (title_left, (self.header_h - th) // 2),
+            _GUIDE_TITLE, self.font_title, YELLOW,
+        )
         self._text(
             (clock_x, (self.header_h - th) // 2),
             time_str, self.font_time, CYAN,
         )
 
+        # Close button (far right).
+        draw.rectangle([cx0, cy0, cx1, cy1],
+                       fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255),
+                       outline=OSD_BORDER, width=2)
+        lw, lh = _text_size(draw, "X CLOSE", self.font_time)
+        self._text((cx0 + (cx1 - cx0 - lw) // 2,
+                    cy0 + (cy1 - cy0 - lh) // 2 - 2),
+                   "X CLOSE", self.font_time, CYAN)
+
         # Weather on the LEFT (roomy, so it never truncates).  The keybind hint
         # that used to live here is now covered by the context menu.
+        # Weather takes whatever side of the title is free: the space left of a
+        # centred one, the space right of a left-aligned one.
         if self._weather:
-            title_left = (self.width - tw) // 2
-            self._draw_weather(draw, left=self.pad, right_limit=title_left - self.pad)
+            if title_left > self.pad:
+                left, limit = self.pad, title_left - self.pad
+            else:
+                left, limit = title_left + tw + self.pad, clock_x - self.pad
+            self._draw_weather(draw, left=left, right_limit=limit)
 
     def _draw_weather(self, draw, left, right_limit):
         """Two-line weather summary + condition icon, left-aligned from `left`
@@ -441,15 +580,32 @@ class Guide:
                                scx + math.cos(a) * (r + 5), scy + math.sin(a) * (r + 5)],
                               fill=YELLOW, width=max(1, s // 18))
 
+        def moon(mx, my, r):
+            # Two-circle crescent at the real current phase; the shadow circle
+            # is filled with the header background so it reads as a bite.
+            draw.ellipse([mx - r, my - r, mx + r, my + r], fill=(228, 228, 214, 255))
+            p = _moon_phase()
+            off = (-4 * r * p) if p < 0.5 else (4 * r * (1 - p))
+            if abs(off) < 2 * r - 1:          # not full — carve the shadow
+                draw.ellipse([mx - r + off, my - r, mx + r + off, my + r],
+                             fill=GUIDE_HEADER_BG)
+
         cx = x + s / 2
+        night = _is_night()
         if cat == "clear":
-            sun(cx, y + s / 2, s * 0.28)
+            if night:
+                moon(cx, y + s / 2, s * 0.28)
+            else:
+                sun(cx, y + s / 2, s * 0.28)
             return
         if cat == "partly":
-            sun(x + s * 0.32, y + s * 0.34, s * 0.2)
+            if night:
+                moon(x + s * 0.32, y + s * 0.34, s * 0.2)
+            else:
+                sun(x + s * 0.32, y + s * 0.34, s * 0.2)
             cloud(x + s * 0.28, y + s * 0.42, s * 0.66, s * 0.4, WHITE_DIM)
             return
-        cloud(x + s * 0.08, y + s * 0.18, s * 0.84, s * 0.5, GRAY if cat == "fog" else WHITE_DIM)
+        cloud(x + s * 0.08, y + s * 0.18, s * 0.84, s * 0.5, INK_MUTED if cat == "fog" else WHITE_DIM)
         base = y + s * 0.72
         if cat == "rain":
             for i in range(3):
@@ -465,7 +621,7 @@ class Guide:
         elif cat == "fog":
             for i in range(2):
                 ly = base + s * 0.04 + i * s * 0.12
-                draw.line([x + s * 0.15, ly, x + s * 0.85, ly], fill=GRAY, width=max(1, s // 16))
+                draw.line([x + s * 0.15, ly, x + s * 0.85, ly], fill=INK_MUTED, width=max(1, s // 16))
 
     def _draw_category_bar(self, draw):
         """The ◄ Category ► selector, highlighted when it has focus."""
@@ -476,14 +632,14 @@ class Guide:
         cat = self.current_category()
         # Arrows on both sides
         self._text((x0 + 6, y0 + (y1 - y0 - 14) // 2), "<",
-                   self.font_small, YELLOW if focused else CYAN)
+                   self.font_small, SEL_TEXT if focused else CYAN)
         self._text((x1 - 14, y0 + (y1 - y0 - 14) // 2), ">",
-                   self.font_small, YELLOW if focused else CYAN)
+                   self.font_small, SEL_TEXT if focused else CYAN)
         label = _truncate(cat, draw, self.font_small, (x1 - x0) - 36)
         lb = draw.textbbox((0, 0), label, font=self.font_small)
         lx = x0 + ((x1 - x0) - (lb[2] - lb[0])) // 2
         self._text((lx, y0 + (y1 - y0 - (lb[3] - lb[1])) // 2 - lb[1]),
-                   label, self.font_small, WHITE if focused else WHITE_DIM)
+                   label, self.font_small, SEL_TEXT if focused else WHITE_DIM)
 
     def _draw_detail_panel(self, draw, channels, epg, current_channel_idx, now, vis):
         """Top info panel: currently-playing channel (left) + metadata for the
@@ -527,32 +683,50 @@ class Guide:
                 return text_wh(draw, "Ag", font)[1]
             gap = max(4, int(self.height * 0.012))
             y = r_top
-            self._text((rx, y), _truncate(f"{sel.number}  {sel.name}", draw,
-                       self.font_small, rw), self.font_small, YELLOW)
-            y += _lh(self.font_small) + gap
+
+            def _put(lines, font, color):
+                """Draw as many of `lines` as the panel still has room for.
+
+                The panel is a fixed box and the copy in it isn't: a long title
+                that wraps to two lines used to push the times and synopsis
+                straight through the divider and into the grid. Whatever doesn't
+                fit is dropped, top-down, so the most important line survives.
+                """
+                nonlocal y
+                lh = _lh(font)
+                for ln in lines:
+                    if y + lh > bottom:
+                        return False
+                    self._text((rx, y), ln, font, color)
+                    y += lh
+                return True
+
+            _put([_truncate(f"{sel.number}  {sel.name}", draw,
+                            self.font_small, rw)], self.font_small, YELLOW)
+            y += gap
             if sprog:
-                for ln in _wrap_text(draw, sprog.title, self.font_panel_title, rw, 2):
-                    self._text((rx, y), ln, self.font_panel_title, WHITE)
-                    y += _lh(self.font_panel_title)
+                _put(_wrap_text(draw, sprog.title, self.font_panel_title, rw, 2),
+                     self.font_panel_title, WHITE)
                 y += gap
                 meta = _prog_range(sprog)
                 if sprog.episode:
                     meta += "   " + sprog.episode
                 if sprog.category:
                     meta += "   " + sprog.category
-                for ln in _wrap_text(draw, meta, self.font_panel_text, rw, 2):
-                    self._text((rx, y), ln, self.font_panel_text, CYAN)
-                    y += _lh(self.font_panel_text)
+                _put(_wrap_text(draw, meta, self.font_panel_text, rw,
+                                1 if self.portrait else 2),
+                     self.font_panel_text, CYAN)
                 y += gap
                 dlh = _lh(self.font_panel_text) + max(2, gap // 2)
-                max_lines = max(1, (bottom - y) // dlh)
-                for ln in _wrap_text(draw, sprog.description or "",
-                                     self.font_panel_text, rw, max_lines):
-                    self._text((rx, y), ln, self.font_panel_text, WHITE_DIM)
-                    y += dlh
+                max_lines = max(0, (bottom - y) // dlh)
+                if max_lines:
+                    for ln in _wrap_text(draw, sprog.description or "",
+                                         self.font_panel_text, rw, max_lines):
+                        self._text((rx, y), ln, self.font_panel_text, WHITE_DIM)
+                        y += dlh
             else:
                 self._text((rx, y), "No program information",
-                           self.font_panel_text, GRAY)
+                           self.font_panel_text, INK_MUTED)
 
     def _draw_time_ruler(
         self,
@@ -585,12 +759,19 @@ class Guide:
             fill=GUIDE_TIME_BG,
         )
 
+        # Every half hour gets a gridline; a label only when there's room since
+        # the last one. In a narrow box the half-hour labels run into each other
+        # and the ruler reads "1:39 PM2:09 PM" — the rhythm of the grid survives
+        # the thinning, the overprinting doesn't.
+        next_label_x = self.grid_x
         for i in range(slots):
             t = window_start + timedelta(minutes=i * slot_min)
             label = t.astimezone().strftime("%I:%M %p").lstrip("0")
             x = self.grid_x + int(i * slot_w)
             draw.line([x, ry, x, ry + rh], fill=GUIDE_BORDER, width=1)
-            self._text((x + 4, ry + 4), label, self.font_small, WHITE)
+            if x >= next_label_x:
+                self._text((x + 4, ry + 4), label, self.font_small, WHITE)
+                next_label_x = x + 4 + measure(draw, label, self.font_small) + 12
 
         # "Now" line
         now_offset = (now - window_start).total_seconds() / 60
@@ -598,7 +779,7 @@ class Guide:
             now_x = self.grid_x + int(now_offset / total_min * self.grid_w)
             draw.line(
                 [now_x, ry, now_x, ry + rh + self.row_h * self.visible_rows],
-                fill=(255, 80, 80, 180), width=2,
+                fill=(RED[0], RED[1], RED[2], 180), width=2,
             )
 
     def _draw_channel_row(
@@ -627,6 +808,11 @@ class Guide:
             [col_x0, row_y, col_x0 + self.ch_col_w, row_y + row_h],
             fill=GUIDE_TIME_BG,
         )
+        # Favorite badge — top-right corner of the channel column (state was
+        # otherwise only visible via the Favorites category).
+        if ch.number in self.favorites:
+            self._text((col_x0 + self.ch_col_w - 14, row_y + 3), "*",
+                       self.font_small, YELLOW)
 
         # Logo (above the number + name), pulled from XMLTV <icon> (or M3U logo)
         logo = None
@@ -651,16 +837,41 @@ class Guide:
 
         # [number] [name] — centered horizontally under the logo
         gap = 6
-        name_str = _truncate(ch.name, draw, self.font_small,
-                             self.ch_col_w - tw - gap - 12)
-        nw, nh = _text_size(draw, name_str, self.font_small)
-        total_w = tw + (gap + nw if name_str else 0)
-        start_x = col_x0 + max(4, (self.ch_col_w - total_w) // 2)
-        self._text((start_x, text_y), num_str, self.font_ch,
-                   YELLOW if is_current else WHITE)
-        if name_str:
-            self._text((start_x + tw + gap, text_y + (th - nh) // 2), name_str,
-                       self.font_small, CYAN if is_current else WHITE_DIM)
+        avail = self.ch_col_w - 12
+        # Side by side on a television. Upright the column is narrow and the
+        # rows are tall, so the name takes its own line under the number — at
+        # whatever size it fits at, because "HD Colo..." identifies nothing.
+        if self.portrait and logo is None:
+            f_name = self._fit_name_font(draw, ch.name, avail)
+            name_str = _truncate(ch.name, draw, f_name, avail)
+            # Stacked lines are placed by their measured ink, not the text
+            # origin: the two fonts carry different top bearings, and stacking
+            # by nominal position leaves the number resting on the name's
+            # ascenders.
+            nb = draw.textbbox((0, 0), num_str, font=self.font_ch)
+            mb = draw.textbbox((0, 0), name_str or "Ag", font=f_name)
+            nw, nh = mb[2] - mb[0], mb[3] - mb[1]
+            g2 = max(4, nh // 4)
+            ny = row_y + (row_h - (th + g2 + nh)) // 2
+            self._text((col_x0 + (self.ch_col_w - tw) // 2 - nb[0], ny - nb[1]),
+                       num_str, self.font_ch, YELLOW if is_current else WHITE)
+            if name_str:
+                self._text((col_x0 + (self.ch_col_w - nw) // 2 - mb[0],
+                            ny + th + g2 - mb[1]),
+                           name_str, f_name,
+                           CYAN if is_current else WHITE_DIM)
+        else:
+            name_str = _truncate(ch.name, draw, self.font_small,
+                                 avail - tw - gap)
+            nw, nh = _text_size(draw, name_str, self.font_small)
+            total_w = tw + (gap + nw if name_str else 0)
+            start_x = col_x0 + max(4, (self.ch_col_w - total_w) // 2)
+            self._text((start_x, text_y), num_str, self.font_ch,
+                       YELLOW if is_current else WHITE)
+            if name_str:
+                self._text((start_x + tw + gap, text_y + (th - nh) // 2),
+                           name_str, self.font_small,
+                           CYAN if is_current else WHITE_DIM)
 
         # Program grid area background
         draw.rectangle(
@@ -678,7 +889,7 @@ class Guide:
         if epg is None:
             self._text(
                 (self.grid_x + 8, row_y + (row_h - 16) // 2),
-                "No EPG data", self.font_small, GRAY,
+                "No EPG data", self.font_small, INK_MUTED,
             )
             return
 
@@ -686,7 +897,7 @@ class Guide:
         if not channel_epg_id:
             self._text(
                 (self.grid_x + 8, row_y + (row_h - 16) // 2),
-                ch.name, self.font_small, GRAY,
+                ch.name, self.font_small, INK_MUTED,
             )
             return
 
@@ -704,7 +915,12 @@ class Guide:
 
             is_on_air = prog.start <= now < prog.stop
             cell_fill = GUIDE_ONAIR if is_on_air else bg
-            cell_text = WHITE if is_on_air else WHITE_DIM
+            if is_on_air:
+                cell_text = ONAIR_TEXT
+            elif is_selected:
+                cell_text = SEL_TEXT_DIM   # readable on the accent-mixed fill
+            else:
+                cell_text = WHITE_DIM
 
             draw.rectangle(
                 [px + 1, row_y + 2, px + pw - 1, row_y + row_h - 2],
@@ -715,14 +931,29 @@ class Guide:
                 fill=GUIDE_BORDER, width=1,
             )
 
-            # Program title in cell
-            title = _truncate(prog.title, draw, self.font_prog, pw - 8)
-            tw2, th2 = _text_size(draw, title, self.font_prog)
-            if pw > 20 and title:
-                self._text(
-                    (px + 4, row_y + (row_h - th2) // 2),
-                    title, self.font_prog, cell_text,
-                )
+            # Program title in cell. A block only wide enough for the ellipsis
+            # renders as a bare "..." that says less than the empty block does —
+            # a 20px floor was low enough to let those through at phone font
+            # sizes, so the floor is measured against the font instead.
+            if pw >= 8 + measure(draw, "MMMMM", self.font_prog):
+                title = _truncate(prog.title, draw, self.font_prog, pw - 8)
+                if title:
+                    _tw2, th2 = _text_size(draw, title, self.font_prog)
+                    self._text(
+                        (px + 4, row_y + (row_h - th2) // 2),
+                        title, self.font_prog, cell_text,
+                    )
+
+    def _fit_name_font(self, draw, name: str, max_w: int):
+        """Channel-name font shrunk (to a floor) so the whole name fits `max_w`.
+
+        Scaled in one step from the measured overflow rather than stepped down a
+        size at a time: this runs per row, per frame.
+        """
+        w = measure(draw, name, self.font_small)
+        if w <= max_w or w <= 0:
+            return self.font_small
+        return get_font(max(11, int(self._small_px * max_w / w)))
 
     def _draw_scroll_arrow(self, draw: ImageDraw.Draw, up: bool):
         cx = self.width // 2

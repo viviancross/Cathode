@@ -17,10 +17,38 @@ from typing import Callable, Dict, Optional, Tuple
 from PIL import Image
 
 
+def _read_capped(resp, limit: int) -> Optional[bytes]:
+    """Read at most `limit` bytes; None if the response is bigger than that.
+
+    A timeout bounds how long a fetch can stall, not how much it can send. Logo
+    URLs are third-party data — they arrive in XMLTV <icon src> and M3U
+    tvg-logo attributes, from playlists people download from IPTV providers —
+    so one entry pointing at a huge file would otherwise be read whole into
+    memory, on a thread per URL, and then written to the disk cache.
+    """
+    chunks, total = [], 0
+    while True:
+        chunk = resp.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 class LogoStore:
     _ORIG_MAX = 256      # full-size images kept in RAM (posters add up fast)
     _RESIZED_MAX = 1024  # fitted variants; cleared wholesale when exceeded
     _DISK_MAX = 400      # on-disk cache files; pruned oldest-first at startup
+    # A channel logo or a poster is tens of kilobytes; 8 MB is already absurd
+    # for one, and is the point at which we stop rather than find out.
+    _MAX_BYTES = 8 * 1024 * 1024
+    # Decoded size, which is the number that actually costs memory: a small
+    # file can decode to an enormous bitmap (a "decompression bomb"), and
+    # Pillow's own default only warns. 40 MP is ~160 MB as RGBA.
+    _MAX_PIXELS = 40_000_000
 
     def __init__(self, cache_dir: str, on_loaded: Optional[Callable] = None,
                  user_agent: str = "Cathode/1.0"):
@@ -101,27 +129,45 @@ class LogoStore:
     def _disk_path(self, url: str) -> str:
         return os.path.join(self.cache_dir, hashlib.sha1(url.encode()).hexdigest())
 
+    def _decode(self, im) -> Optional[Image.Image]:
+        """Decode to RGBA, refusing anything absurdly large.
+
+        `Image.open` is lazy — it reads the header and nothing else — so the
+        dimensions can be checked BEFORE any pixels are allocated, which is the
+        only point at which refusing is still cheap.
+        """
+        w, h = im.size
+        if w <= 0 or h <= 0 or w * h > self._MAX_PIXELS:
+            return None
+        return im.convert("RGBA")
+
     def _fetch(self, url: str):
         img = None
         try:
             path = self._disk_path(url)
             if os.path.exists(path):
-                img = Image.open(path).convert("RGBA")
+                img = self._decode(Image.open(path))
             elif url.startswith(("http://", "https://")):
                 import urllib.request
                 hdrs = {"User-Agent": self._ua}
                 with self._lock:
                     hdrs.update(self._auth.get(url) or {})
                 req = urllib.request.Request(url, headers=hdrs)
-                data = urllib.request.urlopen(req, timeout=15).read()
-                img = Image.open(BytesIO(data)).convert("RGBA")
-                try:
-                    with open(path, "wb") as f:
-                        f.write(data)
-                except OSError:
-                    pass
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = _read_capped(resp, self._MAX_BYTES)
+                if data is None:
+                    raise ValueError("logo exceeds the size cap")
+                img = self._decode(Image.open(BytesIO(data)))
+                # Only cache what actually decoded: caching first would fill
+                # the disk with whatever a bad URL happened to return.
+                if img is not None:
+                    try:
+                        with open(path, "wb") as f:
+                            f.write(data)
+                    except OSError:
+                        pass
             elif os.path.exists(url):                 # local file path
-                img = Image.open(url).convert("RGBA")
+                img = self._decode(Image.open(url))
         except Exception:
             img = None
         with self._lock:

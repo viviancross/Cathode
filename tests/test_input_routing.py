@@ -46,6 +46,43 @@ class TestFocusOwner(unittest.TestCase):
         self.assertEqual(self.app._focus_owner(), "osk")
 
 
+class TestSetupWizard(unittest.TestCase):
+    """The first-run wizard chains menu pages; skipping everything must land
+    in the demo channels, and the auto-run must arm only once."""
+
+    def setUp(self):
+        self.app = make_app()
+        self.menu = self.app.renderer.menu
+        self.demo_started = []
+        self.app._start_demo = lambda: self.demo_started.append(True)
+        self.app.renderer.show_notification = lambda *a, **k: None
+
+    def _activate(self, idx):
+        self.menu._page[1] = idx
+        self.menu.activate()
+
+    def test_skip_everything_lands_in_demo(self):
+        self.app._setup_wizard()
+        self.assertTrue(self.app.config.setup_done)
+        self.assertTrue(self.menu.open)
+        self.assertIn("1/3", self.menu._page[2])
+        self._activate(len(self.menu._page[0]) - 1)   # Next >
+        self.assertIn("2/3", self.menu._page[2])
+        self._activate(1)                             # Skip for now
+        self.assertIn("3/3", self.menu._page[2])
+        self._activate(1)                             # Skip
+        self.assertFalse(self.menu.open)
+        self.assertEqual(self.demo_started, [True])
+
+    def test_theme_pick_keeps_wizard_page(self):
+        self.app._setup_wizard()
+        self._activate(0)                             # pick the first theme
+        self.assertTrue(self.menu.open)
+        self.assertIn("1/3", self.menu._page[2])      # page survived the pick
+        self.assertEqual(self.app.config.theme,
+                         self.app._builtin_theme_labels()[0])
+
+
 class TestRouting(unittest.TestCase):
     def setUp(self):
         self.app = make_app()
@@ -121,7 +158,8 @@ class TestTuneGuards(unittest.TestCase):
 
     def test_plex_skip_falls_back_to_chapter_at_queue_edge(self):
         app = make_app()
-        app._plex_queue = ["10", "11"]
+        app._plex_queue = [{"rating_key": "10", "title": "E1"},
+                           {"rating_key": "11", "title": "E2"}]
         app._plex_queue_pos = 0
         chapters = []
         app.player.chapter_skip = lambda d: chapters.append(d)

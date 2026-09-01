@@ -35,7 +35,7 @@ class MenusMixin:
             return
         if latest and updater.is_newer(latest["tag"], __version__):
             self.renderer.show_notification(
-                f"Update {latest['tag']} available — Check for Updates in the menu", 6.0)
+                f"Update {latest['tag']} available - Check for Updates in the menu", 6.0)
 
     def _check_updates(self):
         """Menu action: checking screen -> result -> confirm -> download with a
@@ -47,7 +47,7 @@ class MenusMixin:
         def work():
             # 1. Checking screen.
             self.renderer.menu.open_with(
-                [MenuItem("Contacting GitHub…", enabled=False)],
+                [MenuItem("Contacting GitHub...", enabled=False)],
                 title="CHECKING FOR UPDATES")
             self.renderer.update()
             try:
@@ -161,8 +161,77 @@ class MenusMixin:
             MenuItem("Gamepad Buttons", submenu=self._gamepad_keys_submenu),
             MenuItem("Audio Device", submenu=self._plex_audio_devices_submenu),
             MenuItem("Display", submenu=self._display_submenu),
+            MenuItem("Setup Wizard", action=self._setup_wizard,
+                     close_after=False),
             MenuItem("Check for Updates", action=self._check_updates),
         ]
+
+    # ── First-run setup wizard ────────────────────────────────────────────
+    # Three skippable steps chained as context-menu pages over the home
+    # screen: pick a look, add a playlist, sign in to Plex. Every wizard item
+    # is close_after=False — the action itself opens the next page (or closes
+    # the menu), and activate()'s close-after would kill that new page.
+
+    def _setup_wizard(self):
+        if not self.config.setup_done:
+            self.config.setup_done = True     # the auto-run happens once, ever
+            self.config.save()
+        self._wizard_theme()
+
+    def _wizard_theme(self):
+        self.renderer.menu.open_with(self._wizard_theme_items(),
+                                     title="WELCOME 1/3 - PICK A LOOK")
+        self.renderer.mark_dirty()
+
+    def _wizard_theme_items(self):
+        items = [MenuItem(label,
+                          action=lambda i=label: self._wizard_pick_theme(i),
+                          checked=(self._active_theme == label),
+                          close_after=False)
+                 for label in self._builtin_theme_labels()]
+        items.append(MenuItem("Next  >", action=self._wizard_playlist,
+                              close_after=False))
+        return items
+
+    def _wizard_pick_theme(self, ident):
+        self._apply_theme_ident(ident)        # live preview, whole UI restyles
+        self.renderer.menu.replace_page(self._wizard_theme_items())
+        self.renderer.update()
+
+    def _wizard_playlist(self):
+        self.renderer.menu.open_with([
+            MenuItem("Add my playlist...", action=self._wizard_add_playlist,
+                     close_after=False),
+            MenuItem("Skip for now", action=self._wizard_plex,
+                     close_after=False),
+        ], title="SETUP 2/3 - LIVE TV")
+        self.renderer.mark_dirty()
+
+    def _wizard_add_playlist(self):
+        pl = self._add_playlist_dialog()      # OSK prompts; menu waits under
+        if pl:
+            self._start_from_playlist(pl)     # tunes in — wizard's done
+        else:
+            self._wizard_playlist()           # cancelled → offer the step again
+
+    def _wizard_plex(self):
+        self.renderer.menu.open_with([
+            MenuItem("Sign in to Plex...", action=self._wizard_open_plex,
+                     close_after=False),
+            MenuItem("Skip", action=self._wizard_finish, close_after=False),
+        ], title="SETUP 3/3 - PLEX")
+        self.renderer.mark_dirty()
+
+    def _wizard_open_plex(self):
+        self.renderer.menu.close()
+        self._open_ppv()                      # the PIN sign-in lives there
+
+    def _wizard_finish(self):
+        """Nothing configured — land in the demo channels, not a dead screen."""
+        self.renderer.menu.close()
+        self._start_demo()
+        self.renderer.show_notification(
+            "DEMO CHANNELS - add a playlist from the home screen", 4.0)
 
     # ── Input remapping menus ─────────────────────────────────────────────
 
@@ -503,7 +572,8 @@ class MenusMixin:
         self.renderer.vignette_on = self.config.vignette_enabled
         self.renderer.set_scanline_alpha(self.config.scanline_alpha)
 
-    def _select_theme(self, ident):
+    def _apply_theme_ident(self, ident):
+        """Apply + persist a theme by its menu label (built-in or custom)."""
         ct = self.config.custom_themes.get(ident)
         if ct:
             self._apply_custom_theme_values(ct)
@@ -513,9 +583,12 @@ class MenusMixin:
         self._active_theme = ident
         self.config.save()
         self.renderer.rebuild()
+        print(f"[cathode] Theme -> {ident}")
+
+    def _select_theme(self, ident):
+        self._apply_theme_ident(ident)
         self.renderer.menu.replace_page(self._theme_submenu())
         self.renderer.update()
-        print(f"[cathode] Theme -> {ident}")
 
     def _theme_from_state(self, state):
         c = state["colors"]
@@ -603,7 +676,8 @@ class MenusMixin:
         return {"colors": colors,
                 "scanline": int(self.config.scanline_alpha),
                 "crt": bool(self.config.crt_enabled),
-                "vignette": bool(self.config.vignette_enabled)}
+                "vignette": bool(self.config.vignette_enabled),
+                "motion": bool(self.config.motion_enabled)}
 
     def _visual_snapshot(self):
         """Capture the full look state so the editor can revert on cancel."""
@@ -659,6 +733,14 @@ class MenusMixin:
                                  chnum=c.get("chnum", [40, 255, 90]))
         self.renderer.crt_on = bool(state["crt"])
         self.renderer.vignette_on = bool(state["vignette"])
+        # Motion is an accessibility preference, not part of the look, so it is
+        # neither saved into a theme nor reverted when the editor is dismissed
+        # without saving. It persists the moment it is toggled.
+        motion = bool(state.get("motion", True))
+        self.renderer.reduce_motion = not motion
+        if motion != bool(self.config.motion_enabled):
+            self.config.motion_enabled = motion
+            self.config.save()
         new_alpha = max(0, min(255, int(state["scanline"])))
         if new_alpha != self.renderer._scanline_alpha:
             self.renderer.set_scanline_alpha(new_alpha)

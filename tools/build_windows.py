@@ -140,6 +140,8 @@ def package(app_dir):
                                    os.path.relpath(full, lic_dir))
                 z.write(full, rel.replace(os.sep, "/"))
                 n += 1
+    from build_source import write_sha256
+    write_sha256(out_zip)
     mb = os.path.getsize(out_zip) / 1024 / 1024
     log(f"DONE -> {out_zip}  ({n} files, {mb:.1f} MB)")
 

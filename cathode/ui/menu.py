@@ -13,8 +13,9 @@ from typing import Callable, List, Optional
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, ellipsize, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    CHANNEL_GREEN, GUIDE_SELECTED,
+    get_font, ellipsize, OSD_BG, OSD_BORDER, SCRIM, WHITE, WHITE_DIM, CYAN,
+    YELLOW, INK_MUTED,
+    CHANNEL_GREEN, GUIDE_SELECTED, SEL_TEXT,
 )
 
 
@@ -38,6 +39,7 @@ class ContextMenu:
         self.width = width
         self.height = height
         self.open = False
+        self.min_row_h = 0            # physical floor for touch hosts (px)
         self._stack: list = []        # [[items, selected_idx, title], ...]
         self._build_fonts()
 
@@ -102,8 +104,11 @@ class ContextMenu:
         return self._page[0] if self._page else []
 
     def _back_present(self) -> bool:
-        # Submenu pages show a clickable/highlightable Back row at the bottom.
-        return len(self._stack) > 1
+        # Every page gets a way out at the bottom, not only submenus. On a
+        # touchscreen the alternative was tapping outside the panel, which
+        # nothing on screen advertises — and the product rule is that whatever a
+        # button does, an on-screen control does too.
+        return bool(self._page)
 
     def _select_first(self):
         p = self._page
@@ -201,8 +206,12 @@ class ContextMenu:
 
     def _row_h(self) -> int:
         # Fit the tallest text (title or item) + padding, so no row overlaps.
+        # min_row_h is a physical floor set by touch hosts: proportional sizing
+        # is right at ten feet but yields a 4mm row on a phone, which is under
+        # any thumb.
         ink = max(getattr(self, "_item_ink", 0), getattr(self, "_title_ink", 0))
-        return max(22, int(self.height * 0.052), ink + max(10, int(self.height * 0.020)))
+        return max(22, getattr(self, "min_row_h", 0), int(self.height * 0.052),
+                   ink + max(10, int(self.height * 0.020)))
 
     def _max_visible(self) -> int:
         """How many item rows fit, reserving the pinned title (+ Back) rows."""
@@ -230,9 +239,16 @@ class ContextMenu:
         pad = max(8, int(self.height * 0.018))
         _, count = self._window()
         rows = 1 + count + (1 if self._back_present() else 0)   # title + window (+ back)
-        panel_w = max(int(self.width * 0.32), 260)
+        # A third of the width is a comfortable panel on a television. Held
+        # upright the box is narrow while the fonts are sized off its height, so
+        # that same third is too tight for the labels and every row ellipsizes
+        # to "...". The box's own shape decides the width, and a wide panel is
+        # centred rather than left-anchored so it can't sit off to one side.
+        portrait = self.width < self.height
+        panel_w = max(int(self.width * (0.86 if portrait else 0.32)), 260)
+        panel_w = min(panel_w, self.width - 2 * pad)
         panel_h = pad * 2 + row_h * rows
-        px = int(self.width * 0.06)
+        px = (self.width - panel_w) // 2 if portrait else int(self.width * 0.06)
         py = max(int(self.height * 0.04), (self.height - panel_h) // 2)
         return px, py, panel_w, panel_h, row_h, pad
 
@@ -273,8 +289,13 @@ class ContextMenu:
         d = ImageDraw.Draw(img)
         px, py, pw, ph, row_h, pad = self._geometry()
 
-        d.rectangle([0, 0, self.width, self.height], fill=(0, 0, 0, 90))  # dim
-        d.rectangle([px, py, px + pw, py + ph], fill=OSD_BG)
+        d.rectangle([0, 0, self.width, self.height], fill=SCRIM)
+        # The panel is opaque; the dim behind it is what places the menu over
+        # whatever it was opened from. At OSD_BG's own alpha the labels fight
+        # the picture underneath — over video that's atmospheric, over the home
+        # screen it reads as two menus printed on top of each other.
+        d.rectangle([px, py, px + pw, py + ph],
+                    fill=(OSD_BG[0], OSD_BG[1], OSD_BG[2], 255))
         d.rectangle([px, py, px + pw, py + ph], outline=OSD_BORDER, width=2)
 
         # Title (ink centered in its row; divider sits a few px below the row).
@@ -287,42 +308,65 @@ class ContextMenu:
         items = self._items()
         sel = self._page[1]
         win_first, win_count = self._window()
-        # Scroll arrows when the list overflows the window.
+        # Scroll arrows when the list overflows the window, bracketing it: above
+        # on the title row, below on the way-out row. Those two have a free right
+        # margin and the item rows don't — theirs is the hint column, where an
+        # arrow reads as a property of the row it lands on rather than as "there
+        # is more of this list".
+        def _arrow(glyph, row_y):
+            aw = d.textlength(glyph, font=self.font)
+            d.text((px + pw - pad - aw,
+                    self._vy(d, glyph, self.font, row_y, row_h)),
+                   glyph, font=self.font, fill=CYAN)
+
         if win_first > 0:
-            d.text((px + pw - pad - 14, self._vy(d, "^", self.font, py + pad, row_h)),
-                   "^", font=self.font, fill=CYAN)
+            _arrow("^", py + pad)
         if win_first + win_count < len(items):
-            d.text((px + pw - pad - 14,
-                    self._vy(d, "v", self.font, py + pad + win_count * row_h, row_h)),
-                   "v", font=self.font, fill=CYAN)
+            below = py + pad + win_count * row_h
+            if self._back_present():
+                below += row_h
+            _arrow("v", below)
         for (i, rx0, ry, rx1, ry1) in self._row_rects():
             it = items[i]
             if i == sel:
                 d.rectangle([px + 4, ry, px + pw - 4, ry + row_h], fill=GUIDE_SELECTED)
-            color = WHITE if it.enabled else GRAY
+            color = WHITE if it.enabled else INK_MUTED
             mark = "* " if it.checked else "   "
-            right = it.hint or (">" if it.submenu is not None else "")
+            # The hint column names the key that does this. A touch host has no
+            # keys, so "G" and "[^]" are noise there; the submenu arrow stays,
+            # because it says what the row will do rather than how else to do it.
+            hint = "" if self.min_row_h else it.hint
+            right = hint or (">" if it.submenu is not None else "")
             right_w = (d.textbbox((0, 0), right, font=self.font)[2]) if right else 0
             # Fit the label between the left padding and the right hint/arrow.
             label_max = pw - (pad + 6) - (right_w + pad + 10) - pad
             mark_w = int(d.textlength(mark, font=self.font))
             label = mark + ellipsize(d, it.label, self.font, label_max - mark_w)
+            # On the highlight fill, use the theme's selection ink (the "*"
+            # marker still carries the checked state).
+            if i == sel:
+                fill = SEL_TEXT
+            else:
+                fill = CHANNEL_GREEN if it.checked else color
             d.text((px + pad + 6, self._vy(d, label, self.font, ry, row_h)),
-                   label, font=self.font, fill=(CHANNEL_GREEN if it.checked else color))
+                   label, font=self.font, fill=fill)
             if right:
                 d.text((px + pw - pad - right_w, self._vy(d, right, self.font, ry, row_h)),
                        right, font=self.font,
-                       fill=CYAN if it.submenu is not None else WHITE_DIM)
+                       fill=SEL_TEXT if i == sel else
+                       (CYAN if it.submenu is not None else WHITE_DIM))
 
-        # Back row (submenus only) — highlightable + clickable.
+        # The way out — highlightable + clickable. Says what it will actually do,
+        # so a submenu reads "Back" and the root page reads "Close".
         br = self._back_rect()
         if br:
             bx0, by0, bx1, by1 = br
             if sel == len(items):
                 d.rectangle([px + 4, by0, px + pw - 4, by1], fill=GUIDE_SELECTED)
-            label = "< Back"
+            label = "< Back" if len(self._stack) > 1 else "X Close"
             d.text((px + pad + 6, self._vy(d, label, self.font, by0, row_h)),
-                   label, font=self.font, fill=CYAN)
+                   label, font=self.font,
+                   fill=SEL_TEXT if sel == len(items) else CYAN)
         return img
 
     @staticmethod

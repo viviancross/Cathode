@@ -12,8 +12,9 @@ from __future__ import annotations
 from PIL import Image, ImageDraw
 
 from .theme import (
-    get_font, OSD_BG, OSD_BORDER, WHITE, WHITE_DIM, CYAN, YELLOW, GRAY,
-    CHANNEL_GREEN, GUIDE_SELECTED,
+    get_font, OSD_BG, OSD_BORDER, TRACK, WHITE, WHITE_DIM, CYAN, YELLOW,
+    INK_MUTED,
+    CHANNEL_GREEN, GUIDE_SELECTED, SEL_TEXT, SCREEN_BG,
 )
 
 _COLORS = [("bg", "Background"), ("accent", "Accent"),
@@ -30,10 +31,12 @@ class ThemeEditor:
         self.open = False
         self.width = width
         self.height = height
+        self.min_row_h = 0        # physical floor for touch hosts (px)
         self.colors = {k: list(v) for k, v in _DEFAULT.items()}
         self.scanline = 40
         self.crt = True
         self.vignette = True
+        self.motion = True
         self._sel = 0
         self._scroll = 0
         self._rows = []
@@ -45,7 +48,8 @@ class ThemeEditor:
 
     def _build_fonts(self):
         h = self.height
-        self.font = get_font(max(13, int(h * 0.024)))
+        self._font_px = max(13, int(h * 0.024))
+        self.font = get_font(self._font_px)
         self.font_title = get_font(max(15, int(h * 0.030)))
 
     def resize(self, w, h):
@@ -63,6 +67,10 @@ class ThemeEditor:
         rows.append(("slider", "scanline", None, "Scanline Intensity"))
         rows.append(("toggle", "crt", None, "CRT Scanlines"))
         rows.append(("toggle", "vignette", None, "Vignette"))
+        # Phrased as "Motion: ON", not "Reduce Motion: ON" — a
+        # toggle whose ON state means "less of the thing" reads
+        # backwards on a row that just says ON or OFF.
+        rows.append(("toggle", "motion", None, "Motion"))
         rows.append(("action", "save_current", None, "Save Current Theme"))
         rows.append(("action", "save_new", None, "Save As New Theme"))
         rows.append(("action", "reset", None, "Reset to Default"))
@@ -86,7 +94,7 @@ class ThemeEditor:
     def state(self):
         return {"colors": {k: list(v) for k, v in self.colors.items()},
                 "scanline": self.scanline, "crt": self.crt,
-                "vignette": self.vignette}
+                "vignette": self.vignette, "motion": self.motion}
 
     def _changed(self):
         if self._on_change:
@@ -148,14 +156,19 @@ class ThemeEditor:
 
     def _geom(self):
         w, h = self.width, self.height
-        pw = max(460, min(int(w * 0.54), 860))
+        # Half the width is a comfortable panel beside a slider on a television.
+        # Held upright the fonts are sized off the height and that half is not
+        # enough to hold a label before the slider starts, so the labels print
+        # straight through the bars.
+        pw = int(w * (0.92 if w < h else 0.54))
+        pw = min(max(460, pw), w - 24)
         px = (w - pw) // 2
         title_h = max(36, int(h * 0.062))
         avail = int(h * 0.88) - title_h
         nrows = max(1, len(self._rows))
         # Shrink rows so every row (incl. the action buttons) fits without
         # scrolling at normal resolutions; only tiny windows will scroll.
-        row_h = max(24, min(int(h * 0.05), avail // nrows))
+        row_h = max(24, self.min_row_h, min(int(h * 0.05), avail // nrows))
         vis = max(1, min(nrows, avail // row_h))
         ph = title_h + vis * row_h + 16
         py = (h - ph) // 2
@@ -191,10 +204,25 @@ class ThemeEditor:
         if ri is not None:
             self._sel = ri
 
+    def _fitted_label_font(self, d, max_w: int):
+        """Largest label font whose longest slider-row label fits `max_w`."""
+        labels = [r[3] for r in self._rows if r[0] in ("color", "slider")]
+        if not labels or max_w <= 0:
+            return self.font
+        px = self._font_px
+        while px > 9 and max(d.textlength(t, font=get_font(px))
+                             for t in labels) > max_w:
+            px -= 1
+        return get_font(px)
+
     def _slider_span(self):
         px, py, pw, _, _ = self._geom()
         pad = 14
-        val_w = 46
+        # Reserve what the widest value actually measures. 46px was enough while
+        # the font was a fraction of a landscape height; in a tall box the bar
+        # is drawn out from under "255" and through the digits.
+        d = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+        val_w = max(46, int(d.textlength("255", font=self.font)) + 14)
         sx0 = px + int(pw * 0.46)
         sx1 = px + pw - pad - val_w
         return sx0, sx1
@@ -243,7 +271,7 @@ class ThemeEditor:
         ph = title_h + vis * row_h + 16
         pad = 14
         panel = (OSD_BG[0], OSD_BG[1], OSD_BG[2], 255)
-        d.rectangle([0, 0, self.width, self.height], fill=(8, 8, 14, 255))
+        d.rectangle([0, 0, self.width, self.height], fill=SCREEN_BG)
         d.rectangle([px, py, px + pw, py + ph], fill=panel)
         d.rectangle([px, py, px + pw, py + ph], outline=OSD_BORDER, width=2)
 
@@ -261,6 +289,10 @@ class ThemeEditor:
 
         sx0, sx1 = self._slider_span()
         val_right = px + pw - pad
+        # One font for every label, shrunk until the longest one stops before
+        # the sliders start. Fitting per row would leave the column ragged; not
+        # fitting at all prints the labels through the bars.
+        f_lab = self._fitted_label_font(d, sx0 - (px + pad) - 10)
         for (ri, x0, y0, x1, y1) in self._row_rects():
             kind, key, ci, label = self._rows[ri]
             if ri == self._sel:
@@ -268,13 +300,18 @@ class ThemeEditor:
                             fill=(GUIDE_SELECTED[0], GUIDE_SELECTED[1],
                                   GUIDE_SELECTED[2], 255))
             is_action = kind == "action"
-            lab_color = CYAN if (is_action and key in ("save_current", "save_new")) \
-                else (CHANNEL_GREEN if (is_action and key == "close") else WHITE)
-            self._draw_text(d, label, self.font, lab_color, x0 + pad, y0, row_h)
+            if ri == self._sel:
+                lab_color = SEL_TEXT       # readable on the highlight fill
+            else:
+                lab_color = CYAN if (is_action and key in ("save_current", "save_new")) \
+                    else (CHANNEL_GREEN if (is_action and key == "close") else WHITE)
+            self._draw_text(d, label, f_lab, lab_color, x0 + pad, y0, row_h)
             cy = y0 + row_h // 2
             if kind in ("color", "slider"):
                 val = self.colors[key][ci] if kind == "color" else self.scanline
-                d.rectangle([sx0, cy - 5, sx1, cy + 5], fill=(0, 0, 0, 255),
+                # Same widget as the OSD progress bar and the Plex scrubber:
+                # an unfilled track behind a coloured fill. Themed, not black.
+                d.rectangle([sx0, cy - 5, sx1, cy + 5], fill=TRACK,
                             outline=OSD_BORDER, width=1)
                 fillx = sx0 + int((sx1 - sx0) * val / 255)
                 bar = CHANNEL_GREEN
@@ -282,19 +319,28 @@ class ThemeEditor:
                     c = [(255, 90, 90), (90, 255, 120), (110, 160, 255)][ci]
                     bar = (c[0], c[1], c[2], 255)
                 d.rectangle([sx0, cy - 5, fillx, cy + 5], fill=bar)
-                self._draw_text(d, str(val), self.font, WHITE_DIM,
+                self._draw_text(d, str(val), self.font,
+                                SEL_TEXT if ri == self._sel else WHITE_DIM,
                                 0, y0, row_h, right_edge=val_right)
             elif kind == "toggle":
                 on = getattr(self, key)
                 self._draw_text(d, "ON" if on else "OFF", self.font,
-                                CHANNEL_GREEN if on else GRAY,
+                                SEL_TEXT if ri == self._sel
+                                else (CHANNEL_GREEN if on else INK_MUTED),
                                 0, y0, row_h, right_edge=val_right)
 
         # Scroll hints (only when the window is too short to show every row),
         # centered in the panel margins so they never overlap a row's value.
+        # Drawn as triangles rather than glyphs: the strip left for them is a
+        # fixed 16px and the font is a fraction of the height, so upright the
+        # glyph is twice the height of its own band and hangs through the
+        # panel's border. It also matches the guide's scroll arrows.
         cxh = px + pw // 2
         if self._scroll > 0:
-            self._draw_text(d, "^", self.font, CYAN, cxh, py + title_h - row_h, row_h)
+            ty = py + title_h - 15
+            d.polygon([(cxh - 10, ty + 11), (cxh + 10, ty + 11), (cxh, ty)],
+                      fill=CYAN)
         if self._scroll + vis < len(self._rows):
-            self._draw_text(d, "v", self.font, CYAN, cxh, py + ph - 14, 12)
+            ty = py + ph - 15
+            d.polygon([(cxh - 10, ty), (cxh + 10, ty), (cxh, ty + 11)], fill=CYAN)
         return img

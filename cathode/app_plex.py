@@ -32,6 +32,8 @@ class PlexMixin:
         if self.renderer.plex_playing:
             items.append(MenuItem("Audio & Subtitles", submenu=self._plex_av_submenu))
         items += [
+            MenuItem(f"Play Queue ({len(self._plex_queue)})",
+                     submenu=self._queue_submenu),
             MenuItem("Live TV", submenu=self._playlists_submenu),
             MenuItem("Options", submenu=self._options_submenu),
             MenuItem("Main Menu", action=self._open_main_menu),
@@ -41,9 +43,15 @@ class PlexMixin:
 
     def _plex_options_submenu(self):
         if not self.config.plex_token:
-            return [MenuItem("(not signed in — open Plex-Per-View)", enabled=False)]
+            return [MenuItem("(not signed in - open Plex-Per-View)", enabled=False)]
         user = self.config.plex_user_name or "Account"
+        # "Wall", not "Poster Wall": the panel ellipsizes past ~15 characters,
+        # and "View: Poster..." spends the truncation on the word that carries
+        # no information.
+        view = "Wall" if self.config.ppv_view == "wall" else "List"
         items = [
+            MenuItem(f"View: {view}", action=self._ppv_toggle_view,
+                     close_after=False),
             MenuItem(f"Quality: {self.config.plex_quality}",
                      submenu=self._plex_quality_submenu),
             MenuItem("Libraries", submenu=self._plex_libraries_submenu),
@@ -56,6 +64,18 @@ class PlexMixin:
             MenuItem("Unlink Plex Account", action=self._plex_unlink),
         ]
         return items
+
+    def _ppv_toggle_view(self):
+        """Flip the browse screen between the list and the poster wall.
+
+        close_after=False on the menu item: activate() runs the action first and
+        applies close_after afterwards, so a page rebuilt in here would be shut
+        the moment it was built."""
+        self.config.ppv_view = "wall" if self.config.ppv_view != "wall" else "list"
+        self.config.save()
+        self.renderer.ppv.view = self.config.ppv_view
+        self.renderer.menu.replace_page(self._plex_options_submenu())
+        self.renderer.mark_dirty()
 
     def _plex_servers_submenu(self):
         servers = self.config.plex_servers
@@ -303,6 +323,10 @@ class PlexMixin:
                     self.config.plex_client_id,
                     token=self.config.plex_user_token or self.config.plex_token,
                     admin_token=self.config.plex_token, version=__version__)
+            # Artwork for the poster wall. Sized transcodes, and the token in a
+            # header so it stays out of the URL and out of the cache key.
+            self.renderer.ppv.art_url = self._plex.photo_url
+            self.renderer.ppv.art_headers = self._plex.poster_headers()
             return self._plex
 
     def _plex_reset(self):
@@ -442,7 +466,7 @@ class PlexMixin:
                     token = ""
                 if token or not protected:
                     break                       # success, or non-protected failure
-                r.show_notification("Wrong PIN — try again", 2.5)
+                r.show_notification("Wrong PIN - try again", 2.5)
             if token:
                 self.config.plex_user_token = token
                 self.config.plex_user_id = uuid
@@ -457,11 +481,16 @@ class PlexMixin:
             self._ppv_connect()
         threading.Thread(target=work, daemon=True).start()
 
+    # Keep every label to ~15 characters: the context menu panel ellipsizes past
+    # that, and two options truncating to the same text are unpickable.
     SORT_OPTIONS = [
-        ("Title (A-Z)", "titleSort:asc"), ("Title (Z-A)", "titleSort:desc"),
-        ("Date Added (Newest)", "addedAt:desc"), ("Date Added (Oldest)", "addedAt:asc"),
-        ("Year (Newest)", "year:desc"), ("Year (Oldest)", "year:asc"),
-        ("Rating (Highest)", "rating:desc"), ("Rating (Lowest)", "rating:asc"),
+        ("Default", ""),
+        ("Title A-Z", "titleSort:asc"), ("Title Z-A", "titleSort:desc"),
+        ("Newest Release", "originallyAvailableAt:desc"),
+        ("Oldest Release", "originallyAvailableAt:asc"),
+        ("Newest Added", "addedAt:desc"), ("Oldest Added", "addedAt:asc"),
+        ("Newest Year", "year:desc"), ("Oldest Year", "year:asc"),
+        ("Highest Rated", "rating:desc"), ("Lowest Rated", "rating:asc"),
     ]
 
     def _ppv_select(self):
@@ -509,15 +538,19 @@ class PlexMixin:
                 self._ppv_categories(rk, title, stype)
             else:
                 self._ppv_open(
-                    lambda s, k=rk: self._ppv_client().section_filter(k, sort=s), title)
+                    lambda s, k=rk: self._ppv_client().section_filter(k, sort=s),
+                    title, sort_key=f"sec:{rk}")
         elif t in ("all", "allvideos"):
             self._ppv_open(
-                lambda s, k=rk: self._ppv_client().section_filter(k, sort=s), title)
+                lambda s, k=rk: self._ppv_client().section_filter(k, sort=s),
+                title, sort_key=f"sec:{rk}")
         elif t == "genre":
+            # Genre lists share the library's sort key — "sort this library by
+            # release date" should hold whichever way you entered it.
             gid = row.get("genre_id")
             self._ppv_open(
                 lambda s, k=rk, g=gid: self._ppv_client().section_filter(
-                    k, genre_id=g, sort=s), title)
+                    k, genre_id=g, sort=s), title, sort_key=f"sec:{rk}")
         elif t == "folderview":
             self._ppv_load_folder(f"/library/sections/{rk}/folder", "FOLDERS", rk)
         elif t == "folder":
@@ -552,11 +585,18 @@ class PlexMixin:
         ]
         self._ppv_push(title, rows, crumb)
 
-    def _ppv_open(self, loader, title, sort="", volatile=False, sortable=True):
+    def _ppv_open(self, loader, title, sort=None, volatile=False, sortable=True,
+                  sort_key=""):
         """Load an item list. `loader(sort)` returns rows; the level remembers
         the loader. sortable=True pins a Sort row (library lists); set False for
         lists with no meaningful sort (onDeck, search). volatile=True reloads the
-        level every time it's returned to (watchlist, onDeck, search)."""
+        level every time it's returned to (watchlist, onDeck, search).
+
+        `sort_key` names the list in config.plex_sorts, so each library reopens
+        with the sort it was last left on; sort=None means "use that remembered
+        sort", an explicit sort (including "") overrides it."""
+        if sort is None:
+            sort = self.config.plex_sorts.get(sort_key, "") if sort_key else ""
         r = self.renderer
         r.ppv.set_status("LOADING...")
         r.mark_dirty()
@@ -568,12 +608,12 @@ class PlexMixin:
                 self._ppv_error(str(e) or "Couldn't load that.")
                 return
             self._ppv_push(title, rows, crumb, loader=loader, sort=sort,
-                           volatile=volatile, sortable=sortable)
+                           volatile=volatile, sortable=sortable, sort_key=sort_key)
         threading.Thread(target=work, daemon=True).start()
 
     def _ppv_open_watchlist(self):
         self._ppv_open(lambda s: self._ppv_client().watchlist(sort=s),
-                       "MY WATCHLIST", volatile=True)
+                       "MY WATCHLIST", volatile=True, sort_key="watchlist")
 
     def _ppv_open_ondeck(self):
         # volatile so it reloads (and drops finished items) each time it's opened.
@@ -610,7 +650,13 @@ class PlexMixin:
         if not self._ppv_stack or not self._ppv_stack[-1].get("loader"):
             return
         lvl = self._ppv_stack.pop()
-        self._ppv_open(lvl["loader"], lvl["title"], sort=sort)
+        key = lvl.get("sort_key", "")
+        if key:
+            self.config.plex_sorts[key] = sort   # this list reopens sorted this way
+            self.config.save()
+        self._ppv_open(lvl["loader"], lvl["title"], sort=sort,
+                       volatile=lvl.get("volatile", False),
+                       sortable=lvl.get("sortable", True), sort_key=key)
 
     def _sort_submenu(self):
         cur = self._ppv_stack[-1].get("sort", "") if self._ppv_stack else ""
@@ -670,6 +716,8 @@ class PlexMixin:
             self._plex_show_playall(shuffle=True)
         elif fid == "seasons":
             self._plex_show_seasons()
+        elif fid == "queue":
+            self._plex_info_queue()
         elif fid == "watchlist":
             self._plex_info_watchlist()
         elif fid == "back":
@@ -700,10 +748,10 @@ class PlexMixin:
             if shuffle:
                 import random
                 random.shuffle(eps)
-            self._plex_queue = eps
-            self._plex_queue_pos = 0
-            self._ppv_play(eps[0], d.get("title", ""), resume=False,
-                           keep_queue=True)
+            # "Play All" means play this show now — it replaces the queue.
+            self._plex_queue = [self._queue_entry(e) for e in eps]
+            self._plex_queue_user = False
+            self._plex_play_queue_at(0)
         threading.Thread(target=work, daemon=True).start()
 
     def _plex_info_play(self):
@@ -722,7 +770,10 @@ class PlexMixin:
         title = detail.get("title", "")
         sub = detail.get("subtitle") or detail.get("meta", "")
         show_key = detail.get("grandparent_key")
-        if detail.get("type") != "episode" or not show_key:
+        # A hand-built queue is never overwritten by the automatic
+        # keep-playing-this-show queue; the episode just plays on its own.
+        if (detail.get("type") != "episode" or not show_key
+                or self._plex_queue_user):
             self._ppv_play(rk, title, sub, resume=resume)
             return
         self.renderer.ppv.set_status("STARTING...")
@@ -734,20 +785,20 @@ class PlexMixin:
                 eps = []
             queue = self._episode_queue(eps, str(rk))
             if queue:
-                self._plex_queue = queue
-                self._plex_queue_pos = 0
-                self._ppv_play(queue[0], title, sub, resume=resume,
-                               keep_queue=True)
+                self._plex_queue = [self._queue_entry(e) for e in queue]
+                self._plex_queue_user = False
+                self._plex_play_queue_at(0, resume=resume)
             else:
                 self._ppv_play(rk, title, sub, resume=resume)
         threading.Thread(target=work, daemon=True).start()
 
     @staticmethod
     def _episode_queue(eps, rk):
-        """Episode rating_keys from `rk` to the end of the show, or [] if `rk`
-        isn't found or is already the last episode (nothing to queue after it)."""
+        """Episode rows from `rk` to the end of the show, or [] if `rk` isn't
+        found or is already the last episode (nothing to queue after it)."""
+        keys = [str(e.get("rating_key", "")) for e in eps]
         try:
-            idx = eps.index(rk)
+            idx = keys.index(str(rk))
         except ValueError:
             return []
         return eps[idx:] if idx < len(eps) - 1 else []
@@ -780,6 +831,139 @@ class PlexMixin:
             self.renderer.mark_dirty()
         threading.Thread(target=work, daemon=True).start()
 
+    # ── play queue ────────────────────────────────────────────────────────
+    #
+    # One ordered list of {rating_key, title, subtitle}. It is filled either
+    # automatically (Play All / keep-playing-this-show) or by hand from the info
+    # screen's "+ QUEUE" button, and `_plex_queue_user` says which — a
+    # hand-built queue is never silently thrown away. `_plex_queue_pos` is the
+    # index playing now, or -1 when the queue is loaded but idle.
+
+    @staticmethod
+    def _queue_entry(d):
+        """Normalize a browse row or an info-screen detail into a queue entry."""
+        return {"rating_key": str(d.get("rating_key", "")),
+                "title": d.get("title", "?"),
+                "subtitle": d.get("subtitle") or d.get("meta", "")}
+
+    def _queue_add(self, entries):
+        entries = [e for e in entries if e["rating_key"]]
+        if not entries:
+            return
+        self._plex_queue.extend(entries)
+        self._plex_queue_user = True
+        n = len(entries)
+        self.renderer.show_notification(
+            f"Queued {n} episodes" if n > 1 else f"Queued: {entries[0]['title']}",
+            2.5)
+
+    def _plex_info_queue(self):
+        """+ QUEUE on the info screen. A series queues all of its episodes."""
+        d = self._plex_info_data or {}
+        if d.get("type") == "show":
+            rk = d.get("rating_key")
+            def work():
+                try:
+                    eps = self._ppv_client().all_episodes(rk)
+                except Exception as e:
+                    self._ppv_error(str(e) or "Couldn't load episodes.")
+                    return
+                self._queue_add([self._queue_entry(e) for e in eps])
+            threading.Thread(target=work, daemon=True).start()
+            return
+        self._queue_add([self._queue_entry(d)])
+
+    def _plex_play_queue_at(self, pos, resume=False):
+        """Start queue entry `pos`, keeping the rest of the queue intact."""
+        q = self._plex_queue
+        if not (0 <= pos < len(q)):
+            return
+        self._plex_queue_pos = pos
+        e = q[pos]
+        self._ppv_play(e["rating_key"], e.get("title", ""), e.get("subtitle", ""),
+                       resume=resume, keep_queue=True)
+
+    def _queue_submenu(self):
+        q = self._plex_queue
+        if not q:
+            # One hint per row: a menu row fits ~15 characters before it
+            # ellipsizes, so the "how do I fill this" text has to be split.
+            return [MenuItem("(empty)", enabled=False),
+                    MenuItem("Use + QUEUE on", enabled=False),
+                    MenuItem("an info screen", enabled=False)]
+        items = []
+        for i, e in enumerate(q):
+            # The row is only ~15 characters wide, so the label is the title and
+            # nothing else: row order carries the position (and each entry's edit
+            # page spells it out), and the checked marker means "playing now".
+            now = (i == self._plex_queue_pos and self.renderer.plex_playing)
+            items.append(MenuItem(e["title"], checked=now,
+                                  submenu=lambda i=i: self._queue_item_menu(i)))
+        items.append(MenuItem("Clear Queue", action=self._queue_clear,
+                              close_after=False))
+        return items
+
+    def _queue_item_menu(self, i):
+        """Edit page for one queue entry. Move/Remove keep the menu open (the
+        actions rebuild the page themselves), so reordering is repeatable."""
+        q = self._plex_queue
+        if not (0 <= i < len(q)):
+            return [MenuItem("(no longer in the queue)", enabled=False)]
+        return [
+            MenuItem(f"#{i + 1} of {len(q)}", enabled=False),
+            MenuItem("Play Now", action=lambda: self._queue_play(i)),
+            MenuItem("Move Up", enabled=i > 0, close_after=False,
+                     action=lambda: self._queue_move(i, -1)),
+            MenuItem("Move Down", enabled=i < len(q) - 1, close_after=False,
+                     action=lambda: self._queue_move(i, 1)),
+            MenuItem("Remove", close_after=False,
+                     action=lambda: self._queue_remove(i)),
+        ]
+
+    def _queue_play(self, i):
+        if self.renderer.plex_playing:
+            self._plex_report("stopped")     # save the outgoing item's position
+        self._plex_play_queue_at(i)
+
+    def _queue_move(self, i, delta):
+        q = self._plex_queue
+        j = i + delta
+        if not (0 <= i < len(q) and 0 <= j < len(q)):
+            return
+        q[i], q[j] = q[j], q[i]
+        # Keep the "playing now" marker on the item it was already on.
+        if self._plex_queue_pos == i:
+            self._plex_queue_pos = j
+        elif self._plex_queue_pos == j:
+            self._plex_queue_pos = i
+        self.renderer.menu.replace_page(self._queue_item_menu(j))
+        self.renderer.mark_dirty()
+
+    def _queue_remove(self, i):
+        """Drop an entry and return to the queue list. Removing the item playing
+        right now doesn't stop it — the position rewinds one slot so the next
+        advance lands on whatever moved up into its place."""
+        q = self._plex_queue
+        if not (0 <= i < len(q)):
+            return
+        q.pop(i)
+        if i < self._plex_queue_pos:
+            self._plex_queue_pos -= 1
+        elif i == self._plex_queue_pos:
+            self._plex_queue_pos = i - 1
+        if not q:
+            self._plex_queue_user = False
+            self._plex_queue_pos = 0
+        self.renderer.menu.back_and_replace(self._queue_submenu())
+        self.renderer.mark_dirty()
+
+    def _queue_clear(self):
+        self._plex_queue = []
+        self._plex_queue_user = False
+        self._plex_queue_pos = 0
+        self.renderer.menu.replace_page(self._queue_submenu())
+        self.renderer.mark_dirty()
+
     def _plex_info_back(self):
         self.renderer.plexinfo.close()
         if self._ppv_stack:
@@ -800,8 +984,14 @@ class PlexMixin:
     def _ppv_play(self, rating_key, title, subtitle="", resume=True,
                   keep_queue=False):
         if not keep_queue:
-            self._plex_queue = []    # a one-off play cancels any episode queue
-            self._plex_queue_pos = 0
+            if self._plex_queue_user:
+                # A hand-built queue outlives a one-off play. Nothing in it is
+                # current any more, so the next skip — or this item finishing —
+                # starts the queue from the top.
+                self._plex_queue_pos = -1
+            else:
+                self._plex_queue = []   # a one-off play cancels an auto queue
+                self._plex_queue_pos = 0
         r = self.renderer
         r.menu.close()               # in case the resume prompt opened it
         r.plexinfo.close()
@@ -828,7 +1018,7 @@ class PlexMixin:
                                info.get("subtitle") or subtitle)
             r.plexosd.paused = False
             r.plexosd.adjusting = False
-            r.plexosd.focus = 0          # default highlight on the timeline
+            r.plexosd.focus_to("playpause")   # first A-press pauses, not scrubs
             r.plexosd.volume = self.config.volume
             r.plexosd.muted = self.config.muted
             # play_info already zeroed the offset when resume=False (and when
@@ -836,6 +1026,7 @@ class PlexMixin:
             self.player.play(info["url"], start=info.get("offset", 0),
                              headers=info.get("headers"))
             self._apply_plex_av()        # subtitle style + audio device
+            r.flash_vcr_tag("PLAY >")
             self._plex_show_osd()
             self._start_plex_monitor()
             r.update()
@@ -960,8 +1151,7 @@ class PlexMixin:
             pos = self._plex_queue_pos + delta
             if 0 <= pos < len(q):
                 self._plex_report("stopped")   # save outgoing episode position
-                self._plex_queue_pos = pos
-                self._ppv_play(q[pos], "", resume=False, keep_queue=True)
+                self._plex_play_queue_at(pos)
                 return
         self.player.chapter_skip(delta)
         self._plex_show_osd()
@@ -970,6 +1160,8 @@ class PlexMixin:
         self._plex_paused = not self._plex_paused
         self.player.set_pause(self._plex_paused)
         self.renderer.plexosd.paused = self._plex_paused
+        if not self._plex_paused:
+            self.renderer.flash_vcr_tag("PLAY >")   # VCR-style resume tag
         self._plex_show_osd()
 
     def _plex_activate(self):
@@ -1114,7 +1306,7 @@ class PlexMixin:
         self._plex_after_stop(0 if (dur and pos > dur - 30) else int(pos))
 
     def _ppv_push(self, title, rows, crumb, loader=None, sort="", volatile=False,
-                  sortable=True):
+                  sortable=True, sort_key=""):
         # Sortable item lists get a "Sort by..." row pinned at the top so the
         # user can re-order without the context menu.
         has_sort = bool(loader and sortable and rows
@@ -1127,7 +1319,8 @@ class PlexMixin:
         self._ppv_stack.append({"title": title, "rows": rows,
                                 "sel": sel0,
                                 "crumb": crumb, "loader": loader, "sort": sort,
-                                "volatile": volatile, "sortable": sortable})
+                                "volatile": volatile, "sortable": sortable,
+                                "sort_key": sort_key})
         self.renderer.ppv.set_browse(title, rows, crumb, sel=sel0)
         self.renderer.ppv.show()     # ensure visible (e.g. opened from info screen)
         self.renderer.mark_dirty()
@@ -1170,7 +1363,8 @@ class PlexMixin:
                     self._ppv_push(lvl["title"], rows, lvl["crumb"],
                                    loader=lvl["loader"], sort=lvl.get("sort", ""),
                                    volatile=True,
-                                   sortable=lvl.get("sortable", True))
+                                   sortable=lvl.get("sortable", True),
+                                   sort_key=lvl.get("sort_key", ""))
                 else:
                     r.ppv.set_browse(lvl["title"], lvl["rows"], lvl["crumb"],
                                      lvl["sel"])
