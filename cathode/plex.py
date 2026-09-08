@@ -354,12 +354,19 @@ class PlexClient:
 
     def item_detail(self, rating_key: str) -> dict:
         """Full metadata for the info screen."""
-        data = self._get(f"{self.server}/library/metadata/{rating_key}",
-                         token=self._server_token)
-        items = _container(data, "Metadata")
+        return self._shape_detail(self._metadata(rating_key), rating_key)
+
+    def _metadata(self, rating_key: str, query: str = "") -> dict:
+        """One Metadata entry for an item, or raise. `query` is appended to the
+        request (e.g. "?includeMarkers=1")."""
+        url = f"{self.server}/library/metadata/{rating_key}{query}"
+        items = _container(self._get(url, token=self._server_token), "Metadata")
         if not items:
             raise PlexError("This item is no longer available.")
-        m = items[0]
+        return items[0]
+
+    def _shape_detail(self, m: dict, rating_key: str) -> dict:
+        """Turn a Metadata entry into the dict the info screen draws."""
         title, subtitle = _display_title(m)
         thumb = (m.get("thumb") or m.get("grandparentThumb")
                  or m.get("parentThumb") or "")
@@ -374,6 +381,26 @@ class PlexClient:
             "guid": m.get("guid", ""), "type": m.get("type", ""),
             "grandparent_key": (str(m["grandparentRatingKey"])
                                 if m.get("grandparentRatingKey") else ""),
+        }
+
+    def download_info(self, rating_key: str) -> dict:
+        """Everything the DVR needs to copy one item and describe it offline:
+        {detail, url, headers, size, container}.
+
+        Always the original file. A transcode is sized for the network it was
+        requested on; a download outlives that network, so it is worth the disk
+        to keep the real file. The token rides in a header, never the URL.
+        """
+        m = self._metadata(rating_key)
+        part = _first_part(m)
+        if not part:
+            raise PlexError("No downloadable file for this item.")
+        return {
+            "detail": self._shape_detail(m, rating_key),
+            "url": f"{self.server}{part['key']}",
+            "headers": {"X-Plex-Token": self._server_token},
+            "size": int(part.get("size") or 0),
+            "container": part.get("container", ""),
         }
 
     def all_episodes(self, show_rating_key: str) -> List[dict]:
@@ -464,7 +491,7 @@ class PlexClient:
             time_base = offset  # transcoder starts here; mpv's clock starts at 0
             offset = 0
         else:
-            url = f"{self.server}{part}"
+            url = f"{self.server}{part['key']}"
         # Auth travels in a header, not the URL query, so the token never lands
         # in mpv's log file. The caller passes these to the player.
         return {"url": url, "offset": offset, "time_base": time_base,
@@ -588,11 +615,13 @@ def _search_metadata(data: dict) -> list:
     return out
 
 
-def _first_part(meta: dict) -> Optional[str]:
+def _first_part(meta: dict) -> Optional[dict]:
+    """The first playable Part of an item. Its `key` is the file's path on the
+    server; `size` and `container` describe the file the DVR would copy."""
     for media in meta.get("Media", []) or []:
         for part in media.get("Part", []) or []:
             if part.get("key"):
-                return part["key"]
+                return part
     return None
 
 

@@ -167,6 +167,24 @@ class App(PlexMixin, MenusMixin):
             on_loaded=self.renderer.mark_dirty,
             user_agent=config.user_agent)
         self.renderer.plexinfo.logos = self.renderer.logos   # posters
+
+        # The DVR: Plex items copied to this device so they survive a flight.
+        # Deliberately NOT under runtime_dir — that is a cache, and a cache is
+        # something the system is allowed to throw away. downloads.default_dir
+        # puts them with the user's other videos (Movies on macOS, the XDG
+        # videos dir on Linux, Videos on Windows) rather than in the config
+        # folder, which is where the Android port keeps them because app storage
+        # there is private anyway.
+        from .downloads import DownloadStore, default_dir
+        self.downloads = DownloadStore(
+            config.download_dir
+            or default_dir(os.path.join(config.data_dir() or runtime_dir,
+                                        "downloads")),
+            on_change=self._on_download_change,
+            user_agent=config.user_agent)
+        # The index keeps no Plex token, so resuming a download this process
+        # never started has to ask the server for a fresh URL.
+        self.downloads.refresh_url = self._dvr_source
         self.renderer.ppv.logos = self.renderer.logos        # poster wall tiles
         self.renderer.ppv.view = (config.ppv_view
                                   if config.ppv_view in ("list", "wall") else "list")

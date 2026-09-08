@@ -74,6 +74,10 @@ class Config:
     # the default because it is the better of the two for episodes, where the
     # titles carry the information and the art is one repeated frame.
     ppv_view: str = "list"
+    # Where the DVR keeps downloaded files. Blank picks a sensible place for the
+    # platform (see downloads.default_dir). Point it at a bigger disk if the
+    # default one is small.
+    download_dir: str = ""
     # Subtitle styling (independent of the main UI font) + audio output.
     sub_font: str = ""             # font key (blank = mpv default sans-serif)
     sub_size: int = 38             # mpv sub-font-size
@@ -141,6 +145,11 @@ class Config:
         # overrides them from disk when a config file already exists.
         if self._path and os.path.exists(self._path):
             self._load()
+
+    def data_dir(self) -> str:
+        """The directory this config lives in — where Cathode keeps user data it
+        must not lose. Empty when running without a config file."""
+        return os.path.dirname(self._path) if self._path else ""
 
     def _load(self):
         try:
