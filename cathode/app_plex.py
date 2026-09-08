@@ -13,6 +13,10 @@ from .ui import theme
 from .ui.menu import MenuItem
 from .ui.renderer import UIState
 
+# Marks the top browse level (the library list), which is built twice on a
+# cold start: once from this device, once from the server.
+LIBRARY_KEY = "libraries"
+
 
 class PlexMixin:
     def _confirm_leave_plex(self):
@@ -350,9 +354,51 @@ class PlexMixin:
         r.ppv.set_status("CONNECTING...")
         r.mark_dirty()
         if self._ppv_client().token:
+            # What is already on this device goes up before the network is
+            # asked for anything. Waiting for the connect to fail first only
+            # works if it fails; in airplane mode a socket can sit there for
+            # its full timeout, and CONNECTING... is all the DVR ever shows.
+            if self.downloads.items():
+                self._ppv_show_libraries([self._downloads_row()],
+                                         status="CONNECTING...")
             self._ppv_connect()
         else:
             self._ppv_begin_auth()
+
+    def _ppv_show_libraries(self, rows, status=""):
+        """Put `rows` on the top browse level, replacing whatever is there.
+
+        Called twice on a cold start — once with what this device already
+        holds, once with what the server adds — so the list is never blocked on
+        the network. If the user has already gone deeper by the time the server
+        answers, the level underneath is updated in place instead: Back should
+        land on the full library list, but nobody's screen should change out
+        from under them.
+        """
+        stack = self._ppv_stack
+        deep = len(stack) > 1 and stack[0].get("sort_key") == LIBRARY_KEY
+        if deep:
+            stack[0]["rows"] = rows
+            return
+        # Keep the cursor on whatever kind of row it was on, so the DVR does
+        # not slide out from under a finger when the server list arrives.
+        was = ""
+        if stack and stack[0].get("sort_key") == LIBRARY_KEY:
+            old = stack[0]["rows"]
+            sel = stack[0].get("sel", 0)
+            if 0 <= sel < len(old):
+                was = old[sel].get("type", "")
+        self._ppv_stack = []
+        self._ppv_push("CHOOSE A LIBRARY", rows, "Plex-Per-View",
+                       sort_key=LIBRARY_KEY)
+        for i, row in enumerate(rows):
+            if was and row.get("type") == was:
+                self._ppv_stack[-1]["sel"] = i
+                self.renderer.ppv.sel = i
+                break
+        if status:
+            self.renderer.ppv.set_status(status)
+        self.renderer.mark_dirty()
 
     def _ppv_connect(self):
         """Discover the server and list libraries (background)."""
@@ -362,7 +408,15 @@ class PlexMixin:
                 client.discover_server(prefer=self.config.plex_server_id)
                 sections = client.sections()
             except Exception as e:
-                self._ppv_error(str(e) or "Couldn't reach Plex.")
+                # Airplane mode is the point of the DVR, so an unreachable
+                # server is not the end of Plex-Per-View when there are
+                # downloads on this device — it just narrows it to them. The
+                # list is already up by now; this only relabels it.
+                if self.downloads.items():
+                    self._ppv_show_libraries([self._downloads_row()],
+                                             status="OFFLINE")
+                else:
+                    self._ppv_error(str(e) or "Couldn't reach Plex.")
                 return
             # Cache the library list (show/hide menu) + the server list (server
             # picker) so both menus work without another round-trip.
@@ -382,11 +436,16 @@ class PlexMixin:
                 {"type": "watchlist", "title": "MY WATCHLIST", "meta": "",
                  "playable": False},
             ]
+            # Only once there is something in it. A row that opens an empty
+            # list teaches nothing; the row appears the moment the first DVR
+            # press does, which is when it starts meaning something.
+            if self.downloads.items():
+                rows.append(self._downloads_row())
             rows += [{"type": "section", "rating_key": s["key"],
                       "title": s["title"].upper(), "meta": "", "playable": False,
                       "section_type": s["type"], "agent": s.get("agent", "")}
                      for s in sections if s["key"] not in hidden]
-            self._ppv_push("CHOOSE A LIBRARY", rows, "Plex-Per-View")
+            self._ppv_show_libraries(rows)
         threading.Thread(target=work, daemon=True).start()
 
     def _ppv_begin_auth(self):
@@ -519,6 +578,19 @@ class PlexMixin:
             return
         if t == "search":
             self._ppv_search()
+            return
+        if t == "downloads":
+            self._ppv_open_downloads()
+            return
+        if t == "download":
+            state = row.get("state")
+            if state == "done":
+                self._ppv_show_info(row)
+            elif state in ("paused", "error"):
+                self._dvr_start(rk, title)   # picks up where it stopped
+            else:
+                self.renderer.show_notification("Already downloading", 2.0)
+                self.renderer.mark_dirty()
             return
         if t == "sort":
             self.renderer.menu.open_with(self._sort_submenu(), title="SORT BY")
@@ -687,6 +759,19 @@ class PlexMixin:
     def _ppv_show_info(self, row):
         rk = row.get("rating_key")
         r = self.renderer
+        if row.get("type") == "download":
+            # Everything this page needs is already on disk. Going to the
+            # server for it would make the one screen that must work offline
+            # the one screen that doesn't.
+            detail = self.downloads.detail(rk)
+            if detail is not None:
+                self._plex_info_data = detail
+                self._plex_info_kind = "download"
+                r.plexinfo.dvr = self._dvr_label(rk)
+                r.ppv.close()
+                r.plexinfo.show(detail, watchlisted=False, kind="download")
+                r.update()
+                return
         r.ppv.set_status("LOADING...")
         r.mark_dirty()
         def work():
@@ -702,6 +787,7 @@ class PlexMixin:
             on_wl = self._plex_watchlist_has(detail.get("guid", "")) \
                 if kind != "episode" else False
             r.ppv.close()
+            r.plexinfo.dvr = self._dvr_label(rk)
             r.plexinfo.show(detail, watchlisted=on_wl, kind=kind)
             r.update()
         threading.Thread(target=work, daemon=True).start()
@@ -718,6 +804,8 @@ class PlexMixin:
             self._plex_show_seasons()
         elif fid == "queue":
             self._plex_info_queue()
+        elif fid == "dvr":
+            self._plex_info_dvr()
         elif fid == "watchlist":
             self._plex_info_watchlist()
         elif fid == "back":
@@ -830,6 +918,132 @@ class PlexMixin:
                 info.watchlisted = add
             self.renderer.mark_dirty()
         threading.Thread(target=work, daemon=True).start()
+
+    # ── the DVR ───────────────────────────────────────────────────────────
+    #
+    # One button on the info screen, one list under the libraries. Pressing DVR
+    # copies the item's original file to this device; pressing it again once the
+    # copy is here offers to delete it. A downloaded item plays from disk even
+    # when the server is up — the bytes are already paid for.
+
+    @staticmethod
+    def _downloads_row():
+        return {"type": "downloads", "title": "DOWNLOADS", "meta": "",
+                "playable": False}
+
+    def _dvr_label(self, rk) -> str:
+        """What the DVR button says for `rk`. Kept short: the button row shrinks
+        every label to fit the longest one."""
+        st = self.downloads.state(rk)
+        if st == "done":
+            return "ON DVR"
+        if st == "downloading":
+            return f"DVR {self.downloads.percent(rk)}%"
+        if st == "queued":
+            return "DVR WAIT"
+        if st == "paused":
+            return "RESUME"
+        if st == "error":
+            return "RETRY"
+        return "DVR"
+
+    def _on_download_change(self):
+        """A download changed state or made progress. Repaint whatever is
+        showing it — called from the DVR worker thread."""
+        r = self.renderer
+        if r.plexinfo.open and self._plex_info_data:
+            r.plexinfo.dvr = self._dvr_label(
+                self._plex_info_data.get("rating_key", ""))
+        lvl = self._ppv_stack[-1] if self._ppv_stack else None
+        if lvl is not None and lvl.get("sort_key") == "downloads":
+            rows = self.downloads.items()
+            if not rows:
+                self._ppv_back()          # nothing left in here to look at
+                return
+            lvl["rows"] = rows
+            lvl["sel"] = min(lvl.get("sel", 0), len(rows) - 1)
+            if r.ppv.open:
+                r.ppv.set_browse(lvl["title"], rows, lvl["crumb"], lvl["sel"])
+        r.mark_dirty()
+
+    def _ppv_open_downloads(self):
+        rows = self.downloads.items()
+        if not rows:
+            self.renderer.show_notification("Nothing on the DVR yet", 2.5)
+            self.renderer.mark_dirty()
+            return
+        # No loader and not sortable: this list is local, already newest-first,
+        # and re-fetching it means reading a JSON file we are holding open.
+        self._ppv_push("DOWNLOADS", rows, "Plex-Per-View", sortable=False,
+                       sort_key="downloads")
+
+    def _plex_info_dvr(self):
+        """The DVR button. Start, or offer to undo what is already happening."""
+        d = self._plex_info_data or {}
+        rk = str(d.get("rating_key") or "")
+        if not rk:
+            return
+        st = self.downloads.state(rk)
+        if st == "done":
+            self.renderer.menu.open_with([
+                MenuItem("Keep Download", action=lambda: None),
+                MenuItem("Delete Download", action=lambda: self._dvr_delete(rk)),
+            ], title="ON DVR")
+            self.renderer.mark_dirty()
+            return
+        if st in ("queued", "downloading"):
+            self.renderer.menu.open_with([
+                MenuItem("Keep Downloading", action=lambda: None),
+                MenuItem("Stop", action=lambda: self.downloads.cancel(rk)),
+                MenuItem("Delete Download", action=lambda: self._dvr_delete(rk)),
+            ], title=f"DOWNLOADING {self.downloads.percent(rk)}%")
+            self.renderer.mark_dirty()
+            return
+        self._dvr_start(rk, d.get("title", ""))
+
+    def _dvr_source(self, rk):
+        """(url, headers) for the original file of `rk`, connecting first if
+        this is a bare resume with no browse session behind it. Handed to the
+        store so it can restart a download whose URL died with the last run."""
+        client = self._ppv_client()
+        if not client.server:
+            client.discover_server(prefer=self.config.plex_server_id)
+        info = client.download_info(rk)
+        return info["url"], info["headers"]
+
+    def _dvr_start(self, rk, title=""):
+        """Ask the server for the original file and hand it to the store. A
+        paused or failed entry resumes from the bytes already on disk."""
+        r = self.renderer
+        r.show_notification("Starting download...", 2.0)
+        r.mark_dirty()
+
+        def work():
+            try:
+                client = self._ppv_client()
+                if not client.server:
+                    # Resuming straight from the DOWNLOADS list, with no browse
+                    # session behind it, so there is no server picked yet.
+                    client.discover_server(prefer=self.config.plex_server_id)
+                info = client.download_info(rk)
+            except Exception as e:
+                r.show_notification((str(e) or "Couldn't start the download")[:44],
+                                    3.5)
+                r.mark_dirty()
+                return
+            self.downloads.add(info["detail"], info["url"], info["headers"],
+                               size=info["size"], container=info["container"])
+            name = title or info["detail"].get("title", "")
+            r.show_notification(f"DVR: {name}"[:44], 2.5)
+            r.mark_dirty()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _dvr_delete(self, rk):
+        self.downloads.remove(rk)       # repaints via _on_download_change
+        self.renderer.show_notification("Removed from the DVR", 2.0)
+        if self.renderer.plexinfo.open and self._plex_info_kind == "download":
+            self._plex_info_back()      # the item this page is about is gone
+        self.renderer.mark_dirty()
 
     # ── play queue ────────────────────────────────────────────────────────
     #
@@ -997,13 +1211,24 @@ class PlexMixin:
         r.plexinfo.close()
         r.ppv.set_status("STARTING...")
         r.mark_dirty()
+        # A downloaded copy wins over the stream every time, server up or not:
+        # it is the original file, it costs no bandwidth, and it cannot stall.
+        # (It also ignores the transcode quality preset, by the same logic that
+        # made the DVR fetch the original in the first place.)
+        local = self.downloads.local_path(rating_key)
+
         def work():
-            try:
-                info = self._ppv_client().play_info(
-                    rating_key, self.config.plex_quality, resume=resume)
-            except Exception as e:
-                self._ppv_error(str(e) or "Couldn't play that.")
-                return
+            if local:
+                info = {"url": local, "time_base": 0, "markers": [],
+                        "headers": None, "title": title, "subtitle": subtitle,
+                        "offset": self.downloads.offset(rating_key) if resume else 0}
+            else:
+                try:
+                    info = self._ppv_client().play_info(
+                        rating_key, self.config.plex_quality, resume=resume)
+                except Exception as e:
+                    self._ppv_error(str(e) or "Couldn't play that.")
+                    return
             r.ppv.close()
             r.state = UIState.WATCHING
             r.plex_playing = True
@@ -1236,6 +1461,9 @@ class PlexMixin:
     def _cache_offset(self, rk: str, offset: int):
         """Reflect a new resume point in the cached browse rows so re-selecting
         the item offers to resume (or starts over once watched)."""
+        # The DVR keeps its own copy of the resume point: on a plane there is no
+        # server to have told, and this is the only place it would survive.
+        self.downloads.set_offset(rk, offset)
         if rk and self._ppv_stack:
             for row in self._ppv_stack[-1]["rows"]:
                 if row.get("rating_key") == rk and row.get("playable"):
@@ -1271,6 +1499,8 @@ class PlexMixin:
         resume offset), else the browse list, else out of PPV entirely."""
         if self._plex_info_data:
             self._plex_info_data["offset"] = offset
+            self.renderer.plexinfo.dvr = self._dvr_label(
+                self._plex_info_data.get("rating_key", ""))
             self.renderer.plexinfo.show(
                 self._plex_info_data,
                 watchlisted=self.renderer.plexinfo.watchlisted,

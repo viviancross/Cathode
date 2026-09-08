@@ -31,7 +31,21 @@ class TestJSONHelpers(unittest.TestCase):
 
     def test_first_part(self):
         meta = {"Media": [{"Part": [{"key": "/library/parts/1/file.mkv"}]}]}
-        self.assertEqual(plex._first_part(meta), "/library/parts/1/file.mkv")
+        self.assertEqual(plex._first_part(meta),
+                         {"key": "/library/parts/1/file.mkv"})
+
+    def test_first_part_carries_the_file_description(self):
+        # It returns the whole Part, not just its key, because the DVR has to
+        # know how big the file is before it starts copying it.
+        meta = {"Media": [{"Part": [{"key": "/p/1/f.mkv", "size": 8_000_000_000,
+                                     "container": "mkv"}]}]}
+        part = plex._first_part(meta)
+        self.assertEqual(part["size"], 8_000_000_000)
+        self.assertEqual(part["container"], "mkv")
+
+    def test_first_part_skips_a_part_with_no_key(self):
+        meta = {"Media": [{"Part": [{"size": 1}, {"key": "/p/2/f.mp4"}]}]}
+        self.assertEqual(plex._first_part(meta)["key"], "/p/2/f.mp4")
 
     def test_first_part_none(self):
         self.assertIsNone(plex._first_part({}))

@@ -377,3 +377,25 @@ class TestLargeLibraryScaling(unittest.TestCase):
         s._row_rects()
         s.sel = 0
         self.assertIn(0, [i for (i, *_r) in s._row_rects()])
+
+
+class TestPosterClearsTheButtons(unittest.TestCase):
+    """The poster is 2:3 and sized off the width; the button row is pinned to
+    the bottom. On a 16:9 television they overlapped by 21px, which every
+    render done at 1280x800 walks straight past."""
+
+    def test_the_poster_clears_the_buttons(self):
+        from cathode.ui.plexinfo import PlexInfoScreen
+        for w, h in ((1280, 800), (1920, 1080), (1024, 768), (640, 480),
+                     (1920, 1200), (3840, 2160)):
+            s = PlexInfoScreen(w, h)
+            s.show({"title": "T", "summary": "S"})
+            self.assertLessEqual(s._poster_rect()[3], s._button_rects()[0][2],
+                                 f"{w}x{h}: poster runs into the button row")
+
+    def test_the_poster_keeps_its_shape_when_it_shrinks(self):
+        from cathode.ui.plexinfo import PlexInfoScreen
+        s = PlexInfoScreen(1920, 1080)
+        s.show({"title": "T", "summary": "S"})
+        x0, y0, x1, y1 = s._poster_rect()
+        self.assertAlmostEqual((y1 - y0) / (x1 - x0), 1.5, delta=0.05)

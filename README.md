@@ -8,7 +8,7 @@ drive with a keyboard, a mouse, or a game controller. It runs on the Steam Deck,
 Linux, Windows, and macOS, and renders at the window's real size, so it looks
 right on the Deck's screen and on a docked 1080p TV.
 
-**Version 3.0**
+**Version 3.1**
 
 <br clear="left">
 
@@ -43,6 +43,8 @@ build.
 - **Plex-Per-View** — sign in to your Plex server and browse, search, and watch
   your library on demand, including Continue Watching, your watchlist, an
   editable play queue, and Skip Intro / Skip Credits. See its own section below.
+- **DVR** — download a title to this machine and watch it with the server
+  unreachable. Plex-Per-View stays usable offline, showing what you've kept.
 - **Retro interface** — info bar, program guide, CRT scanlines, vignette, and
   channel-change static that holds until the new stream's first frame is ready.
   Dead channels get a "PLEASE STAND BY" test-bar card instead of a black
@@ -216,6 +218,24 @@ lined up and marks what's playing. Open any entry to play it now, move it up or
 down, or drop it — and the whole queue can be cleared from the bottom of the
 list. When one item finishes, the next one starts.
 
+**DVR** on an item's detail page downloads it to this machine. The button
+tracks the copy (`DVR 42%`, then `ON DVR`), and once anything is downloaded a
+**DOWNLOADS** row appears in the library list. Press DVR on something you've
+already got to keep or delete it.
+
+Downloads are always the original file rather than a transcode: a transcode is
+sized for the network it was requested on, and a download outlives that network.
+One downloads at a time, and an interrupted one resumes where it stopped instead
+of starting a four-gigabyte film again.
+
+With the server unreachable, Plex-Per-View opens straight onto DOWNLOADS marked
+**OFFLINE** rather than waiting out a connection timeout, and a downloaded copy
+is played instead of the stream whenever one exists.
+
+They're kept in `~/Videos/Cathode` (`~/Movies/Cathode` on macOS), following your
+XDG videos directory on Linux where it's set. Set `download_dir` in the config
+to put them somewhere else, like a bigger disk.
+
 While something is playing, the on-screen control bar handles play/pause,
 skip back/forward, previous/next, volume, and a timeline. The timeline is
 select-then-scrub: press it to start scrubbing, press again (or back out) when
@@ -255,6 +275,8 @@ automatically. A few settings only live in the file:
 - `mpv_extra_args` — extra mpv flags, e.g. `["--hwdec=no"]`.
 - `gamepad` — turn the controller reader on or off.
 - `update_check` — check for a newer release on launch.
+- `download_dir` — where the DVR keeps downloaded files. Blank picks the
+  platform's videos folder.
 
 ## Updating
 
@@ -302,6 +324,7 @@ cathode/
   app.py             input handling, menus, profiles, playlists
   player.py ipc.py   drives mpv over JSON IPC
   plex.py            Plex client (sign-in, browse, playback)
+  downloads.py       the DVR: local copies of Plex items
   updater.py         GitHub release check + download
   playlist.py epg.py config.py weather.py demo.py logos.py gamepad.py
   ui/

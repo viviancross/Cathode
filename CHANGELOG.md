@@ -1,97 +1,103 @@
 # Changelog
 
+## 3.1
+
+- **The DVR:** download a Plex item to this device and watch it with the server
+  unreachable. **DVR** on an item's info page starts a copy, the button tracks
+  it (`DVR 42%`, then `ON DVR`), and a **DOWNLOADS** row appears in the library
+  list once there's something in it. Downloads are always the original file
+  rather than a transcode, because a transcode is sized for the network it was
+  asked for on and a download outlives that network. One at a time, resumed with
+  a Range request rather than restarted, and the index holds no Plex token.
+- **Plex-Per-View works offline.** Open it with no network and whatever is
+  already downloaded is on screen immediately, marked OFFLINE, instead of
+  waiting out a connection timeout to show nothing. A downloaded copy is also
+  preferred over the stream whenever one exists, server up or not.
+- **Downloads live with your other videos:** `~/Videos/Cathode` on Windows and
+  Linux (following the XDG videos directory where it's set, so a localised
+  desktop gets its own name), `~/Movies/Cathode` on macOS. `download_dir` in the
+  config overrides it.
+- **The info screen poster no longer runs into the buttons.** At 1920x1080 it
+  overlapped the button row by 21 pixels. The poster now gives up height, and
+  width with it, so it keeps its 2:3 shape.
+- **Button labels can't overflow their buttons.** A six-button series page at
+  640 wide shrank its text as far as the floor allowed and then drew "-
+  WATCHLIST" across its neighbours anyway.
+
 ## 3.0
 
 - **Poster wall:** Plex libraries can be browsed as a grid of artwork instead of
-  a list — **Options ▸ View** switches between them, and the choice sticks. The
+  a list. **Options ▸ View** switches between them and the choice sticks. The
   grid sizes itself to the window, tiles carry a resume bar for anything part
   way through, and only the artwork actually on screen is ever fetched.
-- **Faster interface:** the overlay pipeline was rebuilt around Pillow's own
-  BGRA packer and a persistent file handle, cutting a full UI frame from 91ms to
-  34ms at 1080p (43ms to 15ms at 720p).
-- **Layout fixes throughout:** the guide header no longer overprints itself at
-  narrow widths, its time ruler thins its labels instead of colliding, and its
-  video preview is 16:9 in every box. The Plex bar, the theme editor's sliders,
-  the on-screen keyboard, the home screen's footer and the stand-by card were
-  all overflowing their boxes at some window size; each now measures its text
-  and fits. The guide gained a visible **X CLOSE** button.
-- **Menus:** every menu page now has a way out at the bottom, not only submenus,
-  and the panel is opaque so it no longer reads as two menus stacked on the home
-  screen.
-- **Updates only follow the desktop release line.** The Android, Tizen, PS2 and
+- **Updates follow the desktop release line only:** the Android, Tizen, PS2 and
   Miyoo ports publish to the same repository, and the update check could offer
-  one of their releases — or, worse, install a build from one. It now reads only
+  one of their releases — or install a build from one. It now reads only
   releases tagged as a plain version, and only accepts an asset named for this
   build.
-- **Ultrawide displays:** `ui_max_aspect` in the config keeps the interface
-  TV-shaped and centred instead of stretching the menus away from the video.
-  Off by default.
-- **Gamepad:** button actions no longer fail when the native reader is disabled.
-- **Secondary text belongs to its theme.** Captions, metadata, hints and
+- **The CRT is the whole app:** the home screen, the library browser and item
+  detail pages were rendered flat, so walking into a menu walked out of the
+  television. Every screen is now behind the same glass, including the context
+  menu and on-screen keyboard. The scanlines themselves are better: a soft
+  falloff rather than hard alternating rows, at a pitch that follows the screen
+  instead of a fixed one-pixel line that was coarse at 480p and an invisible
+  shimmer at 4K. A faint shadow-mask texture runs under them, and the vignette
+  leaves the middle of the picture alone.
+- **Faster interface:** the overlay pipeline was rebuilt around Pillow's own
+  BGRA packer and a persistent file handle, cutting a full UI frame from 91ms to
+  34ms at 1080p (43ms to 15ms at 720p). Scanlines and vignette are now one
+  layer, so a frame composites once instead of twice.
+- **Large libraries stay responsive:** landing near the end of a long list
+  re-measured the whole list on every step, so returning from an item near the
+  bottom of a 5,000-title library locked the interface for about seven seconds.
+  Opening a library measured every title up front. Both are now bounded by
+  what's on screen — 20,000 titles cost what 100 did.
+- **A bad channel logo can't take the app down:** logo URLs come from whatever
+  XMLTV or M3U you loaded, and were downloaded with no size limit and decoded
+  with no dimension limit, so one oversized or crafted image could exhaust
+  memory. Downloads stop at 8 MB, images are refused on their header if they
+  would decode to something absurd, and nothing that fails is cached. A refused
+  logo means that channel shows without art.
+- **Secondary text belongs to its theme:** captions, metadata, hints and
   disabled labels used one fixed gray on all nine themes — a cool gray sitting
   inside Amber CRT's warm world, and one that measured below the readable bar on
   Commodore, Amber and Green Phosphor. It is now derived per theme and solved
   for contrast, so it holds up on custom palettes from the theme editor too.
-- **Progress bars read as bars again.** The unfilled part of a progress or
-  volume bar shared that same gray, so one value had to be both readable text
-  and a recessive track. They are now separate.
-- **The primary action stays primary.** On a Plex detail page, PLAY kept no
-  emphasis of its own once the cursor moved to another button; it now holds an
-  accent ground whatever the cursor is doing.
-- **Library lists read faster at ten feet.** Titles carry full ink against muted
-  metadata, instead of the two sitting a hair apart.
-- **The CRT is the whole app now.** The home screen, the library browser and
-  item detail pages were rendered flat — the scanlines and vignette only ever
-  reached live TV, the guide and Plex playback, so walking into a menu walked
-  out of the television. Every screen is now behind the same glass, including
-  the context menu and on-screen keyboard, which used to stay crisp on top of a
-  scanlined page.
-- **A better tube.** Scanlines have a soft falloff instead of switching hard
-  between black and clear rows, and their pitch follows the screen: the old
-  fixed one-pixel line was a coarse stripe at 480p and an invisible, shimmering
-  hairline at 4K. A faint shadow-mask texture runs under them, and the vignette
-  now leaves the middle of the picture alone and rolls off at the edges the way
-  a real tube does, rather than greying the whole screen evenly.
-- **Faster with the effects on.** Scanlines and vignette are flattened into one
-  layer, so a frame composites once instead of twice — about 40% less work per
-  frame on every screen that already had them.
-- **Tofu boxes in the interface.** The bundled pixel fonts have no em dash, so
+- **Progress bars:** the channel bar, the Plex scrubber, the volume bars and the
+  theme editor's sliders each drew their own unfilled track, two of them in a
+  fixed near-black that ignored the theme. They share one now, and the
+  update-download bar has a track at all — it used to be an empty outline that
+  looked broken at 0%.
+- **Clearer hierarchy:** on a Plex detail page, PLAY kept no emphasis of its own
+  once the cursor moved to another button; it now holds an accent ground
+  whatever the cursor is doing. In library lists, titles carry full ink against
+  muted metadata instead of the two sitting a hair apart.
+- **Layout fixes throughout:** the guide header no longer overprints itself at
+  narrow widths. Its time ruler thins its labels instead of colliding, and its
+  video preview is 16:9 in every box. The Plex bar, the theme editor's sliders,
+  the on-screen keyboard, the home screen's footer and the stand-by card were
+  all overflowing their boxes at some window size; each now measures its text
+  and fits. The guide gained a visible **X CLOSE** button.
+- **Tofu boxes in the interface:** the bundled pixel fonts have no em dash, so
   messages written with one — the update notice, the wrong-PIN warning, the
-  signed-out menu row — drew a literal empty box in the middle of the sentence
-  on the default font. All the text the app draws is now checked against the
-  fonts that ship with it.
-- **Progress bars match each other.** The channel bar, the Plex scrubber, the
-  volume bars and the theme editor's sliders each drew their own unfilled track,
-  two of them in a fixed near-black that ignored the theme. They share one now,
-  and the update-download bar has a track at all — it used to be an empty
-  outline that looked broken at 0%.
-- **One dim behind dialogs.** The context menu and the confirm dialog pushed the
-  background back by different amounts.
-- **Messages arrive instead of blinking.** The toast that reports "Queued",
-  "Added to Favorites" or an available update used to appear and vanish between
-  one frame and the next, so a message replacing another one was easy to miss.
-  It now drops in from the top edge and lifts back out — 160ms in, 120ms out.
-- **Motion can be turned off.** A new **Motion** toggle sits with CRT Scanlines
-  and Vignette in the theme editor; with it off every transition resolves
-  straight to its end state. It is a comfort setting rather than part of a
-  theme, so it saves the moment you set it and is not carried into saved themes.
-- **Large libraries no longer freeze the browser.** Landing near the end of a
-  long list re-measured the whole list on every step, so returning from an item
-  near the bottom of a 5,000-title library locked the interface for about seven
-  seconds. Opening one also measured every title up front. Both are now bounded
-  by what's on screen: opening a library and jumping to its end are as quick at
-  20,000 titles as at 100.
-- **A bad channel logo can't take the app down.** Logo URLs come from whatever
-  XMLTV or M3U you loaded, and were downloaded with no size limit and decoded
-  with no dimension limit — so a single oversized or deliberately-crafted image
-  could exhaust memory. Downloads now stop at 8 MB, images are refused on their
-  header if they'd decode to something absurd, and nothing that fails is left in
-  the cache. A refused logo just means that channel shows without art.
-- **The set turns off.** Quitting cut straight to black. The picture now
-  collapses the way a tube does — squashing into a bright horizontal line, the
-  line pinching to a dot, the dot fading. It takes under half a second, happens
-  on the way out where nothing is waiting on it, and respects the Motion
-  toggle.
+  signed-out menu row — drew a literal empty box mid-sentence in the default
+  font. All the text the app draws is now checked against the fonts that ship
+  with it.
+- **Menus:** every menu page has a way out at the bottom, not only submenus, and
+  the panel is opaque so it no longer reads as two menus stacked on the home
+  screen. One dim behind dialogs, too: the context menu and the confirm dialog
+  used to push the background back by different amounts.
+- **Motion:** messages arrive instead of blinking — the toast that reports
+  "Queued" or an available update drops in from the top edge and lifts back out,
+  160ms in and 120ms out. Quitting no longer cuts to black; the picture collapses
+  the way a tube does, squashing into a bright line that pinches to a dot. A new
+  **Motion** toggle sits with CRT Scanlines and Vignette and resolves every
+  transition straight to its end state. It saves the moment you set it, and is
+  not carried into saved themes.
+- **Ultrawide displays:** `ui_max_aspect` in the config keeps the interface
+  TV-shaped and centred instead of stretching the menus away from the video.
+  Off by default.
+- **Gamepad:** button actions no longer fail when the native reader is disabled.
 
 ## 2.6
 

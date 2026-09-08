@@ -23,13 +23,14 @@ from .theme import (
 # other videos use the default play/watchlist/back.
 BUTTON_SETS = {
     "show": ["playall", "seasons", "shuffle", "queue", "watchlist", "back"],
-    "episode": ["play", "queue", "back"],
-    "default": ["play", "queue", "watchlist", "back"],
+    "episode": ["play", "dvr", "queue", "back"],
+    "default": ["play", "dvr", "queue", "watchlist", "back"],
+    "download": ["play", "dvr", "back"],
 }
 
 LABELS = {
     "play": "PLAY", "playall": "PLAY ALL", "seasons": "SEASONS",
-    "shuffle": "SHUFFLE", "queue": "+ QUEUE", "back": "BACK",
+    "shuffle": "SHUFFLE", "queue": "+ QUEUE", "back": "BACK", "dvr": "DVR",
 }
 
 # The one action this page exists for. It keeps an accent border and full-
@@ -52,6 +53,9 @@ class PlexInfoScreen:
         self.height = height
         self.data = {}
         self.watchlisted = False
+        # What the DVR button says right now — "DVR", "DVR 42%", "ON DVR".
+        # The app owns it, because only the app knows the download store.
+        self.dvr = LABELS["dvr"]
         self.buttons = list(BUTTON_SETS["default"])
         self.focus = 0
         self.logos = None          # LogoStore (set by App) for the poster
@@ -108,6 +112,25 @@ class PlexInfoScreen:
             out.append((i, x, y, x + bw, y + bh))
         return out
 
+    def _poster_rect(self):
+        """(x0, y0, x1, y1) for the poster.
+
+        A poster is 2:3, but the button row is pinned to the bottom of the
+        screen, so on a short box a full-width one grows down into it — worst on
+        a 16:9 television, where the two overlapped by about twenty pixels.
+        Height gives way first and the width follows, keeping the shape.
+        """
+        m = max(20, int(self.width * 0.04))
+        x0, y0 = m, int(self.height * 0.12)
+        pw = int(self.width * 0.28)
+        ph = int(pw * 1.5)
+        rects = self._button_rects()
+        room = (rects[0][2] if rects else self.height) - y0 - max(12, m // 2)
+        if ph > room:
+            ph = max(80, room)
+            pw = int(ph / 1.5)
+        return x0, y0, x0 + pw, y0 + ph
+
     def hit_test(self, x, y) -> Optional[int]:
         for (i, ax0, ay0, ax1, ay1) in self._button_rects():
             if ax0 <= x <= ax1 and ay0 <= y <= ay1:
@@ -130,9 +153,8 @@ class PlexInfoScreen:
         m = max(20, int(self.width * 0.04))
 
         # Poster (left)
-        pw = int(self.width * 0.28)
-        ph = int(pw * 1.5)
-        px, py = m, int(self.height * 0.12)
+        px, py, pw, ph = self._poster_rect()
+        pw, ph = pw - px, ph - py
         poster = None
         url = self.data.get("poster")
         if url and self.logos is not None:
@@ -171,11 +193,22 @@ class PlexInfoScreen:
 
         # Buttons
         wl_label = "- WATCHLIST" if self.watchlisted else "+ WATCHLIST"
-        labels = [wl_label if b == "watchlist" else LABELS.get(b, b.upper())
-                  for b in self.buttons]
+        labels = []
+        for b in self.buttons:
+            if b == "watchlist":
+                labels.append(wl_label)
+            elif b == "dvr":
+                labels.append(self.dvr or LABELS["dvr"])
+            else:
+                labels.append(LABELS.get(b, b.upper()))
         rects = self._button_rects()
-        f_btn = self._fitted_btn_font(d, labels,
-                                      rects[0][3] - rects[0][1] if rects else 0)
+        bw = rects[0][3] - rects[0][1] if rects else 0
+        f_btn = self._fitted_btn_font(d, labels, bw)
+        # _fitted_btn_font has a floor, and a six-button series page at 640 wide
+        # reaches it with "- WATCHLIST" still too long. Labels are centred, so
+        # an overflowing one spills across both neighbours rather than clipping
+        # — trim it instead.
+        labels = [ellipsize(d, t, f_btn, bw - 12) for t in labels]
         for (i, ax0, ay0, ax1, ay1) in rects:
             label = labels[i]
             sel = (i == self.focus)
