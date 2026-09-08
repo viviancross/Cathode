@@ -43,8 +43,7 @@ build.
 - **Plex-Per-View** — sign in to your Plex server and browse, search, and watch
   your library on demand, including Continue Watching, your watchlist, an
   editable play queue, and Skip Intro / Skip Credits. See its own section below.
-- **DVR** — download a title to this machine and watch it with the server
-  unreachable. Plex-Per-View stays usable offline, showing what you've kept.
+- **DVR** — download a plex title to the device and watch it locally, even offline.
 - **Retro interface** — info bar, program guide, CRT scanlines, vignette, and
   channel-change static that holds until the new stream's first frame is ready.
   Dead channels get a "PLEASE STAND BY" test-bar card instead of a black
