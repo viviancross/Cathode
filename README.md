@@ -18,7 +18,7 @@ right on the Deck's screen and on a docked 1080p TV.
 |---|---|
 | ![Program guide](docs/screenshots/guide.png) | ![Home screen](docs/screenshots/home.png) |
 
-| A dead channel | Plex-Per-View, paused |
+| A test channel | Plex-Per-View, paused |
 |---|---|
 | ![Please stand by](docs/screenshots/standby.png) | ![Plex playback](docs/screenshots/plex.png) |
 
