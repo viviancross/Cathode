@@ -346,6 +346,14 @@ def main():
         # UI: redraw + upload only when something on it changed (here: the clock).
         if sec != last_sec:
             last_sec = sec
+            if args.check:   # once a second: is mpv's own output already black?
+                GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, video.fbo)
+                c = tuple(GL.glReadPixels(w // 2, h // 2, 1, 1, GL.GL_RGB, GL.GL_UNSIGNED_BYTE))
+                GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
+                print(f"t={time.monotonic() - t_start:4.1f}s video-fbo center {c}"
+                      f" time-pos {player.time_pos} frame {player.estimated_frame_number}"
+                      f" drops {player.frame_drop_count}/{player.decoder_frame_drop_count}"
+                      f" rendered {video_frames}")
             draw_ui(ui, font, small, fps, frame_ms, crt, pip, len(pads))
             GL.glBindTexture(GL.GL_TEXTURE_2D, ui_tex)
             GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, *CANVAS, GL.GL_RGBA,
