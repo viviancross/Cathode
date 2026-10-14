@@ -262,6 +262,7 @@ def main():
     def blit(prog, tex, rect, flip=0):
         GL.glUseProgram(prog)
         GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        GL.glUniform1i(GL.glGetUniformLocation(prog, "tex"), 0)
         GL.glUniform4f(GL.glGetUniformLocation(prog, "rect"), *rect)
         GL.glUniform1i(GL.glGetUniformLocation(prog, "flip"), flip)
         GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
@@ -320,6 +321,25 @@ def main():
         ending = args.seconds and time.monotonic() - t_start >= args.seconds
         if sec == last_sec and not dirty and (w, h) == rendered_size and not ending:
             continue
+
+        # 1. mpv draws a video frame into its own FBO, only when it has a new
+        #    one (or the size changed); otherwise the last frame is reused.
+        if ctx.update() or (w, h) != rendered_size:
+            ctx.render(flip_y=True, block_for_target_time=False,
+                       opengl_fbo={"w": w, "h": h, "fbo": video.fbo,
+                                   "internal_format": GL.GL_RGBA8})
+            rendered_size = (w, h)
+            video_frames += 1
+        # mpv leaves GL state as it likes; put back everything drawn below relies on.
+        GL.glActiveTexture(GL.GL_TEXTURE0)
+        GL.glDisable(GL.GL_SCISSOR_TEST)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glColorMask(True, True, True, True)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+        GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, 0)
+        GL.glBindBuffer(GL.GL_PIXEL_UNPACK_BUFFER, 0)
+
+        # UI: redraw + upload only when something on it changed (here: the clock).
         if sec != last_sec:
             last_sec = sec
             draw_ui(ui, font, small, fps, frame_ms, crt, pip, len(pads))
@@ -327,14 +347,6 @@ def main():
             GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, *CANVAS, GL.GL_RGBA,
                                GL.GL_UNSIGNED_BYTE, pygame.image.tobytes(ui, "RGBA_PREMULT"))
             ui_uploads += 1
-
-        # 1. mpv draws a video frame into its own FBO, only when it has a new
-        #    one (or the size changed); otherwise the last frame is reused.
-        if ctx.update() or (w, h) != rendered_size:
-            ctx.render(flip_y=True, block_for_target_time=False,
-                       opengl_fbo={"w": w, "h": h, "fbo": video.fbo})
-            rendered_size = (w, h)
-            video_frames += 1
 
         # 2. Compose video (full or PiP) + UI canvas into the scene FBO.
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, scene.fbo)
