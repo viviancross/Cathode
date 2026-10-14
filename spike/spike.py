@@ -167,15 +167,18 @@ def check(shot, pip):
     def lit(c):
         return sum(c) > 60
 
-    results = {"ui banner is blue": (lambda c: c[2] > c[0] and c[2] > c[1])(px(0.05, 0.86))}
+    banner = px(0.05, 0.86)
+    results = {"ui banner is blue": (banner, banner[2] > banner[0] and banner[2] > banner[1])}
     if pip:
-        results["video inside PiP box"] = lit(px(0.22, 0.24))
-        results["black outside PiP box"] = not lit(px(0.75, 0.30))
+        inside, outside = px(0.22, 0.24), px(0.75, 0.30)
+        results["video inside PiP box"] = (inside, lit(inside))
+        results["black outside PiP box"] = (outside, not lit(outside))
     else:
-        results["video fills window"] = lit(px(0.5, 0.3))
-    for name, ok in results.items():
-        print(f"check: {'PASS' if ok else 'FAIL'}  {name}")
-    return all(results.values())
+        mid = px(0.5, 0.3)
+        results["video fills window"] = (mid, lit(mid))
+    for name, (rgb, ok) in results.items():
+        print(f"check: {'PASS' if ok else 'FAIL'}  {name}  rgb={rgb}")
+    return all(ok for _, ok in results.values())
 
 
 def main():
@@ -380,7 +383,7 @@ def main():
         ctx.report_swap()
 
     wall = time.monotonic() - t_start
-    print(f"hwdec {player.hwdec_current or 'no'} | video {player.width}x{player.height}"
+    print(f"{player.mpv_version} | hwdec {player.hwdec_current or 'no'} | video {player.width}x{player.height}"
           f" @ {player.container_fps} fps")
     print(f"frames {frames} in {wall:.1f}s = {frames / wall:.1f} fps | "
           f"main-loop cpu {cpu_ms / max(frames, 1):.2f} ms/frame | "

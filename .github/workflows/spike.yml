@@ -57,14 +57,18 @@ jobs:
           mkdir -p spike/out
           cmd="python spike/spike.py --seconds 8 --crt --pip --check --shot spike/out/${{ matrix.os }}.png"
           if [ "$RUNNER_OS" = Linux ]; then cmd="xvfb-run -s '-screen 0 1280x720x24' $cmd"; fi
-          eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt
+          rc=0
+          eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt || rc=1
+          # A plain pass too (no CRT, no PiP), so a failure can be pinned to a layer.
+          eval "${cmd/--crt --pip /}" 2>&1 | grep -v numpy | tee -a spike/out/log.txt || rc=1
+          exit $rc
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
       - name: publish output
         if: always()
         shell: bash
         run: |
           { echo '```'; tail -40 spike/out/log.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          msg=$(python -c "t=open('spike/out/log.txt',errors='replace').read()[-1500:]; print(t.replace('%','%25').replace('\r','').replace('\n','%0A'))")
+          msg=$(python -c "t=open('spike/out/log.txt',errors='replace').read()[-3000:]; print(t.replace('%','%25').replace('\r','').replace('\n','%0A'))")
           echo "::notice title=spike ${{ matrix.os }}::$msg"
       - uses: actions/upload-artifact@v4
         if: always()
