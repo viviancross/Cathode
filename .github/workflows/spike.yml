@@ -13,6 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+        attempt: [1, 2]   # twice per OS: these failures were intermittent
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -67,8 +68,7 @@ jobs:
           }
           run event-pip --crt --pip || rc=1
           run event-plain || rc=1
-          run simple-pip --crt --pip --loop simple || true
-          run event-pip-rgba8 --crt --pip --mpv fbo_format=rgba8 || true
+          run simple-pip --crt --pip --loop simple || rc=1
           exit $rc
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
       - name: publish output
@@ -84,5 +84,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: spike-${{ matrix.os }}
+          name: spike-${{ matrix.os }}-${{ matrix.attempt }}
           path: spike/out/

@@ -155,10 +155,14 @@ def draw_ui(surf, font, small, fps, frame_ms, crt, pip, pads):
     surf.blit(small.render(info, True, (200, 210, 230)), (band.x + 16, band.y + 62))
 
 
-def check(shot, pip):
+SMPTE_TOP = [(1, 1, 1), (1, 1, 0), (0, 1, 1), (0, 1, 0), (1, 0, 1), (1, 0, 0), (0, 0, 1)]
+
+
+def check(shot, pip, smpte):
     """Sample the composed frame where each layer must be. Catches a missing
     video, a missing UI, or a video drawn in the wrong place, without anyone
-    having to look at the PNG."""
+    having to look at the PNG. With SMPTE bars as the source it also checks
+    each bar's colour, so a corrupted picture can't pass for a working one."""
     w, h = shot.size
 
     def mean(x0, y0, x1, y1):
@@ -180,6 +184,15 @@ def check(shot, pip):
     else:
         mid = mean(0.1, 0.1, 0.9, 0.6)
         results["video fills window"] = (mid, lit(mid))
+    if smpte:   # top two thirds: seven bars, sampled at each one's centre
+        x0, y0, x1, y1 = (0.025, 0.05, 0.425, 0.425) if pip else (0.0, 0.0, 1.0, 1.0)
+        seen = []
+        for i, want in enumerate(SMPTE_TOP):
+            cx, cy = x0 + (x1 - x0) * (i + 0.5) / 7, y0 + (y1 - y0) * 0.3
+            c = mean(cx - 0.005, cy - 0.01, cx + 0.005, cy + 0.01)
+            top = max(c)
+            seen.append(tuple(int(top > 30 and v > 0.5 * top) for v in c))
+        results["video shows SMPTE bars"] = (seen, seen == SMPTE_TOP)
     for name, (rgb, ok) in results.items():
         print(f"check: {'PASS' if ok else 'FAIL'}  {name}  rgb={rgb}")
     return all(ok for _, ok in results.values())
@@ -347,7 +360,9 @@ def main():
         # 1. mpv draws a video frame into its own FBO, only when it has a new
         #    one (or the size changed); otherwise the last frame is reused.
         if ctx.update() or (w, h) != rendered_size or args.loop == "simple":
-            ctx.render(flip_y=True, block_for_target_time=args.loop == "simple",
+            # Default blocking, as in libmpv's own examples: without it, frames
+            # came out black or dimmed on some drivers.
+            ctx.render(flip_y=True,
                        opengl_fbo={"w": w, "h": h, "fbo": video.fbo,
                                    "internal_format": GL.GL_RGBA8})
             rendered_size = (w, h)
@@ -417,7 +432,7 @@ def main():
                 shot = Image.frombytes("RGB", (w, h), px).transpose(Image.FLIP_TOP_BOTTOM)
                 shot.save(args.shot)
                 print("saved", args.shot)
-                if args.check and not check(shot, pip):
+                if args.check and not check(shot, pip, "smptebars" in args.source):
                     failed = True
             running = False
 
