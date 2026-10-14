@@ -29,6 +29,13 @@ class MenusMixin:
     def _update_check_launch(self):
         """Quiet check on launch: only speak up if a newer version exists."""
         from . import updater, __version__
+        # The installer runs after we've exited, so this is the first chance to
+        # say that it failed. Its log stays until an install succeeds.
+        if os.path.exists(os.path.join(self._runtime_dir, "updates",
+                                       updater.FAILED_LOG)):
+            self.renderer.show_notification(
+                "The last update didn't install - run Check for Updates again", 8.0)
+            return
         try:
             latest = updater.check_latest()
         except updater.UpdateError:
@@ -116,8 +123,10 @@ class MenusMixin:
             try:
                 self._pending_apply = updater.write_apply_script(
                     dest, updater.install_dir(), updates_dir)
-            except Exception:
-                pass
+            except Exception as e:
+                self._update_done(snap, "UPDATE FAILED",
+                                  f"Couldn't stage the update: {e}")
+                return
             self._update_done(snap, "UPDATE READY",
                               "Downloaded. Restart Cathode to finish installing.")
 
@@ -351,6 +360,8 @@ class MenusMixin:
     def _display_submenu(self):
         items = [MenuItem("Fullscreen", action=self._toggle_fullscreen, hint="W",
                           checked=self._fullscreen, close_after=False),
+                 MenuItem("Screensaver", action=self._toggle_screensaver,
+                          checked=self.config.screensaver, close_after=False),
                  MenuItem("Aspect Ratio", submenu=self._aspect_submenu)]
         for i, name in enumerate(self.player.get_displays()):
             # close_after=False so picking a display keeps the menu open.
@@ -358,6 +369,15 @@ class MenusMixin:
                          action=lambda idx=i: self._switch_display(idx),
                          close_after=False))
         return items
+
+    def _toggle_screensaver(self):
+        """Display > Screensaver. Persists immediately; the renderer reads the
+        flag on every arming check, so an idle screen stops arming at once."""
+        self.config.screensaver = not self.config.screensaver
+        self.config.save()
+        self.renderer.attract_enabled = self.config.screensaver
+        self.renderer.menu.replace_page(self._display_submenu())
+        self.renderer.mark_dirty()
 
     def _aspect_submenu(self):
         cur = self.config.video_aspect

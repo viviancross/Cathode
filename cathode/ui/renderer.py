@@ -208,6 +208,7 @@ class Renderer:
 
         # Idle screensaver (bouncing logo) + degauss easter egg.
         self._last_activity: float = time.monotonic()
+        self.attract_enabled: bool = True
         self._degauss_on: bool = False
 
         # Active input device ("key" | "gamepad") — picks hint glyphs.
@@ -327,23 +328,29 @@ class Renderer:
 
         The cover is held until reveal_channel() is called (when mpv reports
         the new stream's first frame), so it stays in sync with real loading.
+
+        Under the render lock: update() reads state and phase together, and
+        seeing one from this call and the other from the last could finish a
+        reveal that this channel change just restarted.
         """
-        self.state          = UIState.CHANNEL_CHANGING
-        self._cc_phase      = "buffering"
-        self._buffer_start  = time.monotonic()
-        self._reveal_start  = 0.0
-        self._reveal_duration = max(0.05, reveal_duration)
-        self.osd_visible    = False
-        self.standby        = False   # a new tune clears the stand-by card
+        with self._lock:
+            self.state          = UIState.CHANNEL_CHANGING
+            self._cc_phase      = "buffering"
+            self._buffer_start  = time.monotonic()
+            self._reveal_start  = 0.0
+            self._reveal_duration = max(0.05, reveal_duration)
+            self.osd_visible    = False
+            self.standby        = False   # a new tune clears the stand-by card
 
     def reveal_channel(self, osd_timeout: float = 4.0):
         """New stream is on screen — fade the static out to reveal it."""
-        if self.state != UIState.CHANNEL_CHANGING:
-            return
-        if self._cc_phase != "revealing":
-            self._cc_phase     = "revealing"
-            self._reveal_start = time.monotonic()
-            self._pending_osd_timeout = osd_timeout
+        with self._lock:
+            if self.state != UIState.CHANNEL_CHANGING:
+                return
+            if self._cc_phase != "revealing":
+                self._cc_phase     = "revealing"
+                self._reveal_start = time.monotonic()
+                self._pending_osd_timeout = osd_timeout
 
     def end_channel_change(self, osd_timeout: float = 4.0):
         self.state       = UIState.WATCHING
@@ -1158,6 +1165,8 @@ class Renderer:
     def _attract_due(self, now: float) -> bool:
         """Screensaver arms only on the idle-prone opaque screens (home /
         guide) with no dialog open; any input exits via mark_dirty()."""
+        if not self.attract_enabled:
+            return False
         if now - self._last_activity < self.ATTRACT_AFTER:
             return False
         if not (self.main_menu.open or self.state == UIState.GUIDE_OPEN):
@@ -1180,9 +1189,15 @@ class Renderer:
         colors = [theme.CYAN, theme.YELLOW, CHANNEL_GREEN, theme.ORANGE,
                   theme.WHITE]
         ci = 0
-        while (self._running and self._last_activity == start
-               and self.width == w and self.height == h
-               and (self.main_menu.open or self.state == UIState.GUIDE_OPEN)):
+
+        def still_idle():
+            return (self._running and self.attract_enabled
+                    and self._last_activity == start
+                    and self.width == w and self.height == h
+                    and (self.main_menu.open
+                         or self.state == UIState.GUIDE_OPEN))
+
+        while still_idle():
             x += vx
             y += vy
             bounced = False
@@ -1197,7 +1212,18 @@ class Renderer:
             frame = Image.new("RGBA", (w, h), (0, 0, 0, 255))
             ImageDraw.Draw(frame).text((int(x) - bb[0], int(y) - bb[1]),
                                        "CATHODE", font=font, fill=colors[ci])
-            self._push_to_mpv(self._apply_crt(frame))
+            frame = self._apply_crt(frame)
+            # The exit condition was true at the top of the loop, 50ms and a
+            # frame build ago. A channel change started from the guide in that
+            # gap flips the state and begins painting static from another
+            # thread; pushing this frame anyway lands an opaque black screen
+            # with the wordmark on top of it. So: re-check under the render
+            # lock, right before the write, and hold the lock through it so
+            # nothing else can interleave a frame of its own.
+            with self._lock:
+                if not still_idle():
+                    break
+                self._push_to_mpv(frame)
             time.sleep(0.05)
         self._dirty = True   # repaint the real screen on wake
 

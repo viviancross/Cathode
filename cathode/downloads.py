@@ -28,6 +28,8 @@ from typing import Callable, Dict, List, Optional
 
 from .net import SSL as _SSL
 
+POSTER_MAX = 8 * 1024 * 1024
+
 # States an entry can be in. "paused" is what an interrupted download becomes on
 # the next launch: the bytes are still on disk, and selecting it resumes.
 DONE, DOWNLOADING, QUEUED, PAUSED, ERROR = (
@@ -496,7 +498,9 @@ class DownloadStore:
             hdrs.update(headers or {})
             req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=20, context=_SSL) as r:
-                data = r.read()
+                data = r.read(POSTER_MAX + 1)
+            if len(data) > POSTER_MAX:
+                return    # not a poster; the logo cache draws the same line
             with open(os.path.join(self.root, name), "wb") as f:
                 f.write(data)
             e["poster"] = name

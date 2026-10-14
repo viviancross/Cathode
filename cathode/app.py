@@ -20,6 +20,81 @@ from .app_menus import MenusMixin
 from .app_plex import PlexMixin
 
 
+def hold_instance_lock(path: str):
+    """Lock `path` for the life of this process and return the open file, or
+    None when another Cathode already holds it. Two instances share one
+    overlay file, one config and (on Linux) one mpv socket, and each scribbled
+    over the other. The OS drops the lock when the process dies, crash or not,
+    so a stale lock file is harmless. The update installer holds the same lock
+    while it copies, so a relaunch can't start a half-installed build."""
+    f = None
+    try:
+        f = open(path, "a+b")       # refused outright while the installer has it
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        if f:
+            f.close()
+        return None
+    return f
+
+
+class _Tee:
+    """stdout/stderr to the log file, and to the console too when there is
+    one (the Windows build has none: its sys.stdout is None)."""
+
+    def __init__(self, *streams):
+        self._streams = [st for st in streams if st is not None]
+
+    def write(self, text):
+        for st in self._streams:
+            try:
+                st.write(text)
+                st.flush()
+            except (OSError, ValueError):
+                pass
+        return len(text)
+
+    def flush(self):
+        pass
+
+
+def start_log(runtime_dir: str) -> str:
+    """Send everything printed, and any traceback, to cathode.log as well. The
+    previous run's log is kept as cathode.log.1. Call only while holding the
+    instance lock, or a second launch would rotate the first one's log away."""
+    path = os.path.join(runtime_dir, "cathode.log")
+    try:
+        os.replace(path, path + ".1")
+    except OSError:
+        pass
+    try:
+        f = open(path, "w", encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    sys.stdout = _Tee(f, sys.stdout)
+    sys.stderr = _Tee(f, sys.stderr)
+    return path
+
+
+def fatal(msg: str):
+    """Report a startup failure where the user will see it, then exit. The
+    Windows build has no console, so a print alone would vanish."""
+    print(f"[cathode] {msg}")
+    if os.name == "nt":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, msg, "Cathode", 0x10)
+        except Exception:
+            pass
+    sys.exit(1)
+
+
 class App(PlexMixin, MenusMixin):
     """
     Cathode application.
@@ -105,6 +180,7 @@ class App(PlexMixin, MenusMixin):
             on_resize=self._on_osd_resize,
             on_playback_started=self._on_playback_started,
             on_mouse_pos=self._on_mouse_pos,
+            on_focus=self._on_focus,
             backend=mpv_backend,
             extra_args=config.mpv_extra_args,
             mpv_path=config.mpv_path,
@@ -117,6 +193,9 @@ class App(PlexMixin, MenusMixin):
         self._active_profile = None     # last-applied look profile (for editor "Save")
         self._last_mouse = (0, 0)       # last reported mouse position
         self._input_mode = "key"        # "key" or "gamepad" — drives nav hints
+        # Whether mpv's window is in front, per mpv. Starts True so a backend
+        # that never reports focus (macOS) leaves the controller working.
+        self._focused = True
 
         # Plex-Per-View
         self._plex = None               # lazy PlexClient
@@ -155,6 +234,7 @@ class App(PlexMixin, MenusMixin):
         self.renderer.crt_on = bool(config.crt_enabled)
         self.renderer.vignette_on = bool(config.vignette_enabled)
         self.renderer.reduce_motion = not bool(config.motion_enabled)
+        self.renderer.attract_enabled = bool(config.screensaver)
 
         # Favorite channels (persisted set of channel numbers) → guide category
         self._favorites = set(int(n) for n in (config.favorites or []))
@@ -201,6 +281,13 @@ class App(PlexMixin, MenusMixin):
         # Channel-change sync (static cover held until stream's first frame)
         self._awaiting_playback: bool = False
         self._tune_timeout: Optional[threading.Timer] = None
+        # Every key press runs on its own thread, so two quick channel presses
+        # tuned concurrently: both read the same _ch_idx, and their loadfiles
+        # could reach mpv in the opposite order to the OSD. One tune at a time;
+        # _tune_gen tells a stale timeout from the current one.
+        self._tune_lock = threading.RLock()
+        self._tune_gen = 0
+        self._epg_stop: Optional[threading.Event] = None   # the refresh loop's
 
         self._start_channel = start_channel
         self._quit = False
@@ -209,6 +296,12 @@ class App(PlexMixin, MenusMixin):
     # ── Public entry point ────────────────────────────────────────────────
 
     def run(self):
+        from .updater import LOCK_FILE
+        self._instance_lock = hold_instance_lock(
+            os.path.join(self._runtime_dir, LOCK_FILE))
+        if not self._instance_lock:
+            fatal("Cathode is already running, or finishing an update.")
+        start_log(self._runtime_dir)
         if self.demo:
             from . import demo
             print("[cathode] DEMO MODE — built-in test-pattern channels.")
@@ -221,8 +314,7 @@ class App(PlexMixin, MenusMixin):
         try:
             self.player.start()
         except RuntimeError as e:
-            print(f"[cathode] {e}")
-            sys.exit(1)
+            fatal(str(e))
 
         # Wire up key handlers (sent to mpv over IPC, so must be after start)
         self._register_keys()
@@ -254,7 +346,8 @@ class App(PlexMixin, MenusMixin):
         self._gamepad_reader = None
         if self.config.gamepad:
             from .gamepad import GamepadReader
-            self._gamepad_reader = GamepadReader(self._gamepad_action)
+            self._gamepad_reader = GamepadReader(
+                self._gamepad_action, is_focused=lambda: self._focused)
             self._gamepad_reader.start()
             print("[cathode] Native gamepad reader active.")
 
@@ -293,13 +386,23 @@ class App(PlexMixin, MenusMixin):
 
     # ── Channel navigation ────────────────────────────────────────────────
 
-    def _tune(self, idx: int, initial: bool = False):
+    def _tune(self, idx, initial: bool = False):
+        """Tune to channel `idx`, or to `idx(current_idx)` when it's a function,
+        so a relative move is worked out from the channel the previous press
+        actually landed on."""
         if not self.channels:
             return                       # nothing loaded — never divide by zero
         self._plex_end()                 # entering live TV ends any Plex stream
+        with self._tune_lock:
+            self._tune_locked(idx(self._ch_idx) if callable(idx) else idx)
+
+    def _tune_locked(self, idx: int):
+        if not self.channels:
+            return
         idx = idx % len(self.channels)
         self._ch_idx = idx
         ch = self.channels[idx]
+        self._tune_gen += 1
 
         self.renderer.current_channel_idx = idx
         self._cancel_tune_timeout()
@@ -316,7 +419,8 @@ class App(PlexMixin, MenusMixin):
 
         # Safety net: if the stream never produces a frame, reveal anyway.
         self._tune_timeout = threading.Timer(
-            self.config.tune_timeout, self._finish_tune, args=(True,),
+            self.config.tune_timeout, self._finish_tune,
+            args=(True, self._tune_gen),
         )
         self._tune_timeout.daemon = True
         self._tune_timeout.start()
@@ -327,17 +431,22 @@ class App(PlexMixin, MenusMixin):
         self.renderer.clear_standby()
         self._finish_tune()
 
-    def _finish_tune(self, timed_out: bool = False):
-        """Reveal the new channel (fade the static out)."""
-        if not self._awaiting_playback:
-            return
-        self._awaiting_playback = False
-        self._cancel_tune_timeout()
-        if timed_out:
-            # Dead stream: fade the static into a PLEASE STAND BY card
-            # instead of dead air. Cleared when a frame finally arrives.
-            self.renderer.standby = True
-        self.renderer.reveal_channel(osd_timeout=self.config.osd_timeout)
+    def _finish_tune(self, timed_out: bool = False, gen: Optional[int] = None):
+        """Reveal the new channel (fade the static out). A timeout carries the
+        generation of the tune that armed it, and is ignored once a newer tune
+        has started."""
+        with self._tune_lock:
+            if not self._awaiting_playback:
+                return
+            if gen is not None and gen != self._tune_gen:
+                return
+            self._awaiting_playback = False
+            self._cancel_tune_timeout()
+            if timed_out:
+                # Dead stream: fade the static into a PLEASE STAND BY card
+                # instead of dead air. Cleared when a frame finally arrives.
+                self.renderer.standby = True
+            self.renderer.reveal_channel(osd_timeout=self.config.osd_timeout)
         self.renderer.update()
 
     def _cancel_tune_timeout(self):
@@ -346,10 +455,10 @@ class App(PlexMixin, MenusMixin):
             self._tune_timeout = None
 
     def _channel_up(self):
-        self._tune((self._ch_idx + 1) % len(self.channels))
+        self._tune(lambda i: i + 1)
 
     def _channel_down(self):
-        self._tune((self._ch_idx - 1) % len(self.channels))
+        self._tune(lambda i: i - 1)
 
     def _initial_channel_idx(self) -> int:
         """Where to start playback: explicit --channel, else last-watched, else 0."""
@@ -655,9 +764,9 @@ class App(PlexMixin, MenusMixin):
         # jumps are live-TV only so they can never yank Plex playback away.
         p.bind_key("TAB", self._show_info, name="hk_TAB")
         p.bind_key("PGUP", self._guard_live(
-            lambda: self._tune(max(0, self._ch_idx - 10))), name="hk_PGUP")
+            lambda: self._tune(lambda i: max(0, i - 10))), name="hk_PGUP")
         p.bind_key("PGDWN", self._guard_live(
-            lambda: self._tune(min(len(self.channels) - 1, self._ch_idx + 10))),
+            lambda: self._tune(lambda i: min(len(self.channels) - 1, i + 10))),
             name="hk_PGDWN")
 
         # NB: the gamepad is handled by the native reader (cathode/gamepad.py),
@@ -1388,6 +1497,12 @@ class App(PlexMixin, MenusMixin):
         if not self._quit and self.channels:
             self.player.play(self.channels[self._ch_idx].url)
 
+    def _on_focus(self, focused: bool):
+        """mpv reported its window gaining or losing focus (IPC reader thread).
+        The gamepad reader consults this on every poll, so the change takes
+        effect on the next press — no restart, no re-open."""
+        self._focused = bool(focused)
+
     def _on_osd_resize(self, w: int, h: int):
         """mpv reported its real window size — re-render the UI to match."""
         if self._quit:
@@ -1487,15 +1602,34 @@ class App(PlexMixin, MenusMixin):
 
     # ── EPG background loader ─────────────────────────────────────────────
 
+    EPG_REFRESH = 6 * 3600      # well inside epg.KEEP_AHEAD
+    EPG_RETRY = 15 * 60
+
     def _load_epg(self):
-        print("[cathode] Loading EPG…")
-        try:
-            epg = EPG()
-            epg.load(self.config.epg_url, user_agent=self.config.user_agent)
-            self.epg = epg
-            self.renderer.epg = epg
-            print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
-            self._rebuild_categories()   # refine categories with EPG genres
-            self.renderer.update()
-        except Exception as e:
-            print(f"[cathode] EPG load failed: {e}")
+        """Load the guide, then keep reloading it for as long as this playlist
+        is the one loaded. It used to load once, so a Cathode left running
+        overnight ran off the end of its listings. A failed reload keeps the
+        guide already on screen and tries again sooner."""
+        url = self.config.epg_url
+        if self._epg_stop:
+            self._epg_stop.set()            # a previous playlist's loop
+        stop = self._epg_stop = threading.Event()
+        while True:
+            print("[cathode] Loading EPG…")
+            wait = self.EPG_REFRESH
+            try:
+                epg = EPG()
+                epg.load(url, user_agent=self.config.user_agent)
+            except Exception as e:
+                print(f"[cathode] EPG load failed: {e}")
+                wait = self.EPG_RETRY
+            else:
+                if stop.is_set() or url != self.config.epg_url:
+                    return                  # the playlist changed under us
+                self.epg = epg
+                self.renderer.epg = epg
+                print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
+                self._rebuild_categories()   # refine categories with EPG genres
+                self.renderer.update()
+            if stop.wait(wait) or url != self.config.epg_url:
+                return

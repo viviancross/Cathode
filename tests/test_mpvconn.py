@@ -109,7 +109,10 @@ class TestPlayerOverAnInjectedConnection(unittest.TestCase):
         self.player.start()
         observed = [c[2] for c in self.conn.transport.commands()
                     if c[0] == "observe_property"]
-        self.assertEqual(set(observed), {"eof-reached", "osd-width", "osd-height"})
+        # `focused` is what stops the controller driving Cathode from behind
+        # another window; the reader consults it on every poll.
+        self.assertEqual(set(observed),
+                         {"eof-reached", "osd-width", "osd-height", "focused"})
 
     def test_events_from_the_connection_reach_key_handlers(self):
         fired = threading.Event()

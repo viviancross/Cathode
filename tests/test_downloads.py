@@ -95,6 +95,19 @@ class TestDownloading(unittest.TestCase):
             self.assertEqual(f.read(), PAYLOAD)
         self.assertEqual(s.percent("1234"), 100)
 
+    def test_poster_art_is_capped(self):
+        # The poster URL comes from the server's metadata; a huge body there
+        # was read whole into memory and written beside the film.
+        from unittest import mock
+        from cathode import downloads
+        for cap, kept in ((len(PAYLOAD) - 1, False), (len(PAYLOAD), True)):
+            with self.subTest(cap=cap), mock.patch.object(downloads, "POSTER_MAX", cap):
+                d = tempfile.mkdtemp(dir=self.dir)
+                s = DownloadStore(d)
+                s.add(dict(DETAIL, poster=self.srv.url), self.srv.url, {})
+                self.assertTrue(_wait(s, "1234", "done"))   # poster goes first
+                self.assertEqual(bool(s._items["1234"].get("poster")), kept)
+
     def test_the_index_survives_a_restart(self):
         s = DownloadStore(self.dir)
         s.add(DETAIL, self.srv.url, {})

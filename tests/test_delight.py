@@ -140,5 +140,97 @@ class TestDelight(unittest.TestCase):
         self.assertFalse(r._attract_due(r._last_activity + 1))
 
 
+
+class TestScreensaverToggle(unittest.TestCase):
+    """The screensaver paints whole frames on its own clock, outside the
+    render path, and was implicated in glitches at channel changes. It has to
+    be switchable, and it must never push a frame once the screen it was
+    covering has changed underneath it."""
+
+    def test_disabled_never_arms(self):
+        r = _renderer()
+        r._last_activity = 0.0
+        r.main_menu.open = True
+        self.assertTrue(r._attract_due(1e6))
+        r.attract_enabled = False
+        self.assertFalse(r._attract_due(1e6))
+
+    def test_no_frame_lands_after_the_state_changes(self):
+        # The race: the loop's exit test passes, then a channel change begins
+        # before it pushes. The push must be abandoned, not landed on top of
+        # the static.
+        r = _renderer()
+        r._running = True                  # the loop is gated on it
+        r.main_menu.open = True
+        r._last_activity = 0.0
+        pushed = []
+        orig_apply = r._apply_crt
+
+        def apply_then_change_state(frame):
+            # Simulates the channel change arriving between the loop-top check
+            # and the write.
+            r.main_menu.open = False
+            r.state = UIState.CHANNEL_CHANGING
+            return orig_apply(frame)
+        r._apply_crt = apply_then_change_state
+        r._push_to_mpv = lambda im: pushed.append(im)
+        r._attract_loop()
+        self.assertEqual(pushed, [])
+        self.assertTrue(r._dirty)              # the real screen gets repainted
+
+    def test_a_frame_lands_while_genuinely_idle(self):
+        r = _renderer()
+        r._running = True                  # the loop is gated on it
+        r.main_menu.open = True
+        r._last_activity = 0.0
+        pushed = []
+
+        def push_then_stop(im):
+            pushed.append(im)
+            r._last_activity = 1e9              # "input arrived" after one frame
+        r._push_to_mpv = push_then_stop
+        r._attract_loop()
+        self.assertEqual(len(pushed), 1)
+
+    def test_toggling_off_mid_run_stops_it(self):
+        r = _renderer()
+        r._running = True                  # the loop is gated on it
+        r.main_menu.open = True
+        r._last_activity = 0.0
+        pushed = []
+
+        def push_then_disable(im):
+            pushed.append(im)
+            r.attract_enabled = False
+        r._push_to_mpv = push_then_disable
+        r._attract_loop()
+        self.assertEqual(len(pushed), 1)
+
+    def test_config_reaches_the_renderer(self):
+        from cathode.app import App
+        from cathode.config import Config
+        cfg = Config("")
+        cfg.gamepad = False
+        cfg.screensaver = False
+        app = App(config=cfg, width=320, height=240, fullscreen=False, demo=True)
+        self.assertFalse(app.renderer.attract_enabled)
+        app.config.save = lambda: None
+        app.renderer.menu.replace_page = lambda items: None
+        app._toggle_screensaver()
+        self.assertTrue(app.config.screensaver)
+        self.assertTrue(app.renderer.attract_enabled)
+
+    def test_the_display_menu_offers_it(self):
+        from cathode.app import App
+        from cathode.config import Config
+        cfg = Config("")
+        cfg.gamepad = False
+        app = App(config=cfg, width=320, height=240, fullscreen=False, demo=True)
+        labels = [i.label for i in app._display_submenu()]
+        self.assertIn("Screensaver", labels)
+        row = next(i for i in app._display_submenu() if i.label == "Screensaver")
+        self.assertTrue(row.checked)
+        self.assertFalse(row.close_after)
+
 if __name__ == "__main__":
     unittest.main()

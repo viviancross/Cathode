@@ -2,8 +2,8 @@
 
 Queries the repo's releases, compares the newest mainline tag to the running
 version, and (when newer) downloads the asset matching this platform/build into
-a folder. The app then tells the user where it is; installing is manual on
-purpose, so a running Cathode.exe / live Deck install is never clobbered.
+a folder. Nothing is overwritten while Cathode runs: the app stages an install
+script that waits for the process to exit, then copies the new build over it.
 
 The port branches (Android, Tizen, PS2, Miyoo) publish to this same repo, so
 this module is deliberately narrow about what counts as an update for the
@@ -63,8 +63,9 @@ class UpdateError(Exception):
 
 
 def _asset_match(name: str) -> bool:
-    """Pick the release asset for this OS: Windows gets the portable Windows zip;
-    the Deck, Linux, and macOS all use the cathode-linux-macos source zip.
+    """Pick the release asset for this build: the Windows exe gets the portable
+    Windows zip; the Deck, Linux, macOS and source runs on Windows all use the
+    cathode-linux-macos source zip.
 
     Matched on the desktop build's full filename prefix, not on a loose
     substring. A port release that happened to carry its own windows zip would
@@ -74,7 +75,9 @@ def _asset_match(name: str) -> bool:
     # build does. Today it loses only because the zip happens to sort first.
     if n.endswith(".sha256"):
         return False
-    if os.name == "nt":
+    # Only the frozen exe takes the Windows build: a source checkout run with
+    # python on Windows would otherwise get the PyInstaller tree copied over it.
+    if os.name == "nt" and getattr(sys, "frozen", False):
         return n.startswith("cathode-windows-")
     return n.startswith("cathode-linux-macos-")
 
@@ -193,42 +196,94 @@ def install_dir() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def write_apply_script(archive: str, dest: str, updates_dir: str) -> str:
-    """Write a detached install script that, once Cathode has exited, extracts
-    `archive` over `dest` so the NEXT launch runs the new version. Binary build
-    archives nest everything under a top-level Cathode/ dir (stripped); the
-    source zip is flat. Returns the script path. The app spawns it on quit."""
+FAILED_LOG = "apply_update.log"
+# The app's single-instance lock, in the runtime dir (the parent of updates/).
+# The installer takes it too, so Cathode can't be relaunched mid-copy.
+LOCK_FILE = "cathode.lock"
+
+
+def _ps_quote(s: str) -> str:
+    """A PowerShell single-quoted literal. PowerShell treats the curly single
+    quotes as quote characters too, so they are doubled along with ' ."""
+    return "'" + re.sub("(['\u2018\u2019\u201a\u201b])", r"\1\1", s) + "'"
+
+
+def write_apply_script(archive: str, dest: str, updates_dir: str,
+                       pid: Optional[int] = None) -> str:
+    """Write an install script that waits for this process (`pid`) to exit,
+    then extracts `archive` over `dest` so the NEXT launch runs the new version.
+    Binary build archives nest everything under a top-level Cathode/ dir
+    (stripped); the source zip is flat. Returns the script path. The app spawns
+    it on quit.
+
+    Any failure leaves the archive in place and appends the reason to
+    FAILED_LOG in `updates_dir`; success removes the archive, the staging dir,
+    the script and that log. Files the new build no longer ships are removed
+    only where nothing of the user's can live: PyInstaller's _internal/ on
+    Windows, the cathode/ package on Linux and macOS."""
+    import shlex
     os.makedirs(updates_dir, exist_ok=True)
+    pid = os.getpid() if pid is None else pid
+    tmp = os.path.join(updates_dir, "_stage")
+    log = os.path.join(updates_dir, FAILED_LOG)
+    lock = os.path.join(os.path.dirname(os.path.abspath(updates_dir)), LOCK_FILE)
     if os.name == "nt":
-        path = os.path.join(updates_dir, "apply_update.bat")
-        tmp = os.path.join(updates_dir, "_stage")
-        script = (
-            "@echo off\r\n"
-            "timeout /t 2 /nobreak >nul\r\n"            # let Cathode.exe close
-            f'rmdir /s /q "{tmp}" 2>nul\r\n'
-            "powershell -NoProfile -Command "
-            f"\"Expand-Archive -LiteralPath '{archive}' -DestinationPath '{tmp}' -Force\"\r\n"
-            f'if exist "{tmp}\\Cathode" (set SRC={tmp}\\Cathode) else (set SRC={tmp})\r\n'
-            f'robocopy "%SRC%" "{dest}" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul\r\n'
-            f'rmdir /s /q "{tmp}" 2>nul\r\n'
-            f'del "{archive}" 2>nul\r\n'
-            '(del "%~f0") 2>nul\r\n'
-        )
+        path = os.path.join(updates_dir, "apply_update.ps1")
+        q = _ps_quote
+        rc = "/R:5 /W:1 /NP /NJH /NJS /NFL /NDL"
+        script = f"""$ErrorActionPreference = 'Stop'
+$archive = {q(archive)}; $dest = {q(dest)}; $stage = {q(tmp)}
+$log = {q(log)}; $self = {q(path)}; $lk = $null
+try {{
+  Wait-Process -Id {int(pid)} -Timeout 60 -ErrorAction SilentlyContinue
+  if (Get-Process -Id {int(pid)} -ErrorAction SilentlyContinue) {{ throw 'Cathode did not exit' }}
+  # Exclusive: fails if Cathode was already relaunched, and holds off a
+  # relaunch until the copy is done.
+  $lk = [IO.File]::Open({q(lock)}, 'OpenOrCreate', 'ReadWrite', 'None')
+  if (Test-Path -LiteralPath $stage) {{ Remove-Item -LiteralPath $stage -Recurse -Force }}
+  Expand-Archive -LiteralPath $archive -DestinationPath $stage -Force
+  $src = Join-Path $stage 'Cathode'
+  if (-not (Test-Path -LiteralPath $src -PathType Container)) {{ $src = $stage }}
+  $int = Join-Path $src '_internal'
+  if (Test-Path -LiteralPath $int -PathType Container) {{
+    robocopy $int (Join-Path $dest '_internal') /MIR {rc} | Out-Null
+    if ($LASTEXITCODE -ge 8) {{ throw "robocopy _internal exit $LASTEXITCODE" }}
+  }}
+  robocopy $src $dest /E /XD $int {rc} | Out-Null
+  if ($LASTEXITCODE -ge 8) {{ throw "robocopy exit $LASTEXITCODE" }}
+  Remove-Item -LiteralPath $stage -Recurse -Force
+  Remove-Item -LiteralPath $archive, $self -Force
+  Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+}} catch {{
+  "$(Get-Date -Format o) update not applied: $_" | Out-File -LiteralPath $log -Append -Encoding utf8
+}} finally {{
+  if ($lk) {{ $lk.Close() }}
+}}
+"""
     else:
         path = os.path.join(updates_dir, "apply_update.sh")
-        tmp = os.path.join(updates_dir, "_stage")
-        script = (
-            "#!/bin/sh\n"
-            "sleep 1\n"                                  # let Cathode release files
-            f'rm -rf "{tmp}"; mkdir -p "{tmp}"\n'
-            f'case "{archive}" in\n'
-            f'  *.tar.gz) tar -xzf "{archive}" -C "{tmp}" ;;\n'
-            f'  *) unzip -o "{archive}" -d "{tmp}" ;;\n'
-            'esac\n'
-            f'src="{tmp}"; [ -d "{tmp}/Cathode" ] && src="{tmp}/Cathode"\n'
-            f'cp -R "$src/." "{dest}/"\n'
-            f'rm -rf "{tmp}" "{archive}" "$0"\n'
-        )
+        q = shlex.quote
+        py = q(sys.executable or "python3")
+        script = f"""#!/bin/sh
+exec >>{q(log)} 2>&1
+trap '[ $? -eq 0 ] || echo "$(date) update not applied"' EXIT
+set -e
+i=0
+while kill -0 {int(pid)} 2>/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
+# Hold Cathode's instance lock while copying (no flock(1) on macOS: skipped).
+if command -v flock >/dev/null; then exec 9>>{q(lock)}; flock -n 9; fi
+rm -rf {q(tmp)}; mkdir -p {q(tmp)}
+{py} -m zipfile -e {q(archive)} {q(tmp)}
+src={q(tmp)}; [ -d {q(tmp)}/Cathode ] && src={q(tmp)}/Cathode
+cp -R "$src/." {q(dest)}/
+if [ -d "$src/cathode" ] && [ -d {q(dest)}/cathode ]; then
+  (cd {q(dest)}/cathode && find . -type f ! -path '*/__pycache__/*') |
+  while IFS= read -r f; do
+    [ -e "$src/cathode/$f" ] || rm -f {q(dest)}/cathode/"$f"
+  done
+fi
+rm -rf {q(tmp)} {q(archive)} "$0" {q(log)}
+"""
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(script)
     if os.name != "nt":
@@ -237,14 +292,20 @@ def write_apply_script(archive: str, dest: str, updates_dir: str) -> str:
 
 
 def spawn_apply(script: str):
-    """Run the apply script detached so it survives this process exiting."""
+    """Run the apply script so it survives this process exiting. Windows runs
+    it through -EncodedCommand, which no execution policy applies to."""
+    import base64
     import subprocess
     if os.name == "nt":
-        DETACHED = 0x00000008 | 0x00000200   # DETACHED_PROCESS | NEW_PROCESS_GROUP
-        subprocess.Popen(["cmd", "/c", script], creationflags=DETACHED,
-                         close_fds=True)
+        with open(script, encoding="utf-8") as f:
+            enc = base64.b64encode(f.read().encode("utf-16-le")).decode("ascii")
+        NO_WINDOW, NEW_GROUP = 0x08000000, 0x00000200
+        return subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive",
+                          "-EncodedCommand", enc],
+                         creationflags=NO_WINDOW | NEW_GROUP, close_fds=True)
     else:
-        subprocess.Popen(["sh", script], start_new_session=True, close_fds=True)
+        return subprocess.Popen(["sh", script], start_new_session=True,
+                                close_fds=True)
 
 
 if __name__ == "__main__":   # tiny self-check (no network)
