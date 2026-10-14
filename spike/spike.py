@@ -231,10 +231,13 @@ def main():
     print("GL:", GL.glGetString(GL.GL_VERSION).decode(), "|",
           GL.glGetString(GL.GL_RENDERER).decode())
 
+    def mpv_log(lvl, comp, msg):
+        if lvl in ("fatal", "error", "warn") or (args.check and comp.startswith(("vo", "libmpv"))):
+            print(f"[mpv/{comp}/{lvl}] {msg.strip()}")
+
     player = mpv.MPV(vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
                      input_default_bindings=False, input_vo_keyboard=False,
-                     log_handler=lambda lvl, comp, msg: print(f"[mpv/{comp}] {msg.strip()}")
-                     if lvl in ("error", "fatal") else None)
+                     log_handler=mpv_log, loglevel="v" if args.check else "warn")
     gpa = mpv.MpvGlGetProcAddressFn(lambda _, name: sdl.SDL_GL_GetProcAddress(name))
     ctx = mpv.MpvRenderContext(player, "opengl", opengl_init_params={"get_proc_address": gpa})
     # mpv calls this from its own thread when it has a frame; posting an SDL
