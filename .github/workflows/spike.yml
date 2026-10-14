@@ -62,6 +62,9 @@ jobs:
           eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt || rc=1
           # A plain pass too (no CRT, no PiP), so a failure can be pinned to a layer.
           eval "${cmd/--crt --pip /}" 2>&1 | grep -v numpy | tee -a spike/out/log.txt || rc=1
+          # Experiment: 8-bit intermediates instead of mpv's default rgba16f.
+          echo "=== fbo_format=rgba8" | tee -a spike/out/log.txt
+          eval "$cmd --mpv fbo_format=rgba8" 2>&1 | grep -v numpy | tee -a spike/out/log.txt || true
           exit $rc
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
       - name: publish output

@@ -193,6 +193,8 @@ def main():
     ap.add_argument("--crt", action="store_true")
     ap.add_argument("--pip", action="store_true")
     ap.add_argument("--paused", action="store_true", help="measure idle cost")
+    ap.add_argument("--mpv", action="append", default=[], metavar="KEY=VALUE",
+                    help="extra mpv option, e.g. --mpv fbo_format=rgba8")
     ap.add_argument("--check", action="store_true",
                     help="with --shot: verify the composed frame, exit 1 if wrong")
     args = ap.parse_args()
@@ -235,9 +237,10 @@ def main():
         if lvl in ("fatal", "error", "warn") or (args.check and comp.startswith(("vo", "libmpv"))):
             print(f"[mpv/{comp}/{lvl}] {msg.strip()}")
 
+    extra = dict(o.split("=", 1) for o in args.mpv)
     player = mpv.MPV(vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
                      input_default_bindings=False, input_vo_keyboard=False,
-                     log_handler=mpv_log, loglevel="v" if args.check else "warn")
+                     log_handler=mpv_log, loglevel="v" if args.check else "warn", **extra)
     gpa = mpv.MpvGlGetProcAddressFn(lambda _, name: sdl.SDL_GL_GetProcAddress(name))
     ctx = mpv.MpvRenderContext(player, "opengl", opengl_init_params={"get_proc_address": gpa})
     # mpv calls this from its own thread when it has a frame; posting an SDL
