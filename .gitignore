@@ -6,3 +6,8 @@ _macbuild/
 __pycache__/
 *.pyc
 tools/preview_out/
+
+# Cathode 4 dev
+.venv/
+_libmpv/
+spike/out/

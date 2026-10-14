@@ -1,0 +1,52 @@
+name: spike
+
+# Runs the Cathode 4 stack spike (spike/spike.py) on every desktop target and
+# uploads the frame it composed, so each OS can be checked by eye.
+on:
+  push:
+    paths: ["spike/**", ".github/workflows/spike.yml"]
+  workflow_dispatch:
+
+jobs:
+  spike:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pygame-ce mpv PyOpenGL Pillow
+
+      - name: libmpv (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libmpv2 xvfb libgl1-mesa-dri
+      - name: libmpv (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install mpv
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+      - name: libmpv (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          url=$(curl -s https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest \
+            | python -c "import sys,json; print(next(a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if a['name'].startswith('mpv-dev-x86_64-2')))")
+          curl -sL -o mpv-dev.7z "$url"
+          7z x -y -o_libmpv mpv-dev.7z > /dev/null
+
+      - name: run spike
+        shell: bash
+        run: |
+          mkdir -p spike/out
+          cmd="python spike/spike.py --seconds 8 --crt --pip --shot spike/out/${{ matrix.os }}.png"
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -s "-screen 0 1280x720x24" $cmd; else $cmd; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spike-${{ matrix.os }}
+          path: spike/out/
