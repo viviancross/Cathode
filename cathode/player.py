@@ -19,6 +19,7 @@ directly instead.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import sys
@@ -38,6 +39,7 @@ class Player:
         on_resize: Optional[Callable] = None,
         on_playback_started: Optional[Callable] = None,
         on_mouse_pos: Optional[Callable] = None,
+        on_focus: Optional[Callable] = None,   # on_focus(bool): window focus changed
         mpv_command: Optional[List[str]] = None,
         flatpak_app: str = "io.mpv.Mpv",
         backend: str = "auto",   # "auto" | "flatpak" | "system"
@@ -56,6 +58,7 @@ class Player:
         self._on_resize = on_resize
         self._on_playback_started = on_playback_started
         self._on_mouse_pos = on_mouse_pos
+        self._on_focus = on_focus
         self._osd_w = 0
         self._osd_h = 0
         self._extra_args = list(extra_args or [])
@@ -87,7 +90,7 @@ class Player:
         # Key dispatch
         self._key_handlers: Dict[str, Callable] = {}
         self.on_after_key: Optional[Callable] = None   # post-handler hook
-        self._req_id = 0
+        self._ids = itertools.count(1)   # request ids; next() is atomic
         self._pending: Dict[int, list] = {}   # request_id -> [Event, data]
         self._pending_lock = threading.Lock()
 
@@ -98,6 +101,15 @@ class Player:
         self._resume_to = None          # one-shot seek (s) applied on next load
         self._unpause_on_start = False  # force play on next file load (keep-open)
         self._aspect = "Original"       # video aspect mode, reapplied per file
+        # Which file mpv's events are about. A playback-restart, end-file or
+        # eof-reached that was in flight when the next loadfile went out
+        # belongs to the file being replaced; acting on it revealed the wrong
+        # channel, or spent this file's resume seek on the last one. mpv
+        # replies to a loadfile before it starts that file, so: sent -> its
+        # reply seen -> a start-file after that = the events are this file's.
+        self._load_lock = threading.Lock()
+        self._load_rid: Optional[int] = None
+        self._load_state = "started"    # "sent" | "acked" | "started"
 
     # ── Launch / connect ───────────────────────────────────────────────────
 
@@ -175,6 +187,11 @@ class Player:
         # correct resolution (handheld 1280x800 vs docked 1920x1080).
         self._send({"command": ["observe_property", 2, "osd-width"]})
         self._send({"command": ["observe_property", 3, "osd-height"]})
+        # Whether mpv's window is in front. The native gamepad reader reads the
+        # controller raw and would otherwise drive Cathode from behind whatever
+        # you alt-tabbed to. mpv only reports this on X11, Wayland and win32;
+        # elsewhere the property never fires and focus is assumed.
+        self._send({"command": ["observe_property", 4, "focused"]})
 
     # ── IPC plumbing ───────────────────────────────────────────────────────
 
@@ -211,6 +228,9 @@ class Player:
             return
         # Reply to a command we sent (e.g. get_property) — resolve the waiter.
         if "request_id" in msg and "event" not in msg:
+            if msg["request_id"] == self._load_rid and self._load_state == "sent":
+                self._load_state = "acked"
+                return
             with self._pending_lock:
                 pend = self._pending.get(msg["request_id"])
             if pend is not None:
@@ -224,8 +244,7 @@ class Player:
         timeout / error. Safe to call from any non-reader thread."""
         if not self._transport:
             return None
-        self._req_id += 1
-        rid = self._req_id
+        rid = next(self._ids)
         ev = threading.Event()
         with self._pending_lock:
             self._pending[rid] = [ev, None]
@@ -311,6 +330,12 @@ class Player:
                             if self.on_after_key:
                                 self.on_after_key()
                     threading.Thread(target=_run, daemon=True).start()
+        elif event == "start-file":
+            if self._load_state == "acked":
+                self._load_state = "started"
+        elif (event in ("playback-restart", "end-file")
+              and self._load_state != "started"):
+            return              # about the file being replaced, not this one
         elif event == "playback-restart":
             # First frame of a newly-loaded file is now on screen.
             if self._resume_to is not None:
@@ -330,7 +355,7 @@ class Player:
         elif event == "property-change":
             name = msg.get("name")
             if name == "eof-reached" and msg.get("data") is True:
-                if self._on_eof:
+                if self._on_eof and self._load_state == "started":
                     self._on_eof("eof")
             elif name == "osd-width":
                 self._osd_w = msg.get("data") or 0
@@ -338,6 +363,13 @@ class Player:
             elif name == "osd-height":
                 self._osd_h = msg.get("data") or 0
                 self._maybe_resize()
+            elif name == "focused":
+                data = msg.get("data")
+                # Anything but a real bool means mpv can't say (unsupported
+                # backend, or the window isn't up yet); treat that as focused
+                # rather than locking the controller out on a guess.
+                if isinstance(data, bool) and self._on_focus:
+                    self._on_focus(data)
             elif name == "mouse-pos":
                 data = msg.get("data") or {}
                 if self._on_mouse_pos and isinstance(data, dict):
@@ -377,10 +409,17 @@ class Player:
         # Per-request HTTP headers (e.g. Plex auth token) — kept out of the URL
         # so the token never lands in mpv's logs. ALWAYS set the property (empty
         # to clear) so a Plex token can't leak onto the next live-TV stream.
-        self._set_property(
-            "http-header-fields",
-            [f"{k}: {v}" for k, v in headers.items()] if headers else [])
-        self._send({"command": ["loadfile", url, "replace"]})
+        # Headers and load go out together under the lock, so a concurrent
+        # play() can't slip its own headers in between.
+        with self._load_lock:
+            rid = next(self._ids)
+            self._load_state = "sent"
+            self._load_rid = rid
+            self._set_property(
+                "http-header-fields",
+                [f"{k}: {v}" for k, v in headers.items()] if headers else [])
+            self._send({"command": ["loadfile", url, "replace"],
+                        "request_id": rid})
 
     def stop(self):
         self._send({"command": ["stop"]})

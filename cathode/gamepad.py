@@ -32,9 +32,15 @@ _JS_BUTTONS = {0: "a", 1: "b", 2: "x", 3: "y", 4: "lb", 5: "rb",
 
 
 class GamepadReader:
-    def __init__(self, on_action: Callable):
+    def __init__(self, on_action: Callable, is_focused: Callable = None):
         # on_action(name: str, is_repeat: bool)
         self.on_action = on_action
+        # is_focused() -> bool. Every backend here reads the controller raw —
+        # XInput, /dev/input/js*, IOKit — none of them know or care which window
+        # is in front, so with Cathode alt-tabbed away a pad press in some other
+        # game still changed the channel. The app answers this from mpv's own
+        # `focused` property; None means "always", for callers with no window.
+        self.is_focused = is_focused or (lambda: True)
         self._running = False
         self._thread = None
 
@@ -56,6 +62,15 @@ class GamepadReader:
 
     def _process(self, dirs, buttons, state):
         now = time.monotonic()
+        if not self.is_focused():
+            # Swallow everything, but keep tracking. The button set has to be
+            # brought up to date or a button pressed while unfocused and
+            # released after refocus would read as a fresh press on the very
+            # next poll; and a direction held across the refocus must not
+            # arrive mid-repeat, so the hold timers are dropped too.
+            state["buttons"] = set(buttons)
+            state["held"].clear()
+            return
         # Button press edges (fire once; no repeat).
         for b in buttons - state["buttons"]:
             self._emit(b, False)

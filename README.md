@@ -8,7 +8,7 @@ drive with a keyboard, a mouse, or a game controller. It runs on the Steam Deck,
 Linux, Windows, and macOS, and renders at the window's real size, so it looks
 right on the Deck's screen and on a docked 1080p TV.
 
-**Version 3.1**
+**Version 3.4**
 
 <br clear="left">
 
@@ -167,7 +167,9 @@ and number shortcuts are off until you close it.
 
 A controller works on every build with no setup (XInput on Windows,
 `/dev/input/js*` on Linux, IOKit HID on macOS), and is picked back up if you
-unplug and reconnect it. Turn it off with `"gamepad": false`. These are the
+unplug and reconnect it. Turn it off with `"gamepad": false`. It only responds while
+Cathode's window is in front, so a pad you're using in a game doesn't reach
+Cathode behind it. These are the
 defaults; remap them under **Options > Gamepad Buttons**.
 
 | Button | Action |
@@ -259,8 +261,8 @@ Open the context menu (right-click while watching, the corner button, or `C`).
 - **Plex** — streaming quality, which libraries to show, server, and user.
 - **Keyboard Shortcuts** and **Gamepad Buttons** — remap inputs.
 - **Audio Device** — pick the audio output device.
-- **Display** — fullscreen, monitor selection, and **Aspect Ratio** (Original,
-  Stretch, 4:3, 16:9, 16:10; also on the controller's R3).
+- **Display** — fullscreen, the screensaver, monitor selection, and **Aspect
+  Ratio** (Original, Stretch, 4:3, 16:9, 16:10; also on the controller's R3).
 - **Check for Updates** — see below.
 
 ### Config file
@@ -310,6 +312,10 @@ installed on the machine.
 - **No video in Game Mode but it works on the desktop** — check
   `~/.cache/cathode/mpv.log`, then try `mpv_extra_args` like
   `["--gpu-context=wayland"]`, `["--hwdec=no"]`, or `["--vo=gpu-next"]`.
+- **Anything else** — Cathode's own log is `cathode.log` (the run before it is
+  `cathode.log.1`), next to `mpv.log` in `%LOCALAPPDATA%\cathode\` on Windows
+  and `~/.cache/cathode/` elsewhere. A failed update leaves
+  `updates/apply_update.log` there too.
 - **Guide is empty** — the channel `tvg-id`s have to match the XMLTV ids. Cathode
   also tries a fuzzy name match as a fallback.
 - **ModuleNotFoundError for PIL or numpy** — the virtualenv isn't active. Run the

@@ -2,7 +2,8 @@
 # IPC socket — we do NOT link libmpv in-process, so python-mpv is not needed.
 # Networking (playlist/EPG/logo fetches) uses the stdlib urllib, so there's no
 # `requests` dependency.
-Pillow>=10.0.0
+# 10.3.0: fixes for CVE-2023-4863 (libwebp), CVE-2023-50447, CVE-2024-28219.
+Pillow>=10.3.0
 numpy>=1.24.0
 # CA bundle so HTTPS (Plex sign-in, etc.) verifies on macOS, whose bundled
 # Python often lacks system certificates.

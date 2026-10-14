@@ -3,9 +3,9 @@
 import xml.etree.ElementTree as ET
 import urllib.request
 import gzip
+import io
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from io import BytesIO
 from typing import Dict, List, Optional
 import re
 
@@ -79,6 +79,17 @@ def _text(el: Optional[ET.Element], tag: str, default: str = "") -> str:
     return default
 
 
+# Only programmes overlapping [now - KEEP_BEHIND, now + KEEP_AHEAD] are kept:
+# the guide shows a few hours ahead, and a provider's week of listings for a
+# thousand channels is most of a gigabyte held for nothing. The app reloads
+# well inside KEEP_AHEAD, so the guide never runs off the end.
+KEEP_BEHIND = timedelta(hours=3)
+KEEP_AHEAD = timedelta(hours=36)
+# A ceiling on what a guide can make us hold, whatever its size on the wire:
+# a gzip bomb of valid listings would otherwise decode straight into memory.
+MAX_PROGRAMMES = 500_000
+
+
 class EPG:
     """Holds EPG data indexed by channel ID."""
 
@@ -89,18 +100,25 @@ class EPG:
         self._display_names: Dict[str, str] = {}
         # channel_id -> logo URL from <channel><icon src="..."/>
         self._icons: Dict[str, str] = {}
+        self._window = None     # (earliest stop, latest start) kept; None = all
+        self._count = 0
 
-    def load(self, source: str, user_agent: str = "Cathode/1.0"):
+    def load(self, source: str, user_agent: str = "Cathode/1.0",
+             now: Optional[datetime] = None):
+        """Parse an XMLTV file or URL, gzipped or not, straight off the wire:
+        neither the download nor its decompressed form is ever held whole."""
+        now = now or datetime.now(timezone.utc)
+        self._window = (now - KEEP_BEHIND, now + KEEP_AHEAD)
         if source.startswith(("http://", "https://")):
-            data = _fetch(source, user_agent)
+            req = urllib.request.Request(source, headers={"User-Agent": user_agent})
+            raw = urllib.request.urlopen(req, timeout=30, context=_SSL)
         else:
-            with open(source, "rb") as f:
-                data = f.read()
-
-        if data[:2] == b"\x1f\x8b":
-            data = gzip.decompress(data)
-
-        self._parse_stream(BytesIO(data))
+            raw = open(source, "rb")
+        with raw:
+            f = io.BufferedReader(raw) if not hasattr(raw, "peek") else raw
+            if f.peek(2)[:2] == b"\x1f\x8b":
+                f = gzip.GzipFile(fileobj=f)
+            self._parse_stream(f)
 
     def _parse_stream(self, fileobj):
         """Stream-parse XMLTV with iterparse, clearing elements as they finish,
@@ -115,6 +133,8 @@ class EPG:
                 self._parse_channel(el)
             elif el.tag == "programme":
                 self._parse_programme(el)
+                if self._count >= MAX_PROGRAMMES:
+                    break       # keep what we have rather than run out of RAM
             else:
                 continue        # sub-elements are freed with their parent
             el.clear()
@@ -149,6 +169,9 @@ class EPG:
             stop = _parse_xmltv_dt(stop_str)
         except ValueError:
             return
+        if self._window and (stop <= self._window[0] or start >= self._window[1]):
+            return
+        self._count += 1
 
         title = _text(prog_el, "title")
         desc = _text(prog_el, "desc")
@@ -247,8 +270,3 @@ class EPG:
     def channel_ids(self):
         return list(self._programs.keys())
 
-
-def _fetch(url: str, user_agent: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
-        return resp.read()

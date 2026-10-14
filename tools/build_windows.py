@@ -8,6 +8,7 @@ Requires (install once):  pip install pyinstaller
 Run from the project root:  python tools/build_windows.py
 """
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -94,7 +95,12 @@ def build(mpv_exe):
     sep = ";"  # Windows add-data separator
     args = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-        "--console", "--name", "Cathode",
+        # No console: closing it killed the app, and it sat behind the video.
+        # Output goes to %LOCALAPPDATA%/cathode/cathode.log instead.
+        "--windowed", "--name", "Cathode",
+        # Pillow's Tk bridge rides along with PIL; nothing here draws with Tk.
+        "--exclude-module", "tkinter", "--exclude-module", "PIL.ImageTk",
+        "--exclude-module", "PIL._imagingtk",
         "--distpath", distpath, "--workpath", workpath,
         "--specpath", WORK,
         "--icon", os.path.join(ROOT, "assets", "cathode.ico"),
@@ -146,9 +152,44 @@ def package(app_dir):
     log(f"DONE -> {out_zip}  ({n} files, {mb:.1f} MB)")
 
 
+# The build ships the interpreter and libraries it ran on, so their age is the
+# user's exposure. 3.3 went out on Python 3.10 and Pillow 9.0 (older than the
+# libwebp fix for CVE-2023-4863) although requirements.txt asked for 10+,
+# because nothing checked. Build from a venv: see RELEASING.md.
+MIN_PYTHON = (3, 12)
+
+
+def _vtuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
+def check_toolchain():
+    from importlib.metadata import PackageNotFoundError, version
+    bad = []
+    if sys.version_info < MIN_PYTHON:
+        bad.append(f"Python {sys.version.split()[0]} < "
+                   f"{'.'.join(map(str, MIN_PYTHON))}")
+    with open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"\s*([A-Za-z0-9_.-]+)\s*>=\s*([\d.]+)", line)
+            if not m:
+                continue
+            try:
+                have = version(m.group(1))
+            except PackageNotFoundError:
+                have = "missing"
+            if have == "missing" or _vtuple(have) < _vtuple(m.group(2)):
+                bad.append(f"{m.group(1)} {have} (needs >= {m.group(2)})")
+    if bad:
+        raise SystemExit("[build] refusing to build with: " + "; ".join(bad))
+    log(f"toolchain: Python {sys.version.split()[0]}, Pillow {version('Pillow')}, "
+        f"numpy {version('numpy')}, PyInstaller {version('pyinstaller')}")
+
+
 def main():
     if os.name != "nt":
         log("WARNING: this produces a Windows binary; run it on Windows.")
+    check_toolchain()
     os.makedirs(WORK, exist_ok=True)
     mpv_exe = fetch_mpv()
     app_dir = build(mpv_exe)

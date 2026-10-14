@@ -113,7 +113,8 @@ class TestAssetMatch(unittest.TestCase):
                  {"name": "CathodePy-miyoo-linux-macos-3.0.zip", "url": "bad3",
                   "size": 1}]
         for nm in ("nt", "posix"):
-            with mock.patch.object(updater.os, "name", nm):
+            with mock.patch.object(updater.os, "name", nm), \
+                    mock.patch.object(updater.sys, "frozen", True, create=True):
                 self.assertIsNone(updater.pick_asset(forks), nm)
                 self.assertEqual(
                     updater.pick_asset(forks + self.ASSETS)["url"],
@@ -127,7 +128,8 @@ class TestAssetMatch(unittest.TestCase):
         sides = [{"name": a["name"] + ".sha256", "url": "side", "size": 65}
                  for a in self.ASSETS]
         for nm, want in (("nt", "u2"), ("posix", "u1")):
-            with mock.patch.object(updater.os, "name", nm):
+            with mock.patch.object(updater.os, "name", nm), \
+                    mock.patch.object(updater.sys, "frozen", True, create=True):
                 self.assertIsNone(updater.pick_asset(sides), nm)
                 # ...and it still loses when it is listed first.
                 self.assertEqual(
@@ -138,8 +140,16 @@ class TestAssetMatch(unittest.TestCase):
             self.assertEqual(updater.pick_asset(self.ASSETS)["url"], "u1")
 
     def test_windows_gets_windows(self):
-        with mock.patch.object(updater.os, "name", "nt"):
+        with mock.patch.object(updater.os, "name", "nt"), \
+                mock.patch.object(updater.sys, "frozen", True, create=True):
             self.assertEqual(updater.pick_asset(self.ASSETS)["url"], "u2")
+
+    def test_a_source_run_on_windows_gets_the_source_zip(self):
+        # The PyInstaller tree copied over a source checkout leaves a
+        # Cathode.exe nobody runs and the .py files untouched.
+        with mock.patch.object(updater.os, "name", "nt"), \
+                mock.patch.object(updater.sys, "frozen", False, create=True):
+            self.assertEqual(updater.pick_asset(self.ASSETS)["url"], "u1")
 
     def test_none_when_no_match(self):
         with mock.patch.object(updater.os, "name", "posix"):
@@ -164,6 +174,116 @@ class TestDownloadProgress(unittest.TestCase):
             self.assertTrue(calls)
             self.assertEqual(calls[-1][0], len(payload))   # ends at 100%
             self.assertEqual(calls[-1][1], len(payload))   # total carried through
+
+
+class TestApplyScript(unittest.TestCase):
+    """Runs the real install script against a throwaway install. The old one
+    slept a fixed two seconds that, detached, didn't sleep at all, so it copied
+    over a Cathode that hadn't exited yet; it also deleted the archive whether
+    or not extraction worked."""
+
+    def _install(self, tmp, archive_files, nested):
+        import zipfile
+        # The apostrophe is deliberate: it broke the old script's quoting.
+        root = os.path.join(tmp, "O'Brien")
+        dest = os.path.join(root, "install")
+        updates = os.path.join(root, "updates")
+        pkg = "_internal" if os.name == "nt" else "cathode"
+        for rel, body in {f"{pkg}/old.py": "stale", f"{pkg}/keep.py": "v1",
+                          "assets/fonts/mine.ttf": "user font"}.items():
+            p = os.path.join(dest, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            Path(p).write_text(body)
+        os.makedirs(updates, exist_ok=True)
+        archive = os.path.join(updates, "new.zip")
+        if archive_files is None:
+            Path(archive).write_bytes(b"not a zip")
+        else:
+            with zipfile.ZipFile(archive, "w") as z:
+                for rel, body in archive_files.items():
+                    z.writestr(("Cathode/" if nested else "") + rel.replace(
+                        "PKG", pkg), body)
+        return dest, updates, archive, pkg
+
+    def _run(self, archive, dest, updates):
+        import subprocess
+        # Stand-in for Cathode: the script must not touch anything until it
+        # has exited.
+        app = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3)"])
+        try:
+            script = updater.write_apply_script(archive, dest, updates, pid=app.pid)
+            proc = updater.spawn_apply(script)
+            import time
+            time.sleep(1.5)
+            self.assertTrue(os.path.exists(archive), "installed before exit")
+        finally:
+            app.wait()
+        proc.wait(timeout=120)
+        return script
+
+    def test_installs_after_exit_and_prunes_only_the_package(self):
+        files = {"PKG/keep.py": "v2", "PKG/new.py": "added", "README.md": "r"}
+        for nested in (True, False):
+            with self.subTest(nested=nested), tempfile.TemporaryDirectory() as tmp:
+                dest, updates, archive, pkg = self._install(tmp, files, nested)
+                script = self._run(archive, dest, updates)
+                read = lambda rel: Path(dest, rel).read_text()
+                self.assertEqual(read(f"{pkg}/keep.py"), "v2")
+                self.assertEqual(read(f"{pkg}/new.py"), "added")
+                self.assertEqual(read("README.md"), "r")
+                self.assertFalse(Path(dest, pkg, "old.py").exists())
+                self.assertEqual(read("assets/fonts/mine.ttf"), "user font")
+                for left in (archive, script, os.path.join(updates, "_stage"),
+                             os.path.join(updates, updater.FAILED_LOG)):
+                    self.assertFalse(os.path.exists(left), left)
+
+    def test_a_bad_archive_is_kept_and_logged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest, updates, archive, pkg = self._install(tmp, None, True)
+            self._run(archive, dest, updates)
+            self.assertTrue(os.path.exists(archive))
+            self.assertTrue(os.path.exists(os.path.join(updates, updater.FAILED_LOG)))
+            self.assertEqual(Path(dest, pkg, "keep.py").read_text(), "v1")
+            self.assertTrue(Path(dest, pkg, "old.py").exists())
+
+    def test_never_installs_under_a_relaunched_cathode(self):
+        # Cathode was started again before the installer got going: copying
+        # now would swap files out from under it.
+        from cathode.app import hold_instance_lock
+        if os.name != "nt":
+            import shutil as sh
+            if not sh.which("flock"):
+                self.skipTest("no flock(1) here; the installer skips the lock")
+        files = {"PKG/keep.py": "v2"}
+        with tempfile.TemporaryDirectory() as tmp:
+            dest, updates, archive, pkg = self._install(tmp, files, True)
+            relaunched = hold_instance_lock(
+                os.path.join(os.path.dirname(updates), updater.LOCK_FILE))
+            try:
+                self._run(archive, dest, updates)
+            finally:
+                relaunched.close()
+            self.assertEqual(Path(dest, pkg, "keep.py").read_text(), "v1")
+            self.assertTrue(os.path.exists(archive))
+            self.assertTrue(os.path.exists(os.path.join(updates, updater.FAILED_LOG)))
+
+    def test_a_failed_install_is_reported_on_the_next_launch(self):
+        from types import SimpleNamespace
+        from cathode.app_menus import MenusMixin
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "updates"))
+            Path(tmp, "updates", updater.FAILED_LOG).write_text("x")
+            said = []
+            app = SimpleNamespace(_runtime_dir=tmp, renderer=SimpleNamespace(
+                show_notification=lambda msg, secs: said.append(msg)))
+            with mock.patch.object(updater, "check_latest") as net:
+                MenusMixin._update_check_launch(app)
+            self.assertIn("didn't install", said[0])
+            net.assert_not_called()
+
+    def test_powershell_quoting(self):
+        self.assertEqual(updater._ps_quote("C:\\O'Brien"), "'C:\\O''Brien'")
+        self.assertEqual(updater._ps_quote("a\u2019b"), "'a\u2019\u2019b'")
 
 
 if __name__ == "__main__":

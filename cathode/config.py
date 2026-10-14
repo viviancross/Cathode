@@ -46,6 +46,10 @@ class Config:
     # Animated transitions. Off resolves each one instantly to its end
     # state — the same courtesy prefers-reduced-motion buys on the web.
     motion_enabled: bool = True
+    # The idle screensaver (bouncing wordmark after five minutes on the home
+    # screen or guide). It paints whole frames on its own clock, so if it ever
+    # misbehaves this is the switch.
+    screensaver: bool = True
 
     # Guide settings
     guide_hours: int = 3           # hours of EPG to show in guide

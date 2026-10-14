@@ -1,5 +1,59 @@
 # Changelog
 
+## 3.4
+
+- **Updates install properly.** The installer was meant to wait two seconds
+  for Cathode to close, but run detached that wait didn't happen at all, so it
+  copied over a Cathode that was still running and then deleted the download
+  whether the copy had worked or not. It now waits for Cathode to actually
+  exit, and won't let it be relaunched until the copy is finished. If anything
+  fails, the download is kept, the reason is written to
+  `updates/apply_update.log`, and the next launch tells you. Files a new
+  version no longer ships are removed instead of piling up, and a Windows
+  username with an apostrophe in it no longer breaks the install. Updating
+  from 3.3 still uses 3.3's installer; if that update looks incomplete, extract
+  the 3.4 zip over the install by hand.
+- **Channel changes stay in order.** Two quick presses could both start from
+  the same channel and reach mpv in the wrong order, leaving the info bar on
+  one channel and the picture on another. A late signal from the stream being
+  replaced could also lift the static early, onto a black screen, or spend a
+  Plex resume point on the wrong file. Presses now queue, and Cathode only
+  listens to the stream it actually asked for.
+- **The guide keeps itself current.** It loaded once at startup, so a Cathode
+  left on overnight ran off the end of its listings. It now reloads every six
+  hours and keeps what it has if a reload fails. Big guides load with a fraction
+  of the memory: the download is read as it arrives instead of all at once, and
+  only listings from three hours back to a day and a half ahead are kept.
+- **One Cathode at a time.** A second launch shared the first one's overlay,
+  config and controller and the two drew over each other. It now says Cathode
+  is already running and exits.
+- **No console window on Windows.** Closing it used to quit the app. What it
+  showed now goes to `cathode.log` (the run before is kept as `cathode.log.1`),
+  and startup errors appear in a message box.
+- **Built on Python 3.13 and Pillow 12.** 3.3 shipped Python 3.10 and Pillow
+  9.0, whose WebP decoder predates the libwebp security fix. The Windows build
+  now refuses to run on an out-of-date toolchain.
+- **DVR poster art is size-capped**, like channel logos.
+
+## 3.3
+
+- **The screensaver can be switched off**, under **Options ▸ Display ▸
+  Screensaver**. It also no longer paints over a channel change: it ran on its
+  own clock outside the render path, only checked whether it should still be
+  running once per frame, and could land one last opaque black frame with the
+  wordmark on top of the static after you'd already pressed a channel key.
+  It now re-checks under the render lock immediately before every write.
+
+## 3.2
+
+- **The controller only drives Cathode while its window is in front.** XInput
+  hands the pad's state to any process that asks, focused or not, so with
+  Cathode open in a second window every press in the game you were actually
+  playing changed the channel behind it. Input is now gated on mpv's own
+  `focused` property; a press made while another window had focus is never
+  delivered, and refocusing with a button or the stick still held doesn't fire
+  a phantom press or a burst of repeats.
+
 ## 3.1
 
 - **The DVR:** download a Plex item to this device and watch it with the server
