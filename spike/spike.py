@@ -206,11 +206,9 @@ def main():
     ap.add_argument("--crt", action="store_true")
     ap.add_argument("--pip", action="store_true")
     ap.add_argument("--paused", action="store_true", help="measure idle cost")
-    ap.add_argument("--loop", choices=["event", "simple"], default="event",
-                    help="event: draw only on a new frame or UI change; "
-                         "simple: draw every pass, paced by mpv")
+    ap.add_argument("--mpvlog", help="write mpv's full verbose log here")
     ap.add_argument("--mpv", action="append", default=[], metavar="KEY=VALUE",
-                    help="extra mpv option, e.g. --mpv fbo_format=rgba8")
+                    help="extra mpv option, e.g. --mpv gpu-dumb-mode=yes")
     ap.add_argument("--check", action="store_true",
                     help="with --shot: verify the composed frame, exit 1 if wrong")
     args = ap.parse_args()
@@ -246,21 +244,32 @@ def main():
         sdl.SDL_GL_GetDrawableSize(window, ctypes.byref(w), ctypes.byref(h))
         return w.value, h.value   # real pixels, so Retina is handled
 
-    print("GL:", GL.glGetString(GL.GL_VERSION).decode(), "|",
-          GL.glGetString(GL.GL_RENDERER).decode())
+    renderer = GL.glGetString(GL.GL_RENDERER).decode()
+    print("GL:", GL.glGetString(GL.GL_VERSION).decode(), "|", renderer)
+    # Software GL (llvmpipe, Apple's software renderer: VMs, CI, no-GPU boxes)
+    # hands out uninitialised texture memory. mpv's float intermediates then
+    # pick up garbage and roughly half of all runs show black video. Dumb mode
+    # skips the intermediates, and is the faster choice on a CPU anyway.
+    software_gl = any(s in renderer.lower() for s in ("llvmpipe", "softpipe", "software"))
 
     stuck = [0]
+    full_log = open(args.mpvlog, "w") if args.mpvlog else None
+    log_t0 = time.monotonic()
 
     def mpv_log(lvl, comp, msg):
+        if full_log:
+            full_log.write(f"{time.monotonic() - log_t0:7.3f} [{comp}/{lvl}] {msg}")
         if "not being called" in msg:   # mpv waited on us for a render or a swap
             stuck[0] += 1
         elif lvl in ("fatal", "error", "warn") or "FBO format" in msg:
             print(f"[mpv/{comp}/{lvl}] {msg.strip()}")
 
-    extra = dict(o.split("=", 1) for o in args.mpv)
-    player = mpv.MPV(vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
-                     input_default_bindings=False, input_vo_keyboard=False,
-                     log_handler=mpv_log, loglevel="v", **extra)
+    opts = dict(vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
+                input_default_bindings=False, input_vo_keyboard=False)
+    if software_gl:
+        opts["gpu-dumb-mode"] = "yes"
+    opts.update(o.split("=", 1) for o in args.mpv)
+    player = mpv.MPV(log_handler=mpv_log, loglevel="v", **opts)
     gpa = mpv.MpvGlGetProcAddressFn(lambda _, name: sdl.SDL_GL_GetProcAddress(name))
     ctx = mpv.MpvRenderContext(player, "opengl", opengl_init_params={"get_proc_address": gpa})
     # mpv calls this from its own thread when it has a frame; posting an SDL
@@ -308,19 +317,14 @@ def main():
     fps_t, fps_n = time.monotonic(), 0
     running = True
     while running:
-        if args.loop == "event":
-            # Sleep until something happens: a video frame, input, or the next
-            # clock second. Nothing changed = nothing drawn = no CPU.
-            until_sec = int((1.0 - time.time() % 1.0) * 1000) + 1
-            if args.seconds:
-                until_sec = min(until_sec, 100)
-            events = [pygame.event.wait(until_sec)] + pygame.event.get()
-        else:
-            # Textbook pattern: draw every pass, mpv's render blocks until the
-            # next frame is due, so the loop runs at the video's frame rate.
-            events = pygame.event.get()
+        # Sleep until something happens: a video frame, input, or the next
+        # clock second. Nothing changed = nothing drawn = no CPU.
+        until_sec = int((1.0 - time.time() % 1.0) * 1000) + 1
+        if args.seconds:
+            until_sec = min(until_sec, 100)
+        events = [pygame.event.wait(until_sec)] + pygame.event.get()
         t0 = time.perf_counter()
-        dirty = args.loop == "simple"
+        dirty = False
         for e in events:
             if e.type == mpv_frame:
                 dirty = True
@@ -359,10 +363,10 @@ def main():
 
         # 1. mpv draws a video frame into its own FBO, only when it has a new
         #    one (or the size changed); otherwise the last frame is reused.
-        if ctx.update() or (w, h) != rendered_size or args.loop == "simple":
-            # Default blocking, as in libmpv's own examples: without it, frames
-            # came out black or dimmed on some drivers.
-            ctx.render(flip_y=True,
+        if ctx.update() or (w, h) != rendered_size:
+            # Non-blocking: the UI thread must never sit waiting for a frame's
+            # display time while input is queued.
+            ctx.render(flip_y=True, block_for_target_time=False,
                        opengl_fbo={"w": w, "h": h, "fbo": video.fbo,
                                    "internal_format": GL.GL_RGBA8})
             rendered_size = (w, h)
@@ -441,7 +445,8 @@ def main():
 
     wall = time.monotonic() - t_start
     print(f"{player.mpv_version} | hwdec {player.hwdec_current or 'no'} | video {player.width}x{player.height}"
-          f" @ {player.container_fps} fps | loop {args.loop} | mpv waited on us {stuck[0]}x")
+          f" @ {player.container_fps} fps | dumb mode {'on' if software_gl else 'off'}"
+          f" | mpv waited on us {stuck[0]}x")
     print(f"frames {frames} in {wall:.1f}s = {frames / wall:.1f} fps | "
           f"main-loop cpu {cpu_ms / max(frames, 1):.2f} ms/frame | "
           f"video frames {video_frames} | ui uploads {ui_uploads} | process cpu {100 * (time.process_time() - cpu_start) / wall:.0f}%")

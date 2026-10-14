@@ -66,9 +66,8 @@ jobs:
             eval "$base --shot spike/out/$name.png $*" 2>&1 \
               | grep -vE 'numpy|^t=|ALSA|libcuda' | tee -a spike/out/log.txt
           }
-          run event-pip --crt --pip || rc=1
-          run event-plain || rc=1
-          run simple-pip --crt --pip --loop simple || rc=1
+          run crt-pip --crt --pip || rc=1
+          run plain || rc=1
           exit $rc
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
       - name: publish output
