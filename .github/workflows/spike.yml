@@ -56,25 +56,29 @@ jobs:
           set -o pipefail
           mkdir -p spike/out
           # Static SMPTE bars, so the frame the check samples doesn't depend on timing.
-          cmd="python spike/spike.py --seconds 8 --crt --pip --check --shot spike/out/${{ matrix.os }}.png --source av://lavfi:smptebars=size=1280x720:rate=30"
-          if [ "$RUNNER_OS" = Linux ]; then cmd="xvfb-run -s '-screen 0 1280x720x24' $cmd"; fi
+          base="python spike/spike.py --seconds 8 --check --source av://lavfi:smptebars=size=1280x720:rate=30"
+          if [ "$RUNNER_OS" = Linux ]; then base="xvfb-run -a -s '-screen 0 1280x720x24' $base"; fi
           rc=0
-          eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt || rc=1
-          # A plain pass too (no CRT, no PiP), so a failure can be pinned to a layer.
-          eval "${cmd/--crt --pip /}" 2>&1 | grep -v numpy | tee -a spike/out/log.txt || rc=1
-          # Experiment: 8-bit intermediates instead of mpv's default rgba16f.
-          echo "=== fbo_format=rgba8" | tee -a spike/out/log.txt
-          eval "$cmd --mpv fbo_format=rgba8" 2>&1 | grep -v numpy | tee -a spike/out/log.txt || true
+          run() {   # run <label> <args...>: one variant, compact output
+            echo "=== $1" | tee -a spike/out/log.txt
+            name=$1; shift
+            eval "$base --shot spike/out/$name.png $*" 2>&1 \
+              | grep -vE 'numpy|^t=|ALSA|libcuda' | tee -a spike/out/log.txt
+          }
+          run event-pip --crt --pip || rc=1
+          run event-plain || rc=1
+          run simple-pip --crt --pip --loop simple || true
+          run event-pip-rgba8 --crt --pip --mpv fbo_format=rgba8 || true
           exit $rc
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
       - name: publish output
         if: always()
         shell: bash
         run: |
-          { echo '```'; tail -40 spike/out/log.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; cat spike/out/log.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           msg=$(python -c "
-          noise = ('Loaded extension', 'Loading hwdec', 'Loading failed', 'ALSA lib', 'hwdec only works', 'not a libplacebo')
-          t = ''.join(l for l in open('spike/out/log.txt', errors='replace') if not any(n in l for n in noise))[-20000:]
+          keep = ('===', 'check:', 'waited', 'GL:', 'rror', 'frames ')
+          t = ''.join(l for l in open('spike/out/log.txt', errors='replace') if any(k in l for k in keep))
           print(t.replace('%', '%25').replace('\r', '').replace('\n', '%0A'))")
           echo "::notice title=spike ${{ matrix.os }}::$msg"
       - uses: actions/upload-artifact@v4

@@ -193,6 +193,9 @@ def main():
     ap.add_argument("--crt", action="store_true")
     ap.add_argument("--pip", action="store_true")
     ap.add_argument("--paused", action="store_true", help="measure idle cost")
+    ap.add_argument("--loop", choices=["event", "simple"], default="event",
+                    help="event: draw only on a new frame or UI change; "
+                         "simple: draw every pass, paced by mpv")
     ap.add_argument("--mpv", action="append", default=[], metavar="KEY=VALUE",
                     help="extra mpv option, e.g. --mpv fbo_format=rgba8")
     ap.add_argument("--check", action="store_true",
@@ -233,14 +236,18 @@ def main():
     print("GL:", GL.glGetString(GL.GL_VERSION).decode(), "|",
           GL.glGetString(GL.GL_RENDERER).decode())
 
+    stuck = [0]
+
     def mpv_log(lvl, comp, msg):
-        if lvl in ("fatal", "error", "warn") or (args.check and comp.startswith(("vo", "libmpv"))):
+        if "not being called" in msg:   # mpv waited on us for a render or a swap
+            stuck[0] += 1
+        elif lvl in ("fatal", "error", "warn") or "FBO format" in msg:
             print(f"[mpv/{comp}/{lvl}] {msg.strip()}")
 
     extra = dict(o.split("=", 1) for o in args.mpv)
     player = mpv.MPV(vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
                      input_default_bindings=False, input_vo_keyboard=False,
-                     log_handler=mpv_log, loglevel="v" if args.check else "warn", **extra)
+                     log_handler=mpv_log, loglevel="v", **extra)
     gpa = mpv.MpvGlGetProcAddressFn(lambda _, name: sdl.SDL_GL_GetProcAddress(name))
     ctx = mpv.MpvRenderContext(player, "opengl", opengl_init_params={"get_proc_address": gpa})
     # mpv calls this from its own thread when it has a frame; posting an SDL
@@ -288,14 +295,19 @@ def main():
     fps_t, fps_n = time.monotonic(), 0
     running = True
     while running:
-        # Sleep until something happens: a video frame, input, or the next
-        # clock second. Nothing changed = nothing drawn = no CPU.
-        until_sec = int((1.0 - time.time() % 1.0) * 1000) + 1
-        if args.seconds:
-            until_sec = min(until_sec, 100)
-        events = [pygame.event.wait(until_sec)] + pygame.event.get()
+        if args.loop == "event":
+            # Sleep until something happens: a video frame, input, or the next
+            # clock second. Nothing changed = nothing drawn = no CPU.
+            until_sec = int((1.0 - time.time() % 1.0) * 1000) + 1
+            if args.seconds:
+                until_sec = min(until_sec, 100)
+            events = [pygame.event.wait(until_sec)] + pygame.event.get()
+        else:
+            # Textbook pattern: draw every pass, mpv's render blocks until the
+            # next frame is due, so the loop runs at the video's frame rate.
+            events = pygame.event.get()
         t0 = time.perf_counter()
-        dirty = False
+        dirty = args.loop == "simple"
         for e in events:
             if e.type == mpv_frame:
                 dirty = True
@@ -334,8 +346,8 @@ def main():
 
         # 1. mpv draws a video frame into its own FBO, only when it has a new
         #    one (or the size changed); otherwise the last frame is reused.
-        if ctx.update() or (w, h) != rendered_size:
-            ctx.render(flip_y=True, block_for_target_time=False,
+        if ctx.update() or (w, h) != rendered_size or args.loop == "simple":
+            ctx.render(flip_y=True, block_for_target_time=args.loop == "simple",
                        opengl_fbo={"w": w, "h": h, "fbo": video.fbo,
                                    "internal_format": GL.GL_RGBA8})
             rendered_size = (w, h)
@@ -414,7 +426,7 @@ def main():
 
     wall = time.monotonic() - t_start
     print(f"{player.mpv_version} | hwdec {player.hwdec_current or 'no'} | video {player.width}x{player.height}"
-          f" @ {player.container_fps} fps")
+          f" @ {player.container_fps} fps | loop {args.loop} | mpv waited on us {stuck[0]}x")
     print(f"frames {frames} in {wall:.1f}s = {frames / wall:.1f} fps | "
           f"main-loop cpu {cpu_ms / max(frames, 1):.2f} ms/frame | "
           f"video frames {video_frames} | ui uploads {ui_uploads} | process cpu {100 * (time.process_time() - cpu_start) / wall:.0f}%")
