@@ -155,6 +155,29 @@ def draw_ui(surf, font, small, fps, frame_ms, crt, pip, pads):
     surf.blit(small.render(info, True, (200, 210, 230)), (band.x + 16, band.y + 62))
 
 
+def check(shot, pip):
+    """Sample the composed frame where each layer must be. Catches a missing
+    video, a missing UI, or a video drawn in the wrong place, without anyone
+    having to look at the PNG."""
+    w, h = shot.size
+
+    def px(fx, fy):
+        return shot.getpixel((int(fx * w), int(fy * h)))
+
+    def lit(c):
+        return sum(c) > 60
+
+    results = {"ui banner is blue": (lambda c: c[2] > c[0] and c[2] > c[1])(px(0.05, 0.86))}
+    if pip:
+        results["video inside PiP box"] = lit(px(0.22, 0.24))
+        results["black outside PiP box"] = not lit(px(0.75, 0.30))
+    else:
+        results["video fills window"] = lit(px(0.5, 0.3))
+    for name, ok in results.items():
+        print(f"check: {'PASS' if ok else 'FAIL'}  {name}")
+    return all(results.values())
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="av://lavfi:testsrc2=size=1280x720:rate=30")
@@ -163,6 +186,8 @@ def main():
     ap.add_argument("--crt", action="store_true")
     ap.add_argument("--pip", action="store_true")
     ap.add_argument("--paused", action="store_true", help="measure idle cost")
+    ap.add_argument("--check", action="store_true",
+                    help="with --shot: verify the composed frame, exit 1 if wrong")
     args = ap.parse_args()
 
     pygame.init()
@@ -171,8 +196,13 @@ def main():
         pygame.display.gl_set_attribute(a, v)
     if sys.platform == "darwin":
         pygame.display.gl_set_attribute(pygame.GL_CONTEXT_FORWARD_COMPATIBLE_FLAG, 1)
-    pygame.display.set_mode((1280, 720), pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE,
-                            vsync=1)
+    flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
+    try:
+        pygame.display.set_mode((1280, 720), flags, vsync=1)
+    except pygame.error:
+        # Software GL (VMs, CI, some drivers) has no vsync. Harmless here: the
+        # loop only presents when a frame or the UI changes, so it can't spin.
+        pygame.display.set_mode((1280, 720), flags)
     pygame.display.set_caption("Cathode 4 spike")
     pygame.display.set_allow_screensaver(False)   # "keep screen awake" is one line
 
@@ -237,6 +267,7 @@ def main():
     pads = {}
     t_start = time.monotonic()
     cpu_start = time.process_time()
+    failed = False
     frames, cpu_ms, ui_uploads, last_sec = 0, 0.0, 0, -1
     video_frames, rendered_size = 0, (0, 0)
     fps, frame_ms = 0.0, 0.0
@@ -338,8 +369,11 @@ def main():
                 GL.glPixelStorei(GL.GL_PACK_ALIGNMENT, 1)
                 px = GL.glReadPixels(0, 0, w, h, GL.GL_RGB, GL.GL_UNSIGNED_BYTE)
                 from PIL import Image
-                Image.frombytes("RGB", (w, h), px).transpose(Image.FLIP_TOP_BOTTOM).save(args.shot)
+                shot = Image.frombytes("RGB", (w, h), px).transpose(Image.FLIP_TOP_BOTTOM)
+                shot.save(args.shot)
                 print("saved", args.shot)
+                if args.check and not check(shot, pip):
+                    failed = True
             running = False
 
         pygame.display.flip()
@@ -354,6 +388,8 @@ def main():
     ctx.free()
     player.terminate()
     pygame.quit()
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

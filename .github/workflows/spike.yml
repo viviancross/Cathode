@@ -38,13 +38,24 @@ jobs:
             | python -c "import sys,json; print(next(a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if a['name'].startswith('mpv-dev-x86_64-2')))")
           curl -sL -o mpv-dev.7z "$url"
           7z x -y -o_libmpv mpv-dev.7z > /dev/null
+      # The runner has no GPU and Windows' own OpenGL stops at 1.1; Mesa's
+      # software OpenGL beside python.exe takes precedence over the system one.
+      - name: software OpenGL (Windows CI only)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          url=$(curl -s https://api.github.com/repos/pal1000/mesa-dist-win/releases/latest \
+            | python -c "import sys,json; print(next(a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'release-msvc' in a['name']))")
+          curl -sL -o mesa.7z "$url"
+          7z e -y mesa.7z "x64/*.dll" -o"$pythonLocation" > /dev/null
+          ls "$pythonLocation"/*.dll
 
       - name: run spike
         shell: bash
         run: |
           set -o pipefail
           mkdir -p spike/out
-          cmd="python spike/spike.py --seconds 8 --crt --pip --shot spike/out/${{ matrix.os }}.png"
+          cmd="python spike/spike.py --seconds 8 --crt --pip --check --shot spike/out/${{ matrix.os }}.png"
           if [ "$RUNNER_OS" = Linux ]; then cmd="xvfb-run -s '-screen 0 1280x720x24' $cmd"; fi
           eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt
       # Job logs need a GitHub sign-in to read; summaries and annotations don't.
