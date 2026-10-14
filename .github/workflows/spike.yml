@@ -55,7 +55,8 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p spike/out
-          cmd="python spike/spike.py --seconds 8 --crt --pip --check --shot spike/out/${{ matrix.os }}.png"
+          # Static SMPTE bars, so the frame the check samples doesn't depend on timing.
+          cmd="python spike/spike.py --seconds 8 --crt --pip --check --shot spike/out/${{ matrix.os }}.png --source av://lavfi:smptebars=size=1280x720:rate=30"
           if [ "$RUNNER_OS" = Linux ]; then cmd="xvfb-run -s '-screen 0 1280x720x24' $cmd"; fi
           rc=0
           eval "$cmd" 2>&1 | grep -v numpy | tee spike/out/log.txt || rc=1

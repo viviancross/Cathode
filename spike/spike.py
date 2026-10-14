@@ -161,20 +161,24 @@ def check(shot, pip):
     having to look at the PNG."""
     w, h = shot.size
 
-    def px(fx, fy):
-        return shot.getpixel((int(fx * w), int(fy * h)))
+    def mean(x0, y0, x1, y1):
+        """Average colour over a 7x7 grid inside a box given as fractions, so
+        one dark detail in the video can't decide the result."""
+        pts = [shot.getpixel((int((x0 + (x1 - x0) * i / 6) * w), int((y0 + (y1 - y0) * j / 6) * h)))
+               for i in range(7) for j in range(7)]
+        return tuple(sum(p[k] for p in pts) // len(pts) for k in range(3))
 
     def lit(c):
         return sum(c) > 60
 
-    banner = px(0.05, 0.86)
+    banner = mean(0.04, 0.82, 0.05, 0.90)   # left margin of the banner, no text
     results = {"ui banner is blue": (banner, banner[2] > banner[0] and banner[2] > banner[1])}
     if pip:
-        inside, outside = px(0.22, 0.24), px(0.75, 0.30)
+        inside, outside = mean(0.06, 0.08, 0.39, 0.40), mean(0.55, 0.08, 0.95, 0.60)
         results["video inside PiP box"] = (inside, lit(inside))
         results["black outside PiP box"] = (outside, not lit(outside))
     else:
-        mid = px(0.5, 0.3)
+        mid = mean(0.1, 0.1, 0.9, 0.6)
         results["video fills window"] = (mid, lit(mid))
     for name, (rgb, ok) in results.items():
         print(f"check: {'PASS' if ok else 'FAIL'}  {name}  rgb={rgb}")
