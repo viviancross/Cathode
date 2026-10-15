@@ -46,7 +46,7 @@ redrawn unless something changed, so an idle Cathode costs next to nothing.
   channel numbers, PREV for the last channel.
 - **Like a box**: start-up screen while it finds its signal, a banner on
   every tune (INFO again for the full description), browse other channels
-  without tuning, a mini guide, PREV and a THEMES button.
+  without tuning, a mini guide, a signal-loss screen for dead channels.
 - **Pause live TV**: pause, rewind and fast-forward through what's buffered,
   then back to live.
 - **On Demand (Plex)**: sign in with a code, browse and search your

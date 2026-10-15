@@ -109,6 +109,8 @@ class BoxSkin(Classic):
         if live.message:
             self._message(c, live.message)
             return
+        if live.standby and live.phase != "cover":
+            self._signal_loss(c)
         if (live.banner_visible() or live.phase == "cover") and live.channel:
             cur, nxt = live.programs()
             self._banner(c, live.channel, cur, nxt, full=live.banner_full)

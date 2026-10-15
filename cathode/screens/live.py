@@ -22,6 +22,7 @@ class LiveTV(Screen):
         self.idx = 0
         self.prev = None            # channel index PREV goes back to
         self.phase = "idle"         # idle | cover | reveal | watch
+        self.standby = False        # dead stream: the skin's stand-by card
         self.message = "Loading channels..." if app.config.playlist_url else \
             "No playlist set up yet. Start Cathode with --playlist <M3U URL or file>."
         self.banner_until = 0.0
@@ -65,7 +66,7 @@ class LiveTV(Screen):
             self.prev = self.idx
         self.idx = idx
         ch = self.channels[idx]
-        self.phase = "cover"
+        self.phase, self.standby = "cover", False
         self.behind = 0.0                   # a fresh tune is live
         self.app.cancel(self._timeout)
         self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
@@ -75,9 +76,9 @@ class LiveTV(Screen):
         print(f"[cathode] Tuning to {ch}")
 
     def _timed_out(self):
-        """No frame in time: reveal anyway (a dead stream shows black with
-        the banner up; mpv keeps trying underneath)."""
+        """No frame in time: reveal anyway, onto the stand-by card."""
         if self.phase == "cover":
+            self.standby = True
             self._reveal()
 
     def _reveal(self):
@@ -92,7 +93,7 @@ class LiveTV(Screen):
     def suspend(self):
         """Something else (On Demand) is using the picture: let go of it."""
         self.app.cancel(self._timeout)
-        self.suspended = True
+        self.suspended, self.standby = True, False
         self.phase = "watch"
 
     def resume(self):
@@ -106,6 +107,7 @@ class LiveTV(Screen):
         if self.suspended:
             return                      # about On Demand's video, not ours
         if kind == "video_started":
+            self.standby = False
             if self.phase == "cover":
                 self._reveal()
         elif kind == "video_ended" and self.channels and self.phase in ("watch", "reveal"):

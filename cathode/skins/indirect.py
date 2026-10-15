@@ -257,6 +257,23 @@ class InDirectHD(BoxSkin):
         t.draw(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", self.fb(Y(22)), b["soft"], r.right - X(20),
                r.y + (r.h - t.ink(self.fb(Y(22)))[1]) // 2, align="right")
 
+    def _signal_loss(self, c):
+        """The HR20's 'Searching for satellite signal (771)' card: a navy
+        band on black, the explanation under it."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        c.fill((0, 0, 0, 255))
+        band = self.R(0, 150, 1280, 96)
+        pygame.draw.rect(c, b["navy"], band)
+        pygame.draw.rect(c, b["sky"], (band.x, band.y, band.w, Y(3)))
+        pygame.draw.rect(c, b["sky"], (band.x, band.bottom - Y(3), band.w, Y(3)))
+        t.draw(c, "Searching for satellite signal. (771)", self.fb(Y(28)), b["text"], X(96), band.y + Y(32))
+        f = self.f(Y(22))
+        y = band.bottom + Y(26)
+        for line in t.wrap(f, "The channel isn't sending a picture. Cathode keeps trying; press GUIDE or "
+                              "a channel number to watch something else.", X(1088), 3):
+            t.draw(c, line, f, b["soft"], X(96), y)
+            y += Y(32)
+
     # ── Guide ─────────────────────────────────────────────────────────────
 
     def draw_guide(self, c, g):
@@ -593,7 +610,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(12))
         w = max(max(t.width(f, s) for s in lines) + X(24), min_w)
-        r = pygame.Rect(X(52), 0, min(w, X(224)), Y(8) + len(lines) * Y(13))
+        r = pygame.Rect(X(52), 0, min(w, X(262)), Y(8) + len(lines) * Y(13))
         r.bottom = y_bottom if y_bottom is not None else Y(227)
         pygame.draw.rect(c, b["purple"], r)
         pygame.draw.rect(c, b["rule"], r, 2)
@@ -626,6 +643,12 @@ class InDirect(InDirectHD):
             x = bar.x + int(bar.w * s["buffer"] / span)
             pygame.draw.rect(c, b["teal"], (bar.x, bar.y, x - bar.x, bar.h))
             pygame.draw.rect(c, b["text"], (x - 1, bar.y - 2, 3, bar.h + 4))
+
+    def _signal_loss(self, c):
+        """The DSS's card on black, as the box showed a showing it couldn't
+        play (the frame at 0:09)."""
+        c.fill((0, 0, 0, 255))
+        self._notice(c, ["This showing is no longer available.", "Check Program Guide for other showtimes."])
 
     # ── Guide: the DSS Program Guide ──────────────────────────────────────
 

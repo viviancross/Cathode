@@ -66,8 +66,11 @@ frames. The sources, and what they settled:
   Setup pages keep the title area, list the options down the left on teal
   with a light bar on the chosen row, explain it in a darker panel at the
   right, and keep the picture top-right.
-- The signal-loss and signal-meter screens were dropped (2026-10-15): a dead
-  channel shows black with the banner up.
+- The Point Dish signal-meter dialogs were dropped (2026-10-15). A dead
+  channel shows each box's own card instead: the DSS's "This showing is no
+  longer available" notice (0:09 in its video), the HR20's "Searching for
+  satellite signal (771)" band, Dish's ATTENTION dialog with its progress
+  bar (0:16 in the 2005 video); Classic keeps its colour bars.
 
 ## InDirecTV (DirecTV-style)
 

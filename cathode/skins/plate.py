@@ -251,6 +251,34 @@ class PlateHD(BoxSkin):
             pygame.draw.rect(c, b["text"], (x - X(2), bar.y - Y(5), X(4), bar.h + Y(10)))
         self.cb(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", f, b["banner_ink"], r.right - X(20), r.y + Y(14), align="right")
 
+    def _signal_loss(self, c):
+        """Dish's ATTENTION dialog on black, with its progress bar (the
+        frame at 0:16), while the channel sends nothing."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        c.fill((0, 0, 0, 255))
+        r = self.R(290, 250, 700, 220)
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba((255, 255, 255)), edge_w=Y(3))
+        pill = pygame.Rect(r.x + X(30), r.y + Y(14), r.w - X(60), Y(36))
+        vgrad(c, pill, rgba(mix(b["later"], (255, 255, 255), 0.35)), rgba(b["later"]), radius=Y(10))
+        f = self.fb(Y(22))
+        self.cb(c, "ATTENTION", f, b["text"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        fl = self.fb(Y(19))
+        self.cb(c, "Acquiring satellite signal.", fl, b["ink"], r.centerx, pill.bottom + Y(16), align="center")
+        self.cb(c, "Please wait, or pick another channel.", fl, b["ink"], r.centerx, pill.bottom + Y(50), align="center")
+        self._progress_bar(c, pygame.Rect(r.x + X(40), r.bottom - Y(50), r.w - X(80), Y(22)))
+
+    def _progress_bar(self, c, bar):
+        """The dialog's inset bar, its dark segments walking along."""
+        b, X = self.b, self.X
+        pygame.draw.rect(c, (255, 255, 255), bar)
+        pygame.draw.rect(c, b["ink"], bar, 1)
+        seg = max(4, X(12))
+        n = (bar.w - X(8)) // (seg + X(3))
+        lit = int(time.monotonic() * 4) % (n + 1)
+        for i in range(lit):
+            pygame.draw.rect(c, b["ink"], (bar.x + X(4) + i * (seg + X(3)), bar.y + 3, seg, bar.h - 6))
+
     # ── Guide ─────────────────────────────────────────────────────────────
 
     def draw_guide(self, c, g):
@@ -527,6 +555,22 @@ class Plate(PlateHD):
     def guide_video_box(self):
         r = self.R(320, 0, 320, 236)
         return (r.x, r.y, r.w, r.h)
+
+    def _signal_loss(self, c):
+        """The ATTENTION dialog on black, as on the HD box, at the 4:3 size."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        c.fill((0, 0, 0, 255))
+        r = self.R(100, 150, 440, 150)
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(10), edge=rgba((255, 255, 255)), edge_w=Y(2))
+        pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
+        vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
+        f = self.fb(Y(15))
+        t.draw(c, "ATTENTION", f, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        fl = self.f(Y(13))
+        t.draw(c, "Acquiring satellite signal.", fl, b["ink"], r.centerx, pill.bottom + Y(12), align="center")
+        t.draw(c, "Please wait, or pick another channel.", fl, b["ink"], r.centerx, pill.bottom + Y(34), align="center")
+        self._progress_bar(c, pygame.Rect(r.x + X(30), r.bottom - Y(34), r.w - X(60), Y(16)))
 
     # ── Guide: the 2005 page ──────────────────────────────────────────────
 

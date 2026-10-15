@@ -16,7 +16,7 @@ a retro-themed player.
   colour editor, any font and the CRT effect.
 - **Box behaviour.** A start-up screen that follows the real loading, a
   banner on every tune (INFO again for the description), browse without
-  tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), PREV, a THEMES button for genres, guide paging
+  tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss screen for dead channels, PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus.
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.
 - **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on
