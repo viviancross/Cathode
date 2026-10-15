@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cathode.downloads import DownloadStore
 from cathode.plex import _first_part
-from cathode.ui.plexinfo import BUTTON_SETS, LABELS, PlexInfoScreen
 
 PAYLOAD = bytes(range(256)) * 400          # 102,400 bytes
 
@@ -70,6 +69,15 @@ def _wait(store, rk, state, timeout=15):
     end = time.time() + timeout
     while time.time() < end:
         if store.state(rk) == state:
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def _wait_for(pred, timeout=5):
+    end = time.time() + timeout
+    while time.time() < end:
+        if pred():
             return True
         time.sleep(0.02)
     return False
@@ -209,33 +217,6 @@ class TestOffline(unittest.TestCase):
         self.store._items["1234"]["state"] = "paused"
         self.assertEqual(self.store.local_path("1234"), "")
         self.assertFalse(self.store.items()[0]["playable"])
-
-
-class TestTheButton(unittest.TestCase):
-    def test_single_items_offer_the_dvr(self):
-        for kind in ("default", "episode", "download"):
-            self.assertIn("dvr", BUTTON_SETS[kind], kind)
-
-    def test_a_series_does_not(self):
-        # A show is a folder, not a file. There is no one thing to copy.
-        self.assertNotIn("dvr", BUTTON_SETS["show"])
-
-    def test_a_downloaded_item_offers_only_what_works_offline(self):
-        self.assertEqual(BUTTON_SETS["download"], ["play", "dvr", "back"])
-
-    def test_the_label_is_the_app_s_to_set(self):
-        s = PlexInfoScreen(1920, 1080)
-        self.assertEqual(s.dvr, LABELS["dvr"])
-        s.show(DETAIL, kind="default")
-        s.dvr = "DVR 42%"
-        img = s.render()          # renders without raising, at any label width
-        self.assertEqual(img.size, (1920, 1080))
-
-    def test_it_renders_upright_too(self):
-        s = PlexInfoScreen(1080, 2400)
-        s.show(DETAIL, kind="download")
-        s.dvr = "ON DVR"
-        self.assertEqual(s.render().size, (1080, 2400))
 
 
 class _FlakyHandler(http.server.BaseHTTPRequestHandler):
@@ -421,138 +402,6 @@ class TestInterrupted(unittest.TestCase):
         s.resume()
         self.assertTrue(_wait_for(lambda: s.state("1234") == "done"))
         self.assertEqual(asked, ["1234"])
-
-
-class _Transport:
-    def try_connect(self): return True
-    def send(self, data): pass
-    def serve(self, on_line): pass
-    def close(self): pass
-
-
-class _Conn:
-    def connect(self, args): return _Transport()
-    def alive(self): return True
-    def shutdown(self): pass
-
-
-class _SlowClient:
-    """A radio that does not answer. Airplane mode does not always fail fast —
-    a socket can sit for its whole timeout — which is the case that mattered."""
-
-    server = ""
-    token = "t"
-
-    def __init__(self, delay=1.0, fail=True):
-        self.delay, self.fail = delay, fail
-
-    def discover_server(self, prefer=""):
-        time.sleep(self.delay)
-        if self.fail:
-            raise RuntimeError("Couldn't connect to your Plex server.")
-        self.server = "http://server"
-        return self.server
-
-    def sections(self):
-        return [{"key": "1", "title": "Movies", "type": "movie", "agent": "a"}]
-
-    def list_servers(self):
-        return []
-
-
-class TestTheLibraryListOffline(unittest.TestCase):
-    """The DVR has to be on screen before the network has been asked anything.
-
-    Falling back only once the connect has failed works only if it fails; on a
-    real radio in airplane mode it can block instead, and CONNECTING... is then
-    all the DVR ever shows.
-    """
-
-    def setUp(self):
-        from cathode.app import App
-        from cathode.config import Config
-        self.dir = tempfile.mkdtemp()
-        cfg = Config(os.path.join(self.dir, "config.json"))
-        cfg.gamepad = False
-        cfg.plex_token, cfg.plex_client_id = "acct", "cid"
-        self.app = App(config=cfg, width=1080, height=1440, fullscreen=False,
-                       connection=_Conn())
-
-    def tearDown(self):
-        shutil.rmtree(self.dir, ignore_errors=True)
-
-    def _downloaded(self, rk="55", title="Aliens"):
-        st = self.app.downloads
-        with open(os.path.join(st.root, rk + ".mkv"), "wb") as f:
-            f.write(b"v" * 10)
-        st._items[rk] = {"rating_key": rk, "title": title, "file": rk + ".mkv",
-                         "size": 10, "got": 10, "state": "done", "offset": 0}
-        st._order.append(rk)
-
-    def _titles(self):
-        return [r["title"] for r in self.app.renderer.ppv.rows]
-
-    def test_the_dvr_is_up_before_the_server_is_asked(self):
-        self._downloaded()
-        self.app._ppv_client = lambda: _SlowClient(delay=5)
-        self.app._open_ppv()             # returns immediately; connect is async
-        self.assertEqual(self._titles(), ["DOWNLOADS"])
-        self.assertEqual(self.app.renderer.ppv.status, "CONNECTING...")
-
-    def test_it_is_usable_while_the_connect_is_still_hanging(self):
-        self._downloaded()
-        self.app._ppv_client = lambda: _SlowClient(delay=5)
-        self.app._open_ppv()
-        self.app.renderer.ppv.sel = 0
-        self.app._ppv_select()
-        self.assertEqual(self._titles(), ["Aliens"])
-
-    def test_nothing_downloaded_still_reports_the_failure(self):
-        # An empty DVR has nothing to offer, so say what went wrong instead.
-        self.app._ppv_client = lambda: _SlowClient(delay=0)
-        self.app._open_ppv()
-        self.assertTrue(_wait_for(lambda: self.app.renderer.ppv.status.startswith(
-            "Couldn't")))
-        self.assertEqual(self.app._ppv_stack, [])
-
-    def test_the_server_list_replaces_the_stub_rather_than_stacking_on_it(self):
-        self._downloaded()
-        self.app._ppv_client = lambda: _SlowClient(delay=0, fail=False)
-        self.app._open_ppv()
-        self.assertTrue(_wait_for(lambda: len(self._titles()) > 1))
-        # One level, so Back still leaves Plex-Per-View in a single press.
-        self.assertEqual(len(self.app._ppv_stack), 1)
-        self.assertIn("MOVIES", self._titles())
-
-    def test_the_cursor_stays_on_the_dvr_when_the_list_grows(self):
-        self._downloaded()
-        self.app._ppv_client = lambda: _SlowClient(delay=0, fail=False)
-        self.app._open_ppv()
-        self.assertTrue(_wait_for(lambda: len(self._titles()) > 1))
-        ppv = self.app.renderer.ppv
-        self.assertEqual(ppv.rows[ppv.sel]["title"], "DOWNLOADS")
-
-    def test_a_late_answer_does_not_yank_the_screen_away(self):
-        self._downloaded()
-        self.app._ppv_client = lambda: _SlowClient(delay=0.6, fail=False)
-        self.app._open_ppv()
-        self.app.renderer.ppv.sel = 0
-        self.app._ppv_select()                  # into DOWNLOADS while it hangs
-        self.assertEqual(self._titles(), ["Aliens"])
-        time.sleep(1.2)
-        self.assertEqual(self._titles(), ["Aliens"])     # still there
-        # ...but Back now lands on the full list, not the one-row stub.
-        self.app._ppv_back()
-        self.assertIn("MOVIES", self._titles())
-
-
-def _wait_for(pred, timeout=5):
-    end = time.time() + timeout
-    while time.time() < end:
-        if pred():
-            return True
-        time.sleep(0.02)
-    return False
 
 
 class TestPartInfo(unittest.TestCase):

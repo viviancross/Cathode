@@ -7,7 +7,7 @@ fixed white text used to fall below 2:1.
 
 import unittest
 
-from cathode.ui import theme
+from cathode import palette as theme
 
 
 class TestThemeContrast(unittest.TestCase):
@@ -70,9 +70,8 @@ class TestThemeContrast(unittest.TestCase):
     def test_a_custom_palette_gets_the_same_guarantees(self):
         # The theme editor can build arbitrary palettes; the derivations have to
         # hold there too, which is why they are solved rather than tabulated.
-        theme.set_custom_palette(bg=(90, 88, 96), accent=(200, 198, 205),
-                                 accent2=(210, 205, 180), text=(235, 235, 240))
-        pal = theme.PALETTES["custom"]
+        pal = theme.custom(bg=(90, 88, 96), accent=(200, 198, 205),
+                           accent2=(210, 205, 180), text=(235, 235, 240))
         for surf in ("SCREEN_BG", "OSD_BG", "GUIDE_BG"):
             ratio = theme.contrast(pal["INK_MUTED"][:3], pal[surf][:3])
             self.assertGreaterEqual(ratio, 4.5,
@@ -80,7 +79,6 @@ class TestThemeContrast(unittest.TestCase):
         self.assertGreaterEqual(
             theme.contrast(pal["BTN_PRIMARY_TEXT"][:3],
                            pal["BTN_PRIMARY_BG"][:3]), 4.5)
-        theme.apply_theme("blue")          # leave the default installed
 
     def test_screen_bg_darker_than_theme_bg(self):
         # SCREEN_BG is the full-page backdrop; it must stay near-black so the

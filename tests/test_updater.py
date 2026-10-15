@@ -249,7 +249,7 @@ class TestApplyScript(unittest.TestCase):
     def test_never_installs_under_a_relaunched_cathode(self):
         # Cathode was started again before the installer got going: copying
         # now would swap files out from under it.
-        from cathode.app import hold_instance_lock
+        from cathode.instance import hold_instance_lock
         if os.name != "nt":
             import shutil as sh
             if not sh.which("flock"):
@@ -266,20 +266,6 @@ class TestApplyScript(unittest.TestCase):
             self.assertEqual(Path(dest, pkg, "keep.py").read_text(), "v1")
             self.assertTrue(os.path.exists(archive))
             self.assertTrue(os.path.exists(os.path.join(updates, updater.FAILED_LOG)))
-
-    def test_a_failed_install_is_reported_on_the_next_launch(self):
-        from types import SimpleNamespace
-        from cathode.app_menus import MenusMixin
-        with tempfile.TemporaryDirectory() as tmp:
-            os.makedirs(os.path.join(tmp, "updates"))
-            Path(tmp, "updates", updater.FAILED_LOG).write_text("x")
-            said = []
-            app = SimpleNamespace(_runtime_dir=tmp, renderer=SimpleNamespace(
-                show_notification=lambda msg, secs: said.append(msg)))
-            with mock.patch.object(updater, "check_latest") as net:
-                MenusMixin._update_check_launch(app)
-            self.assertIn("didn't install", said[0])
-            net.assert_not_called()
 
     def test_powershell_quoting(self):
         self.assertEqual(updater._ps_quote("C:\\O'Brien"), "'C:\\O''Brien'")
