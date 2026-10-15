@@ -6,6 +6,18 @@ import threading
 from dataclasses import dataclass, field
 
 
+def _fits(default, v) -> bool:
+    """A saved value of the kind the setting holds (bool is not an int)."""
+    if default is None:
+        return True
+    if isinstance(default, bool):
+        return isinstance(v, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and \
+            (isinstance(default, float) or float(v).is_integer())
+    return isinstance(v, type(default))
+
+
 @dataclass
 class Config:
     _path: str = field(default="", repr=False)
@@ -159,6 +171,7 @@ class Config:
     def __post_init__(self):
         # Serialises save() — many Plex background threads call config.save().
         self._save_lock = threading.Lock()
+        self._load_error = ""       # why the file couldn't be read (shown once at start)
         # Field defaults above are the single source of truth; load only
         # overrides them from disk when a config file already exists.
         if self._path and os.path.exists(self._path):
@@ -171,13 +184,29 @@ class Config:
 
     def _load(self):
         try:
-            with open(self._path, "r", encoding="utf-8") as f:
+            with open(self._path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
-            for k, v in data.items():
-                if hasattr(self, k) and not k.startswith("_"):
-                    setattr(self, k, v)
+            if not isinstance(data, dict):
+                raise ValueError("not a settings object")
         except Exception as e:
-            print(f"[config] Warning: could not load config from {self._path}: {e}")
+            # Set the damaged file aside: the first save would otherwise
+            # overwrite every playlist and setting it still holds.
+            kept = f"{self._path}.damaged"
+            try:
+                os.replace(self._path, kept)
+            except OSError:
+                kept = ""
+            self._load_error = os.path.basename(kept) if kept else "the old file"
+            print(f"[config] Warning: could not load config from {self._path}: {e} (kept as {kept or '-'})")
+            return
+        for k, v in data.items():
+            if k.startswith("_") or not hasattr(self, k):
+                continue
+            if _fits(getattr(self, k), v):
+                cur = getattr(self, k)
+                setattr(self, k, int(v) if isinstance(cur, int) and not isinstance(cur, bool) else v)
+            else:               # one bad value costs that setting, not the file
+                print(f"[config] ignoring {k}={v!r}: expected {type(getattr(self, k)).__name__}")
 
     def save(self):
         if not self._path:

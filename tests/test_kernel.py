@@ -45,14 +45,33 @@ class TestGuideRefresh(unittest.TestCase):
     def test_a_failed_reload_keeps_the_guide_and_retries_sooner(self):
         a = make_app()
         kept = a.epg
+        toasts = []
+        a.toast = lambda *args: toasts.append(args)
 
         def boom(self, url, **k):
             raise OSError("network down")
         with mock.patch.object(app_mod.threading, "Thread", SyncThread), \
-                mock.patch.object(EPG, "load", boom):
+                mock.patch.object(EPG, "load", boom), \
+                mock.patch.object(EPG, "channel_ids", property(lambda self: ["one.us"])):
             a.load_epg()
         self.assertIs(a.epg, kept)
         self.assertEqual([s for s, _ in a.scheduled], [App.EPG_RETRY])
+        self.assertEqual(toasts, [])                # the old guide stays, quietly
+
+    def test_a_first_guide_that_fails_says_why(self):
+        import urllib.error
+        a = make_app()
+        toasts = []
+        a.toast = lambda text, *rest: toasts.append(text)
+
+        def boom(self, url, **k):
+            raise urllib.error.URLError(ConnectionRefusedError())
+        with mock.patch.object(app_mod.threading, "Thread", SyncThread), \
+                mock.patch.object(EPG, "load", boom):
+            a.load_epg()
+        self.assertEqual(len(toasts), 1)
+        self.assertIn("didn't answer", toasts[0])
+        self.assertIn("15 minutes", toasts[0])
 
     def test_reloads_stop_when_the_playlist_changes(self):
         a = make_app()

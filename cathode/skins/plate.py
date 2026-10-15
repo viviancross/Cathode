@@ -93,12 +93,12 @@ class PlateHD(BoxSkin):
         """Bold text squeezed to the box's condensed width; returns its width."""
         if not s:
             return 0
-        img = f.render(s, True, ink[:3])
+        img, extra = self.text.render(f, s, ink[:3])
         w, h = img.get_size()
         img = pygame.transform.smoothscale(img, (max(1, int(w * squeeze)), h))
         w = img.get_width()
         x = x - w if align == "right" else x - w // 2 if align == "center" else x
-        c.blit(img, (x, y - self.text.ink(f)[0]))
+        c.blit(img, (x, y - self.text.ink(f)[0] - extra))
         return w
 
     def fit_cb(self, f, s, max_w, squeeze=0.86) -> str:
@@ -838,12 +838,15 @@ class PlateHD(BoxSkin):
     def draw_toast(self, c, msg):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(24))
-        w = min(X(1100), self.measure(lambda cc, x, y: self.cb(cc, msg, f, b["vp_ink"], x, y)) + X(64))
-        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(50))
-        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=r.h)
-        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=r.h // 2)
-        self.cb(c, self.fit_cb(f, msg, w - X(56)), f, b["vp_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2,
-                align="center")
+        lines = t.wrap(f, msg, int(X(1040) / 0.86), 3)
+        lh = Y(32)
+        w = max(int(t.width(f, ln) * 0.86) for ln in lines) + X(64)
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(18) + lh * len(lines))
+        radius = r.h // 2 if len(lines) == 1 else Y(18)
+        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=radius)
+        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=radius)
+        for k, ln in enumerate(lines):
+            self.cb(c, ln, f, b["vp_ink"], r.centerx, r.y + Y(14) + k * lh, align="center")
 
     def _message(self, c, msg):
         c.fill((0, 0, 0, 255))
@@ -1564,10 +1567,16 @@ class Plate(PlateHD):
     def draw_toast(self, c, msg):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(15))
-        w = min(X(600), t.width(f, msg) + X(40))
-        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(32))
-        self._sd_pill(c, r, "", True)
-        t.draw(c, t.fit(f, msg, w - X(30)), f, b["cursor_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2, align="center")
+        lines = t.wrap(f, msg, X(560), 3)
+        lh = Y(20)
+        w = max(t.width(f, ln) for ln in lines) + X(40)
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(14) + lh * len(lines))
+        if len(lines) == 1:
+            self._sd_pill(c, r, "", True)
+        else:
+            pygame.draw.rect(c, b["cursor"], r, border_radius=Y(10))
+        for k, ln in enumerate(lines):
+            t.draw(c, ln, f, b["cursor_ink"], r.centerx, r.y + Y(9) + k * lh, align="center")
 
     def _message(self, c, msg):
         c.fill((0, 0, 0, 255))

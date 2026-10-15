@@ -1033,11 +1033,14 @@ class InDirectHD(BoxSkin):
     def draw_toast(self, c, msg):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(24))
-        r = pygame.Rect(X(96), Y(62), min(X(1088), t.width(f, msg) + X(48)), Y(50))
+        lines = t.wrap(f, msg, X(1040), 3)
+        lh = Y(34)
+        r = pygame.Rect(X(96), Y(62), max(t.width(f, ln) for ln in lines) + X(48), Y(16) + lh * len(lines))
         pygame.draw.rect(c, b["pop_body"], r)
         pygame.draw.rect(c, b["sky"], (r.x, r.y, r.w, Y(3)))
         pygame.draw.rect(c, b["sky"], (r.x, r.bottom - Y(3), r.w, Y(3)))
-        t.draw(c, t.fit(f, msg, r.w - X(48)), f, b["text"], r.x + X(24), r.y + (r.h - t.ink(f)[1]) // 2)
+        for k, ln in enumerate(lines):
+            t.draw(c, ln, f, b["text"], r.x + X(24), r.y + Y(12) + k * lh)
 
     def draw_screensaver(self, c, ss):
         W, H = self.canvas
@@ -1141,13 +1144,13 @@ class InDirect(InDirectHD):
         """The DSS lettered everything condensed, with a dark drop shadow."""
         if not s:
             return 0
-        img = f.render(s, True, ink[:3])
+        img, extra = self.text.render(f, s, ink[:3])
         w = max(1, int(img.get_width() * self.SQUEEZE))
         img = pygame.transform.smoothscale(img, (w, img.get_height()))
         x0 = x - w if align == "right" else x - w // 2 if align == "center" else x
-        y0 = y - self.text.ink(f)[0]
+        y0 = y - self.text.ink(f)[0] - extra
         if shadow:
-            sh = pygame.transform.smoothscale(f.render(s, True, shadow[:3]), (w, img.get_height()))
+            sh = pygame.transform.smoothscale(self.text.render(f, s, shadow[:3])[0], (w, img.get_height()))
             c.blit(sh, (x0 + 2, y0 + 2))
         c.blit(img, (x0, y0))
         return w
@@ -1685,7 +1688,7 @@ class InDirect(InDirectHD):
         self._notice(c, lines, y_bottom=self.Y(150), min_w=self.X(262))
 
     def draw_toast(self, c, msg):
-        self._notice(c, self.text.wrap(self.fb(self.Y(12)), msg, int(self.X(238) / self.SQUEEZE), 2))
+        self._notice(c, self.text.wrap(self.fb(self.Y(12)), msg, int(self.X(238) / self.SQUEEZE), 3))
 
     def draw_screensaver(self, c, ss):
         W, H = self.canvas

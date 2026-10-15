@@ -204,9 +204,9 @@ class EPG:
             return
         self._count += 1
 
-        title = _text(prog_el, "title")
-        desc = _text(prog_el, "desc")
-        category = _text(prog_el, "category")
+        title = _text(prog_el, "title")[:200]
+        desc = _text(prog_el, "desc")[:1500]
+        category = _text(prog_el, "category")[:60]
 
         # Episode number
         ep_nums = prog_el.findall("episode-num")

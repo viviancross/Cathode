@@ -27,6 +27,20 @@ def sort_label(val: str) -> str:
     return next((n for n, v in SORTS if v == val), "Default")
 
 
+def plex_error_text(e: Exception) -> str:
+    """A failed Plex request, in words for the couch (the raw error goes to
+    the log)."""
+    import urllib.error
+    from .plex import PlexError
+    if isinstance(e, PlexError):
+        return str(e) or "Couldn't reach Plex."
+    if isinstance(e, urllib.error.HTTPError):
+        return "Plex sign-in has expired: link your account again." if e.code == 401 else             f"Plex refused that ({e.code})."
+    if isinstance(e, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return "Couldn't reach your Plex server."
+    return "Plex sent something Cathode couldn't read."
+
+
 def episode_queue(eps: list, rk) -> list:
     """Episodes from `rk` to the end of the show, or [] when `rk` isn't there
     or is the last one (nothing would follow it)."""
@@ -148,8 +162,9 @@ class OnDemand:
             try:
                 result = work()
             except Exception as e:
+                print(f"[ondemand] {e!r}")
                 if fail:
-                    self.app.post(fail, str(e) or "Couldn't reach Plex.")
+                    self.app.post(fail, plex_error_text(e))
                 return
             if done:
                 self.app.post(done, result)

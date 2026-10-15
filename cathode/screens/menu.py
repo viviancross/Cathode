@@ -200,7 +200,10 @@ class Keyboard(Screen):
         self.app.pop(self)
         self.on_done(result)
 
+    MAX = 4096         # long enough for any address with a token; a runaway paste stops here
+
     def insert(self, s: str):
+        s = s[:max(0, self.MAX - len(self.value))]
         self.value = self.value[:self.caret] + s + self.value[self.caret:]
         self.caret += len(s)
         self.app.invalidate()

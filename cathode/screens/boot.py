@@ -29,7 +29,9 @@ class Boot(Screen):
             return "signal" if self.app.live.message.startswith("Loading") else "done"
         if self._channels_at is None:
             self._channels_at = now
-        guide_due = bool(self.app.config.epg_url) and not self.app.epg.channel_ids
+        # The guide is due while its load runs; a load that failed is said
+        # (a notice) and doesn't hold the picture.
+        guide_due = bool(self.app.config.epg_url) and not self.app.epg.channel_ids and             getattr(self.app, "guide_progress", -1) is not None
         if guide_due and now - self._channels_at < self.GUIDE_WAIT:
             return "guide"
         return "done"

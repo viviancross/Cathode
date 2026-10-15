@@ -398,13 +398,14 @@ class App:
             self.post(self._guide_progress, gen, -1 if frac is None else frac)
 
         def work():
+            err = ""
             try:
                 epg = EPG()
                 epg.load(url, user_agent=self.config.user_agent, progress=progress)
             except Exception as e:
-                print(f"[cathode] EPG load failed: {e}")
-                epg = None
-            self.post(self._epg_loaded, gen, url, epg)
+                print(f"[cathode] EPG load failed: {e!r}")
+                epg, err = None, load_error_text(e, "guide")
+            self.post(self._epg_loaded, gen, url, epg, err)
         print("[cathode] Loading EPG...")
         self.guide_progress = -1
         threading.Thread(target=work, daemon=True).start()
@@ -414,7 +415,7 @@ class App:
             self.guide_progress = frac
             self.invalidate()
 
-    def _epg_loaded(self, gen, url, epg):
+    def _epg_loaded(self, gen, url, epg, err=""):
         if gen != self._epg_gen or url != self.config.epg_url:
             return                      # the playlist changed under it
         self.guide_progress = None
@@ -423,6 +424,9 @@ class App:
             self._cats = None           # genres come from the guide
             print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
             self.invalidate()
+        elif not self.epg.channel_ids:     # nothing to show: say why (a reload keeps the old guide quietly)
+            self.toast(f"Couldn't load the guide: {err or 'it failed'}. Trying again in "
+                       f"{self.EPG_RETRY // 60} minutes.", 8.0)
         self.after(self.EPG_REFRESH if epg is not None else self.EPG_RETRY,
                    lambda: gen == self._epg_gen and self.load_epg())
 
@@ -479,6 +483,9 @@ class App:
         self.after(10.0, self._idle_check)
 
         self.push(LiveTV(self))
+        if self.config._load_error:
+            self.after(1.5, lambda: self.toast(f"Your settings couldn't be read, so Cathode started fresh. "
+                                               f"The old file was kept as {self.config._load_error}.", 10.0))
         for t, button in self.script:
             self.after(t, partial(self.press, button))
         if self.config.playlist_url:
@@ -625,7 +632,7 @@ class App:
             updater.spawn_apply(self.pending_update)
 
 
-def load_error_text(e: Exception) -> str:
+def load_error_text(e: Exception, what: str = "playlist") -> str:
     """Why a playlist didn't load, in words for the couch (the raw error
     goes to the log)."""
     import urllib.error
@@ -636,8 +643,8 @@ def load_error_text(e: Exception) -> str:
     if isinstance(e, (urllib.error.URLError, TimeoutError, ConnectionError)):
         return "the server didn't answer"
     if isinstance(e, ValueError):
-        return "that isn't a playlist address"
-    return "it isn't a playlist Cathode can read"
+        return f"that isn't a {what} address"
+    return f"it isn't a {what} Cathode can read"
 
 
 def _mpv_extra(args) -> dict:

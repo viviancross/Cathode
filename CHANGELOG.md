@@ -34,6 +34,13 @@ a retro-themed player.
 - **Subtitles** on live TV and On Demand: S (bindable) cycles the stream's tracks
   and broadcast closed captions; Settings > Subtitles turns them on for
   everything you watch and sets their size, colour, background and font.
+- **Built for real-world data.** Channel names and guide text in any script
+  (Arabic and Hebrew shaped right-to-left, Chinese, Japanese, Korean, Thai,
+  Hindi, Greek, Cyrillic, emoji) fall back to a system font when a skin's own
+  font lacks them. Playlists with a byte-order mark, Windows-1252 text, HTML
+  entities or control characters load cleanly. A damaged settings file is kept
+  as config.json.damaged instead of overwritten, and a bad value costs only
+  that setting. A guide or Plex failure says why in plain words.
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.
 - **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on
   the new core: the same sign-in, browsing, poster wall, queue, resume and

@@ -710,13 +710,17 @@ class Classic(Skin):
     # ── Toast ─────────────────────────────────────────────────────────────
 
     def draw_toast(self, c, msg):
-        p, f = self.p, self.role("heading")
-        w = self.text.width(f, msg) + 40
-        box = pygame.Rect((self.canvas[0] - w) // 2, 62, w, 44)   # under the guide's header
-        pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), box, border_radius=22)
-        pygame.draw.rect(c, p["OSD_BORDER"], box, 2, border_radius=22)
-        self.text.draw(c, msg, f, p["WHITE"], box.centerx, box.y + (box.h - self.text.ink(f)[1]) // 2,
-                       align="center")
+        p, t, f = self.p, self.text, self.role("heading")
+        room = self.canvas[0] - 160
+        lines = t.wrap(f, msg, room, 3)
+        lh = t.ink(f)[1] + 12
+        w = max(t.width(f, line) for line in lines) + 40
+        box = pygame.Rect((self.canvas[0] - w) // 2, 62, w, 20 + lh * len(lines))   # under the guide's header
+        radius = 22 if len(lines) == 1 else 12
+        pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), box, border_radius=radius)
+        pygame.draw.rect(c, p["OSD_BORDER"], box, 2, border_radius=radius)
+        for k, line in enumerate(lines):
+            t.draw(c, line, f, p["WHITE"], box.centerx, box.y + 16 + k * lh, align="center")
 
     # ── Guide ─────────────────────────────────────────────────────────────
     # Fixed geometry on the 1280x720 canvas (3.x's fractions at 720p).

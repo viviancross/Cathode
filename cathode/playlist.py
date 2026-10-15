@@ -1,6 +1,8 @@
 """M3U playlist parser."""
 
+import html
 import re
+import unicodedata
 import urllib.request
 from dataclasses import dataclass
 from typing import List, Optional
@@ -48,20 +50,37 @@ def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
     if source.startswith(("http://", "https://", "rtsp://")):
         content = _fetch_url(source, user_agent)
     else:
-        with open(source, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        with open(source, "rb") as f:
+            content = _decode(f.read())
     return _parse(content)
+
+
+def _decode(raw: bytes) -> str:
+    """UTF-8 (a BOM is fine), else Windows-1252, the other encoding
+    playlists turn up in."""
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def _clean_name(name: str) -> str:
+    """A channel name as written for people: entities decoded, control
+    characters dropped, a runaway name cut."""
+    name = html.unescape(name)
+    name = "".join(" " if ch.isspace() else ch for ch in name if ch.isspace() or unicodedata.category(ch)[0] != "C")
+    return " ".join(name.split())[:120]
 
 
 def _fetch_url(url: str, user_agent: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
     with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+        return _decode(resp.read())
 
 
 def _parse(content: str) -> List[Channel]:
     channels: List[Channel] = []
-    lines = content.splitlines()
+    lines = content.lstrip("\ufeff").splitlines()
 
     if not lines or not lines[0].strip().startswith("#EXTM3U"):
         # Try to parse even without proper header
@@ -79,6 +98,7 @@ def _parse(content: str) -> List[Channel]:
             m = _EXTINF_RE.match(line)
             if m:
                 attr_str, name = _split_attrs_name(m.group("rest"))
+                name = _clean_name(name)
                 if name:
                     pending_meta = {
                         "name": name,
