@@ -21,6 +21,7 @@ or sponsored by any of these projects or their authors.
 | Jersey 10 | Sarah Cadigan-Fried | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/jersey10 |
 | Space Mono (file name `Closed_Caption.ttf`) | Colophon Foundry / The Space Mono Project Authors | SIL OFL 1.1 | https://github.com/googlefonts/spacemono |
 | Liberation Sans (Regular, Bold, Italic) | Red Hat, Inc.; digitized data Google (Arimo) | SIL OFL 1.1 | https://github.com/liberationfonts/liberation-fonts |
+| Barlow (Medium, Bold) | The Barlow Project Authors (Jeremy Tribby) | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/barlow |
 
 Notes:
 - **CC BY / CC BY-SA** require attribution (given above). CC BY-SA additionally

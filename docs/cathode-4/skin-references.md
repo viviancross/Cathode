@@ -150,6 +150,17 @@ look. Frames from these videos (extracted 2026-10-15, not stored here):
   the chosen), grey dialogs with a blue title pill, the three-capsule
   banner reused as the DVR bar. Neither Dish box had a poster wall.
 
+### Lettering
+
+Each skin's face was compared with its frames at matched widths: InDirecTV HD
+draws in Barlow (Medium and Bold, OFL), whose square DIN-like shapes and
+proportions match the HR20's screen face (cap and x-height within 2%);
+the DSS keeps Liberation Sans Bold condensed to 82%; Plate Network HD keeps
+Liberation Sans Bold at 86%, as close to the 2007 box's narrow Helvetica as
+TeX Gyre Heros Condensed was; Plate Network SD's Arial-style bold is
+Liberation Sans Bold itself. The HD skins show full channel names, stepping
+the size down to fit before any ellipsis.
+
 ## InDirecTV (DirecTV-style)
 
 ### SD variant: D10 / D11 / R15 (2004-2006)

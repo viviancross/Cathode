@@ -44,6 +44,7 @@ class InDirectHD(BoxSkin):
     guide_hours = 1.5               # three half-hour columns, as the box showed
     guide_rows = 6
     guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
+    default_font = "barlow"         # the HR20's DIN-like screen face: Barlow matches its letterforms
     SD = False
     # Measured: the header navy, the program-cell teal, the amber, the logo blue.
     NATIVE = {"bg": [8, 36, 75], "accent": [10, 70, 112], "accent2": [240, 165, 22],
@@ -186,10 +187,11 @@ class InDirectHD(BoxSkin):
             self.tile(c, (X(100), Y(60), X(66), Y(62)), b["sky"])
         f_num, f_call, f_title = self.fb(Y(36)), self.f(Y(34)), self.fb(Y(34))
         t.draw(c, str(ch.number), f_num, b["text"], X(240), Y(62))
-        call, fc = ch.name.upper(), f_call
-        if t.width(fc, call) > X(170):            # a long name: a smaller face before an ellipsis
-            fc = self.f(Y(24))
-        t.draw(c, t.fit(fc, call, X(170)), fc, b["text"], X(240), Y(99 if fc is f_call else 104))
+        call, size = ch.name.upper(), 34
+        while size > 20 and t.width(self.f(Y(size)), call) > X(135):    # a long name: smaller before an ellipsis
+            size -= 1
+        fc = self.f(Y(size))
+        t.draw(c, t.fit(fc, call, X(135)), fc, b["text"], X(240), Y(99) + (t.ink(f_call)[1] - t.ink(fc)[1]))
         t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(97))
         if ch.group:
             t.draw(c, t.fit(f_call, ch.group, X(260)), f_call, b["text"], X(1105), Y(99), align="right")
@@ -346,7 +348,11 @@ class InDirectHD(BoxSkin):
             chr_ = pygame.Rect(X(96), y, X(199), rh)
             pygame.draw.rect(c, b["navy"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            t.draw(c, t.fit(f_cell, f"{ch.number} {ch.name}", chr_.w - X(24)), f_cell, b["text"], X(110), cy)
+            label, size = f"{ch.number} {ch.name}", 30
+            while size > 21 and t.width(self.f(Y(size)), label) > chr_.w - X(24):
+                size -= 1
+            fl = self.f(Y(size))
+            t.draw(c, t.fit(fl, label, chr_.w - X(24)), fl, b["text"], X(110), y + (rh - t.ink(fl)[1]) // 2)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
             self._cell(c, pygame.Rect(grid_x + grid_w, y, X(1278) - grid_x - grid_w, rh), False)
@@ -422,7 +428,11 @@ class InDirectHD(BoxSkin):
             if sel:
                 pygame.draw.rect(c, b["bar"], row)
             ink = (b["panel"] if sel else b["text"]) if it.enabled else b["soft"]
-            t.draw(c, t.fit(f_row, it.label, X(160)), f_row, ink, X(96), y)
+            size = 24
+            while size > 19 and t.width(self.f(Y(size)), it.label) > X(168):     # smaller before an ellipsis
+                size -= 1
+            fr = self.f(Y(size))
+            t.draw(c, t.fit(fr, it.label, X(168)), fr, ink, X(96), y + (t.ink(f_row)[1] - t.ink(fr)[1]))
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
             t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(18)), b["soft"], X(96), Y(214) + n_vis * rh)
@@ -1063,6 +1073,7 @@ class InDirect(InDirectHD):
     canvas = (640, 480)
     guide_hours = 2                 # four half-hour columns, as the DSS showed
     guide_rows = 6
+    default_font = "sans"           # Liberation Sans Bold, condensed (SQUEEZE) as the DSS lettered
     SD = True
     # Measured from the frames: the purple band, the lavender page, the teal
     # bar, the light selection; the amber was the box's own highlight colour.

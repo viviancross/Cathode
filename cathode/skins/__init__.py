@@ -94,6 +94,7 @@ FONTS = {
     "pixelop": ("PixelOperator.ttf", None, "Pixel Operator"),
     "vt323": ("VT323-Regular.ttf", None, "VT323"),
     "jersey": ("Jersey10-Regular.ttf", None, "Jersey 10"),
+    "barlow": ("Barlow-Medium.ttf", "Barlow-Bold.ttf", "Barlow"),
 }
 
 
