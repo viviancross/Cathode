@@ -177,6 +177,129 @@ class Classic(Skin):
         self.text.draw(c, "PLEASE STAND BY", self.f(56), self.p["WHITE"], card.centerx,
                        card.centery - 20, align="center")
 
+    # ── Menus ─────────────────────────────────────────────────────────────
+
+    MENU_ROWS = 10
+
+    def draw_menu(self, c, m):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        f_title, f_row, f_hint = self.f(26), self.f(22), self.f(15)
+        scrim = pygame.Surface((W, H), pygame.SRCALPHA)
+        scrim.fill(p["SCRIM"])
+        c.blit(scrim, (0, 0))
+        rh, pw = 46, 620
+        n = len(m.items)
+        top = max(0, min(m.cursor - self.MENU_ROWS + 1, n - self.MENU_ROWS)) if n > self.MENU_ROWS else 0
+        shown = m.items[top: top + self.MENU_ROWS]
+        ph = 64 + len(shown) * rh + 44
+        panel = pygame.Rect((W - pw) // 2, (H - ph) // 2, pw, ph)
+        pygame.draw.rect(c, p["OSD_BG"][:3] + (245,), panel, border_radius=10)
+        pygame.draw.rect(c, p["OSD_BORDER"], panel, 2, border_radius=10)
+        t.draw(c, m.title.upper(), f_title, p["YELLOW"], panel.x + 24, panel.y + 18)
+        pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.y + 56, pw - 24, 2))
+        y = panel.y + 64
+        for i, it in enumerate(shown, start=top):
+            row = pygame.Rect(panel.x + 12, y, pw - 24, rh - 4)
+            sel = i == m.cursor
+            if sel:
+                pygame.draw.rect(c, p["GUIDE_SELECTED"], row, border_radius=6)
+            ink = (p["SEL_TEXT"] if sel else p["WHITE"]) if it.enabled else p["INK_MUTED"]
+            ty = row.y + (row.h - t.ink(f_row)[1]) // 2
+            label = it.label + (" >" if it.submenu else "")
+            t.draw(c, label, f_row, ink, row.x + 14, ty)
+            if it.value:
+                v = it.value()
+                if sel and it.adjust:
+                    v = f"< {v} >"
+                t.draw(c, v, f_row, p["SEL_TEXT"] if sel else p["CYAN"], row.right - 14, ty, align="right")
+            self.hit(row, lambda i=i: m.activate(i))
+            y += rh
+        if n > self.MENU_ROWS:
+            if top > 0:
+                self._arrow(c, panel.centerx, panel.y + 60, up=True)
+            if top + self.MENU_ROWS < n:
+                self._arrow(c, panel.centerx, y + 2, up=False)
+        hint = "OK: select   </>: change   BACK: return   EXIT: close"
+        t.draw(c, t.fit(f_hint, hint, pw - 40), f_hint, p["INK_MUTED"], panel.centerx,
+               panel.bottom - 30, align="center")
+
+    # ── On-screen keyboard ────────────────────────────────────────────────
+
+    def draw_keyboard(self, c, kb):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        c.fill(p["SCREEN_BG"])
+        f_prompt, f_field, f_key, f_hint = self.f(28), self.f(24), self.f(26), self.f(16)
+        t.draw(c, kb.prompt, f_prompt, p["YELLOW"], W // 2, 60, align="center")
+        field = pygame.Rect(80, 110, W - 160, 56)
+        pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), field)     # opaque: no video through it
+        pygame.draw.rect(c, p["OSD_BORDER"], field, 2)
+        # Show the end of a long value, where the caret usually is.
+        before = kb.value[:kb.caret]
+        shown = before
+        while shown and t.width(f_field, shown) > field.w - 40:
+            shown = shown[1:]
+        rest = t.fit(f_field, kb.value[kb.caret:], field.w - 40 - t.width(f_field, shown))
+        ty = field.y + (field.h - t.ink(f_field)[1]) // 2
+        x = field.x + 16 + t.draw(c, shown, f_field, p["WHITE"], field.x + 16, ty)
+        pygame.draw.rect(c, p["CYAN"], (x + 1, field.y + 10, 3, field.h - 20))
+        t.draw(c, rest, f_field, p["WHITE"], x + 6, ty)
+        if kb.hint:
+            t.draw(c, kb.hint, f_hint, p["INK_MUTED"], W // 2, field.bottom + 14, align="center")
+
+        grid = kb.grid()
+        kw, kh, gap = 96, 64, 8
+        gx = (W - (10 * kw + 9 * gap)) // 2
+        y = 230
+        for r, row in enumerate(grid):
+            if r == len(grid) - 1:                      # the action row: wider keys
+                aw = (10 * kw + 9 * gap - (len(row) - 1) * gap) // len(row)
+                widths = [aw] * len(row)
+                f = f_hint
+            else:
+                widths = [kw] * len(row)
+                f = f_key
+            x = gx
+            for col, cell in enumerate(row):
+                rect = pygame.Rect(x, y, widths[col], kh)
+                sel = (r, col) == (kb.row, kb.col)
+                fill = p["GUIDE_SELECTED"] if sel else p["BTN_PRIMARY_BG"] if cell == "DONE" else p["OSD_BG"]
+                pygame.draw.rect(c, fill[:3] + (255,), rect, border_radius=6)
+                pygame.draw.rect(c, p["OSD_BORDER"], rect, 1, border_radius=6)
+                ink = p["SEL_TEXT"] if sel else p["BTN_PRIMARY_TEXT"] if cell == "DONE" else p["WHITE"]
+                t.draw(c, cell, f, ink, rect.centerx, rect.y + (kh - t.ink(f)[1]) // 2, align="center")
+                self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
+                                                                kb._press(cell)))
+                x += widths[col] + gap
+            y += kh + gap
+        t.draw(c, "Type on a keyboard or pick keys.  Ctrl+V pastes.  LB/RB move the cursor.",
+               f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+
+    # ── Diagnostics ───────────────────────────────────────────────────────
+
+    def draw_diagnostics(self, c, d):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        c.fill(p["SCREEN_BG"])
+        f_title, f_row, f_hint = self.f(30), self.f(22), self.f(16)
+        t.draw(c, "DIAGNOSTICS", f_title, p["YELLOW"], W // 2, 48, align="center")
+        y = 120
+        for label, value, pct in (("Signal strength", d.signal(), None), ("Signal quality", d.quality(), None)):
+            t.draw(c, label, f_row, p["WHITE"], 160, y)
+            bar = pygame.Rect(480, y - 2, 520, 26)
+            pygame.draw.rect(c, p["TRACK"], bar)
+            col = p["GREEN"] if value >= 70 else p["YELLOW"] if value >= 40 else p["RED"]
+            pygame.draw.rect(c, col, (bar.x, bar.y, bar.w * value // 100, bar.h))
+            t.draw(c, f"{value:3d}", f_row, p["WHITE"], bar.right + 20, y)
+            y += 56
+        y += 20
+        for label, value in d.rows():
+            t.draw(c, label, f_row, p["CYAN"], 160, y)
+            t.draw(c, t.fit(f_row, str(value), W - 640), f_row, p["WHITE"], 480, y)
+            y += 42
+        t.draw(c, "BACK: return", f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+
     # ── Toast ─────────────────────────────────────────────────────────────
 
     def draw_toast(self, c, msg):

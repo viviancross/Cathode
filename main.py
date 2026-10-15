@@ -42,7 +42,8 @@ def main():
     start_log(runtime)
 
     from cathode.app import App
-    app = App(config, fullscreen=not args.windowed and not args.shot, start_channel=args.channel)
+    full = config.start_fullscreen and not args.windowed and not args.shot
+    app = App(config, fullscreen=full, start_channel=args.channel)
     if args.shot:
         app.shot = (args.shot, args.seconds)
     app.script = [(float(t), b) for t, _, b in (p.partition(":") for p in args.press.split(",") if p)]

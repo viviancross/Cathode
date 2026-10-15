@@ -206,10 +206,52 @@ class App:
             if s.handle(action):
                 self.invalidate()
                 return
-        if action == R.FULLSCREEN:
+        from . import menus
+        if menus.handles_menu_button(self, action):
+            self.invalidate()
+        elif action == R.FULLSCREEN:
             self.toggle_fullscreen()
         elif action == R.QUIT:
-            self.running = False
+            self.quit()
+
+    def quit(self):
+        self.running = False
+
+    def click(self, wx: int, wy: int, button: int = 1):
+        """A mouse click at window pixels. Left clicks hit what the skin drew
+        last frame (topmost first); right is BACK, as a remote's back button."""
+        if button == 3:
+            self.press(R.BACK)
+            return
+        pt = self.gfx.to_canvas(self.skin.canvas, wx, wy)
+        if pt is None:
+            return
+        for rect, fn in reversed(self.skin.hits):
+            if rect.collidepoint(pt):
+                fn()
+                self.invalidate()
+                return
+        if button == 1 and len(self.screens) == 1:
+            self.press(R.INFO)          # a click on plain live TV shows the banner
+
+    def set_skin(self, name: str):
+        from .skins import load_skin
+        self.config.skin = name
+        self.config.save()
+        self.skin = load_skin(name, self)
+        self.invalidate()
+
+    def switch_playlist(self, pl: dict):
+        self.live.message = "Loading channels..."
+        self.channels, self._cats = [], None
+        self.load_playlist(pl.get("playlist_url", ""), pl.get("epg_url", ""))
+        self.invalidate()
+
+    def move_to_display(self, index: int):
+        self.config.display = index
+        self.config.save()
+        self.gfx.move_to_display(index, self.fullscreen)
+        self.invalidate()
 
     def _arm_repeat(self):
         """Held controller directions repeat on a timer (keyboards repeat by
@@ -303,7 +345,7 @@ class App:
         from .screens.live import LiveTV
 
         pygame.font.init()
-        self.gfx = Gfx(self.size, self.fullscreen)
+        self.gfx = Gfx(self.size, self.fullscreen, display=self.config.display)
         print(f"[cathode] GL {self.gfx.version} | {self.gfx.renderer}")
         R.sdl_controller.init()
         pygame.key.set_repeat(self.config.nav_repeat_delay,
@@ -348,7 +390,10 @@ class App:
                 anim = any(s.animating() for s in self.screens)
                 if self.dirty or anim:
                     self.dirty = False
+                    if canvas.get_size() != self.skin.canvas:     # skin changed
+                        canvas = pygame.Surface(self.skin.canvas, pygame.SRCALPHA)
                     canvas.fill((0, 0, 0, 0))
+                    self.skin.hits = []
                     for s in self._visible():
                         self.skin.draw(canvas, s)
                     if time.monotonic() < self.toast_until:
@@ -395,12 +440,35 @@ class App:
             self.running = False
         elif e.type in (pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED, pygame.WINDOWEXPOSED):
             self.invalidate()
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button in (1, 3):
+            self.click(*e.pos, button=e.button)
+        elif getattr(self.top(), "wants_text", False) and self._text_event(e):
+            pass
         else:
             for action in self.remote.translate(e):
                 self.press(action)
             if e.type in (pygame.CONTROLLERBUTTONDOWN, pygame.CONTROLLERBUTTONUP,
                           pygame.CONTROLLERAXISMOTION):
                 self._arm_repeat()
+
+    def _text_event(self, e) -> bool:
+        """A real keyboard typing into the on-screen one: characters go in as
+        typed, Enter submits, Ctrl+V pastes. Arrows, Backspace and Esc still
+        act as remote buttons."""
+        kb = self.top()
+        if e.type == pygame.TEXTINPUT:
+            kb.text(e.text)
+            return True
+        if e.type != pygame.KEYDOWN:
+            return False
+        if e.key == pygame.K_v and e.mod & (pygame.KMOD_CTRL | pygame.KMOD_META):
+            kb.paste()
+            return True
+        if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            kb._press("DONE")
+            return True
+        # Printable keys arrive again as TEXTINPUT; don't also run them as buttons.
+        return bool(e.unicode) and e.unicode.isprintable() and not e.mod & pygame.KMOD_CTRL
 
     def _shutdown(self):
         try:

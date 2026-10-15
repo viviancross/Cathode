@@ -95,6 +95,14 @@ class Skin:
         self.app = app
         self.text = Text()
         self._logo_surfaces = {}
+        self.hits = []          # [(Rect, fn)] clickable this frame, in canvas pixels
+
+    def reload(self):
+        """Pick up changed settings (theme, font)."""
+
+    def hit(self, rect, fn):
+        """Register a clickable region while drawing."""
+        self.hits.append((pygame.Rect(rect), fn))
 
     def draw(self, canvas, screen):
         fn = getattr(self, f"draw_{screen.name}", None)

@@ -32,8 +32,8 @@ Tick a line when the new code has a test for it.
 
 ## Menus, keyboard, guide (`test_menu*`, `test_osk`, `test_guide_close`)
 - [ ] Long menus scroll a window that follows the selection; back row pops a submenu
-- [ ] Every menu page offers an exit; at the root it closes, in a submenu it goes up
-- [ ] On-screen keyboard: caret at end on open, insert/backspace at caret, caret clamps
+- [x] Every menu page offers an exit; at the root it closes, in a submenu it goes up
+- [x] On-screen keyboard: caret at end on open, insert/backspace at caret, caret clamps
 - [ ] Guide close control is hittable and doesn't overlap the category bar
 
 ## Look (`test_delight`, `test_crt`, `test_motion`, `test_fonts`, `test_ascii_ui`, `test_ui_aspect`)

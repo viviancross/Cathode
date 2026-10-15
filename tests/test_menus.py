@@ -1,0 +1,168 @@
+"""Menus, the on-screen keyboard, and the login-item files. Menu and keyboard
+cases carried over from 3.4's test_menu, test_menu_exit and test_osk."""
+
+import os
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pygame  # noqa: E402
+
+from cathode import autostart, remote as R  # noqa: E402
+from cathode.screens.menu import Item, Keyboard, Menu  # noqa: E402
+
+
+class FakeApp:
+    def __init__(self):
+        self.screens = []
+
+    def push(self, s):
+        self.screens.append(s)
+
+    def pop(self, s=None):
+        self.screens.remove(s or self.screens[-1])
+
+    def invalidate(self):
+        pass
+
+
+def menu(app, n=3, **kw):
+    ran = []
+    items = [Item(f"item{i}", (lambda i=i: ran.append(i)), **kw) for i in range(n)]
+    m = Menu(app, "T", items)
+    app.push(m)
+    return m, ran
+
+
+class TestMenu(unittest.TestCase):
+    def test_digits_pick_rows_like_a_numbered_box_menu(self):
+        app = FakeApp()
+        m, ran = menu(app)
+        m.handle(R.DIGITS[2])
+        self.assertEqual(ran, [1])
+
+    def test_a_digit_past_the_end_does_nothing(self):
+        app = FakeApp()
+        m, ran = menu(app)
+        m.handle(R.DIGITS[9])
+        self.assertEqual(ran, [])
+
+    def test_movement_wraps_and_skips_disabled_rows(self):
+        app = FakeApp()
+        m = Menu(app, "T", [Item("a"), Item("b", enabled=False), Item("c")])
+        m.handle(R.DOWN)
+        self.assertEqual(m.cursor, 2)
+        m.handle(R.DOWN)
+        self.assertEqual(m.cursor, 0)
+
+    def test_back_pops_a_submenu_then_closes_at_the_root(self):
+        app = FakeApp()
+        m = Menu(app, "T", [Item("sub", submenu=lambda: [Item("x")])])
+        app.push(m)
+        m.handle(R.SELECT)
+        self.assertEqual(m.title, "sub")
+        m.handle(R.BACK)
+        self.assertEqual(m.title, "T")
+        m.handle(R.BACK)
+        self.assertNotIn(m, app.screens)
+
+    def test_exit_closes_from_any_depth(self):
+        app = FakeApp()
+        m = Menu(app, "T", [Item("sub", submenu=lambda: [Item("x")])])
+        app.push(m)
+        m.handle(R.SELECT)
+        m.handle(R.EXIT)
+        self.assertNotIn(m, app.screens)
+
+    def test_left_right_adjust_a_value_in_place(self):
+        app = FakeApp()
+        got = []
+        m = Menu(app, "T", [Item("v", value=lambda: "x", adjust=got.append)])
+        m.handle(R.RIGHT)
+        m.handle(R.LEFT)
+        self.assertEqual(got, [1, -1])
+
+    def test_volume_still_reaches_live_tv(self):
+        app = FakeApp()
+        m, _ = menu(app)
+        self.assertFalse(m.handle(R.VOL_UP))
+
+
+class TestKeyboard(unittest.TestCase):
+    def setUp(self):
+        self.app = FakeApp()
+        self.result = []
+        with mock.patch.object(pygame.key, "start_text_input"):
+            self.kb = Keyboard(self.app, "p", self.result.append, initial="abc")
+        self.app.push(self.kb)
+        patcher = mock.patch.object(pygame.key, "stop_text_input")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_the_caret_starts_at_the_end(self):
+        self.assertEqual(self.kb.caret, 3)
+
+    def test_insert_and_backspace_work_at_the_caret(self):
+        self.kb.handle(R.CH_DOWN)             # caret left
+        self.kb.insert("X")
+        self.assertEqual(self.kb.value, "abXc")
+        self.kb.handle(R.BACK)
+        self.assertEqual(self.kb.value, "abc")
+
+    def test_the_caret_clamps(self):
+        for _ in range(10):
+            self.kb.handle(R.CH_UP)
+        self.assertEqual(self.kb.caret, 3)
+        for _ in range(10):
+            self.kb.handle(R.CH_DOWN)
+        self.assertEqual(self.kb.caret, 0)
+
+    def test_clear_resets_the_caret(self):
+        self.kb._press("CLEAR")
+        self.assertEqual((self.kb.value, self.kb.caret), ("", 0))
+
+    def test_done_hands_back_the_text(self):
+        self.kb.text(" d ")
+        self.kb._press("DONE")
+        self.assertEqual(self.result, ["abc d"])
+        self.assertNotIn(self.kb, self.app.screens)
+
+    def test_cancel_hands_back_none(self):
+        self.kb.handle(R.EXIT)
+        self.assertEqual(self.result, [None])
+
+    def test_typed_control_characters_are_dropped(self):
+        self.kb.text("x\x07y")
+        self.assertEqual(self.kb.value, "abcxy")
+
+    def test_shift_and_symbols_change_the_keys(self):
+        self.kb._press("SHIFT")
+        self.assertIn("Q", self.kb.grid()[1])
+        self.kb._press("SYM")
+        self.assertIn("@", self.kb.grid()[0])
+
+
+class TestAutostart(unittest.TestCase):
+    def test_the_mac_agent_runs_at_login_and_escapes_paths(self):
+        text = autostart.mac_plist_text(["/Apps/A & B/python", "main.py"])
+        self.assertIn("<key>RunAtLoad</key>", text)
+        self.assertIn("A &amp; B", text)
+
+    def test_the_linux_entry_quotes_its_command(self):
+        text = autostart.linux_desktop_text(["/opt/my apps/python", "main.py"])
+        self.assertIn("Exec='/opt/my apps/python' main.py", text)
+
+    @unittest.skipIf(sys.platform in ("win32", "darwin"), "file-based autostart only")
+    def test_turning_it_on_and_off_on_linux(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": d}):
+            autostart.set_enabled(True)
+            self.assertTrue(autostart.enabled())
+            autostart.set_enabled(False)
+            self.assertFalse(autostart.enabled())
+
+
+if __name__ == "__main__":
+    unittest.main()

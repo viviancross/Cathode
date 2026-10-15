@@ -103,6 +103,10 @@ class Config:
     # Saved playlists/networks: [{name, playlist_url, epg_url}, ...]
     playlists: list = field(default_factory=list)
 
+    # Window
+    start_fullscreen: bool = True  # -w on the command line overrides it
+    display: int = 0               # which monitor (0 = the first)
+
     # Startup
     main_menu_on_launch: bool = True  # show the home screen on launch; when
     # false, boot straight into the configured playlist (the menu is still

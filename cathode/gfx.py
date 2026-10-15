@@ -218,6 +218,21 @@ class Gfx:
 
     # ── Window ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def displays() -> int:
+        return pygame.display.get_num_displays()
+
+    def move_to_display(self, index: int, fullscreen: bool):
+        """Put the window on another monitor (leaving and re-entering full
+        screen so it fills the new one)."""
+        centred = 0x2FFF0000 | index        # SDL_WINDOWPOS_CENTERED_DISPLAY(index)
+        self._sdl.SDL_SetWindowPosition.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        if fullscreen:
+            pygame.display.toggle_fullscreen()
+        self._sdl.SDL_SetWindowPosition(self._window, centred, centred)
+        if fullscreen:
+            pygame.display.toggle_fullscreen()
+
     def get_proc_address(self, name: bytes) -> int:
         return self._sdl.SDL_GL_GetProcAddress(name)
 
