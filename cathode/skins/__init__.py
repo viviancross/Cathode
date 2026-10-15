@@ -337,8 +337,15 @@ class Skin:
 
     def menu_cols(self, menu) -> int:
         """How many columns this skin lays a menu page out in (1 = a list).
-        Grids move LEFT/RIGHT across and UP/DOWN by a row."""
+        Grids fill a column before the next (1-5 down the left, 6-0 down the
+        right, as the boxes numbered them); UP/DOWN move in a column and
+        LEFT/RIGHT across."""
         return 1
+
+    def menu_rows(self, menu) -> int:
+        """Rows in each column of a grid menu."""
+        cols = max(1, self.menu_cols(menu))
+        return max(1, -(-len(menu.items) // cols))
 
     def f(self, size: int, bold: bool = False):
         regular, heavy, _ = FONTS.get(self.font_key(), FONTS[self.default_font])

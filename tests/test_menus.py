@@ -91,6 +91,28 @@ class TestMenu(unittest.TestCase):
         self.assertFalse(m.handle(R.VOL_UP))
 
 
+class GridSkin:
+    """Two columns of five, filled a column at a time."""
+    def menu_cols(self, menu):
+        return 2
+
+    def menu_rows(self, menu):
+        return 5
+
+
+class TestGridMenu(unittest.TestCase):
+    def test_arrows_follow_the_columns_as_drawn(self):
+        app = FakeApp()
+        app.skin = GridSkin()
+        m, _ = menu(app, n=7)                 # 1-5 down the left, 6-7 down the right
+        moves = []
+        for a in (R.RIGHT, R.DOWN, R.DOWN, R.LEFT, R.DOWN, R.DOWN, R.DOWN, R.RIGHT, R.UP):
+            m.handle(a)
+            moves.append(m.cursor)
+        # 0 -> 5 (across), 6, 6 (column end), 1 (back across), 2, 3, 4, 6 (shorter column: its last), 5
+        self.assertEqual(moves, [5, 6, 6, 1, 2, 3, 4, 6, 5])
+
+
 class TestKeyboard(unittest.TestCase):
     def setUp(self):
         self.app = FakeApp()

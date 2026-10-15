@@ -1248,6 +1248,9 @@ class Plate(PlateHD):
     def menu_cols(self, menu):
         return 2 if menu.title == "MAIN MENU" and len(menu.pages) == 1 else 1
 
+    def menu_rows(self, menu):
+        return 5 if self.menu_cols(menu) == 2 else super().menu_rows(menu)
+
     def menu_video_box(self, menu):
         return "hidden"
 
@@ -1269,7 +1272,7 @@ class Plate(PlateHD):
         n = len(m.items)
         cols = self.menu_cols(m)
         rh = Y(40)
-        per_col = 5 if cols == 2 else max(1, (Y(430) - Y(165)) // rh)
+        per_col = self.menu_rows(m) if cols == 2 else max(1, (Y(430) - Y(165)) // rh)
         n_vis = per_col * cols
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         f_row = self.fb(Y(20))

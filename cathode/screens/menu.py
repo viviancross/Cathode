@@ -107,12 +107,22 @@ class Menu(Screen):
                 self.close()
             return True
         it = self.items[self.cursor]
-        cols = self.app.skin.menu_cols(self) if getattr(self.app, "skin", None) else 1
+        skin = getattr(self.app, "skin", None)
+        cols = skin.menu_cols(self) if skin else 1
         if cols > 1 and a in (R.UP, R.DOWN, R.LEFT, R.RIGHT):
-            # A grid of tiles (Plate Network's Main Menu): across, and down by a row.
-            step = {R.LEFT: -1, R.RIGHT: 1, R.UP: -cols, R.DOWN: cols}[a]
-            j = self.cursor + step
-            if 0 <= j < len(self.items) and self.items[j].enabled:
+            # A grid (Plate Network's Main Menu), filled a column at a time:
+            # UP/DOWN within the column, LEFT/RIGHT to the same row of the
+            # next one (or its last item when that column is shorter).
+            rows, n = skin.menu_rows(self), len(self.items)
+            col, row = divmod(self.cursor, rows)
+            if a in (R.UP, R.DOWN):
+                j = self.cursor + (1 if a == R.DOWN else -1)
+                ok = 0 <= row + (1 if a == R.DOWN else -1) < rows and 0 <= j < n
+            else:
+                c2 = col + (1 if a == R.RIGHT else -1)
+                j = min(c2 * rows + row, n - 1)
+                ok = 0 <= c2 < cols and j >= c2 * rows
+            if ok and self.items[j].enabled:
                 self.cursor = j
                 self._landed()
         elif a == R.UP:
