@@ -106,6 +106,8 @@ class Skin:
     right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume
     browse_style = "banner"     # BROWSE shows: banner (one channel) | mini (a mini guide)
     guide_jump_min = 24 * 60    # how far REW / FF move the guide
+    poster_wall = True          # On Demand titles may show as a poster wall
+    keyboard_layer = "abc"      # the case the on-screen keyboard opens in
     default_font = "vcr"
 
     def __init__(self, app):
@@ -151,6 +153,17 @@ class Skin:
 
     def menu_video_box(self, menu):
         """Where a menu wants the video; None leaves it to the screen below."""
+        return None
+
+    def page_video_box(self, screen):
+        """Where a full page (On Demand, item info, keyboard, diagnostics)
+        keeps the picture; None hides it."""
+        return None
+
+    def keyboard_rows(self, layer):
+        """The on-screen keyboard's rows for a layer, action rows included
+        (SHIFT, SYM, SPACE, DEL, CLEAR, CANCEL, DONE); None for the standard
+        layout."""
         return None
 
     def menu_cols(self, menu) -> int:

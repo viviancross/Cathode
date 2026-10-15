@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace as NS
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -93,6 +94,50 @@ def screens(app):
             Keyboard(app, "Prompt", lambda v: None, "text"), Boot(app), Screensaver(app), diag]
 
 
+class FakeOnDemand:
+    def __init__(self):
+        self.queue = NS(items=[1, 2, 3], pos=0)
+        self.downloads = NS(root=".")
+
+    def poster(self, *a):
+        return None
+
+
+def page_screens():
+    """On Demand (list, wall, top level, link code, My Recordings), an item's
+    info, playback and the remote-capture prompt, from made-up data."""
+    rows = [dict(type="sort", title="Sort by: Title", meta="")] + [
+        dict(type="movie", title=f"MOVIE NUMBER {i}", meta=f"{1980 + i}   PG   7.{i}", playable=True,
+             offset=120 if i == 2 else 0, duration=600) for i in range(14)]
+    recs = [dict(type="download", title=f"Recording {i}", meta="42%" if i == 1 else "", playable=i != 1,
+                 state="downloading" if i == 1 else "done") for i in range(8)]
+
+    def od(view="list", mode="browse", key="", depth=2, rws=rows):
+        level = dict(title="ALL MOVIES", rows=rws, sel=3, key=key)
+        parent = dict(title="MOVIES", rows=[dict(title="ALL MOVIES"), dict(title="COMEDY")], sel=0, key="")
+        s = NS(name="ondemand", mode=mode, status="", view=view, stack=([parent] if depth > 1 else []) + [level],
+               level=level, rows=rws, sel=3, wall_offset=1 if rws is rows else 0, auth_code="AB12",
+               auth_link="plex.tv/link")
+        s.crumb = lambda: "On Demand / Movies"
+        s.current = lambda: rws[3]
+        s.select = s.back = lambda: None
+        s.handle = lambda a: True
+        return s
+    info = NS(name="iteminfo", focus=1, detail=dict(title="Movie Number 3", subtitle="1983   PG   7.3",
+                                                    summary="A summary of the film. " * 12, duration=6000, offset=120))
+    info.buttons = lambda: ["play", "dvr", "queue", "watchlist", "back"]
+    info.label = lambda b: {"play": "PLAY", "dvr": "REC 40%", "queue": "+ QUEUE", "watchlist": "+ WATCHLIST",
+                            "back": "BACK"}[b]
+    info.press = lambda b: None
+    pb = NS(name="playback", title="Movie Number 3", subtitle="1983", pos=120.0, dur=600.0, skip_label="SKIP INTRO",
+            flash=("", 0))
+    pb.bar_visible = lambda: True
+    pb.seek_to = pb.toggle_pause = pb.stop = pb.skip = pb.seek = lambda *a: None
+    pb.handle = lambda a: True
+    cap = NS(name="capture", prompt="Press the key for Guide  (Esc cancels)")
+    return [od(), od(view="wall"), od(depth=1), od(mode="auth"), od(key="recordings", rws=recs), info, pb, cap]
+
+
 class TestEverySkinDrawsEveryScreen(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -116,6 +161,27 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
                         skin.draw(canvas, s)
                         if s.name in ("live", "guide", "menu", "keyboard", "boot", "diagnostics"):
                             self.assertIsNotNone(canvas.get_bounding_rect(min_alpha=1).w)
+
+    def test_on_demand_pages_toasts_and_messages(self):
+        for name, cls in skin_classes().items():
+            app = FakeApp()
+            app.config.skin = name
+            app.ondemand = FakeOnDemand()
+            skin = cls(app)
+            app.skin = skin
+            for theme in [k for k, _ in skin.theme_choices() if k != "custom"][:3]:
+                skin.set_theme_key(theme)
+                skin.reload()
+                canvas = pygame.Surface(skin.canvas, pygame.SRCALPHA)
+                for k, s in enumerate(page_screens()):
+                    with self.subTest(skin=name, theme=theme, screen=f"{s.name}{k}"):
+                        canvas.fill((0, 0, 0, 0))
+                        skin.hits = []
+                        skin.draw(canvas, s)
+                        self.assertIsNotNone(canvas.get_bounding_rect(min_alpha=1).w)
+                with self.subTest(skin=name, theme=theme, screen="toast+message"):
+                    skin.draw_toast(canvas, "Deleted from My Recordings")
+                    skin._message(canvas, "Couldn't load the playlist: the server said no.")
 
     def test_box_skins_cut_to_black_and_classic_keeps_static(self):
         classes = skin_classes()

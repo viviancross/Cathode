@@ -16,6 +16,9 @@ class Diagnostics(Screen):
         self._timer = None
         self._tick()
 
+    def video_box(self):
+        return self.app.skin.page_video_box(self)
+
     def _tick(self):
         if self not in self.app.screens and self._timer:
             return                       # closed

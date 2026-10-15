@@ -150,12 +150,22 @@ class Keyboard(Screen):
         self.prompt, self.hint, self.on_done = prompt, hint, on_done
         self.value = initial
         self.caret = len(initial)
-        self.layer = "abc"
-        self.row, self.col = 1, 0       # on the keys, not the action row
+        self.layer = getattr(getattr(app, "skin", None), "keyboard_layer", "abc")
+        # Start on the first letter: past the digits, never on an action.
+        self.row, self.col = next(((r, c) for r, row in enumerate(self.grid()) for c, k in enumerate(row)
+                                   if len(k) == 1 and k.isalpha()), (0, 0))
         pygame.key.start_text_input()
 
-    # Grid: key rows, then the action row.
+    def video_box(self):
+        return self.app.skin.page_video_box(self)
+
+    # Grid: key rows, then the action row(s). A skin may lay the keys out as
+    # its box did; the actions keep their names (SHIFT, SPACE, DONE...).
     def grid(self) -> List[List[str]]:
+        skin = getattr(self.app, "skin", None)
+        rows = skin.keyboard_rows(self.layer) if skin else None
+        if rows:
+            return [list(r) for r in rows]
         return [list(r) for r in self.LAYERS[self.layer]] + [self.ACTIONS]
 
     def _press(self, cell: str):

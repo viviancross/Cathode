@@ -45,6 +45,9 @@ class OnDemandScreen(Screen):
         else:
             self.begin_auth()
 
+    def video_box(self):
+        return self.app.skin.page_video_box(self)
+
     # ── Levels ────────────────────────────────────────────────────────────
 
     @property
@@ -69,7 +72,7 @@ class OnDemandScreen(Screen):
     def view(self) -> str:
         """The poster wall only for levels of titles; menus of places to go
         (the library list, genres) read better as a list either way."""
-        if self.app.config.ppv_view != "wall":
+        if self.app.config.ppv_view != "wall" or not self.app.skin.poster_wall:
             return "list"
         titled = any(r.get("playable") or r.get("type") in ("show", "season", "movie")
                      for r in self.rows)

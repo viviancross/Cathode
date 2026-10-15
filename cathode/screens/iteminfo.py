@@ -33,6 +33,9 @@ class ItemInfo(Screen):
         self.focus = 0
         self.od.listeners.append(self.app.invalidate)
 
+    def video_box(self):
+        return self.app.skin.page_video_box(self)
+
     @property
     def rk(self) -> str:
         return str(self.detail.get("rating_key") or "")
