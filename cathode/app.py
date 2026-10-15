@@ -457,7 +457,10 @@ class App:
                 self._run_timers()
 
                 resized = self.gfx.begin()
-                changed = resized or self.dirty
+                # A scripted shot is taken on time even when nothing redraws
+                # (a dead channel, a static page).
+                due = bool(self.shot) and time.monotonic() - t_start >= self.shot[1]
+                changed = resized or self.dirty or due
                 if self._frame_pending or resized:
                     w, h = self.gfx.size
                     if self.video.render(self.gfx.video.fbo, w, h):

@@ -18,6 +18,7 @@ class Text:
     def __init__(self):
         self._fonts = {}
         self._ink = {}
+        self._cap = {}
 
     def font(self, file: str, size: int) -> pygame.font.Font:
         key = (file, size)
@@ -33,6 +34,14 @@ class Text:
     def ink(self, font) -> tuple:
         """(offset from the render's top to the ink's top, ink height)."""
         return self._ink[font]
+
+    def cap(self, font) -> int:
+        """Cap height: centring capitals on this, not on ink() (which runs
+        down to the descenders), sits them optically in the middle."""
+        h = self._cap.get(font)
+        if h is None:
+            h = self._cap[font] = font.render("H", True, (255, 255, 255)).get_bounding_rect().h
+        return h
 
     @staticmethod
     def width(font, s: str) -> int:

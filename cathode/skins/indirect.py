@@ -192,9 +192,11 @@ class InDirectHD(BoxSkin):
             size -= 1
         fc = self.f(Y(size))
         t.draw(c, t.fit(fc, call, X(135)), fc, b["text"], X(240), Y(99) + (t.ink(f_call)[1] - t.ink(fc)[1]))
-        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(97))
-        if ch.group:
-            t.draw(c, t.fit(f_call, ch.group, X(260)), f_call, b["text"], X(1105), Y(99), align="right")
+        group = t.fit(f_call, ch.group, X(260)) if ch.group else ""
+        room = min(X(560), X(1105) - (t.width(f_call, group) + X(30) if group else 0) - X(385))
+        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, room), f_title, b["text"], X(385), Y(97))
+        if group:
+            t.draw(c, group, f_call, b["text"], X(1105), Y(99), align="right")
         strip = self.R(0, 134, 1280, 52)
         paper = pygame.Surface(strip.size, pygame.SRCALPHA)
         paper.fill((*b["paper"], 240))
@@ -815,7 +817,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, f"{max(1, d['duration'] // 60)}min", fs, b["strip_ink"], X(301), sy)
         meta = d.get("subtitle") or d.get("meta", "")
         if meta:
-            t.draw(c, t.fit(fs, meta, X(140)), fs, b["strip_ink"], X(690), sy)
+            t.draw(c, t.fit(fs, meta, X(250)), fs, b["strip_ink"], X(580), sy)
         pn = self.R(300, 222, 880, 478)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
         fb_ = self.f(Y(25))
@@ -1115,7 +1117,7 @@ class InDirect(InDirectHD):
             # The shared pieces (volume, mini guide...) read these.
             "navy": purple, "cell": page, "cell_hi": mix(page, (255, 255, 255), 0.06),
             "gap": mix(page, (0, 0, 0), 0.3), "sky": teal, "deep": mix(purple, (0, 0, 0), 0.4),
-            "sel_hi": mix(sel, (255, 255, 255), 0.25), "sel_shadow": None, "mark": text, "ink": text,
+            "sel_shadow": None, "mark": text, "ink": text,
         }
 
     # The DSS frame's own 320x240 (the capture's size), scaled to the canvas.
@@ -1314,7 +1316,8 @@ class InDirect(InDirectHD):
                 on = row_sel and p.start <= max(now, start) < p.stop
                 self._dss_cell(c, cell, on)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
-                lines = t.wrap(f_cell, p.title, int((cell.w - X(8)) / self.SQUEEZE), 2)
+                room = int((cell.w - X(8)) / self.SQUEEZE)
+                lines = [t.fit(f_cell, line, room) for line in t.wrap(f_cell, p.title, room, 2)]
                 for k, line in enumerate(lines):
                     self._shadowed(c, line, f_cell, ink, shadow, cell.x + X(4), y + Y(2) + k * Y(12))
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
@@ -1415,8 +1418,13 @@ class InDirect(InDirectHD):
                 hint = "SELECT opens this menu."
             else:
                 hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, "SELECT chooses this.")
-            self._shadowed(c, t.fit(f_row, hint, int((box.w - X(26)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
-                           box.x + X(20), box.y + Y(6))
+            room, fh = int((box.w - X(26)) / self.SQUEEZE), f_row
+            for size in (12, 11, 10):
+                fh = self.fb(Y(size))
+                if t.width(fh, hint) <= room:
+                    break
+            self._shadowed(c, t.fit(fh, hint, room), fh, b["text"], b["shadow"],
+                           box.x + X(20), box.y + Y(6) + (t.ink(f_row)[1] - t.ink(fh)[1]) // 2)
 
     # ── Mini guide: the DSS had none; a purple band of rows ───────────────
 
@@ -1573,7 +1581,7 @@ class InDirect(InDirectHD):
             self._shadowed(c, line, f, b["soft"], b["shadow"], X(57), y + Y(6))
             y += Y(12)
         for k, name in enumerate(info.buttons()):
-            r = pygame.Rect(X(222), Y(83) + k * Y(19), X(82), Y(13))
+            r = pygame.Rect(X(220), Y(83) + k * Y(19), X(92), Y(13))
             word = "Buy" if offer and name == "play" else self.button_words(info.label(name), back="Exit")
             self._dss_button(c, r, word, self.ICONS.get(name, "info"), k == info.focus)
             self.hit(r, lambda k=k, name=name: (setattr(info, "focus", k), info.press(name)))
@@ -1632,7 +1640,7 @@ class InDirect(InDirectHD):
                     w = X(43) if len(row) > 2 else X(60)
                     rect = pygame.Rect(X(52) + col * (w + X(2)), Y(97) + r * Y(15) + Y(4), w, Y(13))
                     label = ("a-z" if kb.layer == "ABC" else "A-Z") if cell == "SHIFT" else \
-                        ("ABC" if kb.layer == "sym" else "Symbols") if cell == "SYM" else self.KEY_WORDS.get(cell, cell)
+                        ("ABC" if kb.layer == "sym" else "Sym") if cell == "SYM" else self.KEY_WORDS.get(cell, cell)
                     self._dss_button(c, rect, label, "exit" if cell == "CANCEL" else "play" if cell == "DONE" else "info", on)
                 self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                 kb._press(cell)))

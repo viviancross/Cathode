@@ -439,7 +439,7 @@ class PlateHD(BoxSkin):
             if on:
                 self.cb(c, "Today", fc, b["text"], X(597), Y(560))
                 self.cb(c, self.fit_cb(fc, f"{ampm(on.start)} - {ampm(on.stop)}  {on.title}", X(580)), fc, b["text"], X(597), Y(588))
-        lp = self.R(51, 127, 493, 567)
+        lp = self.R(51, 127, 493, 545)
         pygame.draw.rect(c, b["list_panel"], lp, border_radius=Y(14))
         pygame.draw.rect(c, b["pip_edge"], lp, Y(3), border_radius=Y(14))
         n = len(m.items)
@@ -460,12 +460,12 @@ class PlateHD(BoxSkin):
                 pygame.draw.rect(c, fill, rr, border_radius=Y(8))
                 pygame.draw.rect(c, b["row_edge"], rr, Y(2), border_radius=Y(8))
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
-            self.cb(c, self.fit_cb(f_row, it.label, row.w - (X(180) if it.value else X(50))), f_row, ink,
-                    row.x + X(16), ty)
+            lw = self.cb(c, self.fit_cb(f_row, it.label, row.w - (X(180) if it.value else X(50))), f_row, ink,
+                         row.x + X(16), ty)
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v
-                self.cb(c, self.fit_cb(f_row, v, X(140)), f_row, ink, row.right - X(14), ty, align="right")
+                self.cb(c, self.fit_cb(f_row, v, row.w - lw - X(48)), f_row, ink, row.right - X(14), ty, align="right")
             elif it.submenu:
                 self.cb(c, ">", f_row, ink, row.right - X(14), ty, align="right")
             if i < 9:
@@ -473,7 +473,7 @@ class PlateHD(BoxSkin):
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
             self.cb(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.fb(Y(18)), b["ink"], lp.x + X(32), lp.bottom - Y(28))
-        self.cb(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.fb(Y(18)), b["muted"], X(51), Y(694))
+        self.cb(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.fb(Y(18)), b["muted"], X(51), Y(690))
 
     def menu_video_box(self, menu):
         r = self.R(609, 181, 569, 354)
@@ -496,7 +496,7 @@ class PlateHD(BoxSkin):
         return 1
 
     def ondemand_page(self, screen):
-        return 6
+        return 8
 
     def _vip_page(self, c, title, sub="", picture=True):
         """The page every ViP screen shares; returns the picture's rect."""
@@ -601,7 +601,7 @@ class PlateHD(BoxSkin):
         title = "My Recordings" if rec else "On Demand"
         sub = "" if rec or not s.level or len(s.stack) < 2 else s.level["title"].title()
         self._vip_page(c, title, sub)
-        panel = self.R(40, 336, 740, 360)
+        panel = self.R(40, 236, 740, 460)
         self._vip_panel(c, panel)
         fh = self.fb(Y(22))
         fh.italic = True
@@ -1070,7 +1070,8 @@ class Plate(PlateHD):
                     self._crescent(c, cell, mark, left=False)
                     inset_r = X(18)
                 if cell.w > X(30):
-                    lines = t.wrap(f_cell, p.title, cell.w - inset_l - inset_r, 2)
+                    lines = [t.fit(f_cell, ln, cell.w - inset_l - inset_r)
+                             for ln in t.wrap(f_cell, p.title, cell.w - inset_l - inset_r, 2)]
                     pitch = Y(17)
                     ty = y + (rh - (len(lines) - 1) * pitch - t.ink(f_cell)[1]) // 2
                     cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2
@@ -1276,11 +1277,11 @@ class Plate(PlateHD):
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             num = str((i + 1) % 10) if i < 10 else ""
             label = f"{num} {it.label}".strip()
-            t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(28), ty)
+            lw = t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(28), ty)
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v
-                t.draw(c, t.fit(f_row, v, X(120)), f_row, ink, row.right - X(22), ty, align="right")
+                t.draw(c, t.fit(f_row, v, row.w - lw - X(66)), f_row, ink, row.right - X(22), ty, align="right")
             elif it.submenu:
                 t.draw(c, ">", f_row, ink, row.right - X(22), ty, align="right")
             self.hit(row, lambda i=i: m.activate(i))
@@ -1328,7 +1329,7 @@ class Plate(PlateHD):
         if not on:
             pygame.draw.rect(c, b["row_hi"], (r.x + r.h // 2, r.y + Y(2), r.w - r.h, Y(3)), border_radius=2)
         f = self.fb(Y(19))
-        ty = r.y + (r.h - t.ink(f)[1]) // 2
+        ty = r.y + (r.h - t.cap(f)) // 2
         rw = t.width(f, right) + X(16) if right else 0
         t.draw(c, t.fit(f, label, r.w - X(36) - rw), f, ink, r.x + X(20), ty)
         if right:

@@ -163,8 +163,12 @@ class Classic(Skin):
             c.blit(logo, logo.get_rect(center=nb.center))
             name_x += t.draw(c, str(ch.number), f_large, p["CHANNEL_GREEN"], info_x, y_name) + 12
         else:
-            ink = t.ink(f_huge)[1]
-            t.draw(c, str(ch.number), f_huge, p["CHANNEL_GREEN"], nb.centerx,
+            fn, size = f_huge, int(bh * 0.55)
+            while size > 12 and t.width(fn, str(ch.number)) > nb.w - 12:
+                size -= 2
+                fn = self.f(size)
+            ink = t.ink(fn)[1]
+            t.draw(c, str(ch.number), fn, p["CHANNEL_GREEN"], nb.centerx,
                    nb.centery - ink // 2, align="center")
         t.draw(c, t.fit(f_large, ch.name, col_w - (name_x - info_x)), f_large, p["WHITE"],
                name_x, y_name)
@@ -180,16 +184,18 @@ class Classic(Skin):
         else:
             t.draw(c, "No program info", f_med, p["INK_MUTED"], info_x, y_prog)
 
+        right = bx + bw - 12
+        group = t.fit(f_small, ch.group.upper(), int(W * 0.16)) if ch.group else ""
         if nxt:
-            next_w = (bx + bw) - next_x - int(W * 0.10)
+            gw = t.width(f_small, group) if group else 0
+            next_w = right - gw - 24 - next_x
             t.draw(c, "NEXT", f_small, p["ORANGE"], next_x, y_name)
             t.draw(c, t.fit(f_med, nxt.title, next_w), f_med, p["WHITE_DIM"], next_x, y_prog)
             t.draw(c, span(nxt), f_small, p["INK_MUTED"], next_x, y_time)
 
-        right = bx + bw - 12
         t.draw(c, clock(datetime.now()), f_large, p["YELLOW"], right, y_name, align="right")
-        if ch.group:
-            t.draw(c, ch.group.upper()[:20], f_small, p["CYAN"], right, y_prog, align="right")
+        if group:
+            t.draw(c, group, f_small, p["CYAN"], right, y_prog, align="right")
         # The clock on the banner advances while it's up: one tick pending at a time.
         if self._tick is None or self._tick[0] <= time.monotonic():
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
@@ -687,7 +693,7 @@ class Classic(Skin):
         t.draw(c, "DIAGNOSTICS", f_title, p["YELLOW"], W // 2, 48, align="center")
         y = 120
         for label, value, pct in (("Signal strength", d.signal(), None), ("Signal quality", d.quality(), None)):
-            t.draw(c, label, f_row, p["WHITE"], 160, y)
+            t.draw(c, label, f_row, p["CYAN"], 160, y)
             bar = pygame.Rect(480, y - 2, 520, 26)
             pygame.draw.rect(c, p["TRACK"], bar)
             col = p["GREEN"] if value >= 70 else p["YELLOW"] if value >= 40 else p["RED"]
@@ -824,7 +830,7 @@ class Classic(Skin):
 
         # Scroll hints.
         if guide.top > 0:
-            self._arrow(c, W // 2, grid_y - 6, up=True)
+            self._arrow(c, grid_x - 20, ruler_y + g["ruler_h"] // 2, up=True)
         if guide.top + guide.rows < len(vis):
             self._arrow(c, W // 2, grid_y + g["row_h"] * guide.rows + 6, up=False)
         pygame.draw.rect(c, p["GUIDE_BORDER"], (0, 0, W, H), 2)
