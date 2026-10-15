@@ -516,7 +516,7 @@ class InDirectHD(BoxSkin):
     def ondemand_page(self, screen):
         if screen.view == "wall":
             return self.OD_COLS * 2
-        return 6 if self._is_playlist(screen) else 9
+        return 6 if self._is_playlist(screen) else 9      # 9 x 44 inside the 408 panel
 
     @staticmethod
     def _is_playlist(s):
@@ -577,7 +577,7 @@ class InDirectHD(BoxSkin):
         bar = self.R(356, 634, 880, 40)
         pygame.draw.rect(c, b["od_bar"], bar, border_radius=Y(6))
         hy = bar.y + (bar.h - t.ink(self.f(Y(21)))[1]) // 2
-        x = self._hint(c, bar.x + X(20), hy, "MENU", "Options", b["od_ink"], b["od_tag"])
+        x = self._hint(c, bar.x + X(64), hy, "MENU", "Options", b["od_ink"], b["od_tag"])
         x = self._hint(c, x, hy, "LIST", "My Recordings", b["od_ink"], b["od_tag"])
         if s.status:
             t.draw(c, s.status.title(), self.fb(Y(21)), b["od_ink"], bar.right - X(20), hy, align="right")
@@ -617,7 +617,7 @@ class InDirectHD(BoxSkin):
                 self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
 
         cur = s.current() or {}
-        title = cur.get("title") if parent or s.view == "wall" else s.level["title"] if s.level else "On Demand"
+        title = cur.get("title") or (s.level["title"] if s.level else "On Demand")
         t.draw(c, t.fit(fh, (title or "On Demand").title(), head.w - X(40)), fh, b["text"], head.x + X(20), head.y + Y(18))
         about = cur.get("meta") or s.crumb()
         for k, line in enumerate(t.wrap(fd, about, head.w - X(40), 4)):
@@ -658,10 +658,12 @@ class InDirectHD(BoxSkin):
             if off and dur:
                 pygame.draw.rect(c, b["tk_bar"], (r.x + X(16), r.bottom - Y(5), int((r.w - X(32)) * min(1, off / dur)), Y(3)))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
-        if top + n_vis < len(rows) or top:
-            pts = (main.x + X(30), main.bottom + Y(2))
-            pygame.draw.polygon(c, b["od_bar"], [(pts[0] - X(10), pts[1] - Y(10)), (pts[0] + X(10), pts[1] - Y(10)),
-                                                 (pts[0], pts[1])])
+        ax, ay = X(374), Y(654)                 # the key bar's arrow slot
+        if top + n_vis < len(rows):
+            pygame.draw.polygon(c, b["od_ink"], [(ax, ay - Y(6)), (ax + X(16), ay - Y(6)), (ax + X(8), ay + Y(6))])
+        if top:
+            pygame.draw.polygon(c, b["od_ink"], [(ax + X(22), ay + Y(6)), (ax + X(38), ay + Y(6)),
+                                                 (ax + X(30), ay - Y(6))])
 
     def _od_posters(self, c, s, main):
         """Top Picks: posters in two rows, each titled on a pale strip."""

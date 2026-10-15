@@ -151,11 +151,12 @@ class Classic(Skin):
         info_x = nb.right + 20
         next_x = int(W * 0.45)
         col_w = next_x - info_x - 16
-        gap = max(2, int(bh * 0.05))
-        y_name = by + int(bh * 0.10)
-        y_prog = y_name + t.ink(f_large)[1] + gap
-        pb_y = y_prog + t.ink(f_med)[1] + gap      # clear of the title, not an underline
-        y_time = pb_y + 4 + gap
+        tight, apart = max(2, int(bh * 0.05)), max(4, int(bh * 0.09))
+        stack = t.ink(f_large)[1] + tight + t.ink(f_med)[1] + apart + 4 + tight + t.ink(f_small)[1]
+        y_name = by + (bh - stack) // 2
+        y_prog = y_name + t.ink(f_large)[1] + tight
+        pb_y = y_prog + t.ink(f_med)[1] + apart
+        y_time = pb_y + 4 + tight
 
         name_x = info_x
         if logo is not None:
@@ -291,11 +292,11 @@ class Classic(Skin):
         scrim = pygame.Surface((W, H), pygame.SRCALPHA)
         scrim.fill(p["SCRIM"])
         c.blit(scrim, (0, 0))
-        rh, pw = 46, 620
+        rh, pw, foot = 46, 620, 46
         n = len(m.items)
         top = max(0, min(m.cursor - self.MENU_ROWS + 1, n - self.MENU_ROWS)) if n > self.MENU_ROWS else 0
         shown = m.items[top: top + self.MENU_ROWS]
-        ph = 64 + len(shown) * rh + 44
+        ph = 64 + len(shown) * rh + 10 + foot
         panel = pygame.Rect((W - pw) // 2, (H - ph) // 2, pw, ph)
         pygame.draw.rect(c, p["OSD_BG"][:3] + (245,), panel, border_radius=10)
         pygame.draw.rect(c, p["OSD_BORDER"], panel, 2, border_radius=10)
@@ -323,9 +324,10 @@ class Classic(Skin):
                 self._arrow(c, panel.centerx, panel.y + 60, up=True)
             if top + self.MENU_ROWS < n:
                 self._arrow(c, panel.centerx, y + 2, up=False)
+        pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.bottom - foot, pw - 24, 1))
         hint = "OK: select   </>: change   BACK: return   EXIT: close"
         t.draw(c, t.fit(f_hint, hint, pw - 40), f_hint, p["INK_MUTED"], panel.centerx,
-               panel.bottom - 30, align="center")
+               panel.bottom - foot + (foot - t.ink(f_hint)[1]) // 2, align="center")
 
     # ── On-screen keyboard ────────────────────────────────────────────────
 

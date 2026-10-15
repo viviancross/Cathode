@@ -647,7 +647,7 @@ class PlateHD(BoxSkin):
         if meta:
             self.cb(c, self.fit_cb(fm, meta, X(580)), fm, b["text"], X(330), Y(162), align="center")
         if d.get("duration"):
-            self.cb(c, hms(d["duration"]), fm, b["text"], X(580), Y(204), align="right")
+            self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], X(330), Y(200), align="center")
         panel = self.R(80, 300, 500, 330)
         self._vip_panel(c, panel)
         pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
