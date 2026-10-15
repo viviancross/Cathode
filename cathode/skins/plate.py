@@ -51,6 +51,9 @@ class PlateHD(BoxSkin):
 
     def roles(self, b):
         page, now_, later, text, gold = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
+
+        def sh(c, k):
+            return self.shade(b, c, k)
         return {
             "page": page, "page_hi": mix(page, (40, 120, 130), 0.35), "page_lo": mix(page, (0, 0, 0), 0.3),
             "now": now_, "later": later, "edge": mix(later, (120, 160, 200), 0.3),
@@ -63,6 +66,17 @@ class PlateHD(BoxSkin):
             "ink": mix(later, (0, 0, 0), 0.3), "pip": (0, 0, 0), "pip_edge": mix(page, (120, 170, 180), 0.5),
             "panel_top": (236, 238, 240), "panel_bot": (190, 196, 204),
             "sel": gold, "sel_ink": mix(later, (0, 0, 0), 0.3), "deep": mix(page, (0, 0, 0), 0.4),
+            # The ViP's pages, measured off the frames (2009-11): the blue
+            # page and its header, the pale list panel and its rows, the
+            # amber cursor, the white capsule buttons, the dark info panel.
+            "vp_top": sh((42, 59, 105), "accent2"), "vp_mid": sh((40, 92, 170), "accent2"),
+            "vp_bot": sh((15, 43, 100), "accent2"), "vp_hdr": sh((86, 161, 226), "accent2"),
+            "vp_panel": (223, 239, 243), "vp_panel_edge": sh((92, 97, 135), "accent2"),
+            "vp_row": (236, 241, 252), "vp_row_edge": (150, 166, 196), "vp_ink": (22, 34, 82),
+            "vp_amber": sh((232, 160, 60), "chnum"), "vp_amber_edge": sh((195, 131, 54), "chnum"),
+            "vp_btn": (238, 244, 250), "vp_btn_edge": (120, 128, 155), "vp_info": sh((129, 148, 178), "accent2"),
+            "vp_info_hd": sh((106, 128, 166), "accent2"), "vp_green": (52, 132, 72), "vp_green2": (64, 146, 84),
+            "vp_orange": (236, 104, 34), "vp_dim": (150, 166, 196), "vp_field": (182, 204, 236),
         }
 
     def X(self, v) -> int:
@@ -444,6 +458,378 @@ class PlateHD(BoxSkin):
     def menu_video_box(self, menu):
         r = self.R(609, 181, 569, 354)
         return (r.x, r.y, r.w, r.h)
+
+    # ── Pages: the ViP's On Demand, My Recordings, info, keyboard ─────────
+    # From frames of the real ViP622/722 (2009-11): a blue page, the mark
+    # and an italic title top-left, the date top-right, the picture in a
+    # pale frame with its channel above it; lists in a pale rounded panel,
+    # white capsule buttons in a column at the right, amber on the chosen.
+
+    poster_wall = False             # the ViP listed titles; it had no poster wall
+    keyboard_layer = "ABC"
+
+    def page_video_box(self, screen):
+        r = self.R(660, 108, 360, 203)
+        return (r.x, r.y, r.w, r.h)
+
+    def ondemand_cols(self, screen):
+        return 1
+
+    def ondemand_page(self, screen):
+        return 6
+
+    def _vip_page(self, c, title, sub="", picture=True):
+        """The page every ViP screen shares; returns the picture's rect."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        knee = Y(150)
+        vgrad(c, (0, 0, W, knee), rgba(b["vp_top"]), rgba(b["vp_mid"]))
+        vgrad(c, (0, knee, W, H - knee), rgba(b["vp_mid"]), rgba(b["vp_bot"]))
+        hdr = pygame.Surface((W, Y(90)), pygame.SRCALPHA)
+        pygame.draw.ellipse(hdr, (*b["vp_hdr"], 70), (-X(200), -Y(160), W + X(400), Y(240)))
+        c.blit(hdr, (0, 0))
+        self.wordmark(c, X(40), Y(26), Y(34), b["text"], b["dish"])
+        f = self.fb(Y(36))
+        f.italic = True
+        try:
+            self.cb(c, self.fit_cb(f, title, X(600)), f, b["text"], X(214), Y(30))
+        finally:
+            f.italic = False
+        if sub:
+            fs = self.fb(Y(26))
+            fs.italic = True
+            try:
+                self.cb(c, self.fit_cb(fs, sub, X(420)), fs, b["text"], X(240), Y(78))
+            finally:
+                fs.italic = False
+        local = datetime.now()
+        self.cb(c, f"{local:%a}, {local:%B} {local.day}", self.fb(Y(26)), b["text"], X(1240), Y(34), align="right")
+        if not picture:
+            return None
+        vx, vy, vw, vh = self.page_video_box(None)
+        frame = pygame.Rect(vx - X(8), vy - Y(8), vw + X(16), vh + Y(48))
+        pygame.draw.rect(c, b["vp_panel_edge"], frame.inflate(X(6), Y(6)), border_radius=Y(12))
+        pygame.draw.rect(c, b["vp_row"], frame, border_radius=Y(10))
+        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        live = self.app.live
+        fc = self.fb(Y(22))
+        if live and live.channel:
+            self.cb(c, self.fit_cb(fc, f"{live.channel.number} {live.channel.name.upper()}", vw - X(20)), fc,
+                    b["vp_ink"], vx + X(6), vy + vh + Y(12))
+        return pygame.Rect(vx, vy, vw, vh)
+
+    def _vip_panel(self, c, r):
+        """The pale rounded list panel with its blue edge."""
+        b, Y = self.b, self.Y
+        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(Y(6), Y(6)), border_radius=Y(18))
+        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.35)), radius=Y(16))
+
+    def _vip_button(self, c, r, label, on, hot=False):
+        """A white capsule button; amber with a gold ring when chosen."""
+        b, Y = self.b, self.Y
+        if on:
+            pygame.draw.rect(c, (250, 230, 60), r.inflate(Y(8), Y(8)), border_radius=r.h)
+        fill, edge = (b["vp_amber"], b["vp_amber_edge"]) if on else (b["vp_btn"], b["vp_btn_edge"])
+        if hot and not on:
+            fill = b["vp_orange"]
+        pygame.draw.rect(c, edge, r.inflate(Y(4), Y(4)), border_radius=r.h)
+        vgrad(c, r, rgba(mix(fill, (255, 255, 255), 0.4)), rgba(fill), radius=r.h // 2)
+        f = self.fb(Y(24))
+        self.cb(c, self.fit_cb(f, label, r.w - Y(20)), f, b["vp_ink"], r.centerx, r.y + (r.h - self.text.ink(f)[1]) // 2,
+                align="center")
+
+    def _vip_buttons(self, c, labels, focus, x=680, y=372, w=250, h=44, pitch=62, hits=None):
+        for k, label in enumerate(labels):
+            r = self.R(x, y + k * pitch, w, h)
+            self._vip_button(c, r, label, k == focus)
+            if hits:
+                self.hit(r, hits[k])
+
+    def _vip_rows(self, c, s, panel, rows, sel, top, n_vis, green=False):
+        """Rows in the panel: the box's list stripes, amber on the chosen."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f, fm = self.fb(Y(25)), self.fb(Y(23))
+        rh = (panel.h - Y(70)) // n_vis
+        for k, i in enumerate(range(top, min(len(rows), top + n_vis))):
+            row = rows[i]
+            r = pygame.Rect(panel.x + X(12), panel.y + Y(36) + k * rh, panel.w - X(24), rh - Y(4))
+            on = i == sel
+            fill = b["vp_amber"] if on else (b["vp_green"] if k % 2 == 0 else b["vp_green2"]) if green else b["vp_row"]
+            pygame.draw.rect(c, fill, r)
+            pygame.draw.rect(c, b["vp_row_edge"], r, 1)
+            ink = b["vp_ink"] if on or not green else b["text"]
+            meta = row.get("meta", "")
+            mw = self.measure(lambda cc, x, y: self.cb(cc, meta, fm, ink, x, y)) + X(20) if meta else 0
+            ty = r.y + (r.h - t.ink(f)[1]) // 2
+            self.cb(c, self.fit_cb(f, row.get("title", ""), r.w - mw - X(30)), f, ink, r.x + X(12), ty)
+            if meta:
+                self.cb(c, meta, fm, ink, r.right - X(12), ty, align="right")
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+        if top + n_vis < len(rows):
+            cx = panel.centerx
+            pygame.draw.polygon(c, b["vp_ink"], [(cx - X(14), panel.bottom - Y(28)), (cx + X(14), panel.bottom - Y(28)),
+                                                 (cx, panel.bottom - Y(14))])
+        if top:
+            cx = panel.centerx
+            pygame.draw.polygon(c, b["vp_ink"], [(cx - X(14), panel.y + Y(28)), (cx + X(14), panel.y + Y(28)),
+                                                 (cx, panel.y + Y(14))])
+
+    def draw_ondemand(self, c, s):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        rec = bool(s.level) and s.level.get("key") == "recordings"
+        title = "My Recordings" if rec else "On Demand"
+        sub = "" if rec or not s.level or len(s.stack) < 2 else s.level["title"].title()
+        self._vip_page(c, title, sub)
+        panel = self.R(40, 336, 560, 360)
+        self._vip_panel(c, panel)
+        fh = self.fb(Y(22))
+        fh.italic = True
+        try:
+            head = "Ordered by Date" if rec else (s.crumb() if len(s.stack) > 1 else "Pay-Per-View & On Demand")
+            self.cb(c, self.fit_cb(fh, head, panel.w - X(40)), fh, b["vp_ink"], panel.x + X(20), panel.y + Y(10))
+        finally:
+            fh.italic = False
+        if s.mode == "auth":
+            y = panel.y + Y(60)
+            for line, f in (("On a phone or computer, go to", self.fb(Y(24))), (s.auth_link or "plex.tv/link", self.fb(Y(30))),
+                            ("and enter this code:", self.fb(Y(24)))):
+                self.cb(c, line, f, b["vp_ink"], panel.centerx, y, align="center")
+                y += t.ink(f)[1] + Y(20)
+            if s.auth_code:
+                self.cb(c, s.auth_code, self.fb(Y(72)), b["vp_ink"], panel.centerx, y + Y(10), align="center")
+            self._vip_about(c, {"title": "Link your Plex account",
+                                "meta": "On Demand comes from your own Plex server."})
+            self._vip_buttons(c, ["Cancel"], 0, hits=[s.back])
+            return
+        rows, n_vis = s.rows, self.ondemand_page(s)
+        top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
+        self._vip_rows(c, s, panel, rows, s.sel, top, n_vis, green=rec)
+        fc = self.fb(Y(20))
+        fc.italic = True
+        try:
+            self.cb(c, f"{'Event' if rec else 'Item'} ({s.sel + 1} of {len(rows)})", fc, b["vp_ink"], panel.right - X(20),
+                    panel.bottom - Y(30), align="right")
+        finally:
+            fc.italic = False
+        labels = (["Sort", "Options", "Done"] if rec else ["Options", "My Recordings", "Done"])
+        acts = ([s.handle and (lambda: s.handle("MENU"))] * 2 + [s.back]) if rec else \
+            [lambda: s.handle("MENU"), lambda: s.handle("LIST"), s.back]
+        self._vip_buttons(c, labels, -1, hits=acts)
+        if s.status:
+            fs = self.fb(Y(22))
+            self.cb(c, s.status.title(), fs, b["text"], X(1240), Y(668), align="right")
+        self._vip_about(c, s.current() or {})
+
+    def _vip_about(self, c, row):
+        """The chosen row's title and details, top-left above the list."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f, fd = self.fb(Y(26)), self.fb(Y(22))
+        y = Y(130)
+        for line in t.wrap(f, row.get("title", ""), int(X(560) / 0.86), 2):
+            self.cb(c, line, f, b["text"], X(48), y)
+            y += Y(34)
+        meta = row.get("meta", "")
+        if meta:
+            self.cb(c, self.fit_cb(fd, meta, X(560)), fd, b["text"], X(48), y + Y(6))
+
+    def draw_iteminfo(self, c, info):
+        """The ViP's DVR Event page: the title centred over the facts, the
+        description in the panel with its Time Left heading, the capsule
+        buttons down the right."""
+        from ..screens.iteminfo import hms
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        d = info.detail
+        self._vip_page(c, "Event Info")
+        f = self.fb(Y(28))
+        self.cb(c, self.fit_cb(f, d.get("title", ""), X(580)), f, b["text"], X(330), Y(118), align="center")
+        fm = self.fb(Y(23))
+        meta = d.get("subtitle") or d.get("meta", "")
+        if meta:
+            self.cb(c, self.fit_cb(fm, meta, X(580)), fm, b["text"], X(330), Y(162), align="center")
+        if d.get("duration"):
+            self.cb(c, hms(d["duration"]), fm, b["text"], X(580), Y(204), align="right")
+        panel = self.R(80, 300, 500, 330)
+        self._vip_panel(c, panel)
+        pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
+        fh = self.fb(Y(22))
+        fh.italic = True
+        try:
+            left = f"Resume at: {hms(d['offset'])}" if d.get("offset", 0) > 5 else "Time Left: 0:00"
+            self.cb(c, left, fh, b["vp_ink"], panel.right - X(24), panel.y + Y(18), align="right")
+        finally:
+            fh.italic = False
+        fd = self.fb(Y(22))
+        y = panel.y + Y(54)
+        for line in t.wrap(fd, d.get("summary", "") or "No description available.", int((panel.w - X(60)) / 0.86), 7):
+            self.cb(c, line, fd, b["vp_ink"], panel.centerx, y, align="center")
+            y += Y(30)
+        names = info.buttons()
+        self._vip_buttons(c, [self.button_words(info.label(n)) for n in names], info.focus, y=372, pitch=58,
+                          hits=[lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)])
+
+    # The keyboard: the Themes & Search pop-up: a grey-blue card over the
+    # page, the keyword field, the pale rounded keys, Done / Cancel / Clear.
+
+    def keyboard_rows(self, layer):
+        if layer == "sym":
+            keys = ["!@#$%^&*()", "_+=?~'\"|\\;", "[]{}<>,`:/"]
+        else:
+            keys = ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ'-.&", "1234567890"]
+            if layer == "abc":
+                keys = [k.lower() for k in keys]
+        return keys + [["DEL", "SPACE", "SHIFT", "SYM"], ["DONE", "CANCEL", "CLEAR"]]
+
+    def draw_keyboard(self, c, kb):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        self._vip_page(c, "Search", picture=False)
+        card = self.R(150, 104, 980, 590)
+        pygame.draw.rect(c, b["vp_panel_edge"], card.inflate(X(8), Y(8)), border_radius=Y(30))
+        vgrad(c, card, rgba(mix(b["vp_hdr"], (255, 255, 255), 0.25)), rgba(b["vp_mid"]), radius=Y(28))
+        f = self.fb(Y(24))
+        self.cb(c, self.fit_cb(f, kb.prompt, X(800)), f, b["vp_ink"], card.centerx, card.y + Y(24), align="center")
+        if kb.hint:
+            self.cb(c, self.fit_cb(self.fb(Y(20)), kb.hint, X(800)), self.fb(Y(20)), b["vp_ink"], card.centerx,
+                    card.y + Y(58), align="center")
+        field = self.R(250, 196, 780, 42)
+        pygame.draw.rect(c, b["vp_field"], field)
+        pygame.draw.rect(c, b["vp_panel_edge"], field, Y(2))
+        ff = self.fb(Y(26))
+        shown = kb.value[:kb.caret]
+        while shown and t.width(ff, shown) * 0.86 > field.w - X(40):
+            shown = shown[1:]
+        x = field.x + X(12) + self.cb(c, shown, ff, b["vp_ink"], field.x + X(12), field.y + (field.h - t.ink(ff)[1]) // 2)
+        pygame.draw.rect(c, b["vp_ink"], (x + X(2), field.bottom - Y(10), X(14), Y(3)))
+        well = self.R(250, 258, 780, 300)
+        pygame.draw.rect(c, b["vp_mid"], well, border_radius=Y(16))
+        pygame.draw.rect(c, b["vp_panel_edge"], well, Y(2), border_radius=Y(16))
+        grid = kb.grid()
+        fk = self.fb(Y(26))
+        words = {"DEL": "Del", "SPACE": "Space", "SHIFT": "a-z" if kb.layer == "ABC" else "A-Z",
+                 "SYM": "ABC" if kb.layer == "sym" else "Symbols", "DONE": "Done", "CANCEL": "Cancel",
+                 "CLEAR": "Clear Entry"}
+        for r, row in enumerate(grid):
+            last = r == len(grid) - 1
+            for col, cell in enumerate(row):
+                on = (r, col) == (kb.row, kb.col)
+                if last:
+                    rect = self.R(250 + col * 270, 590, 240, 46)
+                    self._vip_button(c, rect, words[cell], on, hot=cell == "CANCEL")
+                else:
+                    if len(cell) == 1:
+                        rect = self.R(270 + col * 74, 272 + r * 54, 66, 46)
+                    else:
+                        widths = {"DEL": 120, "SPACE": 360, "SHIFT": 120, "SYM": 120}
+                        x0 = 270 + sum(widths[k] + 8 for k in row[:col])
+                        rect = self.R(x0, 272 + r * 54, widths[cell], 46)
+                    fill = b["vp_amber"] if on else b["vp_row"]
+                    pygame.draw.rect(c, b["vp_btn_edge"], rect.inflate(Y(4), Y(4)), border_radius=Y(12))
+                    vgrad(c, rect, rgba(mix(fill, (255, 255, 255), 0.5)), rgba(fill), radius=Y(10))
+                    label = cell if len(cell) == 1 else words[cell]
+                    fl = fk if len(cell) == 1 else self.fb(Y(22))
+                    self.cb(c, label, fl, b["vp_ink"], rect.centerx, rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
+                self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
+                                                                kb._press(cell)))
+
+    # Diagnostics: the System Info card, labels right-aligned to a centre
+    # line, values beside them, Help / Done / Cancel along the foot.
+
+    def draw_diagnostics(self, c, d):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        self._vip_page(c, "System Info", picture=False)
+        card = self.R(120, 104, 1040, 590)
+        pygame.draw.rect(c, b["vp_panel"], card.inflate(X(8), Y(8)), border_radius=Y(30))
+        vgrad(c, card, rgba(mix(b["vp_info"], (255, 255, 255), 0.2)), rgba(b["vp_info"]), radius=Y(28))
+        f = self.fb(Y(27))
+        y = card.y + Y(34)
+        for label, value in [("Signal Strength", f"{d.signal()}"), ("Signal Quality", f"{d.quality()}")] + d.rows():
+            self.cb(c, label, f, b["vp_ink"], X(620), y, align="right")
+            self.cb(c, self.fit_cb(f, str(value), X(500)), f, b["vp_ink"], X(650), y)
+            y += Y(42)
+        for k, (label, fn) in enumerate((("Help", None), ("Done", lambda: d.handle("BACK")),
+                                         ("Cancel", lambda: d.handle("BACK")))):
+            r = self.R(250 + k * 280, 618, 230, 46)
+            self._vip_button(c, r, label, k == 1)
+            if fn:
+                self.hit(r, fn)
+
+    # Playback: the ViP's trick bar over the picture: a dark band with the
+    # title, the progress line and its times, the mode at the right.
+
+    def draw_playback(self, c, pb):
+        from ..screens.iteminfo import hms
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        if pb.skip_label:
+            r = self.R(880, 480 if pb.bar_visible() else 600, 350, 52)
+            self._vip_button(c, r, f"{pb.skip_label.title()}  (SELECT)", True)
+            self.hit(r, lambda: pb.handle("SELECT"))
+        if not pb.bar_visible():
+            return
+        r = self.R(40, 560, 1200, 120)
+        self._box(c, r)
+        f = self.fb(Y(28))
+        q = self.app.ondemand.queue
+        title = pb.title + (f"  ({q.pos + 1} of {len(q.items)})" if q.items and q.pos >= 0 else "")
+        self.cb(c, self.fit_cb(f, title, X(860)), f, b["banner_ink"], r.x + X(24), r.y + Y(16))
+        mode = "Paused" if self.app.video.paused else "Play"
+        self.cb(c, mode, f, b["gold"], r.right - X(24), r.y + Y(16), align="right")
+        line = pygame.Rect(r.x + X(140), r.y + Y(74), r.w - X(280), Y(14))
+        pygame.draw.rect(c, b["pill"], line, border_radius=Y(7))
+        frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
+        pygame.draw.rect(c, b["gold"], (line.x, line.y, max(Y(14), int(line.w * frac)), line.h), border_radius=Y(7))
+        fs = self.fb(Y(24))
+        self.cb(c, hms(pb.pos), fs, b["banner_ink"], line.x - X(18), line.y - Y(4), align="right")
+        self.cb(c, hms(pb.dur) if pb.dur else "--:--", fs, b["banner_ink"], line.right + X(18), line.y - Y(4))
+        self.hit(line.inflate(0, Y(24)), lambda: pb.seek_to(self._click_frac(line)))
+
+    def _vip_dialog(self, c, title, lines, buttons=()):
+        """The ViP's pale dialog: the title in a blue capsule, the lines
+        centred, capsule buttons under them."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f = self.fb(Y(24))
+        wrapped = [w for line in lines for w in t.wrap(f, line, int(X(560) / 0.86), 3)]
+        r = pygame.Rect(0, 0, X(680), Y(110) + len(wrapped) * Y(34) + (Y(70) if buttons else 0))
+        r.center = (W // 2, H // 2)
+        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(8), Y(8)), border_radius=Y(24))
+        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=Y(22))
+        cap = pygame.Rect(r.x + X(30), r.y + Y(18), r.w - X(60), Y(44))
+        vgrad(c, cap, rgba(b["vp_hdr"]), rgba(b["vp_mid"]), radius=Y(22))
+        fh = self.fb(Y(26))
+        self.cb(c, title, fh, b["text"], cap.centerx, cap.y + (cap.h - t.ink(fh)[1]) // 2, align="center")
+        y = cap.bottom + Y(20)
+        for line in wrapped:
+            self.cb(c, line, f, b["vp_ink"], r.centerx, y, align="center")
+            y += Y(34)
+        for k, label in enumerate(buttons):
+            bw = X(200)
+            x0 = r.centerx - (len(buttons) * bw + (len(buttons) - 1) * X(30)) // 2
+            self._vip_button(c, pygame.Rect(x0 + k * (bw + X(30)), r.bottom - Y(62), bw, Y(42)), label, k == 0)
+
+    def draw_capture(self, c, cap):
+        self._vip_dialog(c, "Remote Setup", [cap.prompt, "Waiting..."])
+
+    def draw_toast(self, c, msg):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f = self.fb(Y(24))
+        w = min(X(1100), self.measure(lambda cc, x, y: self.cb(cc, msg, f, b["vp_ink"], x, y)) + X(60))
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(50))
+        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=r.h)
+        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=r.h // 2)
+        self.cb(c, self.fit_cb(f, msg, w - X(60)), f, b["vp_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2,
+                align="center")
+
+    def _message(self, c, msg):
+        c.fill((0, 0, 0, 255))
+        self._vip_dialog(c, "ATTENTION", [msg])
+
+    def draw_screensaver(self, c, ss):
+        W, H = self.canvas
+        b, Y = self.b, self.Y
+        c.fill((0, 0, 0, 255))
+        size = Y(60)
+        w = self.measure(self.wordmark, size, b["text"], b["dish"])
+        x, y = ss.position(w, int(size * 1.5), W, H)
+        self.wordmark(c, x, y, size, b["text"], b["dish"])
 
     # ── Boot ──────────────────────────────────────────────────────────────
 
@@ -877,6 +1263,262 @@ class Plate(PlateHD):
         if n > n_vis:
             t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(11)), b["ink"], X(40), band.bottom + Y(6))
         t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+
+    # ── Pages: the 2005 box's grey pages ──────────────────────────────────
+    # The 322/522 drew everything on the grey swirl page: the mark top-left,
+    # the title in a pale pill at the right, blue capsule pills (white on
+    # the chosen one), grey dialogs with a blue title pill. On Demand, My
+    # Recordings, info and the keyboard are drawn in that vocabulary.
+
+    poster_wall = False
+    keyboard_layer = "ABC"
+
+    def page_video_box(self, screen):
+        return None
+
+    def ondemand_cols(self, screen):
+        return 1
+
+    def ondemand_page(self, screen):
+        return 6
+
+    def _sd_page(self, c, title):
+        """The grey page with the mark and the title pill (the Theme
+        Categories page's top)."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        self._grey_page(c, (0, 0, W, H))
+        self.wordmark(c, X(60), Y(36), Y(44), b["ink"], b["dish"])
+        f_title = self.fb(Y(27))
+        tp = pygame.Rect(X(300), Y(58), X(340), Y(44))
+        pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.3), tp.move(0, Y(3)), border_top_left_radius=tp.h // 2,
+                         border_bottom_left_radius=tp.h // 2)
+        pygame.draw.rect(c, b["grey_hi"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
+        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(15), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
+
+    def _sd_pill(self, c, r, label, on, right=""):
+        """A blue capsule pill with its light top line, white when chosen."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        fill, ink = (b["cursor"], b["cursor_ink"]) if on else (b["row"], b["row_ink"])
+        pygame.draw.rect(c, fill, r, border_radius=r.h // 2)
+        if not on:
+            pygame.draw.rect(c, b["row_hi"], (r.x + r.h // 2, r.y + Y(2), r.w - r.h, Y(3)), border_radius=2)
+        f = self.fb(Y(19))
+        ty = r.y + (r.h - t.ink(f)[1]) // 2
+        rw = t.width(f, right) + X(16) if right else 0
+        t.draw(c, t.fit(f, label, r.w - X(36) - rw), f, ink, r.x + X(20), ty)
+        if right:
+            t.draw(c, right, f, ink, r.right - X(18), ty, align="right")
+
+    def _sd_band(self, c, y, h):
+        b, X, Y = self.b, self.X, self.Y
+        band = pygame.Rect(0, y, self.canvas[0], h)
+        pygame.draw.rect(c, b["grey_lo"], band)
+        return band
+
+    def _sd_side(self, c, labels, focus, y0=170, hits=None):
+        """Blue pill buttons in a column at the right, the chosen one white."""
+        X, Y = self.X, self.Y
+        for k, label in enumerate(labels):
+            r = pygame.Rect(X(424), Y(y0) + k * Y(40), X(200), Y(32))
+            self._sd_pill(c, r, label, k == focus)
+            if hits and hits[k]:
+                self.hit(r, hits[k])
+
+    def draw_ondemand(self, c, s):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        rec = bool(s.level) and s.level.get("key") == "recordings"
+        self._sd_page(c, "My Recordings" if rec else (s.level["title"].title() if s.level and len(s.stack) > 1
+                                                      else "Pay-Per-View"))
+        band = self._sd_band(c, Y(160), Y(270))
+        if s.mode == "auth":
+            fl = self.fb(Y(17))
+            y = band.y + Y(24)
+            for line in ("On a phone or computer, go to", s.auth_link or "plex.tv/link", "and enter this code:"):
+                t.draw(c, line, fl, b["ink"], X(240), y, align="center")
+                y += Y(30)
+            if s.auth_code:
+                t.draw(c, s.auth_code, self.fb(Y(44)), b["ink"], X(240), y + Y(4), align="center")
+            self._sd_side(c, ["Cancel"], 0, hits=[s.back])
+            return
+        rows, n_vis = s.rows, self.ondemand_page(s)
+        top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
+        for k, i in enumerate(range(top, min(len(rows), top + n_vis))):
+            row = rows[i]
+            r = pygame.Rect(X(20), band.y + Y(10) + k * Y(42), X(390), Y(34))
+            self._sd_pill(c, r, row.get("title", "").title(), i == s.sel, right=row.get("meta", "").split("   ")[0])
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+        fs = self.f(Y(12))
+        t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(40), band.bottom + Y(6))
+        if s.status:
+            t.draw(c, s.status.title(), self.fb(Y(13)), b["ink"], X(600), band.bottom + Y(6), align="right")
+        self._sd_side(c, ["Options", "Recordings" if not rec else "Sort", "Done"], -1,
+                      hits=[lambda: s.handle("MENU"), (lambda: s.handle("LIST")) if not rec else (lambda: s.handle("MENU")),
+                            s.back])
+        t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+
+    def draw_iteminfo(self, c, info):
+        from ..screens.iteminfo import hms
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        d = info.detail
+        self._sd_page(c, "Event Info")
+        r = self.R(20, 150, 390, 290)
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba((255, 255, 255)), edge_w=Y(2))
+        pill = pygame.Rect(r.x + X(14), r.y + Y(10), r.w - X(28), Y(30))
+        vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(10))
+        f = self.fb(Y(17))
+        t.draw(c, t.fit(f, d.get("title", ""), pill.w - X(20)), f, b["pill_ink"], pill.centerx,
+               pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        fl = self.fb(Y(14))
+        y = pill.bottom + Y(12)
+        for label, value in (("info:", d.get("subtitle") or d.get("meta", "")),
+                             ("length:", hms(d["duration"]) if d.get("duration") else ""),
+                             ("resume:", hms(d["offset"]) if d.get("offset", 0) > 5 else "")):
+            if value:
+                t.draw(c, label, fl, b["ink"], r.x + X(80), y, align="right")
+                t.draw(c, t.fit(fl, value, r.w - X(100)), fl, b["ink"], r.x + X(88), y)
+                y += Y(20)
+        fd = self.f(Y(14))
+        y += Y(6)
+        for line in t.wrap(fd, d.get("summary", ""), r.w - X(36), max(1, (r.bottom - Y(12) - y) // Y(18))):
+            t.draw(c, line, fd, b["ink"], r.centerx, y, align="center")
+            y += Y(18)
+        names = info.buttons()
+        self._sd_side(c, [self.button_words(info.label(n), back="Cancel") for n in names], info.focus, y0=150,
+                      hits=[lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)])
+
+    def keyboard_rows(self, layer):
+        if layer == "sym":
+            keys = ["!@#$%^&*()", "_+=?~'\"|\\;", "[]{}<>,`:/"]
+        else:
+            keys = ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ'-.&", "1234567890"]
+            if layer == "abc":
+                keys = [k.lower() for k in keys]
+        return keys + [["DEL", "SPACE", "SHIFT", "SYM"], ["DONE", "CANCEL", "CLEAR"]]
+
+    def draw_keyboard(self, c, kb):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        self._sd_page(c, "Search")
+        band = self._sd_band(c, Y(150), Y(296))
+        f = self.fb(Y(15))
+        t.draw(c, t.fit(f, kb.prompt, X(560)), f, b["ink"], X(40), band.y + Y(8))
+        field = self.R(40, 178, 560, 26)
+        pygame.draw.rect(c, b["pillfill"], field, border_radius=Y(6))
+        pygame.draw.rect(c, b["ink"], field, 1, border_radius=Y(6))
+        ff = self.fb(Y(16))
+        shown = kb.value[:kb.caret]
+        while shown and t.width(ff, shown) > field.w - X(30):
+            shown = shown[1:]
+        x = field.x + X(8) + t.draw(c, shown, ff, b["ink"], field.x + X(8), field.y + (field.h - t.ink(ff)[1]) // 2)
+        pygame.draw.rect(c, b["ink"], (x + 1, field.bottom - Y(6), X(8), Y(2)))
+        fk = self.fb(Y(17))
+        words = {"DEL": "Del", "SPACE": "Space", "SHIFT": "a-z" if kb.layer == "ABC" else "A-Z",
+                 "SYM": "ABC" if kb.layer == "sym" else "Symbols", "DONE": "Done", "CANCEL": "Cancel", "CLEAR": "Clear"}
+        grid = kb.grid()
+        for r, row in enumerate(grid):
+            for col, cell in enumerate(row):
+                on = (r, col) == (kb.row, kb.col)
+                if r == len(grid) - 1:
+                    rect = self.R(40 + col * 190, 404, 176, 30)
+                    self._sd_pill(c, rect, words[cell], on)
+                else:
+                    if len(cell) == 1:
+                        rect = self.R(40 + col * 56, 214 + r * 36, 52, 32)
+                    else:
+                        widths = {"DEL": 100, "SPACE": 220, "SHIFT": 100, "SYM": 100}
+                        x0 = 40 + sum(widths[k] + 6 for k in row[:col])
+                        rect = self.R(x0, 214 + r * 36, widths[cell], 32)
+                    fill, ink = (b["cursor"], b["cursor_ink"]) if on else (b["row"], b["row_ink"])
+                    pygame.draw.rect(c, fill, rect, border_radius=Y(8))
+                    if not on:
+                        pygame.draw.rect(c, b["row_hi"], (rect.x + Y(6), rect.y + Y(2), rect.w - Y(12), Y(3)), border_radius=2)
+                    label = cell if len(cell) == 1 else words[cell]
+                    fl = fk if len(cell) == 1 else self.fb(Y(15))
+                    t.draw(c, label, fl, ink, rect.centerx, rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
+                self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
+                                                                kb._press(cell)))
+
+    def draw_diagnostics(self, c, d):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        self._sd_page(c, "System Info")
+        r = self.R(28, 150, 584, 296)
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba((255, 255, 255)), edge_w=Y(2))
+        f = self.fb(Y(15))
+        y = r.y + Y(16)
+        for label, value in [("Signal Strength", f"{d.signal()}"), ("Signal Quality", f"{d.quality()}")] + d.rows():
+            t.draw(c, label, f, b["ink"], X(300), y, align="right")
+            t.draw(c, t.fit(f, str(value), X(280)), f, b["ink"], X(316), y)
+            y += Y(24)
+        ok = pygame.Rect(X(230), r.bottom - Y(42), X(180), Y(30))
+        self._sd_pill(c, ok, "Done", True)
+        self.hit(ok, lambda: d.handle("BACK"))
+
+    def draw_playback(self, c, pb):
+        """The 2005 box's DVR bar: the capsules of its banner along the
+        bottom, the title over the progress line, the times in the outer
+        two."""
+        from ..screens.iteminfo import hms
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        if pb.skip_label:
+            r = self.R(370, 300 if pb.bar_visible() else 400, 230, 32)
+            self._sd_pill(c, r, f"{pb.skip_label.title()}: SELECT", True)
+            self.hit(r, lambda: pb.handle("SELECT"))
+        if not pb.bar_visible():
+            return
+        top, h = H - Y(46) - Y(87), Y(87)
+        left = pygame.Rect(X(55), top, X(88), h)
+        mid = pygame.Rect(X(147), top, X(333), h)
+        right = pygame.Rect(X(484), top, X(96), h)
+        for r in (left, mid, right):
+            self._band(c, r)
+        ink = b["band_ink"]
+        f, fs = self.fb(Y(19)), self.fb(Y(17))
+        t.draw(c, "Elapsed", fs, ink, left.centerx, top + Y(24), align="center")
+        t.draw(c, hms(pb.pos), f, ink, left.centerx, top + Y(51), align="center")
+        t.draw(c, "Length", fs, ink, right.centerx, top + Y(24), align="center")
+        t.draw(c, hms(pb.dur) if pb.dur else "--:--", f, ink, right.centerx, top + Y(51), align="center")
+        t.draw(c, t.fit(self.fb(Y(22)), pb.title, mid.w - X(20)), self.fb(Y(22)), ink, mid.centerx, top + Y(12),
+               align="center")
+        line = pygame.Rect(mid.x + X(18), top + Y(50), mid.w - X(36), Y(10))
+        pygame.draw.rect(c, b["band_soft"], line, border_radius=Y(5))
+        frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
+        pygame.draw.rect(c, b["warn"], (line.x, line.y, max(Y(10), int(line.w * frac)), line.h), border_radius=Y(5))
+        t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
+        self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
+
+    def _sd_dialog(self, c, title, lines):
+        """The grey ATTENTION-style dialog."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f = self.f(Y(14))
+        wrapped = [w for line in lines for w in t.wrap(f, line, X(380), 3)]
+        r = pygame.Rect(X(100), 0, X(440), Y(60) + len(wrapped) * Y(20))
+        r.centery = H // 2
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(10), edge=rgba((255, 255, 255)), edge_w=Y(2))
+        pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
+        vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
+        fh = self.fb(Y(15))
+        t.draw(c, title, fh, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(fh)[1]) // 2, align="center")
+        y = pill.bottom + Y(10)
+        for line in wrapped:
+            t.draw(c, line, f, b["ink"], r.centerx, y, align="center")
+            y += Y(20)
+
+    def draw_capture(self, c, cap):
+        self._sd_dialog(c, "REMOTE SETUP", [cap.prompt, "Waiting..."])
+
+    def draw_toast(self, c, msg):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f = self.fb(Y(15))
+        w = min(X(600), t.width(f, msg) + X(40))
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(32))
+        self._sd_pill(c, r, "", True)
+        t.draw(c, t.fit(f, msg, w - X(30)), f, b["cursor_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2, align="center")
+
+    def _message(self, c, msg):
+        c.fill((0, 0, 0, 255))
+        self._sd_dialog(c, "ATTENTION", [msg])
 
     def draw_boot(self, c, boot):
         W, H = self.canvas
