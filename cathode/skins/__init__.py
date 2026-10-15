@@ -167,6 +167,24 @@ class Skin:
         layout."""
         return None
 
+    @staticmethod
+    def pct(frac) -> str:
+        """' 40%' for a known fraction, '' otherwise."""
+        return f" {int(frac * 100)}%" if frac is not None and frac >= 0 else ""
+
+    def guide_pct(self) -> str:
+        """The app's guide load, as pct() puts it."""
+        return self.pct(getattr(self.app, "guide_progress", None))
+
+    def draw_format(self, c, label: str):
+        """The FORMAT key's notice: the picture format now in use."""
+        self.draw_toast(c, f"Format: {label}")
+
+    def draw_guide_progress(self, c, frac):
+        """A guide load's truthful progress (frac -1 when the size is
+        unknown), while live TV or the guide is up."""
+        self.draw_toast(c, "Updating guide data..." + self.pct(frac))
+
     def menu_cols(self, menu) -> int:
         """How many columns this skin lays a menu page out in (1 = a list).
         Grids move LEFT/RIGHT across and UP/DOWN by a row."""

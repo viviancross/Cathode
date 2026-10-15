@@ -3,6 +3,7 @@
 import xml.etree.ElementTree as ET
 import urllib.request
 import gzip
+import os
 import io
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
@@ -90,6 +91,31 @@ KEEP_AHEAD = timedelta(hours=36)
 MAX_PROGRAMMES = 500_000
 
 
+class _Counted(io.RawIOBase):
+    """A source read through, counting bytes for a progress callback."""
+
+    def __init__(self, raw, total, cb):
+        self._raw, self._total, self._cb = raw, total, cb
+        self._done, self._pct = 0, -1
+        if not total:
+            cb(None)
+
+    def readable(self):
+        return True
+
+    def readinto(self, b):
+        data = self._raw.read(len(b))
+        n = len(data)
+        b[:n] = data
+        self._done += n
+        if self._total:
+            pct = min(100, self._done * 100 // self._total)
+            if pct != self._pct:
+                self._pct = pct
+                self._cb(pct / 100)
+        return n
+
+
 class EPG:
     """Holds EPG data indexed by channel ID."""
 
@@ -104,18 +130,23 @@ class EPG:
         self._count = 0
 
     def load(self, source: str, user_agent: str = "Cathode/1.0",
-             now: Optional[datetime] = None):
+             now: Optional[datetime] = None, progress=None):
         """Parse an XMLTV file or URL, gzipped or not, straight off the wire:
-        neither the download nor its decompressed form is ever held whole."""
+        neither the download nor its decompressed form is ever held whole.
+        progress(fraction) hears how much of the source has been read, as
+        each whole percent passes; progress(None) once when the size is
+        unknown."""
         now = now or datetime.now(timezone.utc)
         self._window = (now - KEEP_BEHIND, now + KEEP_AHEAD)
         if source.startswith(("http://", "https://")):
             req = urllib.request.Request(source, headers={"User-Agent": user_agent})
             raw = urllib.request.urlopen(req, timeout=30, context=_SSL)
+            total = int(raw.headers.get("Content-Length") or 0)
         else:
             raw = open(source, "rb")
+            total = os.path.getsize(source)
         with raw:
-            f = io.BufferedReader(raw) if not hasattr(raw, "peek") else raw
+            f = io.BufferedReader(_Counted(raw, total, progress) if progress else raw)
             if f.peek(2)[:2] == b"\x1f\x8b":
                 f = gzip.GzipFile(fileobj=f)
             self._parse_stream(f)

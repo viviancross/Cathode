@@ -209,6 +209,29 @@ class Classic(Skin):
             col = p["GREEN"] if v.volume < 80 else p["YELLOW"] if v.volume < 95 else p["RED"]
             pygame.draw.rect(c, col, (cx - 60, box.bottom + 8, int(120 * v.volume / 100), 6))
 
+    def _osd_note(self, c, text, frac=None):
+        """A small OSD box top-right; a bar under the text when frac is a
+        known fraction."""
+        W, H = self.canvas
+        p, t = self.p, self.text
+        f = self.role("meta")
+        bar = frac is not None and frac >= 0
+        w = max(t.width(f, text) + 32, 300 if bar else 0)
+        box = pygame.Rect(W - 48 - w, 40, w, 44 + (16 if bar else 0))
+        pygame.draw.rect(c, p["OSD_BG"], box)
+        pygame.draw.rect(c, p["OSD_BORDER"], (box.x, box.y, box.w, 3))
+        t.draw(c, text, f, p["CYAN"], box.x + 16, box.y + 15)
+        if bar:
+            track = pygame.Rect(box.x + 16, box.bottom - 16, box.w - 32, 6)
+            pygame.draw.rect(c, p["TRACK"], track)
+            pygame.draw.rect(c, p["GREEN"], (track.x, track.y, int(track.w * frac), track.h))
+
+    def draw_format(self, c, label):
+        self._osd_note(c, f"FORMAT  {label.upper()}")
+
+    def draw_guide_progress(self, c, frac):
+        self._osd_note(c, "UPDATING GUIDE" + self.pct(frac), frac)
+
     def _standby(self, c):
         """Dead stream: colour bars and a card instead of black."""
         W, H = self.canvas
@@ -257,13 +280,16 @@ class Classic(Skin):
             y += logo.get_height() + 24
         f_word, f_stage = self.f(64), self.role("heading")
         t.draw(c, "CATHODE", f_word, p["CYAN"], W // 2, y, align="center")
-        caption = {"signal": "Acquiring signal...", "guide": "Downloading program guide...",
+        caption = {"signal": "Acquiring signal...", "guide": "Downloading program guide..." + self.guide_pct(),
                    "done": "Ready"}[stage]
         t.draw(c, caption, f_stage, p["WHITE"], W // 2, y + 110, align="center")
         bar = pygame.Rect(W // 2 - 260, y + 160, 520, 12)
         pygame.draw.rect(c, p["TRACK"], bar)
+        g = getattr(self.app, "guide_progress", None)
         if stage == "done":
             pygame.draw.rect(c, p["GREEN"], bar)
+        elif stage == "guide" and g is not None and g >= 0:       # the real download, not a sweep
+            pygame.draw.rect(c, p["CYAN"], (bar.x, bar.y, int(bar.w * g), bar.h))
         else:
             x = bar.x + int((age * 260) % (bar.w + 120)) - 120     # sweeping block
             seg = pygame.Rect(x, bar.y, 120, bar.h).clip(bar)

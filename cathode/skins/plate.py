@@ -261,6 +261,30 @@ class PlateHD(BoxSkin):
             pygame.draw.rect(c, b["text"], (x - X(2), bar.y - Y(5), X(4), bar.h + Y(10)))
         self.cb(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", f, b["banner_ink"], r.right - X(20), r.y + Y(14), align="right")
 
+    def _note(self, c, text, frac=None):
+        """A short notice in the banner's grey box, bottom left; a gold bar
+        under the text when frac is a known fraction."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        bar = frac is not None and frac >= 0
+        f = self.fb(Y(26))
+        r = self.R(40, 0, 0, 0)
+        r.w = max(int(t.width(f, text) * 0.86) + X(48), X(560) if bar else 0)
+        r.h = Y(80 if bar else 56)
+        r.bottom = Y(680)
+        self._box(c, r)
+        self.cb(c, text, f, b["banner_ink"], r.x + X(24), r.y + Y(16))
+        if bar:
+            track = pygame.Rect(r.x + X(24), r.bottom - Y(26), r.w - X(48), Y(12))
+            pygame.draw.rect(c, b["pill"], track, border_radius=Y(6))
+            pygame.draw.rect(c, b["gold"], (track.x, track.y, max(track.h, int(track.w * frac)), track.h),
+                             border_radius=Y(6))
+
+    def draw_format(self, c, label):
+        self._note(c, f"Format: {label}")
+
+    def draw_guide_progress(self, c, frac):
+        self._note(c, "Retrieving program information" + self.pct(frac), frac)
+
     def _signal_loss(self, c):
         """Dish's ATTENTION dialog on black, with its progress bar (the
         frame at 0:16), while the channel sends nothing."""
@@ -841,7 +865,8 @@ class PlateHD(BoxSkin):
         self.wordmark(c, (W - mw) // 2, Y(150), size, b["text"], b["dish"])
         self._tvguide(c, W // 2 - X(40), Y(290), X(80), Y(66))
         caption = {"starting": "Starting up...", "signal": "Acquiring satellite signal.",
-                   "guide": "Retrieving program information from satellite.", "done": "Ready"}[stage]
+                   "guide": "Retrieving program information from satellite." + self.guide_pct(),
+                   "done": "Ready"}[stage]
         r = self.R(290, 440, 700, 110)
         panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba(b["pip_edge"]), edge_w=Y(3))
         pill = pygame.Rect(r.x + X(30), r.y + Y(14), r.w - X(60), Y(36))
@@ -1486,6 +1511,21 @@ class Plate(PlateHD):
         t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
         self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
 
+    def _note(self, c, text, frac=None):
+        """A dark capsule like the banner's, bottom left."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        bar = frac is not None and frac >= 0
+        f = self.fb(Y(16))
+        r = pygame.Rect(X(55), 0, max(t.width(f, text) + X(36), X(330) if bar else 0), Y(58 if bar else 38))
+        r.bottom = Y(440)
+        self._band(c, r)
+        t.draw(c, text, f, b["band_ink"], r.x + X(18), r.y + Y(11))
+        if bar:
+            track = pygame.Rect(r.x + X(18), r.bottom - Y(17), r.w - X(36), Y(7))
+            pygame.draw.rect(c, b["band_soft"], track, border_radius=Y(3))
+            pygame.draw.rect(c, b["warn"], (track.x, track.y, max(track.h, int(track.w * frac)), track.h),
+                             border_radius=Y(3))
+
     def _sd_dialog(self, c, title, lines):
         """The grey ATTENTION-style dialog."""
         W, H = self.canvas
@@ -1531,7 +1571,8 @@ class Plate(PlateHD):
         mw = self.measure(self.wordmark, size, b["text"], b["dish"])
         self.wordmark(c, (W - mw) // 2, Y(80), size, b["text"], b["dish"])
         caption = {"starting": "Starting up...", "signal": "Acquiring Satellite Signal",
-                   "guide": "Retrieving program information from satellite.", "done": "Ready"}[stage]
+                   "guide": "Retrieving program information from satellite." + self.guide_pct(),
+                   "done": "Ready"}[stage]
         r = self.R(100, 280, 440, 90)
         panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(10), edge=rgba((255, 255, 255)), edge_w=Y(2))
         pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))

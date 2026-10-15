@@ -42,6 +42,22 @@ import mpv  # noqa: E402
 _SOFTWARE_GL = ("llvmpipe", "softpipe", "software")
 
 
+# The FORMAT key's picture formats, in the order it cycles them: (key, label,
+# mpv properties). Original keeps the picture's shape (pillar or letterbox);
+# Zoom fills the screen and crops; Stretch fills it and distorts; 4:3 fixes a
+# 4:3 picture a stream mislabels as widescreen.
+FORMATS = [
+    ("original", "Original", {"keepaspect": True, "panscan": 0.0, "video-aspect-override": "no"}),
+    ("zoom", "Zoom", {"keepaspect": True, "panscan": 1.0, "video-aspect-override": "no"}),
+    ("stretch", "Stretch", {"keepaspect": False, "panscan": 0.0, "video-aspect-override": "no"}),
+    ("4:3", "4:3", {"keepaspect": True, "panscan": 0.0, "video-aspect-override": "4:3"}),
+]
+
+
+def format_label(key: str) -> str:
+    return next((label for k, label, _ in FORMATS if k == key), FORMATS[0][1])
+
+
 class Video:
     """One mpv instance. `post(kind, **data)` must be safe to call from any
     thread; it is how mpv's events reach the UI thread."""
@@ -163,6 +179,15 @@ class Video:
     @paused.setter
     def paused(self, on: bool):
         self.player.pause = bool(on)
+
+    def set_format(self, key: str):
+        """Apply a picture format from FORMATS (unknown keys: Original)."""
+        props = next((p for k, _, p in FORMATS if k == key), FORMATS[0][2])
+        for name, value in props.items():
+            try:
+                self.player[name] = value
+            except Exception:
+                pass        # an mpv without the property keeps its default
 
     def seek(self, seconds: float, mode: str = "relative"):
         try:

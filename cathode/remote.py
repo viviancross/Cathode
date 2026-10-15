@@ -16,13 +16,13 @@ PAGE_UP, PAGE_DOWN = "PAGE_UP", "PAGE_DOWN"
 VOL_UP, VOL_DOWN, MUTE = "VOL_UP", "VOL_DOWN", "MUTE"
 PAUSE, PLAY, STOP, REW, FF, REPLAY, SKIP = "PAUSE", "PLAY", "STOP", "REW", "FF", "REPLAY", "SKIP"
 FAV, THEMES, BROWSE, LIST = "FAV", "THEMES", "BROWSE", "LIST"
-FULLSCREEN, QUIT = "FULLSCREEN", "QUIT"
+FULLSCREEN, QUIT, FORMAT = "FULLSCREEN", "QUIT", "FORMAT"
 DIGITS = [f"DIGIT{i}" for i in range(10)]
 
 # Buttons a user can rebind, in the order the remap menu lists them.
 BINDABLE = [GUIDE, INFO, MENU, EXIT, BACK, SELECT, UP, DOWN, LEFT, RIGHT, CH_UP, CH_DOWN,
             PAGE_UP, PAGE_DOWN, PREV, FAV, BROWSE, THEMES, PAUSE, REW, FF, SKIP,
-            VOL_UP, VOL_DOWN, MUTE, FULLSCREEN, QUIT]
+            VOL_UP, VOL_DOWN, MUTE, FORMAT, FULLSCREEN, QUIT]
 
 # Held, these repeat (menus and the guide scroll; channels don't race away).
 REPEATABLE = {UP, DOWN, LEFT, RIGHT, PAGE_UP, PAGE_DOWN, VOL_UP, VOL_DOWN, BACK}
@@ -44,7 +44,7 @@ DEFAULT_KEYS = {
     "K_MINUS": VOL_DOWN, "K_KP_MINUS": VOL_DOWN, "K_m": MUTE,
     "K_SPACE": PAUSE, "K_COMMA": REW, "K_PERIOD": FF,
     "K_f": FAV, "K_t": THEMES, "K_b": BROWSE, "K_l": LIST,
-    "K_w": FULLSCREEN, "K_F11": FULLSCREEN, "K_q": QUIT,
+    "K_w": FULLSCREEN, "K_F11": FULLSCREEN, "K_q": QUIT, "K_a": FORMAT,
     # Media keys: IR receivers and media remotes send these.
     "K_AUDIOPLAY": PAUSE, "K_AUDIOSTOP": STOP, "K_AUDIONEXT": SKIP, "K_AUDIOPREV": REPLAY,
     "K_AUDIOREWIND": REW, "K_AUDIOFASTFORWARD": FF, "K_AUDIOMUTE": MUTE, "K_MUTE": MUTE,

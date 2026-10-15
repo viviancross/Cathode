@@ -123,7 +123,7 @@ def page_screens():
         s.select = s.back = lambda: None
         s.handle = lambda a: True
         return s
-    info = NS(name="iteminfo", focus=1, detail=dict(title="Movie Number 3", subtitle="1983   PG   7.3",
+    info = NS(name="iteminfo", focus=1, kind="default", detail=dict(title="Movie Number 3", subtitle="1983   PG   7.3",
                                                     summary="A summary of the film. " * 12, duration=6000, offset=120))
     info.buttons = lambda: ["play", "dvr", "queue", "watchlist", "back"]
     info.label = lambda b: {"play": "PLAY", "dvr": "REC 40%", "queue": "+ QUEUE", "watchlist": "+ WATCHLIST",
@@ -135,7 +135,21 @@ def page_screens():
     pb.seek_to = pb.toggle_pause = pb.stop = pb.skip = pb.seek = lambda *a: None
     pb.handle = lambda a: True
     cap = NS(name="capture", prompt="Press the key for Guide  (Esc cancels)")
-    return [od(), od(view="wall"), od(depth=1), od(mode="auth"), od(key="recordings", rws=recs), info, pb, cap]
+    rec = NS(**{**vars(info), "kind": "download"})       # a recording: Program Information, not an offer
+    return [od(), od(view="wall"), od(depth=1), od(mode="auth"), od(key="recordings", rws=recs), info, rec, pb, cap]
+
+
+class TestPictureFormat(unittest.TestCase):
+    def test_every_format_sets_mpv_and_unknown_keys_fall_back(self):
+        from cathode.video import FORMATS, Video
+        v = Video.__new__(Video)
+        v.player = {}
+        for key, _, props in FORMATS:
+            v.set_format(key)
+            self.assertEqual({k: v.player[k] for k in props}, props)
+        v.set_format("nonsense")
+        self.assertEqual(v.player["panscan"], 0.0)
+        self.assertIs(v.player["keepaspect"], True)
 
 
 class TestEverySkinDrawsEveryScreen(unittest.TestCase):
@@ -182,6 +196,14 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
                 with self.subTest(skin=name, theme=theme, screen="toast+message"):
                     skin.draw_toast(canvas, "Deleted from My Recordings")
                     skin._message(canvas, "Couldn't load the playlist: the server said no.")
+                for frac in (-1, 0.0, 0.4, 1.0):
+                    with self.subTest(skin=name, theme=theme, screen=f"guide progress {frac}"):
+                        canvas.fill((0, 0, 0, 0))
+                        skin.draw_guide_progress(canvas, frac)
+                        self.assertIsNotNone(canvas.get_bounding_rect(min_alpha=1).w)
+                with self.subTest(skin=name, theme=theme, screen="format"):
+                    for label in ("Original", "Zoom", "Stretch", "4:3"):
+                        skin.draw_format(canvas, label)
 
     def test_box_skins_cut_to_black_and_classic_keeps_static(self):
         classes = skin_classes()

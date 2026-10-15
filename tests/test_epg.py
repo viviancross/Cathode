@@ -87,6 +87,17 @@ class TestParse(unittest.TestCase):
             srv.server_close()
         self.assertEqual(e.current_program("one.us", NOW).title, "Now")
 
+    def test_progress_reports_the_real_read_and_ends_at_one(self):
+        # Gzipped too: the count is of the source's bytes, not the XML's.
+        for name, data in (("g.xml", self._sample() * 1), ("g.xml.gz", gzip.compress(self._sample()))):
+            with self.subTest(name):
+                seen = []
+                EPG().load(self._write(name, data), now=NOW, progress=seen.append)
+                self.assertTrue(seen)
+                self.assertEqual(seen, sorted(seen))          # never goes backwards
+                self.assertEqual(seen[-1], 1.0)
+                self.assertTrue(all(0 <= f <= 1 for f in seen))
+
     def test_only_the_window_around_now_is_kept(self):
         e = EPG()
         e.load(self._write("g.xml", self._sample()), now=NOW)

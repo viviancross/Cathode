@@ -20,6 +20,11 @@ a retro-themed player.
   banner on every tune (INFO again for the description), browse without
   tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss screen for dead channels, PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus.
+- **FORMAT key** (A, or Settings > Picture & Style): Original, Zoom, Stretch
+  or 4:3, over any screen, remembered. **Guide refreshes show their real
+  progress** in each box's own notice, and the start-up screen's bar follows
+  the actual download. InDirecTV's DSS offers On Demand titles as its 1997
+  **Purchase Offer** page (Cost to view: $0.00).
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.
 - **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on
   the new core: the same sign-in, browsing, poster wall, queue, resume and

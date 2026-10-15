@@ -276,6 +276,29 @@ class InDirectHD(BoxSkin):
         t.draw(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", self.fb(Y(22)), b["soft"], r.right - X(20),
                r.y + (r.h - t.ink(self.fb(Y(22)))[1]) // 2, align="right")
 
+    def _note(self, c, text, frac=None):
+        """A short notice on the sky band, bottom left; an amber bar under
+        the text when frac is a known fraction."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        bar = frac is not None and frac >= 0
+        f = self.fb(Y(24))
+        r = self.R(96, 0, 0, 0)
+        r.w = max(t.width(f, text) + X(48), X(520) if bar else 0)
+        r.h = Y(76 if bar else 56)
+        r.bottom = Y(680)
+        self._band(c, r)
+        t.draw(c, text, f, b["text"], r.x + X(24), r.y + Y(20))
+        if bar:
+            track = pygame.Rect(r.x + X(24), r.bottom - Y(22), r.w - X(48), Y(10))
+            pygame.draw.rect(c, b["gap"], track)
+            pygame.draw.rect(c, b["sel"], (track.x, track.y, int(track.w * frac), track.h))
+
+    def draw_format(self, c, label):
+        self._note(c, f"Format: {label}")
+
+    def draw_guide_progress(self, c, frac):
+        self._note(c, "Acquiring guide data..." + self.pct(frac), frac)
+
     def _signal_loss(self, c):
         """The HR20's 'Searching for satellite signal (771)' card: a navy
         band on black, the explanation under it."""
@@ -1053,12 +1076,13 @@ class InDirectHD(BoxSkin):
         if stage == "starting":
             return
         caption = {"signal": "Step 1 of 2: Acquiring satellite signal...",
-                   "guide": "Step 2 of 2: Downloading guide data...", "done": "Ready"}[stage]
+                   "guide": "Step 2 of 2: Downloading guide data..." + self.guide_pct(), "done": "Ready"}[stage]
         t.draw(c, caption, self.f(Y(24)), b["text"], cx, Y(440), align="center")
         bar = self.R(360, 492, 560, 12)
         age = time.monotonic() - boot.start
-        frac = {"signal": 0.15 + 0.25 * min(1, age / 4), "guide": 0.45 + 0.45 * min(1, age / 8),
-                "done": 1.0}[stage]
+        g = getattr(self.app, "guide_progress", None)
+        guide = 0.45 + 0.55 * g if g is not None and g >= 0 else 0.45 + 0.45 * min(1, age / 8)
+        frac = {"signal": 0.15 + 0.25 * min(1, age / 4), "guide": guide, "done": 1.0}[stage]
         self.progress(c, bar, frac, rgba(b["gap"]), rgba(b["sel"]))
         t.draw(c, "Press any button to skip", self.f(Y(18)), b["soft"], cx, Y(660), align="center")
 
@@ -1214,6 +1238,15 @@ class InDirect(InDirectHD):
             x = bar.x + int(bar.w * s["buffer"] / span)
             pygame.draw.rect(c, b["teal"], (bar.x, bar.y, x - bar.x, bar.h))
             pygame.draw.rect(c, b["text"], (x - 1, bar.y - 2, 3, bar.h + 4))
+
+    def _note(self, c, text, frac=None):
+        b, X, Y = self.b, self.X, self.Y
+        bar = frac is not None and frac >= 0
+        r = self._notice(c, [text] + ([""] if bar else []), min_w=X(190))
+        if bar:
+            track = pygame.Rect(r.x + X(12), r.bottom - Y(9), r.w - X(24), Y(4))
+            pygame.draw.rect(c, b["gap"], track)
+            pygame.draw.rect(c, b["teal"], (track.x, track.y, int(track.w * frac), track.h))
 
     def _signal_loss(self, c):
         """The DSS's card on black, as the box showed a showing it couldn't
@@ -1514,8 +1547,13 @@ class InDirect(InDirectHD):
         from ..screens.iteminfo import hms
         b, t, X, Y = self.b, self.text, self.X, self.Y
         d = info.detail
-        self._dss_page(c, "Program Information", ["Choose Play to watch this program.",
-                                                  "Choose Exit to return to the list."])
+        offer = info.kind != "download"
+        if offer:
+            self._dss_page(c, "Purchase Offer", ["To purchase, point to Buy and press SELECT.",
+                                                 "Choose Exit to return to the list."])
+        else:
+            self._dss_page(c, "Program Information", ["Choose Play to watch this program.",
+                                                      "Choose Exit to return to the list."])
         lines = [(d.get("title", ""), True)]
         meta = d.get("subtitle") or d.get("meta", "")
         if meta:
@@ -1525,14 +1563,19 @@ class InDirect(InDirectHD):
         if d.get("offset", 0) > 5:
             lines.append((f"Resume at: {hms(d['offset'])}", False))
         y = self._dss_lines(c, lines, X(57), Y(76), X(158))
+        if offer:
+            fc = self.fb(Y(13))
+            w = self._shadowed(c, "Cost to view:", self.fb(Y(12)), b["text"], b["shadow"], X(57), y + Y(4))
+            self._shadowed(c, "$0.00", fc, b["text"], b["shadow"], X(57) + w + X(6), y + Y(3))
+            y += Y(20)
         f = self.f(Y(11))
         for line in t.wrap(f, d.get("summary", ""), int(X(158) / self.SQUEEZE), max(0, (Y(232) - y - Y(6)) // Y(12))):
             self._shadowed(c, line, f, b["soft"], b["shadow"], X(57), y + Y(6))
             y += Y(12)
         for k, name in enumerate(info.buttons()):
             r = pygame.Rect(X(222), Y(83) + k * Y(19), X(82), Y(13))
-            self._dss_button(c, r, self.button_words(info.label(name), back="Exit"), self.ICONS.get(name, "info"),
-                             k == info.focus)
+            word = "Buy" if offer and name == "play" else self.button_words(info.label(name), back="Exit")
+            self._dss_button(c, r, word, self.ICONS.get(name, "info"), k == info.focus)
             self.hit(r, lambda k=k, name=name: (setattr(info, "focus", k), info.press(name)))
 
     def draw_playback(self, c, pb):
@@ -1651,7 +1694,7 @@ class InDirect(InDirectHD):
         self._spaced(c, "InDirecTV", f, b["text"], W // 2 - w // 2, Y(110), X(1))
         if stage == "starting":
             return
-        caption = {"signal": "Acquiring satellite signal...", "guide": "Receiving program guide...",
+        caption = {"signal": "Acquiring satellite signal...", "guide": "Receiving program guide..." + self.guide_pct(),
                    "done": "Ready"}[stage]
         self._notice(c, [caption, "Press any button to skip."], y_bottom=Y(165))
 

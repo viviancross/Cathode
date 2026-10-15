@@ -80,6 +80,8 @@ class App:
         self.shot = None            # (path, seconds): save a frame and exit (tests, CI)
         self.script = []            # [(seconds, button)]: scripted presses (tests, CI)
         self.toast_text, self.toast_until = "", 0.0
+        self.format_until = 0.0     # the FORMAT key's notice is up until then
+        self.guide_progress = None  # a guide load: None idle, -1 size unknown, else 0..1
         self._cats = None           # category list, rebuilt when channels or guide change
         self.last_input = time.monotonic()
         self.weather = None
@@ -220,9 +222,25 @@ class App:
             self.push(Screensaver(self))
         self.after(10.0, self._idle_check)
 
+    def cycle_format(self, d: int = 1):
+        """The FORMAT key: the next picture format, on every screen, kept
+        across restarts; its notice shows the one now in use."""
+        from .video import FORMATS
+        keys = [k for k, _, _ in FORMATS]
+        cur = self.config.picture_format
+        self.config.picture_format = keys[((keys.index(cur) if cur in keys else 0) + d) % len(keys)]
+        self.config.save()
+        self.video.set_format(self.config.picture_format)
+        self.format_until = time.monotonic() + 2.5
+        self.after(2.51, self.invalidate)
+        self.invalidate()
+
     def press(self, action: str):
         """Offer a remote button to the screens, top first."""
         self.last_input = time.monotonic()
+        if action == R.FORMAT:          # like the box's key: works over any screen
+            self.cycle_format()
+            return
         for s in reversed(self.screens):
             if s.handle(action):
                 self.invalidate()
@@ -336,20 +354,30 @@ class App:
         if not url:
             return
 
+        def progress(frac):
+            self.post(self._guide_progress, gen, -1 if frac is None else frac)
+
         def work():
             try:
                 epg = EPG()
-                epg.load(url, user_agent=self.config.user_agent)
+                epg.load(url, user_agent=self.config.user_agent, progress=progress)
             except Exception as e:
                 print(f"[cathode] EPG load failed: {e}")
                 epg = None
             self.post(self._epg_loaded, gen, url, epg)
         print("[cathode] Loading EPG...")
+        self.guide_progress = -1
         threading.Thread(target=work, daemon=True).start()
+
+    def _guide_progress(self, gen, frac):
+        if gen == self._epg_gen and self.guide_progress is not None:
+            self.guide_progress = frac
+            self.invalidate()
 
     def _epg_loaded(self, gen, url, epg):
         if gen != self._epg_gen or url != self.config.epg_url:
             return                      # the playlist changed under it
+        self.guide_progress = None
         if epg is not None:
             self.epg = epg
             self._cats = None           # genres come from the guide
@@ -390,6 +418,7 @@ class App:
                            extra=_mpv_extra(self.config.mpv_extra_args))
         self.video.attach_gl(self.gfx.get_proc_address)
         self.video.muted = self.config.muted
+        self.video.set_format(self.config.picture_format)
         if self.config.audio_device:
             self.video.audio_device = self.config.audio_device
         from .ondemand import OnDemand
@@ -445,6 +474,12 @@ class App:
                     self.skin.hits = []
                     for s in self._visible():
                         self.skin.draw(canvas, s)
+                    top = self.top()
+                    if self.guide_progress is not None and top.name in ("live", "guide"):
+                        self.skin.draw_guide_progress(canvas, self.guide_progress)
+                    if time.monotonic() < self.format_until:
+                        from .video import format_label
+                        self.skin.draw_format(canvas, format_label(self.config.picture_format))
                     if time.monotonic() < self.toast_until:
                         self.skin.draw_toast(canvas, self.toast_text)
                     self.gfx.upload_ui(canvas, nearest=self.skin.nearest)

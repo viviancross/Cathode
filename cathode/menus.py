@@ -245,7 +245,12 @@ _PRETTY = {R.CH_UP: "Channel up", R.CH_DOWN: "Channel down", R.PAGE_UP: "Page up
            R.PAGE_DOWN: "Page down", R.PREV: "Previous channel", R.FAV: "Favorite",
            R.VOL_UP: "Volume up", R.VOL_DOWN: "Volume down", R.REW: "Rewind",
            R.FF: "Fast forward", R.SKIP: "Back to live", R.FULLSCREEN: "Full screen",
-           R.THEMES: "Themes (genres)"}
+           R.THEMES: "Themes (genres)", R.FORMAT: "Picture format"}
+
+
+def _format_label(key):
+    from .video import format_label
+    return format_label(key)
 
 
 def _pretty(action):
@@ -315,6 +320,8 @@ def style_items(app):
              adjust=set_and(lambda d: _scanlines(cfg, d))),
         Item("Vignette", value=lambda: "On" if cfg.vignette_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "vignette_enabled", not cfg.vignette_enabled))),
+        Item("Picture format", value=lambda: _format_label(cfg.picture_format),
+             adjust=lambda d: app.cycle_format(d)),
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
         Item("Edit colors", submenu=lambda: color_items(app)),

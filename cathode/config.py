@@ -17,6 +17,7 @@ class Config:
     # Volume (0-100)
     volume: int = 80
     muted: bool = False
+    picture_format: str = "original"   # the FORMAT key: original | zoom | stretch | 4:3
 
     # OSD settings
     osd_timeout: float = 4.0      # seconds OSD stays visible after channel change
