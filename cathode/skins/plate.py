@@ -168,33 +168,33 @@ class PlateHD(BoxSkin):
             r.bottom = H - Y(43)
         self._box(c, r)
         ink = b["banner_ink"]
-        f_big, f_mid = self.fb(Y(26)), self.fb(Y(20))
+        f_big, f_mid = self.fb(Y(38)), self.fb(Y(30))
         cx = r.x + X(123)
-        self.cb(c, str(ch.number), f_big, ink, cx, r.y + Y(6), align="center")
-        self.cb(c, self.fit_cb(f_mid, ch.name.upper(), X(200)), f_mid, ink, cx, r.y + Y(40), align="center")
-        self.cb(c, self.fit_cb(f_mid, g_list(self), X(200)), f_mid, ink, cx, r.y + Y(68), align="center")
+        self.cb(c, str(ch.number), f_big, ink, cx, r.y + Y(19), align="center")
+        self.cb(c, self.fit_cb(f_mid, ch.name.upper(), X(200)), f_mid, ink, cx, r.y + Y(54), align="center")
+        self.cb(c, self.fit_cb(f_mid, g_list(self), X(200)), f_mid, ink, cx, r.y + Y(82), align="center")
         mid = r.x + X(607)
-        self.cb(c, self.fit_cb(f_big, cur.title if cur else ch.name, X(560)), f_big, ink, mid, r.y + Y(14), align="center")
+        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(560)), f_mid, ink, mid, r.y + Y(24), align="center")
         now = datetime.now(timezone.utc)
         if cur:
             bits = [s for s in (cur.rating, f"{ampm(cur.start)} - {ampm(cur.stop)}") if s]
-            self.cb(c, "   ".join(bits), f_mid, ink, mid, r.y + Y(50), align="center")
+            self.cb(c, "   ".join(bits), f_mid, ink, mid, r.y + Y(59), align="center")
         local = datetime.now()
         rx = r.right - X(20)
-        self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_mid, ink, rx, r.y + Y(6), align="right")
-        self.cb(c, ampm(local), f_mid, ink, rx, r.y + Y(40), align="right")
+        self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_mid, ink, rx, r.y + Y(20), align="right")
+        self.cb(c, ampm(local), f_mid, ink, rx, r.y + Y(50), align="right")
         if cur:
-            self.cb(c, time_left(cur, now), f_mid, ink, rx, r.y + Y(68), align="right")
+            self.cb(c, time_left(cur, now), f_mid, ink, rx, r.y + Y(78), align="right")
         if nxt:
             fn = self.fb(Y(17))
-            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(80), align="center")
+            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(84), align="center")
         label = tag or ("INFO FOR DETAILS" if not full else "")
         if label:
-            pr = pygame.Rect(r.x + X(17), r.y - Y(30) if bottom else r.bottom + Y(10), 0, Y(30))
-            fp = self.fb(Y(20))
+            pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
+            fp = self.fb(Y(28))
             pr.w = int(t.width(fp, label) * 0.86) + X(40)
             pygame.draw.rect(c, b["pill"], pr, border_radius=Y(6))
-            self.cb(c, label, fp, b["pill_ink"], pr.x + X(18), pr.y + Y(4))
+            self.cb(c, label, fp, b["pill_ink"], pr.x + X(18), pr.y + Y(5))
         if full and cur and cur.description:
             f = self.fb(Y(18))
             lines = t.wrap(f, cur.description, int(r.w * 0.86) - X(40), 3)
@@ -285,37 +285,36 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._page(c, (0, 0, W, Y(300)))
         self.wordmark(c, X(42), Y(52), Y(44), b["text"], b["dish"])
-        self._tvguide(c, X(60), Y(146), X(76), Y(62))
+        self._tvguide(c, X(46), Y(150), X(109), Y(65))
         pic = self._picture(c)
         sel = g.selected()
         cur = self.app.live.programs(sel)[0] if sel else None
-        f_title, f_small = self.fb(Y(26)), self.fb(Y(18))
+        f_title, f_small = self.fb(Y(37)), self.fb(Y(24))
         title = cur.title if cur else (sel.name if sel else "")
-        self.cb(c, self.fit_cb(f_title, title, pic.x - X(240)), f_title, b["text"], X(228), Y(50))
-        cx = X(472)
+        cx = X(470)
+        self.cb(c, self.fit_cb(f_title, title, X(600)), f_title, b["text"], cx, Y(62), align="center")
         if cur:
-            if cur.rating:
-                self.cb(c, cur.rating, f_small, b["text"], cx, Y(84), align="center")
-            y = Y(124)
-            for line in t.wrap(f_small, cur.description or "", int(X(570) / 0.86), 5):
+            blurb = (f"{cur.category}. " if cur.category else "") + (cur.description or "")
+            y = Y(168)
+            for line in t.wrap(f_small, blurb, int(X(600) / 0.86), 3):
                 self.cb(c, line, f_small, b["text"], cx, y, align="center")
-                y += Y(24)
-        f_list = self.fb(Y(22))
+                y += Y(30)
+        f_list = self.fb(Y(30))
         tab = pygame.Rect(X(96), Y(262), int(t.width(f_list, g.category) * 0.86) + X(16), Y(30))
         self.cb(c, g.category if g.category != "All" else "All Sub", f_list, b["gold"] if g.focus == "category" else b["text"],
-                X(100), Y(266))
+                X(96), Y(268))
         self.hit(tab, lambda: g.handle("THEMES"))
-        self.cb(c, when(), f_list, b["text"], X(449), Y(266))
+        self.cb(c, when(), f_list, b["text"], X(453), Y(268))
 
         # The charcoal header and the rows.
         pygame.draw.rect(c, b["page_lo"], (0, Y(300), W, H - Y(300)))
         hdr = self.R(0, 300, 1280, 32)
         pygame.draw.rect(c, b["hdr"], hdr)
         start, end = g.window()
-        fh = self.fb(Y(22))
+        fh = self.fb(Y(28))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
-        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(42), hy)
+        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(34), hy)
         slots = int(g.hours * 2)
         cols = [X(251), X(605), X(961), X(1280)]
         for i in range(slots):
@@ -324,16 +323,16 @@ class PlateHD(BoxSkin):
         mins = g.hours * 60
         now = datetime.now(timezone.utc)
         epg = self.app.epg
-        f_cell = self.fb(Y(21))
-        grid_x, grid_w = X(251), X(1029)
+        f_cell, f_chan = self.fb(Y(27)), self.f(Y(27))
+        grid_x, grid_w = X(255), X(1025)
         for i, ch in enumerate(rows):
-            y = Y(340 + 54 * i)
+            y = Y(328 + 53 * i)
             rh = Y(50)
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             chr_ = pygame.Rect(0, y, X(247), rh)
             pygame.draw.rect(c, b["chan"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            self.cb(c, self.fit_cb(f_cell, f"{ch.number} {ch.name.upper()}", X(220)), f_cell, b["text"], X(14), cy)
+            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(220)), f_chan, b["text"], X(26), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["gold"], (chr_.right - X(14), y + Y(12)), Y(5))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
@@ -531,25 +530,28 @@ class Plate(PlateHD):
         mark inside; returns the pills' left x."""
         b, X, Y = self.b, self.X, self.Y
         tab = pygame.Surface((right, Y(236)), pygame.SRCALPHA)
-        pygame.draw.ellipse(tab, b["blue"], (X(42), -Y(20), X(560), Y(262)))
+        pygame.draw.ellipse(tab, b["blue"], (X(58), Y(17), X(420), Y(197)))
         c.blit(tab, (0, 0))
-        self.wordmark(c, X(70), Y(92), Y(34), b["text"], b["dish"])
+        self.wordmark(c, X(64), Y(86), Y(42), b["text"], b["dish"])
         return X(166)
 
-    def _pill(self, c, y, lines, right, icon=None):
+    def _pill(self, c, y, lines, right, icon=None, h=50):
         """A white capsule-left pill from x=166 to the picture's edge, the
         text centred as the box set it."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        r = pygame.Rect(X(166), Y(y), right - X(166), Y(44))
+        r = pygame.Rect(X(166), Y(y), right - X(166), Y(h))
         pygame.draw.rect(c, b["pillfill"], r, border_top_left_radius=r.h // 2, border_bottom_left_radius=r.h // 2)
-        f = self.fb(Y(15))
-        ty = r.y + (r.h - len(lines) * Y(18)) // 2
+        f = self.fb(Y(20))
+        ty = r.y + (r.h - len(lines) * Y(21)) // 2
         cx = r.x + r.w // 2 + X(6)
         for line in lines:
             t.draw(c, t.fit(f, line, r.w - X(40)), f, b["ink"], cx, ty, align="center")
-            ty += Y(18)
+            ty += Y(21)
         if icon == "clock":
-            pygame.draw.circle(c, b["ink"], (r.x + X(14), r.centery), Y(7), 2)
+            cx, cy = r.x + X(22), r.centery
+            pygame.draw.circle(c, b["ink"], (cx, cy), Y(11), 3)
+            pygame.draw.line(c, b["ink"], (cx, cy), (cx, cy - Y(7)), 2)
+            pygame.draw.line(c, b["ink"], (cx, cy), (cx + X(5), cy), 2)
         return r
 
     def guide_video_box(self):
@@ -582,18 +584,18 @@ class Plate(PlateHD):
         self._tab(c, vx)
         pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
         local = datetime.now()
-        self._pill(c, 36, [f"{local:%a} {local.month}/{local.day}", ampm(local).replace("am", " am").replace("pm", " pm")], vx)
-        tab = self._pill(c, 100, ["Favorite List:", g.category if g.category != "All" else "All Sub"], vx, icon="clock")
+        self._pill(c, 33, [f"{local:%a} {local.month}/{local.day}", ampm(local).replace("am", " am").replace("pm", " pm")], vx)
+        tab = self._pill(c, 97, ["Favorite List:", g.category if g.category != "All" else "All Sub"], vx, icon="clock")
         self.hit(tab, lambda: g.handle("THEMES"))
         sel = g.selected()
-        self._pill(c, 166, [f"<  {sel.number if sel else '---'}  >"], vx)
+        self._pill(c, 167, [f"<  {sel.number if sel else '---'}  >"], vx, h=34)
 
         # The header: day, a play arrow, the half hours; the rows below.
-        hdr = self.R(0, 236, 640, 22)
+        hdr = self.R(0, 234, 640, 26)
         pygame.draw.rect(c, b["hdr"], hdr)
-        pygame.draw.rect(c, b["hdr"], self.R(600, 258, 40, 200))
+        pygame.draw.rect(c, b["hdr"], self.R(600, 260, 40, 200))
         start, end = g.window()
-        fh = self.fb(Y(15))
+        fh = self.fb(Y(18))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
         t.draw(c, f"{day:%a} {day.month}/{day.day}", fh, b["text"], X(88), hy, align="center")
@@ -603,24 +605,24 @@ class Plate(PlateHD):
         for i in range(slots):
             t.draw(c, ampm(start + timedelta(minutes=30 * i)).replace("am", " am").replace("pm", " pm"), fh, b["text"],
                    X(210 + 155 * i), hy, align="center")
-        pygame.draw.rect(c, (0, 0, 0), self.R(0, 258, 600, 200))
+        pygame.draw.rect(c, (0, 0, 0), self.R(0, 260, 600, 200))
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
         now = datetime.now(timezone.utc)
         epg = self.app.epg
-        f_cell, f_num, f_call = self.fb(Y(14)), self.fb(Y(15)), self.fb(Y(12))
+        f_cell, f_num, f_call = self.fb(Y(20)), self.fb(Y(20)), self.fb(Y(16))
         grid_x, grid_w = X(133), X(465)
         for i, ch in enumerate(rows):
-            y = Y(262 + 47 * i)
-            rh = Y(43)
+            y = Y(261 + 47 * i)
+            rh = Y(41)
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             chr_ = pygame.Rect(0, y, X(130), rh)
             pygame.draw.rect(c, b["chan_fill"], chr_)
-            arc = pygame.Rect(X(24), y - Y(3), X(58), rh + Y(6))     # the blue crescent
+            arc = pygame.Rect(X(34), y - Y(3), X(52), rh + Y(6))     # the blue crescent
             pygame.draw.ellipse(c, b["blue"], arc)
-            pygame.draw.ellipse(c, b["chan_fill"], arc.move(X(14), 0))
-            t.draw(c, str(ch.number), f_num, b["chan_ink"], X(95), y + Y(3), align="center")
-            t.draw(c, t.fit(f_call, ch.name.upper(), X(64)), f_call, b["chan_ink"], X(95), y + Y(23), align="center")
+            pygame.draw.ellipse(c, b["chan_fill"], arc.move(X(16), 0))
+            t.draw(c, str(ch.number), f_num, b["chan_ink"], X(96), y + Y(4), align="center")
+            t.draw(c, t.fit(f_call, ch.name.upper(), X(64)), f_call, b["chan_ink"], X(96), y + Y(24), align="center")
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
             if not progs:
@@ -645,10 +647,10 @@ class Plate(PlateHD):
                                                  (cell.right - X(10), cell.centery + Y(7))])
                 if cell.w > X(30):
                     lines = t.wrap(f_cell, p.title, cell.w - X(26), 2)
-                    ty = y + (rh - len(lines) * Y(15)) // 2
+                    ty = y + (rh - len(lines) * Y(18)) // 2 + Y(1)
                     for line in lines:
                         t.draw(c, line, f_cell, ink, cell.centerx, ty, align="center")
-                        ty += Y(15)
+                        ty += Y(18)
             self.hit((0, y, X(600), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                      setattr(g, "focus", "grid"), g.handle("SELECT")))
         pygame.draw.rect(c, b["grey_hi"], self.R(0, 458, 640, 22))
@@ -675,26 +677,26 @@ class Plate(PlateHD):
         sign at the right; List and Time Left on a second line."""
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        r = self.R(40, 40, 560, 100)
+        r = self.R(67, 58, 566, 82)
         if bottom:
             r.bottom = H - Y(40)
         self._band(c, r)
         if tag:
             self.chip(c, r.x, r.y - Y(22) if bottom else r.bottom + Y(4), tag, self.fb(Y(11)), rgba(b["sel"]), b["ink"])
         local = datetime.now()
-        fs, fm, fl = self.fb(Y(14)), self.fb(Y(16)), self.fb(Y(13))
-        t.draw(c, f"{local:%a} {local.month}/{local.day}", fs, b["band_ink"], X(100), r.y + Y(22), align="center")
-        t.draw(c, ampm(local).replace("am", " am").replace("pm", " pm"), fs, b["band_ink"], X(100), r.y + Y(48), align="center")
-        t.draw(c, t.fit(fm, cur.title if cur else ch.name, X(300)), fm, b["band_ink"], X(320), r.y + Y(6), align="center")
-        t.draw(c, str(ch.number), fs, b["band_ink"], X(540), r.y + Y(22), align="center")
-        t.draw(c, t.fit(fs, ch.name.upper(), X(100)), fs, b["band_ink"], X(540), r.y + Y(48), align="center")
+        fs, fm, fl = self.fb(Y(20)), self.fb(Y(22)), self.fb(Y(17))
+        t.draw(c, f"{local:%a} {local.month}/{local.day}", fs, b["band_ink"], X(103), r.y + Y(10), align="center")
+        t.draw(c, ampm(local).replace("am", " am").replace("pm", " pm"), fs, b["band_ink"], X(103), r.y + Y(35), align="center")
+        t.draw(c, t.fit(fm, cur.title if cur else ch.name, X(300)), fm, b["band_ink"], X(320), r.y + Y(4), align="center")
+        t.draw(c, str(ch.number), fs, b["band_ink"], X(538), r.y + Y(5), align="center")
+        call = ch.name.upper()
+        while len(call) > 1 and t.width(fs, call) > X(100):
+            call = call[:-1]
+        t.draw(c, call, fs, b["band_ink"], X(538), r.y + Y(39), align="center")
         now = datetime.now(timezone.utc)
         if cur:
-            t.draw(c, time_left(cur, now), fl, b["band_ink"], X(165), r.y + Y(80))
-            t.draw(c, f"{ampm(cur.start)} - {ampm(cur.stop)}", fl, b["band_soft"], X(320), r.y + Y(80), align="center")
-        t.draw(c, f"List: {g_list(self)}", fl, b["band_ink"], X(460), r.y + Y(80), align="right")
-        if nxt:
-            t.draw(c, t.fit(fl, f"Next: {nxt.title}", X(240)), fl, b["band_soft"], X(165), r.y + Y(61))
+            t.draw(c, time_left(cur, now), fl, b["band_ink"], X(163), r.y + Y(57))
+        t.draw(c, f"List: {g_list(self)}", fl, b["band_ink"], X(377), r.y + Y(57))
         if full and cur and cur.description:
             f = self.f(Y(12))
             lines = t.wrap(f, cur.description, r.w - X(40), 3)
@@ -763,30 +765,33 @@ class Plate(PlateHD):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._grey_page(c, (0, 0, W, H))
-        self.wordmark(c, X(60), Y(40), Y(34), b["ink"], b["dish"])
-        f_title = self.fb(Y(22))
+        self.wordmark(c, X(60), Y(36), Y(44), b["ink"], b["dish"])
+        f_title = self.fb(Y(27))
         title = "Main Menu" if m.title == "MAIN MENU" else m.title.title()
-        tp = pygame.Rect(X(320), Y(60), X(320), Y(40))
-        pygame.draw.rect(c, b["pillfill"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
-        pygame.draw.rect(c, b["pill"], (tp.x + tp.h // 2, tp.bottom - Y(2), tp.w - tp.h // 2, Y(2)))
-        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(30), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
+        tp = pygame.Rect(X(300), Y(58), X(340), Y(44))
+        pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.3), tp.move(0, Y(3)), border_top_left_radius=tp.h // 2,
+                         border_bottom_left_radius=tp.h // 2)
+        pygame.draw.rect(c, b["grey_hi"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
+        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(15), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
         n = len(m.items)
         cols = self.menu_cols(m)
-        rh = Y(45)
+        rh = Y(40)
         per_col = 5 if cols == 2 else max(1, (Y(430) - Y(165)) // rh)
         n_vis = per_col * cols
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
-        f_row = self.fb(Y(16))
+        f_row = self.fb(Y(20))
         band = self.R(0, 160, 640, 270 if cols == 2 else per_col * rh + Y(20))
         pygame.draw.rect(c, b["grey_lo"], band)
-        col_w = X(300) if cols == 2 else X(560)
+        if cols == 2:
+            pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.5), (X(319), band.y, X(2), band.h))
+        col_w = X(280) if cols == 2 else X(540)
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
             col, row_i = (k // per_col, k % per_col) if cols == 2 else (0, k)
-            x = X(40) + col * X(300)
-            y = band.y + Y(12) + row_i * rh
+            x = X(50) + col * X(280)
+            y = band.y + Y(8) + row_i * rh
             sel = i == m.cursor
-            row = pygame.Rect(x, y, col_w - X(20), Y(36))
+            row = pygame.Rect(x, y, col_w - X(10), Y(32))
             fill, ink = (b["cursor"], b["cursor_ink"]) if sel else (b["row"], b["row_ink"])
             if not it.enabled:
                 ink = mix(ink, fill, 0.5)
@@ -796,7 +801,7 @@ class Plate(PlateHD):
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             num = str((i + 1) % 10) if i < 10 else ""
             label = f"{num} {it.label}".strip()
-            t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(22), ty)
+            t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(28), ty)
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v
@@ -814,7 +819,7 @@ class Plate(PlateHD):
         stage = boot.stage()
         self._grey_page(c, (0, 0, W, H))
         tab = pygame.Surface((W, Y(236)), pygame.SRCALPHA)
-        pygame.draw.ellipse(tab, b["blue"], (X(42), -Y(20), X(560), Y(262)))
+        pygame.draw.ellipse(tab, b["blue"], (X(58), Y(17), X(420), Y(197)))
         c.blit(tab, (0, 0))
         size = Y(44)
         mw = self.measure(self.wordmark, size, b["text"], b["dish"])

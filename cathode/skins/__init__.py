@@ -105,6 +105,7 @@ class Skin:
     tune_cover = "static"       # what covers a channel change: static | black
     right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume
     browse_style = "banner"     # BROWSE shows: banner (one channel) | mini (a mini guide)
+    guide_jump_min = 24 * 60    # how far REW / FF move the guide
     default_font = "vcr"
 
     def __init__(self, app):

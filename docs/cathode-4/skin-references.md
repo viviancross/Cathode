@@ -22,7 +22,14 @@ frames. The sources, and what they settled:
   Menu: title and two lines of instructions on the purple band, a teal rule,
   numbered items (0 for the last), the chosen one on a light bar, a teal box
   below explaining it. Notices: a purple box with a light bevel, bottom left
-  ("This showing is no longer available").
+  ("This showing is no longer available"). The box's face was condensed:
+  every shadowed line is drawn at 82% of Liberation Sans Bold's width, and
+  the guide's heading and clock are the regular weight in the softer tone.
+  Measured (320x240): the banner band 59 tall, title cap top at 19, the
+  Start / End rows at 32 and 45 with columns at x 57 / 82 / 128 and the
+  clock and date right-aligned at 268 / 288; guide rows 27 tall on a 28.5
+  pitch from 42, the button row 13 tall at 211; menu items from 71, the
+  explaining box at 51,196 224x28.
 - **Plate Network (SD)**: a 2005 Dish 322-era receiver (youtu.be/u2CUPclvbfQ).
   Guide: a grey page with a faint swirl, a big blue (43,72,157) ellipse tab
   top-left holding the mark and three white capsule pills (date and time,
@@ -37,7 +44,12 @@ frames. The sources, and what they settled:
   Theme Categories: the grey page, the mark top-left, the title in a white
   pill at the right, two columns of numbered blue pills on a darker band,
   the chosen one white. Loading: an "ATTENTION" dialog (grey, title in a
-  blue pill).
+  blue pill). Measured (640x480): the tab's ellipse at 58,17 420x197; pills
+  50 tall (the channel one 34) with 20px lettering; header 26 tall at 234
+  with 18px lettering; rows 41 tall on a 47 pitch from 261, the crescent at
+  x 34-86; banner band at 67,58 566x82 with 20px date and clock, a 22px
+  title, 17px "Time Left" / "List" line; menu pills 32 tall on a 40 pitch
+  from 168, 270 wide in two columns from x 50 and 330.
 - **Plate Network HD**: the 2007 teal guide (youtu.be/0eKW6gQJrlk; a 4:3
   capture, mapped onto the 16:9 canvas). Dark teal (0,51,66) page with faint
   swirls, the mark and a red TV-guide tag top-left, the title, rating and
@@ -48,7 +60,14 @@ frames. The sources, and what they settled:
   (34,35,33) translucent rounded box: number, call sign and list stacked at
   the left, title and rating centred, date, clock and "Time left" at the
   right, a grey pill below. Lettering is a condensed bold sans (drawn by
-  squeezing the bold face to 86%).
+  squeezing the bold face to 86%). Measured (on the 1280x720 mapping): the
+  TV-guide tag at 46,150 109x65; title 37px at cap top 62 centred on x 470;
+  synopsis 24px from 168 on a 30 pitch, led by the category; list name and
+  clock 30px at 268; header 28px; rows from 328 on a 53 pitch, 27px cell
+  text, channel labels regular weight in from x 26, the grid from x 255;
+  banner number 38px at 19 below the box top, call sign and list 30px at
+  54 / 82, title 30px at 24 with its rating line at 59, the right column at
+  20 / 50 / 78, the pill 34 tall with 28px lettering.
 - **InDirecTV HD**: the HR20 (youtu.be/fbFCD5yc9O8, 1280x720). Guide: a
   near-white title area (y 0-146) with the stacked mark at x 96 and the
   title at x 300; a light-blue facts strip (y 146-192: clock | hours |
@@ -65,7 +84,13 @@ frames. The sources, and what they settled:
   "Favorites List:" and the yellow "TV Options" / blue "Mini Guide" keys.
   Setup pages keep the title area, list the options down the left on teal
   with a light bar on the chosen row, explain it in a darker panel at the
-  right, and keep the picture top-right.
+  right, and keep the picture top-right. Measured type (cap heights): guide
+  title 36, synopsis 30 regular on a 36 pitch, header 29, channel labels
+  bold 30, cells regular 30, bottom bar 30; banner number 36 bold, call sign
+  34, title 34 bold with its cap top at 97, favourites bar 18 with 22px
+  keys. The grid starts at x 294 with the half hours flush to it. The box's
+  red and green keys moved the guide 12 hours (so does ours, on this skin
+  only); its list was "Channels I Get" and its yellow key "Guide Options".
 - The Point Dish signal-meter dialogs were dropped (2026-10-15). A dead
   channel shows each box's own card instead: the DSS's "This showing is no
   longer available" notice (0:09 in its video), the HR20's "Searching for

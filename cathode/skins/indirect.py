@@ -42,6 +42,7 @@ class InDirectHD(BoxSkin):
     browse_style = "mini"           # BROWSE opens the mini guide
     guide_hours = 1.5               # three half-hour columns, as the box showed
     guide_rows = 6
+    guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
     SD = False
     # Measured: the header navy, the program-cell teal, the amber, the logo blue.
     NATIVE = {"bg": [8, 36, 75], "accent": [10, 70, 112], "accent2": [240, 165, 22],
@@ -125,7 +126,7 @@ class InDirectHD(BoxSkin):
         vgrad(c, self.R(0, 0, 1280, 146), rgba(b["paper_top"]), rgba(b["paper_bot"]))
         pygame.draw.rect(c, b["strip"], self.R(0, 146, 1280, 46))
         self.mark_stacked(c, self.X(96), self.Y(49), b["ink"])
-        f_title = self.fb(self.Y(32))
+        f_title = self.fb(self.Y(36))
         t.draw(c, t.fit(f_title, title, self.X(830) - self.X(300)), f_title, b["ink"], self.X(300), self.Y(108))
         t.draw(c, watermark, self.fb(self.Y(40)), b["watermark"], self.X(830), self.Y(57), align="right")
         return self._picture(c)
@@ -170,13 +171,13 @@ class InDirectHD(BoxSkin):
             c.blit(logo, logo.get_rect(center=(X(155), Y(92))))
         else:
             self.tile(c, (X(100), Y(60), X(66), Y(62)), b["sky"])
-        f_num, f_call, f_title = self.fb(Y(30)), self.f(Y(24)), self.fb(Y(30))
+        f_num, f_call, f_title = self.fb(Y(36)), self.f(Y(34)), self.fb(Y(34))
         t.draw(c, str(ch.number), f_num, b["text"], X(240), Y(62))
         call, fc = ch.name.upper(), f_call
-        if t.width(fc, call) > X(140):            # a long name: a smaller face before an ellipsis
-            fc = self.f(Y(19))
-        t.draw(c, t.fit(fc, call, X(140)), fc, b["text"], X(240), Y(99 if fc is f_call else 102))
-        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(93))
+        if t.width(fc, call) > X(170):            # a long name: a smaller face before an ellipsis
+            fc = self.f(Y(24))
+        t.draw(c, t.fit(fc, call, X(170)), fc, b["text"], X(240), Y(99 if fc is f_call else 104))
+        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(97))
         if ch.group:
             t.draw(c, t.fit(f_call, ch.group, X(260)), f_call, b["text"], X(1105), Y(99), align="right")
         strip = self.R(0, 134, 1280, 52)
@@ -197,11 +198,11 @@ class InDirectHD(BoxSkin):
         kb = pygame.Surface(bar.size, pygame.SRCALPHA)
         kb.fill((*b["keybar"], 215))
         c.blit(kb, bar.topleft)
-        fk = self.fb(Y(20))
+        fk = self.fb(Y(18))
         ky = bar.y + (bar.h - t.ink(fk)[1]) // 2
         t.draw(c, f"Favorites List:  {g_list(self)}", fk, b["text"], X(112), ky)
         for dot, label, dx in ((b["key_yellow"], "TV Options", 820), (b["key_blue"], "Mini Guide", 1005)):
-            pygame.draw.circle(c, dot, (X(dx), bar.centery), Y(9))
+            pygame.draw.circle(c, dot, (X(dx), bar.centery), Y(11))
             t.draw(c, label, fk, b["text"], X(dx + 20), ky)
         if tag:
             self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(16)), rgba(b["sel"]), b["sel_ink"])
@@ -300,31 +301,31 @@ class InDirectHD(BoxSkin):
                 t.draw(c, cur.rating, fs, b["strip_ink"], X(760), sy)
         # The synopsis, white on the page.
         if cur and cur.description:
-            fd = self.f(Y(22))
-            y = Y(206)
+            fd = self.f(Y(28))
+            y = Y(205)
             for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(735), 3):
                 t.draw(c, line, fd, b["text"], X(95), y)
-                y += Y(38)
+                y += Y(36)
 
         # The frame: a navy header, navy channel cells, teal cells, the colour keys.
         pygame.draw.rect(c, b["gap"], self.R(96, 313, 1182, 359))
         hdr = self.R(96, 313, 1182, 35)
         pygame.draw.rect(c, b["navy"], hdr)
         start, end = g.window()
-        fh = self.fb(Y(22))
+        fh = self.fb(Y(29))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
         t.draw(c, f"{day:%a} {day.month}/{day.day}", fh, b["text"], X(105), hy)
         slots = int(g.hours * 2)
         col = 885 / slots
         for i in range(slots):
-            t.draw(c, ampm(start + timedelta(minutes=30 * i)), fh, b["text"], X(299 + col * i + 8), hy)
+            t.draw(c, ampm(start + timedelta(minutes=30 * i)), fh, b["text"], X(294 + col * i), hy)
 
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
         epg = self.app.epg
-        f_cell = self.f(Y(22))
-        grid_x, grid_w = X(299), X(885)
+        f_cell, f_ch = self.f(Y(30)), self.fb(Y(30))
+        grid_x, grid_w = X(294), X(890)
         for i, ch in enumerate(rows):
             y = Y(352 + 48 * i)
             rh = Y(44)
@@ -332,7 +333,7 @@ class InDirectHD(BoxSkin):
             chr_ = pygame.Rect(X(96), y, X(199), rh)
             pygame.draw.rect(c, b["navy"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            t.draw(c, t.fit(f_cell, f"{ch.number} " + ch.name.upper(), chr_.w - X(24)), f_cell, b["text"],
+            t.draw(c, t.fit(f_ch, f"{ch.number} " + ch.name.upper(), chr_.w - X(24)), f_ch, b["text"],
                    X(110), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
@@ -367,12 +368,12 @@ class InDirectHD(BoxSkin):
 
         bar = self.R(96, 639, 1182, 33)
         pygame.draw.rect(c, b["cell"], bar)
-        fl = self.f(Y(22))
+        fl = self.f(Y(30))
         ly = bar.y + (bar.h - t.ink(fl)[1]) // 2
-        cat = g.category if g.category != "All" else "All Channels"
+        cat = g.category if g.category != "All" else "Channels I Get"
         t.draw(c, cat, fl, b["sel"] if g.focus == "category" else b["soft"], X(110), ly)
         self.hit((X(96), bar.y, X(400), bar.h), lambda: g.handle("THEMES"))
-        for dot, label, dx in (("red", "-1 day", 619), ("green", "+1 day", 772), ("yellow", "Themes", 926)):
+        for dot, label, dx in (("red", "-12hrs", 619), ("green", "+12hrs", 772), ("yellow", "Guide Options", 926)):
             pygame.draw.circle(c, DOTS[dot], (X(dx + 10), bar.centery), Y(10))
             t.draw(c, label, fl, b["text"], X(dx + 32), ly)
 
@@ -544,15 +545,26 @@ class InDirect(InDirectHD):
     def Y(self, v) -> int:
         return int(round(v * self.canvas[1] / 240))
 
+    SQUEEZE = 0.82                  # the DSS's condensed face, from Liberation Sans Bold
+
     def _shadowed(self, c, s, f, ink, shadow, x, y, align="left"):
-        """The DSS lettered everything with a dark drop shadow."""
+        """The DSS lettered everything condensed, with a dark drop shadow."""
+        if not s:
+            return 0
+        img = f.render(s, True, ink[:3])
+        w = max(1, int(img.get_width() * self.SQUEEZE))
+        img = pygame.transform.smoothscale(img, (w, img.get_height()))
+        x0 = x - w if align == "right" else x - w // 2 if align == "center" else x
+        y0 = y - self.text.ink(f)[0]
         if shadow:
-            self.text.draw(c, s, f, shadow, x + 2, y + 2, align=align)
-        return self.text.draw(c, s, f, ink, x, y, align=align)
+            sh = pygame.transform.smoothscale(f.render(s, True, shadow[:3]), (w, img.get_height()))
+            c.blit(sh, (x0 + 2, y0 + 2))
+        c.blit(img, (x0, y0))
+        return w
 
     def mark(self, c, x, y, size):
-        """The tile alone, as the box's banner showed only its logo."""
-        self.tile(c, (x, y, size, size), self.b["teal"])
+        """The squat tile alone, as the box's banner showed only its logo."""
+        self.tile(c, (x, y, size, int(size * 0.64)), self.b["teal"])
 
     # ── Live: banner, digits, volume, trick ───────────────────────────────
 
@@ -563,18 +575,18 @@ class InDirect(InDirectHD):
         right-aligned."""
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        r = self.R(0, 0, 320, 56)
+        r = self.R(0, 0, 320, 59)
         vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
         if tag:
             self.chip(c, X(12), r.bottom + Y(4), tag, self.fb(Y(9)), rgba(b["sel"]), b["sel_ink"])
-        self.mark(c, X(22), Y(14), Y(22))
-        num = pygame.Rect(X(23), Y(41), X(24), Y(13))
+        self.mark(c, X(24), Y(19), X(22))
+        num = pygame.Rect(X(22), Y(41), X(28), Y(13))
         pygame.draw.rect(c, b["tile"], num, border_radius=2)
         fn = self.fb(Y(10))
         t.draw(c, str(ch.number), fn, b["sel_ink"], num.centerx, num.y + (num.h - t.ink(fn)[1]) // 2, align="center")
         f_title = self.fb(Y(16))
         self._shadowed(c, t.fit(f_title, cur.title if cur else ch.name, X(240)), f_title, b["text"], b["shadow"],
-                       X(57), Y(5))
+                       X(57), Y(19))
         fs = self.fb(Y(11))
         local = datetime.now()
         cat = g_cat(self)
@@ -583,11 +595,11 @@ class InDirect(InDirectHD):
                 ("End", ampm(cur.stop) + "m" if cur else "", "Normal List" if cat == "All" else cat,
                  f"{local:%a} {local.month}/{local.day}/{local:%y}")]
         for k, (lab, when_, mid, right) in enumerate(rows):
-            y = Y(26 + 12 * k)
+            y = Y(32 + 13 * k)
             self._shadowed(c, lab, fs, b["text"], b["shadow"], X(57), y)
-            self._shadowed(c, when_, fs, b["text"], b["shadow"], X(100), y)
-            self._shadowed(c, mid, fs, b["text"], b["shadow"], X(165), y)
-            self._shadowed(c, right, fs, b["text"], b["shadow"], X(300), y, align="right")
+            self._shadowed(c, when_, fs, b["text"], b["shadow"], X(82), y)
+            self._shadowed(c, mid, fs, b["text"], b["shadow"], X(128), y)
+            self._shadowed(c, right, fs, b["text"], b["shadow"], X(268) if k == 0 else X(288), y, align="right")
         if full and cur and cur.description:
             f = self.f(Y(12))
             lines = t.wrap(f, cur.description, X(296), 3)
@@ -604,7 +616,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         r = self.R(0, 0, 320, 36)
         vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
-        self.mark(c, X(22), Y(7), Y(22))
+        self.mark(c, X(24), Y(8), X(22))
         self._shadowed(c, digits + "-" * (3 - len(digits)), self.fb(Y(18)), b["text"], b["shadow"], X(57), Y(8))
 
     def _notice(self, c, lines, y_bottom=None, min_w=0):
@@ -663,18 +675,18 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         pygame.draw.rect(c, b["purple"], (0, 0, W, Y(42)))
         pygame.draw.rect(c, b["page"], (0, Y(42), W, H - Y(42)))
-        f_head, f_small, f_cell = self.fb(Y(16)), self.fb(Y(11)), self.fb(Y(12))
+        f_head, f_small, f_cell = self.f(Y(16)), self.f(Y(11)), self.fb(Y(12))
         self._shadowed(c, "Norm", f_small, b["soft"], b["shadow"], X(24), Y(14))
-        self._shadowed(c, "Program Guide", f_head, b["text"], b["shadow"], X(55), Y(14))
+        self._shadowed(c, "Program Guide", f_head, b["soft"], b["shadow"], X(55), Y(14))
         local = datetime.now()
         self._shadowed(c, f"{local:%a} {local.month}/{local.day}/{local:%y}", f_small, b["text"], b["shadow"],
                        X(248), Y(14), align="right")
-        self._shadowed(c, ampm(local).upper() + "M", f_small, b["text"], b["shadow"], X(300), Y(14), align="right")
+        self._shadowed(c, ampm(local).upper() + "M", f_small, b["text"], b["shadow"], X(290), Y(14), align="right")
         # The second line: page, and the half hours.
         start, end = g.window()
         rows_all = g.filtered()
         page, pages = g.top // g.rows + 1, max(1, (len(rows_all) + g.rows - 1) // g.rows)
-        self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(30))
+        self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(34))
         slots = int(g.hours * 2)
         col_w = 240 / slots
         for i in range(slots):
@@ -687,21 +699,21 @@ class InDirect(InDirectHD):
         mins = g.hours * 60
         grid_x, grid_w = X(55), X(242)
         for i, ch in enumerate(rows):
-            y = Y(43 + 28 * i)
-            rh = Y(26)
+            y = Y(42) + i * Y(28.5)
+            rh = Y(27)
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             tile = pygame.Rect(X(24), y, X(27), rh)
             self._bevel(c, tile, b["page"])
             name = ch.name.upper()
-            while len(name) > 1 and t.width(f_small, name) > X(25):   # the box showed call signs: clip, no ellipsis
+            while len(name) > 1 and t.width(f_cell, name) * self.SQUEEZE > X(26):   # call signs clip, no ellipsis
                 name = name[:-1]
-            self._shadowed(c, name, f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
-            self._shadowed(c, str(ch.number), f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(14))
+            self._shadowed(c, name, f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
+            self._shadowed(c, str(ch.number), f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(15))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
             if not progs:
                 cell = pygame.Rect(grid_x, y, grid_w, rh)
-                self._bevel(c, cell, b["sel"] if row_sel else b["page"])
+                self._dss_cell(c, cell, row_sel)
                 self._shadowed(c, "No Information", f_cell, b["sel_ink"] if row_sel else b["text"],
                                None if row_sel else b["shadow"], cell.x + X(4), y + Y(2))
             for p in progs:
@@ -711,21 +723,21 @@ class InDirect(InDirectHD):
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(2), rh)
                 on = row_sel and p.start <= max(now, start) < p.stop
-                self._bevel(c, cell, b["sel"] if on else b["page"])
+                self._dss_cell(c, cell, on)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
-                lines = t.wrap(f_cell, p.title, cell.w - X(8), 2)
+                lines = t.wrap(f_cell, p.title, int((cell.w - X(8)) / self.SQUEEZE), 2)
                 for k, line in enumerate(lines):
                     self._shadowed(c, line, f_cell, ink, shadow, cell.x + X(4), y + Y(2) + k * Y(12))
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                          setattr(g, "focus", "grid"), g.handle("SELECT")))
         # The teal buttons along the bottom: page, the lists, Exit.
-        y = Y(212)
+        y = Y(211)
         labels = [("v", "PAGE_DOWN"), (g.category if g.category != "All" else "Movies", "THEMES"),
                   ("Sports", "THEMES"), ("Other", "THEMES"), ("All", "THEMES"), ("Exit", "EXIT")]
         bx = X(24)
         bw = X(45)
         for k, (lab, action) in enumerate(labels):
-            r = pygame.Rect(bx + k * (bw + X(1)), y, bw, Y(11))
+            r = pygame.Rect(bx + k * (bw + X(1)), y, bw, Y(13))
             on = k == 1 and g.focus == "category"
             pygame.draw.rect(c, b["sel"] if on else b["teal"], r)
             pygame.draw.rect(c, b["teal_dark"], (r.x, r.bottom - 1, r.w, 1))
@@ -736,6 +748,14 @@ class InDirect(InDirectHD):
                 self._shadowed(c, t.fit(f_small, lab, bw - X(6)), f_small, b["sel_ink"] if on else b["text"],
                                None if on else b["shadow"], r.centerx, r.y + Y(1), align="center")
             self.hit(r, lambda a=action: g.handle(a))
+
+    def _dss_cell(self, c, cell, on):
+        """A guide cell; the chosen one is light and casts a shadow."""
+        b = self.b
+        self._bevel(c, cell, b["sel"] if on else b["page"])
+        if on:
+            pygame.draw.rect(c, b["shadow"], (cell.x + 2, cell.bottom, cell.w, 2))
+            pygame.draw.rect(c, b["shadow"], (cell.right, cell.y + 2, 2, cell.h))
 
     def _bevel(self, c, r, fill):
         """A cell with the DSS's light top-left / dark bottom-right edges."""
@@ -758,9 +778,9 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["purple"], (0, 0, W, Y(57)))
         pygame.draw.rect(c, b["teal"], (0, Y(57), W, Y(12)))
         pygame.draw.rect(c, b["page"], (0, Y(69), W, H - Y(69)))
-        f_head, f_small, f_row = self.fb(Y(16)), self.fb(Y(11)), self.fb(Y(12))
+        f_head, f_small, f_row = self.f(Y(16)), self.fb(Y(11)), self.fb(Y(12))
         title = "DSS Main Menu" if m.title == "MAIN MENU" else m.title.title()
-        self._shadowed(c, title, f_head, b["text"], b["shadow"], X(55), Y(16))
+        self._shadowed(c, title, f_head, b["soft"], b["shadow"], X(55), Y(16))
         self._shadowed(c, "Use arrows to point to an item, then press SELECT.", f_small, b["text"], b["shadow"],
                        X(55), Y(34))
         self._shadowed(c, "Pressing the number also selects the item.", f_small, b["text"], b["shadow"], X(55), Y(46))
@@ -770,7 +790,7 @@ class InDirect(InDirectHD):
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
-            y = Y(74) + k * rh
+            y = Y(71) + k * rh
             sel = i == m.cursor
             row = pygame.Rect(X(52), y - Y(2), X(218), rh)
             if sel:
@@ -787,7 +807,7 @@ class InDirect(InDirectHD):
             self.hit(row, lambda i=i: m.activate(i))
         it = m.items[m.cursor] if 0 <= m.cursor < n else None
         if it:
-            box = self.R(52, 198, 220, 24)
+            box = self.R(51, 196, 224, 28)
             pygame.draw.rect(c, b["teal"], box)
             pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
             pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
@@ -798,7 +818,8 @@ class InDirect(InDirectHD):
                 hint = "SELECT opens this menu."
             else:
                 hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, "SELECT chooses this.")
-            self._shadowed(c, t.fit(f_row, hint, box.w - X(26)), f_row, b["text"], b["shadow"], box.x + X(20), box.y + Y(6))
+            self._shadowed(c, t.fit(f_row, hint, int((box.w - X(26)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
+                           box.x + X(20), box.y + Y(6))
 
     # ── Mini guide: the DSS had none; a purple band of rows ───────────────
 

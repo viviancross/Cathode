@@ -114,9 +114,9 @@ class Guide(Screen):
         elif a == R.RIGHT:
             self._cycle_category(1) if self.focus == "category" else self._time(SLOT)
         elif a == R.REW:
-            self._time(-24 * 60)            # day back
+            self._time(-self.app.skin.guide_jump_min)     # a day back (12 hours on the HR20)
         elif a == R.FF:
-            self._time(24 * 60)             # day ahead
+            self._time(self.app.skin.guide_jump_min)
         elif a == R.THEMES:
             self._cycle_category(1)
         elif a == R.FAV:
