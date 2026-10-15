@@ -287,7 +287,7 @@ class InDirectHD(BoxSkin):
         r = self.R(96, 0, 0, 0)
         r.w = max(t.width(f, text) + X(48), X(520) if bar else 0)
         r.h = Y(76 if bar else 56)
-        r.bottom = Y(680)
+        r.bottom = Y(590)                  # above the subtitle line
         self._band(c, r)
         t.draw(c, text, f, b["text"], r.x + X(24), r.y + Y(20))
         if bar:
@@ -295,8 +295,8 @@ class InDirectHD(BoxSkin):
             pygame.draw.rect(c, b["gap"], track)
             pygame.draw.rect(c, b["sel"], (track.x, track.y, int(track.w * frac), track.h))
 
-    def draw_format(self, c, label):
-        self._note(c, f"Format: {label}")
+    def draw_note(self, c, text):
+        self._note(c, text)
 
     def draw_guide_progress(self, c, frac):
         self._note(c, "Acquiring guide data..." + self.pct(frac), frac)
@@ -476,7 +476,9 @@ class InDirectHD(BoxSkin):
         if it:
             fbg = self.fb(Y(26))
             t.draw(c, t.fit(fbg, it.label, pn.w - X(40)), fbg, b["text"], pn.x + X(20), pn.y + Y(20))
-            if it.value:
+            if it.preview:
+                hint = "Press SELECT to choose this."
+            elif it.value:
                 hint = "Press LEFT or RIGHT to change this setting." if it.adjust else \
                     "Press SELECT to change this setting."
             elif it.submenu:
@@ -1250,7 +1252,7 @@ class InDirect(InDirectHD):
     def _note(self, c, text, frac=None):
         b, X, Y = self.b, self.X, self.Y
         bar = frac is not None and frac >= 0
-        r = self._notice(c, [text] + ([""] if bar else []), min_w=X(190))
+        r = self._notice(c, [text] + ([""] if bar else []), y_bottom=Y(192), min_w=X(190))   # above the subtitles
         if bar:
             track = pygame.Rect(r.x + X(12), r.bottom - Y(9), r.w - X(24), Y(4))
             pygame.draw.rect(c, b["gap"], track)
@@ -1423,7 +1425,9 @@ class InDirect(InDirectHD):
             pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
             pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
             self._shadowed(c, str((m.cursor + 1) % 10), self.fb(Y(14)), b["text"], b["shadow"], box.x + X(6), box.y + Y(5))
-            if it.value:
+            if it.preview:
+                hint = "SELECT chooses this."
+            elif it.value:
                 hint = "LEFT / RIGHT change this setting." if it.adjust else "SELECT changes this setting."
             elif it.submenu:
                 hint = "SELECT opens this menu."

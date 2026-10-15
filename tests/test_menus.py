@@ -181,6 +181,28 @@ class SetupApp(FakeApp):
     def switch_playlist(self, pl):
         self.switched.append(pl)
 
+    def quit(self):
+        pass
+
+
+class FakeSkin:
+    theme = "native"
+
+    def theme_choices(self):
+        return [("native", "Original"), ("blue", "Blue"), ("custom", "Custom")]
+
+    def theme_key(self):
+        return self.theme
+
+    def set_theme_key(self, k):
+        self.theme = k
+
+    def reload(self):
+        pass
+
+    def menu_cols(self, menu):
+        return 1
+
 
 class TestFirstRun(unittest.TestCase):
     def setUp(self):
@@ -196,15 +218,55 @@ class TestFirstRun(unittest.TestCase):
         kb._press("DONE")
         return kb.prompt
 
-    def test_first_run_asks_for_the_address_first_and_never_for_a_name(self):
+    def test_setup_asks_for_the_addresses_then_the_name(self):
         from cathode import menus
         app = SetupApp()
-        menus.add_playlist(app, ask_name=False)
-        prompts = [self._type(app, "http://provider/list.m3u"), self._type(app, "")]
+        menus.add_playlist(app)
+        prompts = [self._type(app, "http://provider/list.m3u"), self._type(app, ""), self._type(app, "")]
         self.assertIn("Playlist address", prompts[0])
         self.assertIn("Guide address", prompts[1])
+        self.assertIn("Name", prompts[2])
         self.assertEqual(app.switched, [{"name": "My Channels", "playlist_url": "http://provider/list.m3u",
                                          "epg_url": ""}])
+
+    def test_a_saved_playlist_can_be_renamed(self):
+        from cathode import menus
+        pl = {"name": "Old", "playlist_url": "a"}
+        app = SetupApp(playlists=[pl], url="a")
+        app.toast = lambda *a: None
+        m = Menu(app, "CHANNELS", menus.channel_items(app))
+        app.push(m)
+        m.activate(0)                                   # the playlist's page
+        rename = next(i for i, it in enumerate(m.items) if it.label.startswith("Rename"))
+        m.activate(rename)
+        self._type(app, "Movies")
+        self.assertEqual(pl["name"], "Movies")
+        self.assertIn("Movies", m.items[0].label)       # back on the list, renamed
+
+    def test_the_look_wizard_previews_as_the_cursor_moves(self):
+        from cathode import menus
+        app = SetupApp()
+        skins = []
+        app.skin = FakeSkin()
+        app.set_skin = lambda k: (skins.append(k), setattr(app.config, "skin", k))
+        menus.open_welcome(app)
+        m = app.top()
+        self.assertEqual(m.title, "1/3 CHOOSE YOUR BOX")
+        m.handle(R.DOWN)
+        self.assertEqual(skins, ["indirect"])           # the page redrew as that box
+        m.handle(R.SELECT)
+        self.assertEqual(m.title, "2/3 CHOOSE COLORS")
+        m.handle(R.DOWN)
+        self.assertEqual(app.skin.theme, "blue")       # recoloured on the way past
+        m.handle(R.SELECT)
+        self.assertEqual(m.title, "3/3 YOUR CHANNELS")
+        self.assertTrue(app.config.look_chosen)
+        m.handle(R.BACK)
+        self.assertEqual(m.title, "2/3 CHOOSE COLORS")
+        app2 = SetupApp()
+        app2.config.look_chosen = True
+        menus.open_welcome(app2)
+        self.assertEqual(app2.top().title, "WELCOME TO CATHODE")
 
     def test_adding_another_playlist_asks_for_its_name_last(self):
         from cathode import menus

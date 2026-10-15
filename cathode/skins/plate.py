@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, call_sign, mix, panel, rgba, vgrad
+from .box import BoxSkin, call_sign, mix, panel, readable, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -60,9 +60,9 @@ class PlateHD(BoxSkin):
             "banner": (34, 35, 33), "banner_ink": text, "pill": (84, 84, 86), "pill_ink": text,
             "tag": (200, 30, 40), "dish": (210, 30, 40),
             "row": mix(page, (40, 120, 130), 0.5), "row_ink": text, "row_edge": mix(page, (0, 0, 0), 0.3),
-            "cursor": gold, "cursor_ink": mix(later, (0, 0, 0), 0.3), "pip": (0, 0, 0),
+            "cursor": gold, "cursor_ink": readable(gold, mix(later, (0, 0, 0), 0.3)), "pip": (0, 0, 0),
             "pip_edge": mix(page, (120, 170, 180), 0.5),
-            "sel": gold, "sel_ink": mix(later, (0, 0, 0), 0.3), "deep": mix(page, (0, 0, 0), 0.4),
+            "sel": gold, "sel_ink": readable(gold, mix(later, (0, 0, 0), 0.3)), "deep": mix(page, (0, 0, 0), 0.4),
             # Panels, dialogs and the pages' parts, in the guide's colours.
             "list_panel": (58, 54, 66), "panel_top": (58, 54, 66), "panel_bot": (10, 18, 30), "ink": text,
             "pb_track": (84, 84, 86), "pb_edge": (10, 18, 30), "pb_fill": gold,
@@ -270,7 +270,7 @@ class PlateHD(BoxSkin):
         r = self.R(40, 0, 0, 0)
         r.w = max(int(t.width(f, text) * 0.86) + X(48), X(560) if bar else 0)
         r.h = Y(80 if bar else 56)
-        r.bottom = Y(680)
+        r.bottom = Y(590)                  # above the subtitle line
         self._box(c, r)
         self.cb(c, text, f, b["banner_ink"], r.x + X(24), r.y + Y(16))
         if bar:
@@ -279,8 +279,8 @@ class PlateHD(BoxSkin):
             pygame.draw.rect(c, b["gold"], (track.x, track.y, max(track.h, int(track.w * frac)), track.h),
                              border_radius=Y(6))
 
-    def draw_format(self, c, label):
-        self._note(c, f"Format: {label}")
+    def draw_note(self, c, text):
+        self._note(c, text)
 
     def draw_guide_progress(self, c, frac):
         self._note(c, "Retrieving program information" + self.pct(frac), frac)
@@ -1531,7 +1531,7 @@ class Plate(PlateHD):
         bar = frac is not None and frac >= 0
         f = self.fb(Y(16))
         r = pygame.Rect(X(55), 0, max(t.width(f, text) + X(36), X(330) if bar else 0), Y(58 if bar else 38))
-        r.bottom = Y(440)
+        r.bottom = Y(385)                  # above the subtitle line
         self._band(c, r)
         t.draw(c, text, f, b["band_ink"], r.x + X(18), r.y + Y(11))
         if bar:

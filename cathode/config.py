@@ -84,6 +84,7 @@ class Config:
     # default one is small.
     download_dir: str = ""
     # Subtitle styling (independent of the main UI font) + audio output.
+    subtitles: bool = False        # subtitles / captions on for every channel and title
     sub_font: str = ""             # font key (blank = mpv default sans-serif)
     sub_size: int = 38             # mpv sub-font-size
     sub_color: str = "#FFFFFFFF"   # mpv sub-color (#AARRGGBB)
@@ -119,6 +120,7 @@ class Config:
     # reachable from the context menu). First run always shows the menu.
     setup_done: bool = False       # the first-run setup wizard already ran once
     key_tip_shown: bool = False    # the one-time "which keys do what" toast
+    look_chosen: bool = False      # the first-run look wizard (box, colours) is done
     # (it stays reachable from Options > Setup Wizard)
 
     # Input

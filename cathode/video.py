@@ -85,6 +85,9 @@ class Video:
         self._want = None        # playlist entry id of the file we asked for
         self._current = None     # entry id of the file mpv says it started
         self.player.register_event_callback(self._on_event)
+        # Tracks come and go after a start: broadcast captions (EIA-608/708
+        # in the picture) become a track only when caption data turns up.
+        self.player.observe_property("track-list", lambda _name, _v: self._post("tracks_changed"))
 
     # ── GL ────────────────────────────────────────────────────────────────
 
@@ -205,13 +208,41 @@ class Video:
             return None
 
     def tracks(self, kind: str) -> list:
-        """[{id, lang, title, selected}] for kind 'audio' or 'sub'."""
+        """[{id, lang, title, selected, name}] for kind 'audio' or 'sub';
+        name is what a person would call it."""
         out = []
         for t in self.prop("track-list") or []:
             if t.get("type") == kind:
-                out.append({"id": t.get("id"), "lang": t.get("lang", ""),
-                            "title": t.get("title", ""), "selected": bool(t.get("selected"))})
+                cc = str(t.get("codec", "")).startswith("eia_")
+                name = t.get("title") or (f"{t['lang'].upper()}" if t.get("lang") else "") or \
+                    ("Closed captions" if cc else f"Track {t.get('id')}")
+                out.append({"id": t.get("id"), "lang": t.get("lang", ""), "title": t.get("title", ""),
+                            "selected": bool(t.get("selected")), "name": name})
         return out
+
+    def apply_subtitles(self, on: bool):
+        """The subtitles setting, on a stream that just started: on keeps a
+        chosen track or picks the first; off shows none."""
+        subs = self.tracks("sub")
+        if not on:
+            if any(t["selected"] for t in subs):
+                self.set_track("sub", None)
+        elif subs and not any(t["selected"] for t in subs):
+            self.set_track("sub", subs[0]["id"])
+
+    def cycle_subtitles(self) -> str:
+        """Off, then each track in turn: the name of what's on now, '' for
+        off, None when the stream has none."""
+        subs = self.tracks("sub")
+        if not subs:
+            return None
+        cur = next((i for i, t in enumerate(subs) if t["selected"]), -1)
+        nxt = cur + 1
+        if nxt >= len(subs):
+            self.set_track("sub", None)
+            return ""
+        self.set_track("sub", subs[nxt]["id"])
+        return subs[nxt]["name"]
 
     def set_track(self, kind: str, tid):
         self.player["aid" if kind == "audio" else "sid"] = tid if tid is not None else "no"

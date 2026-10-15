@@ -17,10 +17,12 @@ class Item:
                  submenu: Optional[Callable[[], List["Item"]]] = None,
                  value: Optional[Callable[[], str]] = None,
                  adjust: Optional[Callable[[int], None]] = None,
-                 enabled: bool = True, close: bool = False):
+                 enabled: bool = True, close: bool = False,
+                 preview: Optional[Callable[[], None]] = None):
         self.label, self.action, self.submenu = label, action, submenu
         self.value, self.adjust, self.enabled = value, adjust, enabled
         self.close = close          # close the whole menu after the action
+        self.preview = preview      # run when the cursor lands here (live previews)
 
 
 class Menu(Screen):
@@ -76,7 +78,13 @@ class Menu(Screen):
         for _ in range(n):              # skip disabled rows, wrapping
             self.cursor = (self.cursor + d) % n
             if self.items[self.cursor].enabled:
-                return
+                break
+        self._landed()
+
+    def _landed(self):
+        it = self.items[self.cursor]
+        if it.preview:
+            it.preview()
 
     def activate(self, i: Optional[int] = None):
         if i is not None:
@@ -106,6 +114,7 @@ class Menu(Screen):
             j = self.cursor + step
             if 0 <= j < len(self.items) and self.items[j].enabled:
                 self.cursor = j
+                self._landed()
         elif a == R.UP:
             self.move(-1)
         elif a == R.DOWN:

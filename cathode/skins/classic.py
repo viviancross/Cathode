@@ -232,8 +232,8 @@ class Classic(Skin):
             pygame.draw.rect(c, p["TRACK"], track)
             pygame.draw.rect(c, p["GREEN"], (track.x, track.y, int(track.w * frac), track.h))
 
-    def draw_format(self, c, label):
-        self._osd_note(c, f"FORMAT  {label.upper()}")
+    def draw_note(self, c, text):
+        self._osd_note(c, text.upper())
 
     def draw_guide_progress(self, c, frac):
         self._osd_note(c, "UPDATING GUIDE" + self.pct(frac), frac)

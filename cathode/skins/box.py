@@ -19,6 +19,15 @@ def call_sign(ch, n=5) -> str:
     return "".join(ch.name.upper().split())[:n]
 
 
+def readable(bg, ink, floor=4.5):
+    """`ink` on `bg` if it reads (WCAG ratio >= floor), else near-black or
+    white, whichever reads better: a theme can't make text vanish."""
+    from ..palette import contrast
+    if contrast(ink, bg) >= floor:
+        return ink
+    return max(((16, 16, 24), (255, 255, 255)), key=lambda k: contrast(k, bg))
+
+
 def rgba(c, a=255):
     return (c[0], c[1], c[2], a)
 

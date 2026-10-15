@@ -153,6 +153,48 @@ class TestPictureFormat(unittest.TestCase):
         self.assertIs(v.player["keepaspect"], True)
 
 
+class FakePlayer:
+    """mpv's track list and sid, as Video reads and sets them."""
+    def __init__(self, subs):
+        self.track_list = [{"type": "audio", "id": 1, "selected": True}] + subs
+
+    def __setitem__(self, name, value):
+        for t in self.track_list:
+            if t["type"] == "sub" and name == "sid":
+                t["selected"] = t["id"] == value
+
+
+class TestSubtitles(unittest.TestCase):
+    def _video(self, *subs):
+        from cathode.video import Video
+        v = Video.__new__(Video)
+        v.player = FakePlayer([dict(type="sub", selected=False, **s) for s in subs])
+        return v
+
+    def _on(self, v):
+        return [t["name"] for t in v.tracks("sub") if t["selected"]]
+
+    def test_tracks_get_names_a_person_would_use(self):
+        v = self._video({"id": 1, "codec": "eia_608"}, {"id": 2, "lang": "eng"}, {"id": 3, "title": "Commentary"},
+                        {"id": 4})
+        self.assertEqual([t["name"] for t in v.tracks("sub")], ["Closed captions", "ENG", "Commentary", "Track 4"])
+
+    def test_the_setting_picks_the_first_track_or_none(self):
+        v = self._video({"id": 1, "codec": "eia_608"}, {"id": 2, "lang": "eng"})
+        v.apply_subtitles(True)
+        self.assertEqual(self._on(v), ["Closed captions"])
+        v.set_track("sub", 2)
+        v.apply_subtitles(True)                     # a chosen track is kept
+        self.assertEqual(self._on(v), ["ENG"])
+        v.apply_subtitles(False)
+        self.assertEqual(self._on(v), [])
+
+    def test_the_key_cycles_off_then_each_track(self):
+        v = self._video({"id": 1, "codec": "eia_608"}, {"id": 2, "lang": "eng"})
+        self.assertEqual([v.cycle_subtitles() for _ in range(4)], ["Closed captions", "ENG", "", "Closed captions"])
+        self.assertIsNone(self._video().cycle_subtitles())
+
+
 class TestEverySkinDrawsEveryScreen(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -211,7 +253,8 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
                     self.assertIn("favorites", skin.empty_guide(g))
                 with self.subTest(skin=name, theme=theme, screen="format"):
                     for label in ("Original", "Zoom", "Stretch", "4:3"):
-                        skin.draw_format(canvas, label)
+                        skin.draw_note(canvas, f"Format: {label}")
+                    skin.draw_note(canvas, "Subtitles: Closed captions")
 
     def test_box_skins_cut_to_black_and_classic_keeps_static(self):
         classes = skin_classes()

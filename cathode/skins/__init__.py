@@ -192,9 +192,9 @@ class Skin:
         """The app's guide load, as pct() puts it."""
         return self.pct(getattr(self.app, "guide_progress", None))
 
-    def draw_format(self, c, label: str):
-        """The FORMAT key's notice: the picture format now in use."""
-        self.draw_toast(c, f"Format: {label}")
+    def draw_note(self, c, text: str):
+        """A key's notice (the picture format, subtitles) in this skin's style."""
+        self.draw_toast(c, text)
 
     def draw_guide_progress(self, c, frac):
         """A guide load's truthful progress (frac -1 when the size is

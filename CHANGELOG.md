@@ -25,10 +25,15 @@ a retro-themed player.
   progress** in each box's own notice, and the start-up screen's bar follows
   the actual download. InDirecTV's DSS offers On Demand titles as its 1997
   **Purchase Offer** page (Cost to view: $0.00).
-- **First run** goes straight to channels: setup asks for the playlist address
-  first (the name defaults), MENU sets up channels until there are some, a
+- **First run** is a short wizard: choose your box, then its colours (each page
+  redraws in what you point at), then set up channels: the playlist's address,
+  its guide and its name. Playlists can be renamed under Settings > Channels.
+  MENU sets up channels until there are some, a
   playlist that won't load says why in plain words and where to fix it, an
   empty Favorites list says how to add one, and the keys are shown once.
+- **Subtitles** on live TV and On Demand: S (bindable) cycles the stream's tracks
+  and broadcast closed captions; Settings > Subtitles turns them on for
+  everything you watch and sets their size, colour, background and font.
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.
 - **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on
   the new core: the same sign-in, browsing, poster wall, queue, resume and

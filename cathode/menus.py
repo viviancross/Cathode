@@ -19,20 +19,63 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
+# Beside each box's name on the wizard's first page.
+LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
+              "plate": "2005, 4:3", "plate_hd": "2007, HD"}
+
+
 def open_welcome(app):
-    """First run: nothing to watch yet."""
+    """First run, as a wizard: 1/3 the box, 2/3 its colours, 3/3 the
+    channels. The look pages redraw in whatever the cursor is on; BACK steps
+    back a page. Once the look is chosen, coming back here (MENU with no
+    channels yet) goes straight to the channels."""
+    from .skins import skin_classes
+    m = Menu(app, "", [])
+
     def setup():
         def added(entry):
             app.config.setup_done = True
             app.config.save()
             from .screens.boot import Boot
             app.push(Boot(app))
-        add_playlist(app, on_added=added, ask_name=False)
-    app.push(Menu(app, "WELCOME TO CATHODE", [
-        Item("Set up your channels", setup),
-        Item("Picture & Style", submenu=lambda: style_items(app)),
-        Item("Exit Cathode", app.quit, close=True),
-    ]))
+        add_playlist(app, on_added=added)
+
+    def channels(title, extra=()):
+        return [title, [Item("Set up your channels", setup), *extra,
+                        Item("Exit Cathode", app.quit, close=True)], 0]
+
+    def colours():
+        skin = app.skin
+        choices = [(k, label) for k, label in skin.theme_choices() if k != "custom"]
+
+        def show(k):
+            skin.set_theme_key(k)
+            skin.reload()
+            app.invalidate()
+
+        def chosen(k):
+            show(k)
+            app.config.look_chosen = True
+            app.config.save()
+            m.pages.append(channels("3/3 YOUR CHANNELS"))
+        keys = [k for k, _ in choices]
+        m.open("2/3 CHOOSE COLORS", [Item(label, lambda k=k: chosen(k), preview=lambda k=k: show(k))
+                                     for k, label in choices])
+        m.cursor = keys.index(skin.theme_key()) if skin.theme_key() in keys else 0
+
+    def restart():
+        m.close()
+        app.config.look_chosen = False
+        open_welcome(app)
+
+    if app.config.look_chosen:
+        m.pages = [channels("WELCOME TO CATHODE", [Item("Change the look", restart)])]
+    else:
+        names = list(skin_classes())
+        boxes = [Item(cls.label, lambda k=k: (app.set_skin(k), colours()), value=lambda k=k: LOOK_NOTES.get(k, ""),
+                      preview=lambda k=k: app.set_skin(k)) for k, cls in skin_classes().items()]
+        m.pages = [["1/3 CHOOSE YOUR BOX", boxes, names.index(app.config.skin) if app.config.skin in names else 0]]
+    app.push(m)
 
 
 def main_items(app):
@@ -61,6 +104,7 @@ def settings_items(app):
         Item("Picture & Style", submenu=lambda: style_items(app)),
         Item("Channels", submenu=lambda: channel_items(app)),
         Item("Display", submenu=lambda: display_items(app)),
+        Item("Subtitles", submenu=lambda: subtitle_items(app)),
         Item("On Demand", submenu=lambda: ondemand_settings(app)),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("System", submenu=lambda: system_items(app)),
@@ -188,36 +232,58 @@ SUB_COLORS = [("#FFFFFFFF", "White"), ("#FFFFFF00", "Yellow"), ("#FF00FFFF", "Cy
 SUB_BACKS = [("", "None"), ("#96000000", "Shaded"), ("#FF000000", "Black")]
 
 
-def playback_menu(app, pb):
+def track_items(app, kind):
+    """The playing stream's audio or subtitle tracks; picking a subtitle
+    track (or Off) also sets the subtitles setting."""
+    v = app.video
+
+    def pick(tid):
+        v.set_track(kind, tid)
+        if kind == "sub":
+            app.config.subtitles = tid is not None
+            app.config.save()
+        app.top().refresh(track_items(app, kind))
+    rows = [Item(("> " if t["selected"] else "  ") + t["name"], (lambda i=t["id"]: pick(i)))
+            for t in v.tracks(kind)]
+    if kind == "sub":
+        if not rows:
+            return [Item("(none on this stream)", enabled=False)]
+        off = not any(t["selected"] for t in v.tracks("sub"))
+        rows.insert(0, Item(("> " if off else "  ") + "Off", lambda: pick(None)))
+    return rows or [Item("(none)", enabled=False)]
+
+
+def subtitle_items(app):
+    """Subtitles for live TV and On Demand alike: on or off for everything
+    you watch, this stream's track, and how they look."""
     v, cfg = app.video, app.config
 
-    def tracks(kind):
-        def pick(tid):
-            v.set_track(kind, tid)
-            app.top().refresh(tracks(kind))
-        rows = [Item(("> " if t["selected"] else "  ") + " ".join(
-            str(x) for x in (t["id"], t["lang"], t["title"]) if x), (lambda i=t["id"]: pick(i)))
-            for t in v.tracks(kind)]
-        if kind == "sub":
-            off = not any(t["selected"] for t in v.tracks("sub"))
-            rows.insert(0, Item(("> " if off else "  ") + "Off", lambda: pick(None)))
-        return rows or [Item("(none)", enabled=False)]
+    def toggle(d):
+        cfg.subtitles = not cfg.subtitles
+        cfg.save()
+        v.apply_subtitles(cfg.subtitles)
 
-    def style(attr, options, apply):
+    def style(label, attr, options, apply):
         def adj(d):
             setattr(cfg, attr, _cycle(options, getattr(cfg, attr), d))
             cfg.save()
             apply(getattr(cfg, attr))
-        return Item(attr.replace("sub_", "Subtitle ").replace("back", "background"),
-                    value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
+        return Item(label, value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
     fonts = [("", "Default")] + [(f, f) for f in _subtitle_fonts()]
+    return [
+        Item("Subtitles", value=lambda: "On" if cfg.subtitles else "Off", adjust=toggle),
+        Item("Track", submenu=lambda: track_items(app, "sub")),
+        style("Size", "sub_size", SUB_SIZES, lambda s: v.sub_style(size=s)),
+        style("Color", "sub_color", SUB_COLORS, lambda c: v.sub_style(color=c)),
+        style("Background", "sub_back", SUB_BACKS, lambda b: v.sub_style(back=b)),
+        style("Font", "sub_font", fonts, lambda f: v.sub_style(font=f or "sans-serif")),
+    ]
+
+
+def playback_menu(app, pb):
     app.push(Menu(app, "PLAYING", [
-        Item("Audio track", submenu=lambda: tracks("audio")),
-        Item("Subtitles", submenu=lambda: tracks("sub")),
-        style("sub_size", SUB_SIZES, lambda s: v.sub_style(size=s)),
-        style("sub_color", SUB_COLORS, lambda c: v.sub_style(color=c)),
-        style("sub_back", SUB_BACKS, lambda b: v.sub_style(back=b)),
-        style("sub_font", fonts, lambda f: v.sub_style(font=f or "sans-serif")),
+        Item("Audio track", submenu=lambda: track_items(app, "audio")),
+        Item("Subtitles", submenu=lambda: subtitle_items(app)),
         Item(f"Play queue ({len(app.ondemand.queue.items)})", submenu=lambda: queue_items(app)),
         Item("Stop", pb.stop, close=True),
     ]))
@@ -245,7 +311,7 @@ _PRETTY = {R.CH_UP: "Channel up", R.CH_DOWN: "Channel down", R.PAGE_UP: "Page up
            R.PAGE_DOWN: "Page down", R.PREV: "Previous channel", R.FAV: "Favorite",
            R.VOL_UP: "Volume up", R.VOL_DOWN: "Volume down", R.REW: "Rewind",
            R.FF: "Fast forward", R.SKIP: "Back to live", R.FULLSCREEN: "Full screen",
-           R.THEMES: "Themes (genres)", R.FORMAT: "Picture format"}
+           R.THEMES: "Themes (genres)", R.FORMAT: "Picture format", R.SUBTITLE: "Subtitles"}
 
 
 def _format_label(key):
@@ -399,8 +465,17 @@ def playlist_items(app, pl):
         app.config.save()
         app.toast(f"Deleted {pl.get('name', 'playlist')}")
         _reopen(app, channel_items(app))
+    def rename():
+        def got(name):
+            if name:
+                pl["name"] = name
+                app.config.save()
+                app.toast(f"Renamed to {name}")
+                _reopen(app, channel_items(app))
+        app.push(Keyboard(app, "Rename this playlist", got, initial=pl.get("name", "")))
     return [
         Item("Watch this playlist", lambda: app.switch_playlist(pl), close=True),
+        Item("Rename it", rename),
         Item("Delete it", delete),
     ]
 
@@ -413,9 +488,8 @@ def _reopen(app, items):
         m.refresh(items)
 
 
-def add_playlist(app, on_added=None, ask_name=True):
-    """The playlist's address, an optional guide address, then a name (the
-    first run skips the name: channels first)."""
+def add_playlist(app, on_added=None):
+    """The playlist's address, an optional guide address, then its name."""
     entry = {"name": "My Channels"}
 
     def got_url(url):
@@ -429,10 +503,8 @@ def add_playlist(app, on_added=None, ask_name=True):
         if epg is None:
             return
         entry["epg_url"] = epg
-        if ask_name:
-            app.push(Keyboard(app, "Name this playlist", got_name, initial="My Channels"))
-        else:
-            finish()
+        app.push(Keyboard(app, "Name this playlist", got_name, initial="My Channels",
+                          hint="How it's listed under Settings > Channels."))
 
     def got_name(name):
         if name is None:
