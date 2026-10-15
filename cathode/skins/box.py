@@ -13,6 +13,12 @@ def mix(a, b, t=0.5):
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 
+def call_sign(ch, n=5) -> str:
+    """A box-style call sign from a channel's name: spaces dropped, cut at
+    n letters, no ellipsis (the boxes showed TOON, NICKW, MILT)."""
+    return "".join(ch.name.upper().split())[:n]
+
+
 def rgba(c, a=255):
     return (c[0], c[1], c[2], a)
 

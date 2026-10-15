@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, mix, panel, rgba, vgrad
+from .box import BoxSkin, call_sign, mix, panel, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -347,7 +347,7 @@ class PlateHD(BoxSkin):
             chr_ = pygame.Rect(0, y, X(247), rh)
             pygame.draw.rect(c, b["chan"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(220)), f_chan, b["text"], X(26), cy)
+            self.cb(c, f"{ch.number} {dish_call(ch)}", f_chan, b["text"], X(26), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["gold"], (chr_.right - X(14), y + Y(12)), Y(5))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
@@ -1549,7 +1549,7 @@ class Plate(PlateHD):
 def dish_call(ch) -> str:
     """The 2005 box's call sign: spaces dropped, cut at five letters, as it
     showed HISTI and BIOGR."""
-    return "".join(ch.name.upper().split())[:5]
+    return call_sign(ch, 5)
 
 
 def g_list(skin) -> str:

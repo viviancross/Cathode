@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, mix, rgba, vgrad
+from .box import BoxSkin, call_sign, mix, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -353,10 +353,10 @@ class InDirectHD(BoxSkin):
             chr_ = pygame.Rect(X(96), y, X(199), rh)
             pygame.draw.rect(c, b["navy"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            t.draw(c, t.fit(f_ch, f"{ch.number} " + ch.name.upper(), chr_.w - X(24)), f_ch, b["text"],
-                   X(110), cy)
+            t.draw(c, f"{ch.number} {call_sign(ch)}", f_cell, b["text"], X(110), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
+            self._cell(c, pygame.Rect(grid_x + grid_w, y, X(1278) - grid_x - grid_w, rh), False)
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
             if not progs:
@@ -1247,8 +1247,8 @@ class InDirect(InDirectHD):
         mins = g.hours * 60
         grid_x, grid_w = X(55), X(242)
         for i, ch in enumerate(rows):
-            y = Y(42) + i * Y(28.5)
-            rh = Y(27)
+            y = Y(42) + i * Y(28)
+            rh = Y(26)
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             tile = pygame.Rect(X(24), y, X(27), rh)
             self._bevel(c, tile, b["page"])

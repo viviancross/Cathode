@@ -27,8 +27,8 @@ frames. The sources, and what they settled:
   the guide's heading and clock are the regular weight in the softer tone.
   Measured (320x240): the banner band 59 tall, title cap top at 19, the
   Start / End rows at 32 and 45 with columns at x 57 / 82 / 128 and the
-  clock and date right-aligned at 268 / 288; guide rows 27 tall on a 28.5
-  pitch from 42, the button row 13 tall at 211; menu items from 71, the
+  clock and date right-aligned at 268 / 288; guide rows 26 tall on a 28
+  pitch from 42 (clear of the buttons), the button row 13 tall at 211; menu items from 71, the
   explaining box at 51,196 224x28.
 - **Plate Network (SD)**: a 2005 Dish 322-era receiver (youtu.be/u2CUPclvbfQ).
   Guide: a grey page with a faint swirl, a big blue (43,72,157) ellipse tab
@@ -69,7 +69,8 @@ frames. The sources, and what they settled:
   TV-guide tag at 46,150 109x65; title 37px at cap top 62 centred on x 470;
   synopsis 24px from 168 on a 30 pitch, led by the category; list name and
   clock 30px at 268; header 28px; rows from 328 on a 53 pitch, 27px cell
-  text, channel labels regular weight in from x 26, the grid from x 255;
+  text, channel labels regular weight in from x 26 as number and a
+  five-letter call sign (176 TOON), the grid from x 255;
   banner number 38px at 10 below the box top, call sign and list 30px at
   45 / 73, title 30px at 24 with its rating line at 59, the right column at
   12 / 42 / 72 (both outer stacks centred in the box), the pill 34 tall
@@ -92,9 +93,10 @@ frames. The sources, and what they settled:
   with a light bar on the chosen row, explain it in a darker panel at the
   right, and keep the picture top-right. Measured type (cap heights): guide
   title 36, synopsis 30 regular on a 36 pitch, header 29, channel labels
-  bold 30, cells regular 30, bottom bar 30; banner number 36 bold, call sign
+  regular 30 as number and call sign (287 MILT, never an ellipsis), cells regular 30, bottom bar 30; banner number 36 bold, call sign
   34, title 34 bold with its cap top at 97, favourites bar 18 with 22px
-  keys. The grid starts at x 294 with the half hours flush to it. The box's
+  keys. The grid starts at x 294 with the half hours flush to it; past
+  the three half hours a sliver of the next runs to the screen's edge. The box's
   red and green keys moved the guide 12 hours (so does ours, on this skin
   only); its list was "Channels I Get" and its yellow key "Guide Options".
 - The Point Dish signal-meter dialogs were dropped (2026-10-15). A dead

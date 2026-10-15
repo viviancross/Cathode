@@ -785,6 +785,16 @@ class Classic(Skin):
             x = grid_x + int(off / mins * grid_w)
             pygame.draw.line(c, p["RED"][:3] + (200,), (x, ruler_y),
                              (x, grid_y + g["row_h"] * guide.rows), 2)
+        k = guide.cursor - guide.top
+        if guide.focus == "grid" and 0 <= k < len(rows):
+            pygame.draw.rect(c, p["YELLOW"], (pad - 2, grid_y + k * g["row_h"] - 2, W - 2 * pad + 4,
+                                              g["row_h"] + 3), 3)
+
+        # The key hints, in the band under the grid.
+        band = grid_y + g["row_h"] * guide.rows
+        hint = "OK: watch   </>: earlier/later   CH+/-: page   REW/FF: a day   EXIT: close"
+        t.draw(c, t.fit(f_small, hint, W - 2 * pad), f_small, p["INK_MUTED"], W // 2,
+               band + (H - band - t.ink(f_small)[1]) // 2 + 4, align="center")
 
         # Scroll hints.
         if guide.top > 0:
@@ -897,8 +907,8 @@ class Classic(Skin):
         elif current:
             bg = p["GUIDE_CURRENT"]
 
-        # Channel column: logo over number + name.
-        pygame.draw.rect(c, p["GUIDE_TIME_BG"], (pad, y, cw, rh))
+        # Channel column: logo over number + name; lit on the cursor row.
+        pygame.draw.rect(c, p["GUIDE_SELECTED"] if selected else p["GUIDE_TIME_BG"], (pad, y, cw, rh))
         if self.app.is_favorite(ch):
             t.draw(c, "*", f_small, p["YELLOW"], pad + cw - 8, y + 4, align="right")
         epg = self.app.epg
@@ -914,9 +924,9 @@ class Classic(Skin):
         name = t.fit(f_small, ch.name, cw - 20 - nw)
         total = nw + (8 + t.width(f_small, name) if name else 0)
         x0 = pad + max(4, (cw - total) // 2)
-        t.draw(c, num, f_ch, p["YELLOW"] if current else p["WHITE"], x0, ty)
+        t.draw(c, num, f_ch, p["SEL_TEXT"] if selected else p["YELLOW"] if current else p["WHITE"], x0, ty)
         if name:
-            t.draw(c, name, f_small, p["CYAN"] if current else p["WHITE_DIM"], x0 + nw + 8,
+            t.draw(c, name, f_small, p["SEL_TEXT"] if selected else p["CYAN"] if current else p["WHITE_DIM"], x0 + nw + 8,
                    ty + (t.ink(f_ch)[1] - t.ink(f_small)[1]) // 2)
 
         # Programme cells.
