@@ -60,12 +60,40 @@ redrawn unless something changed, so an idle Cathode costs next to nothing.
 
 ## Install
 
+Every build has libmpv inside: nothing else to install. Updates: Windows, the
+AppImage and source installs update themselves from **Settings > System >
+Check for updates**; the Flatpak and the Mac app say when one is out.
+
 ### Windows
 
 Download `cathode-windows-4.0-portable.zip`, right-click it, **Extract All**,
-and run **Cathode.exe**. Everything it needs is inside.
+and run **Cathode.exe**.
 
-### macOS and Linux (from source, for now)
+### Linux
+
+**AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
+`cathode-linux-x86_64-4.0.AppImage`, make it executable (file properties, or
+`chmod +x`) and run it.
+
+**Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
+
+```bash
+flatpak install --user cathode-linux-x86_64-4.0.flatpak
+flatpak run io.github.viviancross.Cathode
+```
+
+It fetches the freedesktop runtime from Flathub the first time. On the Deck,
+**Add a Non-Steam Game** to play it from Game Mode with the controller.
+
+### macOS
+
+Download the zip for your Mac (`cathode-macos-arm64-4.0.zip` for Apple
+Silicon, `cathode-macos-x86_64-4.0.zip` for Intel), unzip it, and move
+**Cathode.app** to Applications. It isn't signed: the first time,
+right-click it and choose **Open** (or **Open Anyway** under System Settings
+> Privacy & Security).
+
+### From source (any OS)
 
 Install libmpv, then run Cathode with Python 3.10 or newer:
 
@@ -76,9 +104,6 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
-
-On macOS with Homebrew on Apple Silicon, if libmpv isn't found:
-`export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"`.
 
 ## Using it
 
@@ -146,15 +171,24 @@ there: `mpv_extra_args` (extra libmpv options such as `["--hwdec=no"]`),
 - **Guide is empty**: the playlist's `tvg-id`s must match the XMLTV channel
   ids; Cathode falls back to matching names.
 - **Logs**: `cathode.log` (and `cathode.log.1`, the run before) in
-  `%LOCALAPPDATA%\cathode\` on Windows and `~/.cache/cathode/` elsewhere.
+  `%LOCALAPPDATA%\cathode\` on Windows, `~/.cache/cathode/` elsewhere
+  (`~/.var/app/io.github.viviancross.Cathode/cache/cathode/` for the Flatpak).
 
 ## Building
 
-PyInstaller builds for the OS it runs on. On Windows:
+PyInstaller builds for the OS it runs on; every build bundles libmpv.
 
 ```bash
 pip install pyinstaller
-python tools/build_windows.py      # cathode-windows-<ver>-portable.zip, bundles libmpv
+python tools/build_windows.py      # Windows: cathode-windows-<ver>-portable.zip
+python tools/build_macos.py        # macOS: cathode-macos-<arch>-<ver>.zip (needs brew install mpv)
+```
+
+The Linux AppImage and Flatpak build in a container (Docker on any OS):
+
+```bash
+docker build -t cathode-linux-build tools/linux
+docker run --rm --privileged -v "$PWD:/src" -v "$PWD/../builds:/builds" cathode-linux-build
 ```
 
 For development without a playlist or a Plex account, `tools/devtv.py` writes

@@ -26,6 +26,10 @@ a retro-themed player.
 - **Desktop.** Any game controller (SDL), media keys for IR remotes, full
   screen on a chosen monitor, start with the computer, the screen kept awake
   while playing.
+- **Ready-made builds everywhere**, each with libmpv inside: Windows zip,
+  Linux AppImage and Flatpak (the Steam Deck's way in), and a macOS app for
+  Apple Silicon and Intel. The AppImage updates itself like the Windows
+  build; the Flatpak and the Mac app tell you when an update is out.
 - **Dropped:** demo mode (`tools/devtv.py` writes a test lineup for
   development instead). Cathode 3's key and controller remaps don't carry
   over, because every button was renamed; set them again under Settings >
