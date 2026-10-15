@@ -96,7 +96,14 @@ class Menu(Screen):
                 self.close()
             return True
         it = self.items[self.cursor]
-        if a == R.UP:
+        cols = self.app.skin.menu_cols(self) if getattr(self.app, "skin", None) else 1
+        if cols > 1 and a in (R.UP, R.DOWN, R.LEFT, R.RIGHT):
+            # A grid of tiles (Plate's Main Menu): across, and down by a row.
+            step = {R.LEFT: -1, R.RIGHT: 1, R.UP: -cols, R.DOWN: cols}[a]
+            j = self.cursor + step
+            if 0 <= j < len(self.items) and self.items[j].enabled:
+                self.cursor = j
+        elif a == R.UP:
             self.move(-1)
         elif a == R.DOWN:
             self.move(1)

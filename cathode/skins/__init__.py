@@ -148,6 +148,11 @@ class Skin:
         from .. import palette
         return palette.base_colors("blue")
 
+    def menu_cols(self, menu) -> int:
+        """How many columns this skin lays a menu page out in (1 = a list).
+        Grids move LEFT/RIGHT across and UP/DOWN by a row."""
+        return 1
+
     def f(self, size: int, bold: bool = False):
         regular, heavy, _ = FONTS.get(self.font_key(), FONTS[self.default_font])
         return self.text.font(heavy if bold and heavy else regular, size)
@@ -187,7 +192,8 @@ def skin_classes() -> dict:
     """name -> skin class, in the order the Skin setting cycles them."""
     from .classic import Classic
     from .indirect import InDirect, InDirectHD
-    return {c.name: c for c in (Classic, InDirect, InDirectHD)}
+    from .plate import Plate, PlateHD
+    return {c.name: c for c in (Classic, InDirect, InDirectHD, Plate, PlateHD)}
 
 
 def load_skin(name: str, app) -> Skin:

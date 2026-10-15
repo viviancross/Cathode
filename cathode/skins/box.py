@@ -63,6 +63,11 @@ class BoxSkin(Classic):
             base = dict(self.NATIVE)
             self.p = palette.custom(**base)
         self.b = self.roles({k: tuple(v) for k, v in base.items()})
+        # Screens drawn by the shared code select with the box's own colour
+        # and title in its text colour, not Classic's derived ones.
+        b = self.b
+        self.p = dict(self.p, GUIDE_SELECTED=rgba(b["sel"]), SEL_TEXT=rgba(b["sel_ink"]),
+                      SEL_TEXT_DIM=rgba(b["sel_ink"], 215), YELLOW=rgba(b["text"]))
 
     def roles(self, base) -> dict:
         return {}
