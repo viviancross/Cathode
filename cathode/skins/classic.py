@@ -378,12 +378,17 @@ class Classic(Skin):
     OD_TILE = (150, 225)        # poster, 2:3: two whole rows fit under the header
     OD_GAP = 26
 
+    def layout_canvas(self):
+        """The size these screens are laid out at (a 4:3 box skin draws them
+        larger and scales down)."""
+        return self.canvas
+
     def ondemand_cols(self, screen) -> int:
-        W = self.canvas[0]
+        W = self.layout_canvas()[0]
         return max(1, (W - 60 + self.OD_GAP) // (self.OD_TILE[0] + self.OD_GAP))
 
     def ondemand_page(self, screen) -> int:
-        H = self.canvas[1]
+        H = self.layout_canvas()[1]
         if screen.view == "wall":
             return self.ondemand_cols(screen) * 2
         return (H - self.OD_TOP - 30) // self.OD_ROW_H

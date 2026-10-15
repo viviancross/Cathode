@@ -172,7 +172,10 @@ class InDirectHD(BoxSkin):
             self.tile(c, (X(100), Y(60), X(66), Y(62)), b["sky"])
         f_num, f_call, f_title = self.fb(Y(30)), self.f(Y(24)), self.fb(Y(30))
         t.draw(c, str(ch.number), f_num, b["text"], X(240), Y(62))
-        t.draw(c, t.fit(f_call, ch.name.upper(), X(140)), f_call, b["text"], X(240), Y(99))
+        call, fc = ch.name.upper(), f_call
+        if t.width(fc, call) > X(140):            # a long name: a smaller face before an ellipsis
+            fc = self.f(Y(19))
+        t.draw(c, t.fit(fc, call, X(140)), fc, b["text"], X(240), Y(99 if fc is f_call else 102))
         t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(93))
         if ch.group:
             t.draw(c, t.fit(f_call, ch.group, X(260)), f_call, b["text"], X(1105), Y(99), align="right")
@@ -394,7 +397,7 @@ class InDirectHD(BoxSkin):
         # The list down the left, a light bar on the chosen row.
         rh = Y(39)
         n = len(m.items)
-        n_vis = max(1, (Y(690) - Y(214)) // rh)
+        n_vis = max(1, (Y(650) - Y(214)) // rh)     # room under the list for the page counter
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         f_row = self.f(Y(24))
         for k, i in enumerate(range(first, min(n, first + n_vis))):
@@ -689,7 +692,10 @@ class InDirect(InDirectHD):
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             tile = pygame.Rect(X(24), y, X(27), rh)
             self._bevel(c, tile, b["page"])
-            self._shadowed(c, t.fit(f_small, ch.name.upper(), X(25)), f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
+            name = ch.name.upper()
+            while len(name) > 1 and t.width(f_small, name) > X(25):   # the box showed call signs: clip, no ellipsis
+                name = name[:-1]
+            self._shadowed(c, name, f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
             self._shadowed(c, str(ch.number), f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(14))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
@@ -813,8 +819,8 @@ class InDirect(InDirectHD):
                 pygame.draw.rect(c, b["sel"], row)
             ink, shadow = (b["sel_ink"], None) if sel else (b["text"], b["shadow"])
             ty = row.y + (row.h - t.ink(f)[1]) // 2
-            self._shadowed(c, t.fit(f, f"{ch.number} {ch.name.upper()}", X(58)), f, ink, shadow, row.x + X(2), ty)
-            self._shadowed(c, t.fit(f, cur.title if cur else "No Information", X(120)), f, ink, shadow, row.x + X(64), ty)
+            self._shadowed(c, t.fit(f, f"{ch.number} {ch.name.upper()}", X(70)), f, ink, shadow, row.x + X(2), ty)
+            self._shadowed(c, t.fit(f, cur.title if cur else "No Information", X(108)), f, ink, shadow, row.x + X(76), ty)
             if nxt:
                 self._shadowed(c, t.fit(f, f"{ampm(nxt.start)}m  {nxt.title}", X(104)), f, ink if sel else b["soft"],
                                shadow, row.x + X(190), ty)

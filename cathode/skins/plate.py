@@ -12,7 +12,6 @@ black band of a banner.
 HD geometry: the capture's 4:3 picture, mapped onto the 1280x720 canvas; SD
 geometry: the 4:3 frame's own 640x480."""
 
-import math
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -427,11 +426,12 @@ class PlateHD(BoxSkin):
                 pygame.draw.rect(c, fill, rr, border_radius=Y(8))
                 pygame.draw.rect(c, b["row_edge"], rr, Y(2), border_radius=Y(8))
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
-            self.cb(c, self.fit_cb(f_row, it.label, row.w - X(170)), f_row, ink, row.x + X(16), ty)
+            self.cb(c, self.fit_cb(f_row, it.label, row.w - (X(180) if it.value else X(50))), f_row, ink,
+                    row.x + X(16), ty)
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v
-                self.cb(c, self.fit_cb(f_row, v, X(150)), f_row, ink, row.right - X(14), ty, align="right")
+                self.cb(c, self.fit_cb(f_row, v, X(140)), f_row, ink, row.right - X(14), ty, align="right")
             elif it.submenu:
                 self.cb(c, ">", f_row, ink, row.right - X(14), ty, align="right")
             if i < 9:
@@ -796,7 +796,7 @@ class Plate(PlateHD):
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             num = str((i + 1) % 10) if i < 10 else ""
             label = f"{num} {it.label}".strip()
-            t.draw(c, t.fit(f_row, label, row.w - X(150)), f_row, ink, row.x + X(22), ty)
+            t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(22), ty)
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v

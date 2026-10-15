@@ -66,8 +66,18 @@ class BoxSkin(Classic):
         # Screens drawn by the shared code select with the box's own colour
         # and title in its text colour, not Classic's derived ones.
         b = self.b
+        text, bg, acc = (tuple(base[k]) for k in ("text", "bg", "accent"))
+
+        def bright(c, floor=120):
+            """A colour light enough to read on the box's dark pages."""
+            c = tuple(c)
+            return c if 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] >= floor else mix(c, text, 0.6)
+
         self.p = dict(self.p, GUIDE_SELECTED=rgba(b["sel"]), SEL_TEXT=rgba(b["sel_ink"]),
-                      SEL_TEXT_DIM=rgba(b["sel_ink"], 215), YELLOW=rgba(b["text"]))
+                      SEL_TEXT_DIM=rgba(b["sel_ink"], 215), YELLOW=rgba(text),
+                      CYAN=rgba(bright(mix(text, acc, 0.3))), CYAN_DIM=rgba(bright(mix(text, acc, 0.5))),
+                      ORANGE=rgba(bright(b["sel"])), WHITE_DIM=rgba(mix(text, bg, 0.25)),
+                      INK_MUTED=rgba(mix(text, bg, 0.5)))
 
     def roles(self, base) -> dict:
         return {}
@@ -103,6 +113,43 @@ class BoxSkin(Classic):
         """Box menus keep a picture window top-right, as the real ones did; a
         full-page grid (the Dish-style Main Menu) covers it."""
         return "hidden" if self.menu_cols(menu) > 1 else self.guide_video_box()
+
+    # Classic's screens (On Demand, the keyboard, diagnostics...) lay out in
+    # 1280-wide pixels. A 4:3 skin draws them at 1280 x 960 and scales down.
+
+    def layout_canvas(self):
+        W, H = self.canvas
+        return (W, H) if W == 1280 else (1280, round(1280 * H / W))
+
+    def draw(self, canvas, screen):
+        fn = getattr(self, f"draw_{screen.name}", None)
+        if not fn:
+            return
+        inherited = fn.__func__ is getattr(Classic, f"draw_{screen.name}", None)
+        big = self.layout_canvas()
+        if not inherited or big == self.canvas:
+            fn(canvas, screen)
+            return
+        small = self.canvas
+        surf = pygame.Surface(big, pygame.SRCALPHA)
+        n = len(self.hits)
+        self.canvas = big
+        try:
+            fn(surf, screen)
+        finally:
+            self.canvas = small
+        sx, sy = small[0] / big[0], small[1] / big[1]
+        canvas.blit(pygame.transform.smoothscale(surf, small), (0, 0))
+        self.hits[n:] = [(pygame.Rect(int(r.x * sx), int(r.y * sy), int(r.w * sx), int(r.h * sy)), f)
+                         for r, f in self.hits[n:]]
+
+    def _click_frac(self, rect) -> float:
+        """Where the last click landed across `rect`, which a scaled-down
+        screen registered in layout pixels."""
+        pt = self.app.gfx.to_canvas(self.canvas, *pygame.mouse.get_pos())
+        big = self.layout_canvas()
+        x = pt[0] * big[0] / self.canvas[0] if pt else rect.x
+        return max(0.0, min(1.0, (x - rect.x) / max(1, rect.w)))
 
     def draw_live(self, c, live):
         W, H = self.canvas
