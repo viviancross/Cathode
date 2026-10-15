@@ -654,7 +654,7 @@ class PlateHD(BoxSkin):
         fh = self.fb(Y(22))
         fh.italic = True
         try:
-            left = f"Resume at: {hms(d['offset'])}" if d.get("offset", 0) > 5 else "Time Left: 0:00"
+            left = f"Time Left: {hms(max(0, (d.get('duration') or 0) - (d.get('offset') or 0)))}"
             self.cb(c, left, fh, b["vp_ink"], panel.right - X(24), panel.y + Y(18), align="right")
         finally:
             fh.italic = False

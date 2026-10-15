@@ -11,7 +11,9 @@ a retro-themed player.
   variants draw in 4:3. Their screens are drawn to measurements from video
   of the real boxes: the 1997 DSS receiver's purple pages, the HR20's blue
   banner and cyan guide, the 2005 Dish guide's blue tab and pills, the 2007
-  teal guide. Each has a mark of its own; no real logos ship. Each skin
+  teal guide. Every screen is the box's own, On Demand, My Recordings,
+  info pages, the keyboard and system info included. Each has a mark of
+  its own; no real logos ship. Each skin
   keeps its own colour theme and font, and any skin can use any theme, the
   colour editor, any font and the CRT effect.
 - **Box behaviour.** A start-up screen that follows the real loading, a

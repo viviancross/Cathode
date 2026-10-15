@@ -103,6 +103,51 @@ frames. The sources, and what they settled:
   satellite signal (771)" band, Dish's ATTENTION dialog with its progress
   bar (0:16 in the 2005 video); Classic keeps its colour bars.
 
+### The rest of each box: On Demand, recordings, info, keyboard, system
+
+Each box skin now draws every screen itself; nothing borrows Classic's
+look. Frames from these videos (extracted 2026-10-15, not stored here):
+
+- **InDirecTV HD**: the HR20's own pages from a 2011-firmware HR20-700
+  (youtu.be/cEasOlyBUCs, 1280x720) and DIRECTV on DEMAND's 2008 intro
+  (youtu.be/-659Nc9k2mc, 640x480). Playlist (4:29): the white title area,
+  "playlist" watermark, the group under the title, the instructions with a
+  green "Tip:", an "Ordered by Date (Newest First)" header (23,36,63), rows
+  (0,53,103) in bold italic on 48px with lighter rules, the orange (232,149,0)
+  cursor with dark ink, the free-space bar and colour keys along the foot.
+  Info (4:36): an action column at x 62-297 (Play / Keep / Delete / ... /
+  Done, orange on the chosen), the facts and synopsis in a (0,60,110) panel
+  from x 300. Keyboard (4:16): a 6-wide A-F grid at x 342 on a 41 pitch, the
+  text in a dark (3,8,69) field, the two choices bottom right. System Info
+  & Test (2:39): an orange rail, pale blue (103,147,204) labels, white values,
+  OK bottom right. On Demand (0:42-3:51): the white logo tile, categories in
+  a teal column (amber on the chosen), the chosen title over its blurb, the
+  titles or the Top Picks posters in a teal panel, a key bar under it.
+  Playback (0:03): a logo tile, a light-blue band with the times and title,
+  an orange progress line with the time on a tab, a play / pause tile. The
+  pop-up MENU (2:00): a grey title, blue body, the logo in a grey foot.
+- **InDirecTV (SD)**: a DSS never had On Demand, a keyboard or diagnostics.
+  They are drawn as its Program Information and Purchase Offer pages were
+  (RCA DSS demo youtu.be/g_i2jWdMjjg 15:25, 1995 infomercial
+  youtu.be/5CySqXJxy8Y 13:50): the purple band with a title and two lines of
+  instructions, the teal rule, plain shadowed lines on the lavender page,
+  square teal buttons with small icons (View / Info / Exit), the chosen one
+  light.
+- **Plate Network HD**: the ViP622/722's pages (2009-11: youtu.be/Vn1g6w12vlE,
+  youtu.be/ZbZo97iS49I, Dish support screenshots). A blue page, the mark,
+  an italic title and the date; the picture top-right in a pale frame with
+  its channel; lists in a pale rounded panel, My Recordings in green stripes
+  with "Event (n of m)"; white capsule buttons in a column under the
+  picture, amber with a gold ring on the chosen; the DVR Event page for item
+  info (title centred over its facts, the description in the panel under
+  "Time Left"); Themes & Search's keyboard pop-up (rounded keys, Done /
+  Cancel / Clear Entry); System Info's centred labels and Help / Done /
+  Cancel.
+- **Plate Network (SD)**: the 2005 box's grey swirl page (youtu.be/u2CUPclvbfQ)
+  carries everything: the mark, the title pill, blue capsule pills (white on
+  the chosen), grey dialogs with a blue title pill, the three-capsule
+  banner reused as the DVR bar. Neither Dish box had a poster wall.
+
 ## InDirecTV (DirecTV-style)
 
 ### SD variant: D10 / D11 / R15 (2004-2006)
@@ -203,3 +248,10 @@ frames. The sources, and what they settled:
 - [DBSTalk: screenshots of the ViP622](https://www.dbstalk.com/threads/could-someone-please-post-screenshots-of-this-dvr.71417/)
 - [Dish Network Solo 301 user manual (ManualMachine)](https://manualmachine.com/dishnetwork/solo301/1072544-user-manual/)
 - [Dish Network DuoDVR 522 user manual (ManualMachine)](https://manualmachine.com/dishnetwork/duodvr522/1072418-user-manual/)
+- [DirecTV HR20-700, 2011 firmware, setup and playlist (YouTube)](https://youtu.be/cEasOlyBUCs)
+- [DirecTV OnDemand intro, 2008 (YouTube)](https://youtu.be/-659Nc9k2mc)
+- [RCA DSS Demo Guide (YouTube)](https://youtu.be/g_i2jWdMjjg)
+- [1995 RCA DSS infomercial (YouTube)](https://youtu.be/5CySqXJxy8Y)
+- [722 interface versus 922 interface (YouTube)](https://youtu.be/Vn1g6w12vlE)
+- [Dish Network Guide Interface, 2009 (YouTube)](https://youtu.be/ZbZo97iS49I)
+- [DISH Network DVR Event Playback Over Menu, 2007 (YouTube)](https://youtu.be/piw4JH_iNkk)
