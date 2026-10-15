@@ -63,8 +63,53 @@ def settings_items(app):
         Item("Picture & Style", submenu=lambda: style_items(app)),
         Item("Channels", submenu=lambda: channel_items(app)),
         Item("Display", submenu=lambda: display_items(app)),
+        Item("Remote control", submenu=lambda: remote_items(app)),
         Item("System", submenu=lambda: system_items(app)),
     ]
+
+
+# ── Remote control ────────────────────────────────────────────────────────
+
+_PRETTY = {R.CH_UP: "Channel up", R.CH_DOWN: "Channel down", R.PAGE_UP: "Page up",
+           R.PAGE_DOWN: "Page down", R.PREV: "Previous channel", R.FAV: "Favorite",
+           R.VOL_UP: "Volume up", R.VOL_DOWN: "Volume down", R.REW: "Rewind",
+           R.FF: "Fast forward", R.SKIP: "Back to live", R.FULLSCREEN: "Full screen",
+           R.THEMES: "Themes (genres)"}
+
+
+def _pretty(action):
+    return _PRETTY.get(action, action.replace("_", " ").title())
+
+
+def remote_items(app):
+    def reset():
+        app.config.key_bindings, app.config.gamepad_bindings = {}, {}
+        app.config.save()
+        app.reload_remote()
+        app.toast("Remote buttons reset")
+    return [
+        Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
+        Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),
+        Item("Reset to defaults", reset),
+    ]
+
+
+def binding_items(app, kind):
+    from .screens.capture import Capture
+    store = app.config.key_bindings if kind == "key" else app.config.gamepad_bindings
+
+    def rebind(action):
+        def got(name):
+            if name:
+                store[action] = name
+                app.config.save()
+                app.reload_remote()
+                app.toast(f"{_pretty(action)}: {name}")
+        what = "key" if kind == "key" else "controller button"
+        app.push(Capture(app, f"Press the {what} for {_pretty(action)}  (Esc cancels)", kind, got))
+    current = app.remote.key_for if kind == "key" else app.remote.pad_for
+    return [Item(_pretty(a), (lambda a=a: rebind(a)), value=lambda a=a: current(a))
+            for a in R.BINDABLE]
 
 
 # ── Picture & style ───────────────────────────────────────────────────────

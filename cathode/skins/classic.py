@@ -357,6 +357,20 @@ class Classic(Skin):
         t.draw(c, "Type on a keyboard or pick keys.  Ctrl+V pastes.  LB/RB move the cursor.",
                f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
 
+    # ── Remap capture ─────────────────────────────────────────────────────
+
+    def draw_capture(self, c, cap):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        f = self.f(24)
+        box = pygame.Rect(0, 0, 900, 140)
+        box.center = (W // 2, H // 2)
+        pygame.draw.rect(c, p["OSD_BG"][:3] + (250,), box, border_radius=10)
+        pygame.draw.rect(c, p["YELLOW"], box, 2, border_radius=10)
+        t.draw(c, t.fit(f, cap.prompt, box.w - 40), f, p["WHITE"], box.centerx, box.y + 40,
+               align="center")
+        t.draw(c, "Waiting...", self.f(18), p["INK_MUTED"], box.centerx, box.y + 90, align="center")
+
     # ── Diagnostics ───────────────────────────────────────────────────────
 
     def draw_diagnostics(self, c, d):

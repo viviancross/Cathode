@@ -255,6 +255,11 @@ class App:
         if button == 1 and len(self.screens) == 1:
             self.press(R.INFO)          # a click on plain live TV shows the banner
 
+    def reload_remote(self):
+        controllers = self.remote.controllers
+        self.remote = R.Remote(self.config.key_bindings, self.config.gamepad_bindings)
+        self.remote.controllers = controllers
+
     def set_skin(self, name: str):
         from .skins import load_skin
         self.config.skin = name
@@ -478,6 +483,8 @@ class App:
             self.running = False
         elif e.type in (pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED, pygame.WINDOWEXPOSED):
             self.invalidate()
+        elif getattr(self.top(), "wants_raw", False) and self.top().raw(e):
+            self.invalidate()           # a remap capture took it
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button in (1, 3):
             self.click(*e.pos, button=e.button)
         elif getattr(self.top(), "wants_text", False) and self._text_event(e):

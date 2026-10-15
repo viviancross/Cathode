@@ -19,6 +19,11 @@ FAV, THEMES, BROWSE, LIST = "FAV", "THEMES", "BROWSE", "LIST"
 FULLSCREEN, QUIT = "FULLSCREEN", "QUIT"
 DIGITS = [f"DIGIT{i}" for i in range(10)]
 
+# Buttons a user can rebind, in the order the remap menu lists them.
+BINDABLE = [GUIDE, INFO, MENU, EXIT, BACK, SELECT, UP, DOWN, LEFT, RIGHT, CH_UP, CH_DOWN,
+            PAGE_UP, PAGE_DOWN, PREV, FAV, BROWSE, THEMES, PAUSE, REW, FF, SKIP,
+            VOL_UP, VOL_DOWN, MUTE, FULLSCREEN, QUIT]
+
 # Held, these repeat (menus and the guide scroll; channels don't race away).
 REPEATABLE = {UP, DOWN, LEFT, RIGHT, PAGE_UP, PAGE_DOWN, VOL_UP, VOL_DOWN, BACK}
 
@@ -67,6 +72,10 @@ _TRIGGERS = {pygame.CONTROLLER_AXIS_TRIGGERLEFT: "TRIGGERLEFT",
 _AXIS_ON, _AXIS_OFF = 20000, 12000   # hysteresis, so a resting stick can't chatter
 
 
+def pad_button_name(code: int) -> str:
+    return {v: k for k, v in _PAD_BUTTONS.items()}.get(code, "")
+
+
 class Remote:
     """Turns pygame events into remote buttons. Press-and-release devices
     (controller axes) are edge-detected here; repeats for held controller
@@ -79,6 +88,8 @@ class Remote:
             if code is not None:
                 self.keys[code] = action
         for action, keyname in (key_overrides or {}).items():
+            if action not in BINDABLE:
+                continue            # e.g. a 3.x binding: its actions had other names
             try:
                 self.keys = {c: a for c, a in self.keys.items() if a != action}
                 self.keys[pygame.key.key_code(keyname)] = action
@@ -86,13 +97,24 @@ class Remote:
                 pass        # unknown key name in config: keep the default
         pad = dict(DEFAULT_PAD)
         for action, button in (pad_overrides or {}).items():
+            if action not in BINDABLE:
+                continue
             pad = {b: a for b, a in pad.items() if a != action}
             pad[button.upper()] = action
         self.pad = {_PAD_BUTTONS[b]: a for b, a in pad.items() if b in _PAD_BUTTONS}
+        self.pad_names = pad        # button name -> action, for the remap menu
         self.pad_axes = {axis: pad.get(name) for axis, name in _TRIGGERS.items()}
         self._axis_down = set()     # (instance, axis, sign) currently past threshold
         self.held_action = None     # controller direction/button now held, for repeat
         self.controllers = {}
+
+    def key_for(self, action: str) -> str:
+        """Display name of the keys bound to an action (the remap menu)."""
+        names = sorted({pygame.key.name(c) for c, a in self.keys.items() if a == action})
+        return ", ".join(n for n in names if n)[:24] or "-"
+
+    def pad_for(self, action: str) -> str:
+        return ", ".join(sorted(b for b, a in self.pad_names.items() if a == action)) or "-"
 
     def translate(self, e) -> list:
         """Remote buttons this event presses (usually zero or one)."""
