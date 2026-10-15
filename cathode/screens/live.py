@@ -174,6 +174,18 @@ class LiveTV(Screen):
         elif a == R.PREV:
             if self.prev is not None:
                 self.tune(self.prev)
+        elif a == R.GUIDE:
+            from .guide import Guide
+            self.hide_banner()
+            self.app.push(Guide(self.app))
+        elif a == R.THEMES:
+            from .guide import Guide        # THEMES opens the guide on a genre
+            self.hide_banner()
+            g = Guide(self.app)
+            g._cycle_category(2 if len(self.app.categories()) > 2 else 1)
+            self.app.push(g)
+        elif a == R.FAV:
+            self.app.toggle_favorite(self.channel)
         elif a in (R.INFO, R.SELECT):
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full

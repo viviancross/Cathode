@@ -76,6 +76,8 @@ class App:
         self._repeat = None
         self.shot = None            # (path, seconds): save a frame and exit (tests, CI)
         self.script = []            # [(seconds, button)]: scripted presses (tests, CI)
+        self.toast_text, self.toast_until = "", 0.0
+        self._cats = None           # category list, rebuilt when channels or guide change
 
     # ── Threads -> UI thread ──────────────────────────────────────────────
 
@@ -140,6 +142,62 @@ class App:
     def invalidate(self):
         self.dirty = True
 
+    @property
+    def live(self):
+        from .screens.live import LiveTV
+        return self.find(LiveTV)
+
+    def toast(self, text: str, seconds: float = 2.5):
+        """A short message over whatever is on screen."""
+        self.toast_text, self.toast_until = text, time.monotonic() + seconds
+        self.after(seconds + 0.01, self.invalidate)
+        self.invalidate()
+
+    # ── Channels, categories, favourites ──────────────────────────────────
+
+    def categories(self) -> List[str]:
+        """'All', 'Favorites', then every genre the lineup has: the guide's
+        dominant XMLTV category for the channel, else its M3U group."""
+        if self._cats is None:
+            names = set()
+            for ch in self.channels:
+                cid = self.epg.resolve_channel_id(ch.epg_id, ch.name)
+                ch.category = (self.epg.dominant_category(cid) if cid else "") or ch.group or ""
+                if ch.category:
+                    names.add(ch.category)
+            self._cats = ["All", "Favorites"] + sorted(names, key=str.lower)
+        return self._cats
+
+    def channels_in(self, category: str) -> List[Channel]:
+        self.categories()               # tags ch.category
+        if category == "All":
+            return self.channels
+        if category == "Favorites":
+            favs = set(self.config.favorites)
+            return [c for c in self.channels if c.number in favs]
+        return [c for c in self.channels if getattr(c, "category", "") == category]
+
+    def is_favorite(self, ch: Channel) -> bool:
+        return ch.number in self.config.favorites
+
+    def toggle_favorite(self, ch: Channel):
+        favs = self.config.favorites
+        if ch.number in favs:
+            favs.remove(ch.number)
+            self.toast(f"Removed {ch.number} from favorites")
+        else:
+            favs.append(ch.number)
+            self.toast(f"Added {ch.number} to favorites")
+        self.config.save()
+
+    def epg_horizon_min(self) -> int:
+        """Minutes from now to the last programme the guide data has."""
+        from datetime import datetime, timezone
+        last = self.epg.last_stop()
+        if not last:
+            return 0
+        return int((last - datetime.now(timezone.utc)).total_seconds() // 60)
+
     # ── Input ─────────────────────────────────────────────────────────────
 
     def press(self, action: str):
@@ -192,6 +250,7 @@ class App:
             self.invalidate()
             return
         self.channels = chans
+        self._cats = None
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         live.channels_loaded()
@@ -222,6 +281,7 @@ class App:
             return                      # the playlist changed under it
         if epg is not None:
             self.epg = epg
+            self._cats = None           # genres come from the guide
             print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
             self.invalidate()
         self.after(self.EPG_REFRESH if epg is not None else self.EPG_RETRY,
@@ -291,6 +351,8 @@ class App:
                     canvas.fill((0, 0, 0, 0))
                     for s in self._visible():
                         self.skin.draw(canvas, s)
+                    if time.monotonic() < self.toast_until:
+                        self.skin.draw_toast(canvas, self.toast_text)
                     self.gfx.upload_ui(canvas, nearest=self.skin.nearest)
                     changed = True
                 if changed:

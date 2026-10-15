@@ -208,9 +208,27 @@ class EPG:
         bucket = self._programs.setdefault(channel_id, [])
         bucket.extend(programs)
         bucket.sort(key=lambda p: p.start)
+        self.__dict__.pop("_resolved", None)
+        self.__dict__.pop("_last_stop", None)
 
     def resolve_channel_id(self, epg_id: str, channel_name: str) -> Optional[str]:
-        """Return the XMLTV channel ID for a given M3U channel."""
+        """Return the XMLTV channel ID for a given M3U channel. Memoised: the
+        fuzzy fallback scans every display name, and the guide asks per row
+        per frame (categories ask for every channel at once)."""
+        key = (epg_id, channel_name)
+        memo = self.__dict__.setdefault("_resolved", {})
+        if key not in memo:
+            memo[key] = self._resolve(epg_id, channel_name)
+        return memo[key]
+
+    def last_stop(self) -> Optional[datetime]:
+        """When the last programme in the guide data ends."""
+        if "_last_stop" not in self.__dict__:
+            stops = [progs[-1].stop for progs in self._programs.values() if progs]
+            self._last_stop = max(stops) if stops else None
+        return self._last_stop
+
+    def _resolve(self, epg_id: str, channel_name: str) -> Optional[str]:
         if epg_id and epg_id in self._programs:
             return epg_id
         if channel_name.lower() in self._display_names:
