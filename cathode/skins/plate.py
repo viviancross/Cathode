@@ -396,6 +396,11 @@ class PlateHD(BoxSkin):
                     self.cb(c, self.fit_cb(f_cell, p.title, cell.w - X(36)), f_cell, b["text"], cell.centerx, cy, align="center")
             self.hit((0, y, W, rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                 setattr(g, "focus", "grid"), g.handle("SELECT")))
+        if not rows:
+            cell = self.R(0, 328, 1272, 50)
+            self._cell(c, cell, False, False)
+            self.cb(c, self.fit_cb(f_cell, self.empty_guide(g), cell.w - X(40)), f_cell, b["text"], cell.centerx,
+                    cell.y + (cell.h - t.ink(f_cell)[1]) // 2, align="center")
 
     def _cell(self, c, cell, airing, on):
         b, Y = self.b, self.Y
@@ -702,7 +707,7 @@ class PlateHD(BoxSkin):
 
     def draw_keyboard(self, c, kb):
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._vip_page(c, "Search", picture=False)
+        self._vip_page(c, "Search" if kb.prompt.lower().startswith("search") else "Text Entry", picture=False)
         card = self.R(150, 104, 980, 590)
         pygame.draw.rect(c, b["vp_panel_edge"], card.inflate(X(8), Y(8)), border_radius=Y(30))
         vgrad(c, card, rgba(mix(b["vp_hdr"], (255, 255, 255), 0.25)), rgba(b["vp_mid"]), radius=Y(28))
@@ -1080,6 +1085,11 @@ class Plate(PlateHD):
                         ty += pitch
             self.hit((0, y, X(597), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                      setattr(g, "focus", "grid"), g.handle("SELECT")))
+        if not rows:
+            cell = pygame.Rect(0, Y(261), X(594), Y(42))
+            self._cell(c, cell, False)
+            t.draw(c, t.fit(f_cell, self.empty_guide(g), cell.w - X(20)), f_cell, b["cell_ink"], cell.centerx,
+                   cell.y + (cell.h - t.ink(f_cell)[1]) // 2, align="center")
         pygame.draw.rect(c, b["grey_hi"], self.R(0, 452, 640, 28))
 
     def _chan_tile(self, c, tile, ch, f):
@@ -1423,10 +1433,13 @@ class Plate(PlateHD):
 
     def draw_keyboard(self, c, kb):
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._sd_page(c, "Search")
+        self._sd_page(c, "Search" if kb.prompt.lower().startswith("search") else "Text Entry")
         band = self._sd_band(c, Y(150), Y(296))
         f = self.fb(Y(15))
-        t.draw(c, t.fit(f, kb.prompt, X(560)), f, b["ink"], X(40), band.y + Y(8))
+        pw = t.draw(c, t.fit(f, kb.prompt, X(560)), f, b["ink"], X(40), band.y + Y(8))
+        if kb.hint:
+            fh = self.f(Y(12))
+            t.draw(c, t.fit(fh, kb.hint, X(540) - pw), fh, b["ink"], X(600), band.y + Y(10), align="right")
         field = self.R(40, 178, 560, 26)
         pygame.draw.rect(c, b["pillfill"], field, border_radius=Y(6))
         pygame.draw.rect(c, b["ink"], field, 1, border_radius=Y(6))

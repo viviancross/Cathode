@@ -27,7 +27,7 @@ def open_welcome(app):
             app.config.save()
             from .screens.boot import Boot
             app.push(Boot(app))
-        add_playlist(app, on_added=added)
+        add_playlist(app, on_added=added, ask_name=False)
     app.push(Menu(app, "WELCOME TO CATHODE", [
         Item("Set up your channels", setup),
         Item("Picture & Style", submenu=lambda: style_items(app)),
@@ -413,28 +413,34 @@ def _reopen(app, items):
         m.refresh(items)
 
 
-def add_playlist(app, on_added=None):
-    """Three prompts: a name, the M3U address, an optional guide address."""
-    entry = {}
-
-    def got_name(name):
-        if name is None:
-            return
-        entry["name"] = name or "My Channels"
-        app.push(Keyboard(app, "Playlist address (M3U URL or file)", got_url,
-                          hint="Paste with Ctrl+V"))
+def add_playlist(app, on_added=None, ask_name=True):
+    """The playlist's address, an optional guide address, then a name (the
+    first run skips the name: channels first)."""
+    entry = {"name": "My Channels"}
 
     def got_url(url):
         if not url:
             return
         entry["playlist_url"] = url
         app.push(Keyboard(app, "Guide address (XMLTV, optional)", got_epg,
-                          hint="Leave empty and press DONE to skip"))
+                          hint="Fills the guide. Leave empty and choose Done to skip."))
 
     def got_epg(epg):
         if epg is None:
             return
         entry["epg_url"] = epg
+        if ask_name:
+            app.push(Keyboard(app, "Name this playlist", got_name, initial="My Channels"))
+        else:
+            finish()
+
+    def got_name(name):
+        if name is None:
+            return
+        entry["name"] = name or "My Channels"
+        finish()
+
+    def finish():
         app.config.playlists.append(entry)
         app.config.save()
         while isinstance(app.top(), Menu):
@@ -442,7 +448,8 @@ def add_playlist(app, on_added=None):
         app.switch_playlist(entry)
         if on_added:
             on_added(entry)
-    app.push(Keyboard(app, "Name this playlist", got_name, initial="My Channels"))
+    app.push(Keyboard(app, "Playlist address (M3U URL or file)", got_url,
+                      hint="From your IPTV provider. Ctrl+V pastes."))
 
 
 # ── Display ───────────────────────────────────────────────────────────────
@@ -543,6 +550,9 @@ def weather_items(app):
 def handles_menu_button(app, action) -> bool:
     """MENU from anywhere that doesn't use it opens the main menu."""
     if action == R.MENU and not isinstance(app.top(), (Menu, Keyboard)):
-        open_main(app)
+        if not app.config.playlist_url and not app.config.playlists:
+            open_welcome(app)           # nothing set up yet: straight to setting it up
+        else:
+            open_main(app)
         return True
     return False

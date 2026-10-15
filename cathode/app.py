@@ -319,14 +319,28 @@ class App:
 
     # ── Data ──────────────────────────────────────────────────────────────
 
+    def key_name(self, action: str) -> str:
+        """The first keyboard key bound to an action, for on-screen hints
+        ('C' for MENU); '' when none is."""
+        k = self.remote.key_for(action).split(",")[0].strip() if self.remote else "-"
+        return "" if k == "-" else k.upper()
+
+    def press_hint(self, action: str) -> str:
+        """'MENU (C)': the remote button and, for keyboards, its key."""
+        k = self.key_name(action)
+        return f"{action} ({k})" if k else action
+
     def load_playlist(self, url: str, epg_url: str = ""):
         """Fetch channels (and then the guide) off the UI thread."""
         def work():
             try:
                 chans = m3u.load(url, user_agent=self.config.user_agent)
-                err = "" if chans else "The playlist has no channels."
+                err = "" if chans else (f"Your playlist has no channels in it. Press {self.press_hint(R.MENU)} "
+                                        "to check its address under Settings > Channels.")
             except Exception as e:
-                chans, err = [], f"Couldn't load the playlist: {e}"
+                print(f"[cathode] playlist load failed: {e!r}")
+                chans, err = [], (f"Couldn't load your channels: {load_error_text(e)}. Press "
+                                  f"{self.press_hint(R.MENU)} to check the address under Settings > Channels.")
             self.post(self._playlist_loaded, url, epg_url, chans, err)
         threading.Thread(target=work, daemon=True).start()
 
@@ -343,6 +357,13 @@ class App:
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         live.channels_loaded()
+        if not self.config.key_tip_shown and self.remote and not self.shot:
+            # Once ever: which keys do what, the first time channels play.
+            self.config.key_tip_shown = True
+            self.config.save()
+            self.toast("   ".join(f"{label}: {self.key_name(a)}" for a, label in
+                                  ((R.GUIDE, "Guide"), (R.MENU, "Menu"), (R.INFO, "Info"))
+                                  if self.key_name(a)) + "   Channels: Up/Down", 9.0)
         self.load_epg()
 
     def load_epg(self):
@@ -444,6 +465,7 @@ class App:
                 self.push(Boot(self))
         else:
             from . import menus
+            self.live.message = f"No channels yet. Press {self.press_hint(R.MENU)} to set up your channels."
             menus.open_welcome(self)
 
         canvas = pygame.Surface(self.skin.canvas, pygame.SRCALPHA)
@@ -579,6 +601,21 @@ class App:
         if self.pending_update:
             from . import updater
             updater.spawn_apply(self.pending_update)
+
+
+def load_error_text(e: Exception) -> str:
+    """Why a playlist didn't load, in words for the couch (the raw error
+    goes to the log)."""
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        return "the server said it isn't there" if e.code == 404 else f"the server refused it ({e.code})"
+    if isinstance(e, FileNotFoundError):
+        return "there's no file at that address"
+    if isinstance(e, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return "the server didn't answer"
+    if isinstance(e, ValueError):
+        return "that isn't a playlist address"
+    return "it isn't a playlist Cathode can read"
 
 
 def _mpv_extra(args) -> dict:

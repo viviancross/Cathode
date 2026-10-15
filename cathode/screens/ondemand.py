@@ -286,7 +286,7 @@ class OnDemandScreen(Screen):
     def open_recordings(self, root=False):
         rows = self.od.downloads.items()
         if not rows:
-            self.app.toast("Nothing recorded yet - press DVR on an item's info page")
+            self.app.toast("Nothing recorded yet. Choose Record on a title's info page.")
             if root:
                 self.app.after(0, self.leave)
             return

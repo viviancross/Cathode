@@ -24,7 +24,7 @@ class LiveTV(Screen):
         self.phase = "idle"         # idle | cover | reveal | watch
         self.standby = False        # dead stream: the skin's stand-by card
         self.message = "Loading channels..." if app.config.playlist_url else \
-            "No playlist set up yet. Start Cathode with --playlist <M3U URL or file>."
+            "No channels yet. Press MENU to set up your channels."
         self.banner_until = 0.0
         self.banner_full = False    # INFO pressed again: the expanded banner
         self.volume_until = 0.0

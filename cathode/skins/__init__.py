@@ -181,6 +181,13 @@ class Skin:
         """' 40%' for a known fraction, '' otherwise."""
         return f" {int(frac * 100)}%" if frac is not None and frac >= 0 else ""
 
+    def empty_guide(self, g) -> str:
+        """What a guide list with no channels says (only Favorites can be)."""
+        if g.category == "Favorites":
+            hint = getattr(self.app, "press_hint", None)
+            return f"No favorites yet. Press {hint('FAV') if hint else 'FAV'} on a channel to add it."
+        return "No channels in this list."
+
     def guide_pct(self) -> str:
         """The app's guide load, as pct() puts it."""
         return self.pct(getattr(self.app, "guide_progress", None))

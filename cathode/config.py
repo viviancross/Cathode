@@ -118,6 +118,7 @@ class Config:
     # false, boot straight into the configured playlist (the menu is still
     # reachable from the context menu). First run always shows the menu.
     setup_done: bool = False       # the first-run setup wizard already ran once
+    key_tip_shown: bool = False    # the one-time "which keys do what" toast
     # (it stays reachable from Options > Setup Wizard)
 
     # Input

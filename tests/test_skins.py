@@ -5,6 +5,7 @@ nobody happened to open."""
 import os
 import sys
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
 
@@ -201,6 +202,13 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
                         canvas.fill((0, 0, 0, 0))
                         skin.draw_guide_progress(canvas, frac)
                         self.assertIsNotNone(canvas.get_bounding_rect(min_alpha=1).w)
+                with self.subTest(skin=name, theme=theme, screen="empty favorites"):
+                    from cathode.screens.guide import Guide
+                    g = Guide(app, category="Favorites")
+                    with mock.patch.object(app, "channels_in", lambda cat: []):
+                        canvas.fill((0, 0, 0, 0))
+                        skin.draw(canvas, g)
+                    self.assertIn("favorites", skin.empty_guide(g))
                 with self.subTest(skin=name, theme=theme, screen="format"):
                     for label in ("Original", "Zoom", "Stretch", "4:3"):
                         skin.draw_format(canvas, label)

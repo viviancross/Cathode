@@ -164,5 +164,84 @@ class TestAutostart(unittest.TestCase):
             self.assertFalse(autostart.enabled())
 
 
+class SetupApp(FakeApp):
+    """Enough of the app for the first-run setup prompts."""
+    def __init__(self, playlists=None, url=""):
+        from cathode.config import Config
+        super().__init__()
+        self.config = Config("")
+        self.config.playlists = list(playlists or [])
+        self.config.playlist_url = url
+        self.switched = []
+        self.screens.append(object())       # live TV, always underneath
+
+    def top(self):
+        return self.screens[-1]
+
+    def switch_playlist(self, pl):
+        self.switched.append(pl)
+
+
+class TestFirstRun(unittest.TestCase):
+    def setUp(self):
+        for name in ("start_text_input", "stop_text_input"):
+            patcher = mock.patch.object(pygame.key, name)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _type(self, app, text):
+        kb = app.top()
+        self.assertIsInstance(kb, Keyboard)
+        kb.value = text
+        kb._press("DONE")
+        return kb.prompt
+
+    def test_first_run_asks_for_the_address_first_and_never_for_a_name(self):
+        from cathode import menus
+        app = SetupApp()
+        menus.add_playlist(app, ask_name=False)
+        prompts = [self._type(app, "http://provider/list.m3u"), self._type(app, "")]
+        self.assertIn("Playlist address", prompts[0])
+        self.assertIn("Guide address", prompts[1])
+        self.assertEqual(app.switched, [{"name": "My Channels", "playlist_url": "http://provider/list.m3u",
+                                         "epg_url": ""}])
+
+    def test_adding_another_playlist_asks_for_its_name_last(self):
+        from cathode import menus
+        app = SetupApp(playlists=[{"name": "Old", "playlist_url": "a"}], url="a")
+        menus.add_playlist(app)
+        prompts = [self._type(app, "b.m3u"), self._type(app, "g.xml"), self._type(app, "Sports")]
+        self.assertIn("Name", prompts[2])
+        self.assertEqual(app.switched[0]["name"], "Sports")
+
+    def test_menu_reopens_the_welcome_until_channels_are_set_up(self):
+        from cathode import menus
+        with mock.patch.object(menus, "open_welcome") as welcome, mock.patch.object(menus, "open_main") as main:
+            app = SetupApp()
+            app.push(object())
+            menus.handles_menu_button(app, R.MENU)
+            app2 = SetupApp(playlists=[{"name": "Mine", "playlist_url": "x"}], url="x")
+            app2.push(object())
+            menus.handles_menu_button(app2, R.MENU)
+        welcome.assert_called_once_with(app)
+        main.assert_called_once_with(app2)
+
+
+class TestLoadErrors(unittest.TestCase):
+    def test_each_failure_reads_in_plain_words(self):
+        import urllib.error
+        from cathode.app import load_error_text
+        cases = [(urllib.error.HTTPError("u", 404, "nf", {}, None), "isn't there"),
+                 (urllib.error.HTTPError("u", 403, "no", {}, None), "refused it (403)"),
+                 (FileNotFoundError("x"), "no file"),
+                 (urllib.error.URLError(ConnectionRefusedError()), "didn't answer"),
+                 (TimeoutError(), "didn't answer"),
+                 (ValueError("unknown url type"), "isn't a playlist address"),
+                 (RuntimeError("?"), "can read")]
+        for e, words in cases:
+            with self.subTest(e=type(e).__name__):
+                self.assertIn(words, load_error_text(e))
+
+
 if __name__ == "__main__":
     unittest.main()

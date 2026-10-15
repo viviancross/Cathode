@@ -807,9 +807,9 @@ class Classic(Skin):
             self._guide_row(c, guide, ch, i, grid_y + i * g["row_h"], grid_x, grid_w,
                             start, end, now, f_small, f_ch, f_prog)
         if not vis:
-            t.draw(c, "No channels in this category", f_small, p["INK_MUTED"], grid_x + 12, grid_y + 16)
-            t.draw(c, "Pick another one above with < >", f_small, p["WHITE_DIM"], grid_x + 12,
-                   grid_y + 44)
+            t.draw(c, self.empty_guide(guide), f_ch, p["WHITE"], grid_x + 12, grid_y + 16)
+            t.draw(c, "Or pick another list above with < >", f_small, p["WHITE_DIM"], grid_x + 12,
+                   grid_y + 48)
 
         # Now line through the ruler and rows.
         off = (now - start).total_seconds() / 60

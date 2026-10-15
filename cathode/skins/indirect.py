@@ -410,6 +410,12 @@ class InDirectHD(BoxSkin):
             self.hit((X(96), y, X(1182), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                            setattr(g, "focus", "grid"), g.handle("SELECT")))
 
+        if not rows:
+            cell = self.R(96, 352, 1170, 44)
+            self._cell(c, cell, False)
+            t.draw(c, t.fit(f_cell, self.empty_guide(g), cell.w - X(28)), f_cell, b["text"], cell.x + X(14),
+                   cell.y + (cell.h - t.ink(f_cell)[1]) // 2)
+
         bar = self.R(96, 639, 1182, 33)
         pygame.draw.rect(c, b["cell"], bar)
         fl = self.f(Y(30))
@@ -1322,6 +1328,11 @@ class InDirect(InDirectHD):
                     self._shadowed(c, line, f_cell, ink, shadow, cell.x + X(4), y + Y(2) + k * Y(12))
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                          setattr(g, "focus", "grid"), g.handle("SELECT")))
+        if not rows:
+            cell = pygame.Rect(X(24), Y(42), X(273), Y(26))
+            self._bevel(c, cell, b["page"])
+            for k, line in enumerate(t.wrap(f_cell, self.empty_guide(g), int((cell.w - X(8)) / self.SQUEEZE), 2)):
+                self._shadowed(c, line, f_cell, b["text"], b["shadow"], cell.x + X(4), cell.y + Y(2) + k * Y(12))
         # The teal buttons along the bottom: page, the lists, Exit.
         y = Y(211)
         labels = [("v", "PAGE_DOWN"), (g.category if g.category != "All" else "Movies", "THEMES"),
