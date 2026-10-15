@@ -405,7 +405,11 @@ class PlateHD(BoxSkin):
     def _cell(self, c, cell, airing, on):
         b, Y = self.b, self.Y
         pygame.draw.rect(c, b["now"] if airing else b["later"], cell)
-        pygame.draw.rect(c, b["gold"] if on else b["edge"], cell, Y(3) if on else 1)
+        if on:
+            pygame.draw.rect(c, b["gold"], cell, Y(5))
+            pygame.draw.rect(c, mix(b["gold"], (255, 255, 255), 0.55), cell.inflate(-Y(10), -Y(10)), 1)
+        else:
+            pygame.draw.rect(c, b["edge"], cell, 1)
 
     # ── Menus: the list page, in this world's colours ─────────────────────
 
@@ -1286,7 +1290,7 @@ class Plate(PlateHD):
                 ink = mix(ink, fill, 0.5)
             pygame.draw.rect(c, fill, row, border_radius=row.h // 2)
             if not sel:
-                pygame.draw.rect(c, b["row_hi"], (row.x + row.h // 2, row.y + Y(2), row.w - row.h, Y(3)), border_radius=2)
+                self._gloss(c, row)
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             num = str((i + 1) % 10) if i < 10 else ""
             label = f"{num} {it.label}".strip()
@@ -1334,13 +1338,22 @@ class Plate(PlateHD):
         pygame.draw.rect(c, b["grey_hi"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
         t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(15), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
 
+    def _gloss(self, c, r, radius=None):
+        """The 2005 pill's sheen across its top half: a lighter capsule on a
+        pill, a lighter rounded band on a key (radius: the key's corners)."""
+        Y, b = self.Y, self.b
+        inset = r.h // 3 if radius is None else Y(4)
+        g = pygame.Rect(r.x + inset, r.y + Y(2), r.w - 2 * inset, max(2, int(r.h * 0.42)))
+        pygame.draw.rect(c, mix(b["row"], b["row_hi"], 0.75), g,
+                         border_radius=g.h // 2 if radius is None else max(1, radius - Y(2)))
+
     def _sd_pill(self, c, r, label, on, right=""):
         """A blue capsule pill with its light top line, white when chosen."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
         fill, ink = (b["cursor"], b["cursor_ink"]) if on else (b["row"], b["row_ink"])
         pygame.draw.rect(c, fill, r, border_radius=r.h // 2)
         if not on:
-            pygame.draw.rect(c, b["row_hi"], (r.x + r.h // 2, r.y + Y(2), r.w - r.h, Y(3)), border_radius=2)
+            self._gloss(c, r)
         f = self.fb(Y(19))
         ty = r.y + (r.h - t.cap(f)) // 2
         rw = t.width(f, right) + X(16) if right else 0
@@ -1472,7 +1485,7 @@ class Plate(PlateHD):
                     fill, ink = (b["cursor"], b["cursor_ink"]) if on else (b["row"], b["row_ink"])
                     pygame.draw.rect(c, fill, rect, border_radius=Y(8))
                     if not on:
-                        pygame.draw.rect(c, b["row_hi"], (rect.x + Y(6), rect.y + Y(2), rect.w - Y(12), Y(3)), border_radius=2)
+                        self._gloss(c, rect, radius=Y(8))
                     label = cell if len(cell) == 1 else words[cell]
                     fl = fk if len(cell) == 1 else self.fb(Y(15))
                     t.draw(c, label, fl, ink, rect.centerx, rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")

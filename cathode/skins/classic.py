@@ -107,11 +107,18 @@ class Classic(Skin):
         t.draw(c, tag, self.f(48), p["WHITE"], 48, 40, outline=(0, 0, 0))
         span = s["buffer"] + behind
         if span >= 2:
-            bar = pygame.Rect(48, 104, 360, 8)
-            pygame.draw.rect(c, p["TRACK"], bar)
-            x = bar.x + int(bar.w * s["buffer"] / span)
-            pygame.draw.rect(c, p["CYAN"], (bar.x, bar.y, x - bar.x, bar.h))
-            pygame.draw.rect(c, p["WHITE"], (x - 2, bar.y - 6, 4, bar.h + 12))
+            self._blocks(c, (48, 104, 360, 14), s["buffer"] / span, p["CYAN"], p["TRACK"])
+
+    @staticmethod
+    def _blocks(c, rect, frac, fill, track, block=12, gap=3):
+        """A bar of square-ended blocks, lit up to frac: the TV's own OSD bar."""
+        rect = pygame.Rect(rect)
+        n = max(1, (rect.w + gap) // (block + gap))
+        w = (rect.w - (n - 1) * gap) / n
+        lit = round(n * max(0.0, min(1.0, frac)))
+        for i in range(n):
+            x = rect.x + round(i * (w + gap))
+            pygame.draw.rect(c, fill if i < lit else track, (x, rect.y, round(w), rect.h))
 
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         W, H = self.canvas
@@ -133,8 +140,9 @@ class Classic(Skin):
                 y += t.ink(f_med)[1] + 10
 
         edge = p["ORANGE"] if tag else p["OSD_BORDER"]
-        pygame.draw.rect(c, p["OSD_BG"], (bx, by, bw, bh), border_radius=8)
-        pygame.draw.rect(c, edge, (bx, by, bw, 3))
+        pygame.draw.rect(c, p["OSD_BG"], (bx, by, bw, bh))
+        pygame.draw.rect(c, edge, (bx, by, bw, 8))
+        pygame.draw.rect(c, edge, (bx, by + bh - 4, bw, 4))
         if tag:
             tw = t.width(f_small, tag) + 20
             pygame.draw.rect(c, p["ORANGE"], (bx + 16, by - 26, tw, 26))
@@ -142,8 +150,8 @@ class Classic(Skin):
 
         # Logo box, or the number big in it when there's no logo.
         nb = pygame.Rect(bx + 8, by + 8, int(bh * 1.1), bh - 16)
-        pygame.draw.rect(c, p["CHNUM_BG"], nb, border_radius=6)
-        pygame.draw.rect(c, p["OSD_BORDER"], (nb.x, nb.y, nb.w, 3))
+        pygame.draw.rect(c, p["CHNUM_BG"], nb)
+        pygame.draw.rect(c, p["OSD_BORDER"], (nb.x, nb.y, nb.w, 5))
         epg = self.app.epg
         url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
         logo = self.logo(url or ch.logo, nb.w - 10, nb.h - 10)
@@ -152,24 +160,26 @@ class Classic(Skin):
         next_x = int(W * 0.45)
         col_w = next_x - info_x - 16
         tight, apart = max(2, int(bh * 0.05)), max(4, int(bh * 0.09))
-        stack = t.ink(f_large)[1] + tight + t.ink(f_med)[1] + apart + 4 + tight + t.ink(f_small)[1]
+        pb_h = 9
+        stack = t.ink(f_large)[1] + tight + t.ink(f_med)[1] + apart + pb_h + tight + t.ink(f_small)[1]
         y_name = by + (bh - stack) // 2
         y_prog = y_name + t.ink(f_large)[1] + tight
         pb_y = y_prog + t.ink(f_med)[1] + apart
-        y_time = pb_y + 4 + tight
+        y_time = pb_y + pb_h + tight
 
         name_x = info_x
         if logo is not None:
             c.blit(logo, logo.get_rect(center=nb.center))
             name_x += t.draw(c, str(ch.number), f_large, p["CHANNEL_GREEN"], info_x, y_name) + 12
         else:
-            fn, size = f_huge, int(bh * 0.55)
-            while size > 12 and t.width(fn, str(ch.number)) > nb.w - 12:
+            size = int(bh * 0.74)
+            fn = self.f(size)
+            while size > 12 and t.width(fn, str(ch.number)) > nb.w - 16:
                 size -= 2
                 fn = self.f(size)
             ink = t.ink(fn)[1]
             t.draw(c, str(ch.number), fn, p["CHANNEL_GREEN"], nb.centerx,
-                   nb.centery - ink // 2, align="center")
+                   nb.centery - ink // 2, align="center", outline=(0, 0, 0))
         t.draw(c, t.fit(f_large, ch.name, col_w - (name_x - info_x)), f_large, p["WHITE"],
                name_x, y_name)
 
@@ -177,9 +187,8 @@ class Classic(Skin):
             title = cur.title + (f"  {cur.episode}" if cur.episode else "")
             t.draw(c, t.fit(f_med, title, col_w), f_med, p["CYAN"], info_x, y_prog)
             pb_w = col_w            # its own column: 3.x let it run under NEXT
-            pygame.draw.rect(c, p["TRACK"], (info_x, pb_y, pb_w, 4))
-            frac = cur.progress_at(datetime.now().astimezone())
-            pygame.draw.rect(c, p["GREEN"], (info_x, pb_y, int(pb_w * frac), 4))
+            self._blocks(c, (info_x, pb_y, pb_w, pb_h), cur.progress_at(datetime.now().astimezone()),
+                         p["GREEN"], p["TRACK"], block=10, gap=2)
             t.draw(c, span(cur), f_small, p["WHITE_DIM"], info_x, y_time)
         else:
             t.draw(c, "No program info", f_med, p["INK_MUTED"], info_x, y_prog)
@@ -193,7 +202,8 @@ class Classic(Skin):
             t.draw(c, t.fit(f_med, nxt.title, next_w), f_med, p["WHITE_DIM"], next_x, y_prog)
             t.draw(c, span(nxt), f_small, p["INK_MUTED"], next_x, y_time)
 
-        t.draw(c, clock(datetime.now()), f_large, p["YELLOW"], right, y_name, align="right")
+        t.draw(c, clock(datetime.now()), self.f(int(bh * 0.40)), p["YELLOW"], right, y_name, align="right",
+               outline=(0, 0, 0))
         if group:
             t.draw(c, group, f_small, p["CYAN"], right, y_prog, align="right")
         # The clock on the banner advances while it's up: one tick pending at a time.
@@ -203,17 +213,17 @@ class Classic(Skin):
     def _volume(self, c, cx, cy):
         p = self.p
         v = self.app.video
-        f = self.role("heading")
+        f = self.role("title")
         label = "MUTE" if v.muted else f"VOL  {v.volume:3d}"
         w = self.text.width(f, label)
-        box = pygame.Rect(cx - w // 2 - 12, cy - 24, w + 24, 40)
+        box = pygame.Rect(cx - w // 2 - 16, cy - 26, w + 32, 46)
         pygame.draw.rect(c, p["OSD_BG"], box)
-        pygame.draw.rect(c, p["OSD_BORDER"], (box.x, box.y, box.w, 3))
-        self.text.draw(c, label, f, p["RED"] if v.muted else p["CYAN"], cx, cy - 14, align="center")
+        pygame.draw.rect(c, p["OSD_BORDER"], (box.x, box.y, box.w, 6))
+        self.text.draw(c, label, f, p["RED"] if v.muted else p["CYAN"], cx, cy - 10, align="center",
+                       outline=(0, 0, 0))
         if not v.muted:
-            pygame.draw.rect(c, p["TRACK"], (cx - 60, box.bottom + 8, 120, 6))
             col = p["GREEN"] if v.volume < 80 else p["YELLOW"] if v.volume < 95 else p["RED"]
-            pygame.draw.rect(c, col, (cx - 60, box.bottom + 8, int(120 * v.volume / 100), 6))
+            self._blocks(c, (cx - 100, box.bottom + 8, 200, 14), v.volume / 100, col, p["TRACK"])
 
     def _osd_note(self, c, text, frac=None):
         """A small OSD box top-right; a bar under the text when frac is a
@@ -225,12 +235,11 @@ class Classic(Skin):
         w = max(t.width(f, text) + 32, 300 if bar else 0)
         box = pygame.Rect(W - 48 - w, 40, w, 44 + (16 if bar else 0))
         pygame.draw.rect(c, p["OSD_BG"], box)
-        pygame.draw.rect(c, p["OSD_BORDER"], (box.x, box.y, box.w, 3))
-        t.draw(c, text, f, p["CYAN"], box.x + 16, box.y + 15)
+        pygame.draw.rect(c, p["OSD_BORDER"], (box.x, box.y, box.w, 6))
+        t.draw(c, text, f, p["CYAN"], box.x + 16, box.y + 16)
         if bar:
-            track = pygame.Rect(box.x + 16, box.bottom - 16, box.w - 32, 6)
-            pygame.draw.rect(c, p["TRACK"], track)
-            pygame.draw.rect(c, p["GREEN"], (track.x, track.y, int(track.w * frac), track.h))
+            self._blocks(c, (box.x + 16, box.bottom - 18, box.w - 32, 9), frac, p["GREEN"], p["TRACK"],
+                         block=10, gap=2)
 
     def draw_note(self, c, text):
         self._osd_note(c, text.upper())
@@ -333,13 +342,13 @@ class Classic(Skin):
         pygame.draw.rect(c, p["OSD_BG"][:3] + (245,), panel, border_radius=10)
         pygame.draw.rect(c, p["OSD_BORDER"], panel, 2, border_radius=10)
         t.draw(c, m.title.upper(), f_title, p["YELLOW"], panel.x + 24, panel.y + 18)
-        pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.y + 56, pw - 24, 2))
+        pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.y + 54, pw - 24, 6))
         y = panel.y + 64
         for i, it in enumerate(shown, start=top):
             row = pygame.Rect(panel.x + 12, y, pw - 24, rh - 4)
             sel = i == m.cursor
             if sel:
-                pygame.draw.rect(c, p["GUIDE_SELECTED"], row, border_radius=6)
+                pygame.draw.rect(c, p["GUIDE_SELECTED"], row)
             ink = (p["SEL_TEXT"] if sel else p["WHITE"]) if it.enabled else p["INK_MUTED"]
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             label = it.label + (" >" if it.submenu else "")
@@ -824,7 +833,7 @@ class Classic(Skin):
         k = guide.cursor - guide.top
         if guide.focus == "grid" and 0 <= k < len(rows):
             pygame.draw.rect(c, p["YELLOW"], (pad - 2, grid_y + k * g["row_h"] - 2, W - 2 * pad + 4,
-                                              g["row_h"] + 3), 3)
+                                              g["row_h"] + 3), 5)
 
         # The key hints, in the band under the grid.
         band = grid_y + g["row_h"] * guide.rows

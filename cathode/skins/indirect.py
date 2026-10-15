@@ -430,9 +430,20 @@ class InDirectHD(BoxSkin):
     def _cell(self, c, cell, on):
         b = self.b
         if on:
-            pygame.draw.rect(c, b["sel"], cell)
+            self._amber(c, cell)
         else:
             vgrad(c, cell, rgba(b["cell_hi"]), rgba(b["cell"]))
+
+    def _amber(self, c, r):
+        """The HR20's amber cursor at full strength: a lit top half, the
+        amber body, a darker lip along its foot."""
+        b = self.b
+        r = pygame.Rect(r)
+        top = r.h // 2
+        vgrad(c, (r.x, r.y, r.w, top), rgba(mix(b["sel"], (255, 255, 255), 0.42)), rgba(mix(b["sel"], (255, 255, 255), 0.1)))
+        pygame.draw.rect(c, b["sel"], (r.x, r.y + top, r.w, r.h - top))
+        lip = max(2, r.h // 12)
+        pygame.draw.rect(c, mix(b["sel"], (0, 0, 0), 0.32), (r.x, r.bottom - lip, r.w, lip))
 
     # ── Menu: the setup page ──────────────────────────────────────────────
 
@@ -520,7 +531,7 @@ class InDirectHD(BoxSkin):
         for ch, cur, nxt, sel in rows:
             row = pygame.Rect(X(96), y, X(1088), rh - Y(4))
             if sel:
-                pygame.draw.rect(c, b["sel"], row)
+                self._amber(c, row)
             else:
                 vgrad(c, row, rgba(b["cell_hi"]), rgba(b["cell"]))
             ink, shadow = (b["sel_ink"], b["sel_shadow"]) if sel else (b["text"], None)
@@ -832,7 +843,7 @@ class InDirectHD(BoxSkin):
         for k, name in enumerate(info.buttons()):
             r = pygame.Rect(X(62), Y(224) + k * Y(41), X(235), Y(39))
             on = k == info.focus
-            pygame.draw.rect(c, b["orange"] if on else b["btn"], r)
+            self._amber(c, r) if on else pygame.draw.rect(c, b["btn"], r)
             pygame.draw.rect(c, b["row_rule"], (r.x, r.bottom, r.w, Y(2)))
             f = self.fb(Y(25)) if on else fb_
             self._shadowed(c, t.fit(f, self.button_words(info.label(name)), r.w - X(40)), f, b["text"],
@@ -895,7 +906,7 @@ class InDirectHD(BoxSkin):
                 else:
                     cell_r = rect
                 on = (r, col) == (kb.row, kb.col)
-                pygame.draw.rect(c, b["orange"] if on else b["key"], cell_r)
+                self._amber(c, cell_r) if on else pygame.draw.rect(c, b["key"], cell_r)
                 pygame.draw.rect(c, b["key_edge"], cell_r, Y(2))
                 if cell == "SHIFT":
                     label = "a-z" if kb.layer == "ABC" else "A-Z"
@@ -1362,18 +1373,18 @@ class InDirect(InDirectHD):
         b = self.b
         self._bevel(c, cell, b["sel"] if on else b["page"])
         if on:
-            pygame.draw.rect(c, b["shadow"], (cell.x + 2, cell.bottom, cell.w, 2))
-            pygame.draw.rect(c, b["shadow"], (cell.right, cell.y + 2, 2, cell.h))
+            pygame.draw.rect(c, b["shadow"], (cell.x + 3, cell.bottom, cell.w, 3))
+            pygame.draw.rect(c, b["shadow"], (cell.right, cell.y + 3, 3, cell.h))
 
     def _bevel(self, c, r, fill):
         """A cell with the DSS's light top-left / dark bottom-right edges."""
         b = self.b
         pygame.draw.rect(c, fill, r)
-        hi, lo = mix(fill, (255, 255, 255), 0.35), mix(fill, (0, 0, 0), 0.35)
-        pygame.draw.line(c, hi, r.topleft, r.topright)
-        pygame.draw.line(c, hi, r.topleft, r.bottomleft)
-        pygame.draw.line(c, lo, r.bottomleft, r.bottomright)
-        pygame.draw.line(c, lo, r.topright, r.bottomright)
+        hi, lo = mix(fill, (255, 255, 255), 0.42), mix(fill, (0, 0, 0), 0.42)
+        pygame.draw.rect(c, hi, (r.x, r.y, r.w, 2))
+        pygame.draw.rect(c, hi, (r.x, r.y, 2, r.h))
+        pygame.draw.rect(c, lo, (r.x, r.bottom - 2, r.w, 2))
+        pygame.draw.rect(c, lo, (r.right - 2, r.y, 2, r.h))
 
     # ── Menu: the DSS Main Menu ───────────────────────────────────────────
 
@@ -1410,9 +1421,9 @@ class InDirect(InDirectHD):
             sel = i == m.cursor
             row = pygame.Rect(X(52), y - Y(2), X(218), rh)
             if sel:
-                pygame.draw.rect(c, b["sel"], row)
-                pygame.draw.rect(c, b["shadow"], (row.x, row.bottom, row.w, 1))
-                pygame.draw.rect(c, b["shadow"], (row.right, row.y, 1, row.h))
+                self._bevel(c, row, b["sel"])
+                pygame.draw.rect(c, b["shadow"], (row.x + 3, row.bottom, row.w, 3))
+                pygame.draw.rect(c, b["shadow"], (row.right, row.y + 3, 3, row.h))
             num = str((i + 1) % 10) if i < 10 else " "
             label = f"{num} {it.label}"
             if it.value:
