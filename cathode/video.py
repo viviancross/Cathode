@@ -13,6 +13,24 @@ from . import paths
 # in a source checkout. Must happen before `import mpv`.
 if os.name == "nt":
     os.environ["PATH"] = os.pathsep.join(paths.libmpv_dirs() + [os.environ.get("PATH", "")])
+else:
+    # python-mpv asks ctypes.util.find_library("mpv"), which can't see inside
+    # an AppImage or .app, nor Homebrew's lib folder on Apple Silicon. Answer
+    # it with a bundled copy first, then Homebrew's.
+    import ctypes.util
+    import glob
+
+    def _libmpv():
+        for d in paths.libmpv_dirs() + ["/opt/homebrew/lib", "/usr/local/lib"]:
+            for pat in ("libmpv.so.2", "libmpv.so.1", "libmpv.so", "libmpv.2.dylib", "libmpv.dylib"):
+                hits = glob.glob(os.path.join(d, pat))
+                if hits:
+                    return hits[0]
+        return None
+    _found = _libmpv()
+    if _found:
+        _find_library = ctypes.util.find_library
+        ctypes.util.find_library = lambda name: _found if name == "mpv" else _find_library(name)
 
 import mpv  # noqa: E402
 

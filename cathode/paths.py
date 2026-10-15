@@ -25,9 +25,9 @@ def asset(*parts) -> str:
 
 
 def libmpv_dirs() -> list:
-    """Windows: where libmpv-2.dll is looked for. A frozen build has it next
-    to the exe or in PyInstaller's _internal folder; a source checkout in
-    _libmpv/."""
+    """Where a bundled libmpv is looked for first. A frozen build has it next
+    to the executable or in PyInstaller's _internal folder; a source checkout
+    in _libmpv/ (Windows; elsewhere the system's own is fine)."""
     if getattr(sys, "frozen", False):
         return _bundle_dirs()
     return [os.path.join(ROOT, "_libmpv")]
