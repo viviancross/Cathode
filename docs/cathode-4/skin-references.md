@@ -6,7 +6,7 @@ Skins evoke these boxes; they ship no brand names, logos, or proprietary fonts.
 Visual specifics (exact colors, type, spacing) still need period screenshots,
 to be collected when each skin is built. Behavior below is from the manuals.
 
-## Satellite A (DirecTV-style)
+## InDirect (DirecTV-style)
 
 ### SD variant: D10 / D11 / R15 (2004-2006)
 
@@ -40,7 +40,7 @@ to be collected when each skin is built. Behavior below is from the manuals.
 - GUIDE first opens a filter menu; a second GUIDE shows the grid.
 - Same family of keys: MENU, GUIDE, LIST, EXIT, BACK, PREV, ACTIVE, color keys.
 
-## Satellite B (Dish-style)
+## Plate (Dish-style)
 
 ### SD variant: 301 / 322 / DishPVR 508 / 522
 
@@ -85,15 +85,13 @@ to be collected when each skin is built. Behavior below is from the manuals.
 | Live buffer + control bar | Pause live TV + rewind |
 | Quick Menu / numbered Main Menu | Box menu tree, per skin |
 
-## Name ideas
+## Skins
 
-Neutral, satellite-flavored, no real brands or satellites:
-
-1. **Uplink** / **Orbit** (+ "HD" for the HD variants)
-2. **Skyline** / **Starport**
-3. **Ku-Band** / **Clarke Belt** (Clarke belt = the geostationary orbit)
-
-The current look stays **Cathode Classic**.
+| Skin | Evokes | Variants |
+|---|---|---|
+| **Cathode Classic** | Cathode 3.x | one |
+| **InDirect** | DirecTV, mid-2000s | InDirect (SD: D10/D11/R15), InDirect HD (HR20) |
+| **Plate** | Dish Network, mid-2000s | Plate (SD: 301/322/508/522), Plate HD (ViP622/722) |
 
 ## Sources
 
