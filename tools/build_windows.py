@@ -1,10 +1,11 @@
 """Build a self-contained Windows binary of Cathode with PyInstaller.
 
-Bundles Python + the app + Pillow/numpy AND a copy of mpv.exe, so the result
-has no prerequisites — extract and run Cathode.exe.
+Bundles Python, the app, pygame-ce (SDL), Pillow, PyOpenGL and libmpv-2.dll,
+so the result has no prerequisites: extract and run Cathode.exe.
 
 Requires (install once):  pip install pyinstaller
-(7zr.exe for extracting the mpv archive is downloaded automatically.)
+(libmpv comes from _libmpv/ if present, else shinchiro's mpv-dev build;
+7zr.exe for extracting it is downloaded automatically.)
 Run from the project root:  python tools/build_windows.py
 """
 import os
@@ -18,9 +19,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)   # so `import cathode` works when run from tools/
 import cathode  # noqa: E402
 # Release zips land in builds/<version>/ (matches the other build scripts).
-BUILDS = os.path.join(os.path.dirname(ROOT), "builds", cathode.__version__)
+# Next to the repo (S:/projects/builds/<version>), also when building from a
+# worktree under .claude/worktrees/.
+REPO = ROOT.split(os.sep + ".claude" + os.sep)[0]
+BUILDS = os.path.join(os.path.dirname(REPO), "builds", cathode.__version__)
 WORK = os.path.join(ROOT, "_winbuild")
-MPV_DIR = os.path.join(WORK, "mpv")
+MPV_DIR = os.path.join(WORK, "libmpv")
 
 
 def log(msg):
@@ -46,50 +50,37 @@ def _ensure_7zr():
     return sevenzr
 
 
-def fetch_mpv():
-    """Download the latest shinchiro mpv x86_64 build and extract mpv.exe."""
+def fetch_libmpv():
+    """libmpv-2.dll: the one in _libmpv/ (what the source checkout runs on),
+    else the latest shinchiro mpv-dev x86_64 build."""
     import json
+    import shutil
+    local = os.path.join(ROOT, "_libmpv", "libmpv-2.dll")
     os.makedirs(MPV_DIR, exist_ok=True)
-    out_exe = os.path.join(MPV_DIR, "mpv.exe")
-    if os.path.isfile(out_exe):
-        log(f"mpv.exe already present ({os.path.getsize(out_exe)//1024//1024} MB)")
-        return out_exe
-
-    # Reuse a previously-downloaded archive if present.
-    archive = None
-    for f in os.listdir(WORK) if os.path.isdir(WORK) else []:
-        if f.startswith("mpv-x86_64") and f.endswith(".7z"):
-            archive = os.path.join(WORK, f)
-            break
-    if not archive:
-        log("querying latest mpv build...")
-        req = urllib.request.Request(
-            "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest",
-            headers={"User-Agent": "cathode-build"})
-        rel = json.loads(urllib.request.urlopen(req, timeout=60).read())
-        assets = [a for a in rel["assets"]
-                  if a["name"].startswith("mpv-x86_64-2") and a["name"].endswith(".7z")
-                  and "v3" not in a["name"]]
-        if not assets:
-            assets = [a for a in rel["assets"]
-                      if a["name"].startswith("mpv-x86_64") and a["name"].endswith(".7z")]
-        asset = assets[0]
-        archive = os.path.join(WORK, asset["name"])
-        log(f"downloading {asset['name']} ({asset['size']//1024//1024} MB)...")
-        urllib.request.urlretrieve(asset["browser_download_url"], archive)
-
-    sevenzr = _ensure_7zr()
-    log("extracting mpv.exe with 7zr...")
-    # 'e' = extract flat (ignore archive paths) -> mpv.exe lands in MPV_DIR
-    subprocess.run([sevenzr, "e", archive, "-o" + MPV_DIR, "mpv.exe", "-y"],
-                   check=True, stdout=subprocess.DEVNULL)
-    if not os.path.isfile(out_exe):
-        raise RuntimeError("7zr did not produce mpv.exe")
-    log(f"mpv.exe ready ({os.path.getsize(out_exe)//1024//1024} MB)")
-    return out_exe
+    out = os.path.join(MPV_DIR, "libmpv-2.dll")
+    if os.path.isfile(local):
+        shutil.copy2(local, out)
+        log(f"libmpv-2.dll from _libmpv/ ({os.path.getsize(out) // 1024 // 1024} MB)")
+        return out
+    if os.path.isfile(out):
+        return out
+    with urllib.request.urlopen(
+            "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest") as r:
+        assets = json.load(r)["assets"]
+    url = next(a["browser_download_url"] for a in assets
+               if a["name"].startswith("mpv-dev-x86_64-2") and a["name"].endswith(".7z"))
+    archive = os.path.join(WORK, url.rsplit("/", 1)[-1])
+    if not os.path.isfile(archive):
+        log(f"downloading {os.path.basename(archive)}...")
+        urllib.request.urlretrieve(url, archive)
+    subprocess.run([_ensure_7zr(), "e", "-y", f"-o{MPV_DIR}", archive, "libmpv-2.dll"], check=True)
+    if not os.path.isfile(out):
+        raise RuntimeError("7zr did not produce libmpv-2.dll")
+    log(f"libmpv-2.dll ready ({os.path.getsize(out) // 1024 // 1024} MB)")
+    return out
 
 
-def build(mpv_exe):
+def build(libmpv):
     distpath = os.path.join(WORK, "dist")
     workpath = os.path.join(WORK, "pyi")
     sep = ";"  # Windows add-data separator
@@ -105,7 +96,9 @@ def build(mpv_exe):
         "--specpath", WORK,
         "--icon", os.path.join(ROOT, "assets", "cathode.ico"),
         "--add-data", f"{os.path.join(ROOT, 'assets')}{sep}assets",
-        "--add-binary", f"{mpv_exe}{sep}mpv",
+        "--add-binary", f"{libmpv}{sep}.",
+        # PyOpenGL picks its platform module at import time.
+        "--hidden-import", "OpenGL.platform.win32",
         os.path.join(ROOT, "main.py"),
     ]
     log("running PyInstaller (this takes a minute)...")
@@ -182,8 +175,8 @@ def check_toolchain():
                 bad.append(f"{m.group(1)} {have} (needs >= {m.group(2)})")
     if bad:
         raise SystemExit("[build] refusing to build with: " + "; ".join(bad))
-    log(f"toolchain: Python {sys.version.split()[0]}, Pillow {version('Pillow')}, "
-        f"numpy {version('numpy')}, PyInstaller {version('pyinstaller')}")
+    log(f"toolchain: Python {sys.version.split()[0]}, pygame-ce {version('pygame-ce')}, "
+        f"Pillow {version('Pillow')}, PyInstaller {version('pyinstaller')}")
 
 
 def main():
@@ -191,8 +184,7 @@ def main():
         log("WARNING: this produces a Windows binary; run it on Windows.")
     check_toolchain()
     os.makedirs(WORK, exist_ok=True)
-    mpv_exe = fetch_mpv()
-    app_dir = build(mpv_exe)
+    app_dir = build(fetch_libmpv())
     package(app_dir)
 
 

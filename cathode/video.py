@@ -12,7 +12,7 @@ from . import paths
 # Windows looks for libmpv-2.dll on PATH: next to the frozen exe, or _libmpv/
 # in a source checkout. Must happen before `import mpv`.
 if os.name == "nt":
-    os.environ["PATH"] = os.pathsep.join([paths.libmpv_dir(), os.environ.get("PATH", "")])
+    os.environ["PATH"] = os.pathsep.join(paths.libmpv_dirs() + [os.environ.get("PATH", "")])
 
 import mpv  # noqa: E402
 

@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.0
+
+A rebuild, from the window up, to feel like using a satellite box rather than
+a retro-themed player.
+
+- **Three skins.** Cathode Classic is 3.x's look. **InDirect** and
+  **InDirect HD** are DirecTV-style boxes (D10/R15 era and HR20), **Plate**
+  and **Plate HD** Dish-style ones (301/522 era and ViP622/722). The SD
+  variants draw in 4:3. Each skin keeps its own colour theme and font, and
+  any skin can use any theme, the colour editor, any font and the CRT effect.
+- **Box behaviour.** A start-up screen that follows the real loading, a
+  banner on every tune (INFO again for the description), browse without
+  tuning (Plate: RIGHT, as on Dish), a mini guide (InDirect), a signal-loss
+  screen for dead channels, PREV, a THEMES button for genres, guide paging
+  and day jumps, numbered menus.
+- **Pause live TV**, rewind and fast-forward through the buffer, back to live.
+- **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on
+  the new core: the same sign-in, browsing, poster wall, queue, resume and
+  offline recordings.
+- **Faster.** Cathode draws its own window and plays video with libmpv in
+  process; the interface is composited on the GPU, including the CRT
+  effect and the channel-change static, and only redrawn when it changes. An
+  idle Cathode uses next to no CPU.
+- **Desktop.** Any game controller (SDL), media keys for IR remotes, full
+  screen on a chosen monitor, start with the computer, the screen kept awake
+  while playing.
+- **Dropped:** demo mode (`tools/devtv.py` writes a test lineup for
+  development instead). Cathode 3's key and controller remaps don't carry
+  over, because every button was renamed; set them again under Settings >
+  Remote control.
+
 ## 3.4
 
 - **Updates install properly.** The installer was meant to wait two seconds
