@@ -3,10 +3,39 @@
 What the real boxes did, gathered from their user manuals and period reviews.
 Skins evoke these boxes; they ship no brand names, logos, or proprietary fonts.
 
-Visual specifics (exact colors, type, spacing) still need period screenshots,
-to be collected when each skin is built. Behavior below is from the manuals.
+Behavior below is from the manuals. The look was checked against period
+captures (video frames of the real receivers, 2026-10-15; not stored here).
+What they settled:
 
-## InDirect (DirecTV-style)
+- Both families drew the **channel banner across the top** of the picture.
+  DirecTV: a translucent blue band, channel and clock on the first line, the
+  title on the second. Dish SD: a steel-blue capsule with white lettering;
+  Dish ViP: silver with navy lettering, "Time Left" rather than a progress bar.
+- Both guides showed **1.5 hours in three half-hour columns**.
+- **HR20 guide**: white-to-blue panel with a soft sweep of light, the mark and
+  the title side by side, a strip of facts (clock | hours | rating), the
+  synopsis in navy; "guide" watermarked beside the picture window; navy grid
+  with white text, amber selection with white text, "<" in light blue for
+  programmes already started; a bottom bar with the list name at the left and
+  the colour keys explained at the right. Setup pages use the same light panel
+  with the list down the left and the picture top-right.
+- **DirecTV SD** (D10/R15/D12): the same screens on a navy-to-black ground,
+  gold selection with dark text.
+- **ViP622/722 guide**: navy info area, a green "List:" tab, the clock under
+  it, title and synopsis centred, the picture top-right with the channel
+  captioned under it; silver cells with navy text and navy edges, channel
+  cells with the number over the call sign right-aligned, green selection.
+  Dialogs are grey rounded panels with the title in a blue pill, buttons as
+  pills, and the Point Dish meter (a 0-125 scale, red "Not Locked" until it
+  locks). List menus: capsule rows in a white panel, numbered down the right,
+  amber cursor, picture window at the right. Start-up: the mark with a
+  reflection, "Starting up...".
+- **Dish 301-era**: light periwinkle top with white pills (date, favourite
+  list, channel), capsule-ended channel cells, blue program cells with white
+  bold text, a pale selection; grey menu panels with blue pill buttons and a
+  white cursor.
+
+## InDirecTV (DirecTV-style)
 
 ### SD variant: D10 / D11 / R15 (2004-2006)
 
@@ -40,7 +69,7 @@ to be collected when each skin is built. Behavior below is from the manuals.
 - GUIDE first opens a filter menu; a second GUIDE shows the grid.
 - Same family of keys: MENU, GUIDE, LIST, EXIT, BACK, PREV, ACTIVE, color keys.
 
-## Plate (Dish-style)
+## Plate Network (Dish-style)
 
 ### SD variant: 301 / 322 / DishPVR 508 / 522
 
@@ -90,8 +119,8 @@ to be collected when each skin is built. Behavior below is from the manuals.
 | Skin | Evokes | Variants |
 |---|---|---|
 | **Cathode Classic** | Cathode 3.x | one |
-| **InDirect** | DirecTV, mid-2000s | InDirect (SD: D10/D11/R15), InDirect HD (HR20) |
-| **Plate** | Dish Network, mid-2000s | Plate (SD: 301/322/508/522), Plate HD (ViP622/722) |
+| **InDirecTV** | DirecTV, mid-2000s | InDirecTV (SD: D10/D11/R15), InDirecTV HD (HR20) |
+| **Plate Network** | Dish Network, mid-2000s | Plate Network (SD: 301/322/508/522), Plate Network HD (ViP622/722) |
 
 ## Sources
 

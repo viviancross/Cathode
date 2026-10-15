@@ -18,12 +18,12 @@ Style > Skin**:
 
 - **Cathode Classic**: Cathode 3's retro-CRT look. Phosphor colour themes,
   pixel fonts, static when you change channel.
-- **InDirect / InDirect HD**: a DirecTV-style box. HD after the HR20
-  (light info panel, navy grid, amber selection, mini guide); SD after the
-  D10/R15 era (saturated blue, yellow selection, 4:3).
-- **Plate / Plate HD**: a Dish Network-style box. HD after the ViP622/722
-  (silver guide, green selection, numbered Main Menu, RIGHT to browse); SD
-  after the 301/522 era (dark navy, yellow selection, 4:3).
+- **InDirecTV / InDirecTV HD**: a DirecTV-style box. HD after the HR20
+  (light swoosh panel, navy grid, amber selection, the colour keys, a mini guide); SD after the
+  D10/R15 era (the same screens on dark navy, gold selection, 4:3).
+- **Plate Network / Plate Network HD**: a Dish Network-style box. HD after the ViP622/722
+  (silver guide cells, green selection, grey dialogs, numbered menus, RIGHT to browse); SD
+  after the 301/522 era (capsule shapes, blue cells, a pale selection, 4:3).
 
 Each skin keeps its own colour theme and font. Every skin can use any colour
 theme, the colour editor, any font, and the CRT scanlines and vignette.
@@ -128,7 +128,7 @@ them under **Settings > Channels**.
 | Back | Backspace | B |
 | Exit (close everything) | Esc | |
 | Previous channel | P | R3 |
-| Browse / mini guide | B (Plate: Right too) | |
+| Browse / mini guide | B (Plate Network: Right too) | |
 | Themes (genres) | T | |
 | Favourite | F | |
 | My Recordings | L | |
@@ -139,7 +139,7 @@ them under **Settings > Channels**.
 | Quit | Q | |
 
 Media keys (play/pause, stop, rewind, fast-forward, mute, volume) do what they
-say. In menus, number keys pick rows (on Plate's Main Menu, tiles). Remap
+say. In menus, number keys pick rows (on Plate Network's Main Menu, tiles). Remap
 anything under **Settings > Remote control**.
 
 ### On Demand and My Recordings
@@ -207,7 +207,7 @@ cathode/
   video.py          libmpv in-process      gfx.py      window + GPU compositor
   remote.py         every input -> remote buttons
   screens/          live TV, guide, menus, browse, On Demand, playback, ...
-  skins/            Classic, InDirect, Plate
+  skins/            Classic, InDirecTV, Plate Network
   ondemand.py plex.py downloads.py playlist.py epg.py updater.py weather.py
 assets/  fonts and icons      tools/  build and dev scripts
 ```

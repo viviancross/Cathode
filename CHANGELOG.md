@@ -5,14 +5,19 @@
 A rebuild, from the window up, to feel like using a satellite box rather than
 a retro-themed player.
 
-- **Three skins.** Cathode Classic is 3.x's look. **InDirect** and
-  **InDirect HD** are DirecTV-style boxes (D10/R15 era and HR20), **Plate**
-  and **Plate HD** Dish-style ones (301/522 era and ViP622/722). The SD
-  variants draw in 4:3. Each skin keeps its own colour theme and font, and
-  any skin can use any theme, the colour editor, any font and the CRT effect.
+- **Three skins.** Cathode Classic is 3.x's look. **InDirecTV** and
+  **InDirecTV HD** are DirecTV-style boxes (D10/R15 era and HR20), **Plate Network**
+  and **Plate Network HD** Dish-style ones (301/522 era and ViP622/722). The SD
+  variants draw in 4:3. Their screens follow period captures of the real
+  boxes: the channel banner across the top, three half-hour columns in the
+  guide, DirecTV's light swoosh panel and colour-key bar, Dish's silver cells,
+  grey dialogs with the signal meter and menus numbered down the right. Each
+  has a mark of its own; no real logos ship. Each skin keeps its own colour
+  theme and font, and any skin can use any theme, the colour editor, any font
+  and the CRT effect.
 - **Box behaviour.** A start-up screen that follows the real loading, a
   banner on every tune (INFO again for the description), browse without
-  tuning (Plate: RIGHT, as on Dish), a mini guide (InDirect), a signal-loss
+  tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss
   screen for dead channels, PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus.
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.

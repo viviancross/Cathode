@@ -148,6 +148,10 @@ class Skin:
         from .. import palette
         return palette.base_colors("blue")
 
+    def menu_video_box(self, menu):
+        """Where a menu wants the video; None leaves it to the screen below."""
+        return None
+
     def menu_cols(self, menu) -> int:
         """How many columns this skin lays a menu page out in (1 = a list).
         Grids move LEFT/RIGHT across and UP/DOWN by a row."""

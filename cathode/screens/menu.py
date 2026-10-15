@@ -54,6 +54,9 @@ class Menu(Screen):
     def open(self, title: str, items: List[Item]):
         self.pages.append([title, items, self._first(items)])
 
+    def video_box(self):
+        return self.app.skin.menu_video_box(self)
+
     def refresh(self, items: List[Item]):
         """Replace the current page's items, keeping the cursor."""
         self.pages[-1][1] = items
@@ -98,7 +101,7 @@ class Menu(Screen):
         it = self.items[self.cursor]
         cols = self.app.skin.menu_cols(self) if getattr(self.app, "skin", None) else 1
         if cols > 1 and a in (R.UP, R.DOWN, R.LEFT, R.RIGHT):
-            # A grid of tiles (Plate's Main Menu): across, and down by a row.
+            # A grid of tiles (Plate Network's Main Menu): across, and down by a row.
             step = {R.LEFT: -1, R.RIGHT: 1, R.UP: -cols, R.DOWN: cols}[a]
             j = self.cursor + step
             if 0 <= j < len(self.items) and self.items[j].enabled:

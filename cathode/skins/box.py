@@ -42,7 +42,7 @@ def panel(c, rect, top, bottom, radius=10, edge=None, edge_w=2):
 
 
 class BoxSkin(Classic):
-    """Base for InDirect and Plate. Subclasses give `NATIVE` base colours and
+    """Base for InDirecTV and Plate Network. Subclasses give `NATIVE` base colours and
     `roles(base)`, their extra colours, and redraw the screens that make a
     box recognisable: banner, guide, menu, browse, boot, signal loss."""
     tune_cover = "black"            # digital boxes cut to black, not snow
@@ -98,6 +98,33 @@ class BoxSkin(Classic):
         return [("native", "Original")] + super().theme_choices()
 
     # ── Shared pieces ─────────────────────────────────────────────────────
+
+    def menu_video_box(self, menu):
+        """Box menus keep a picture window top-right, as the real ones did; a
+        full-page grid (the Dish-style Main Menu) covers it."""
+        return "hidden" if self.menu_cols(menu) > 1 else self.guide_video_box()
+
+    def draw_live(self, c, live):
+        W, H = self.canvas
+        if live.message:
+            self._message(c, live.message)
+            return
+        if live.standby and live.phase != "cover":
+            self._signal_loss(c)
+        if (live.banner_visible() or live.phase == "cover") and live.channel:
+            cur, nxt = live.programs()
+            self._banner(c, live.channel, cur, nxt, full=live.banner_full)
+        if live.digits:
+            self._digits(c, live.digits)
+        if live.volume_visible():
+            self._volume(c, W // 2, int(H * 0.62))
+        if live.trick_visible() and live.phase != "cover":
+            self._trick(c, live.trick_state())
+
+    def measure(self, fn, *args) -> int:
+        """Width of something drawn by `fn(surface, x, y, *args)`, found by
+        drawing it off-screen."""
+        return fn(pygame.Surface((1, 1), pygame.SRCALPHA), 0, 0, *args)
 
     def dim(self, c, alpha=150):
         veil = pygame.Surface(self.canvas, pygame.SRCALPHA)
