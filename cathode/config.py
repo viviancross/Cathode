@@ -91,6 +91,10 @@ class Config:
 
     # Appearance
     skin: str = "classic"          # classic | plate | plate_hd | indirect | indirect_hd
+    # Each box skin's own look choices (Classic uses font/theme/custom_palette):
+    skin_fonts: dict = field(default_factory=dict)    # skin -> font key
+    skin_themes: dict = field(default_factory=dict)   # skin -> theme ("native", a theme, "custom")
+    skin_custom: dict = field(default_factory=dict)   # skin -> edited base colours
     font: str = "vcr"              # vcr | ibm | vt220 | pixelop | vt323 | jersey
     theme: str = "blue"           # blue | amber | green | vhs | mono | custom | ...
     # Custom palette saved by the theme editor: {bg,accent,accent2,text -> [r,g,b]}

@@ -45,8 +45,10 @@ class Screen:
         return False
 
     def video_box(self):
-        """(x, y, w, h) in canvas pixels to show the video in, or None to
-        leave it to the screen below (the bottom of the stack means full)."""
+        """Where this screen wants the video: "full", (x, y, w, h) in canvas
+        pixels, or None for no say. An opaque screen with no say hides it
+        (a full page has no picture behind it, and on a 4:3 skin it would
+        otherwise show in the bars at the sides)."""
         return None
 
     def on_video(self, kind: str, **data):
@@ -466,10 +468,14 @@ class App:
         return self.screens[start:]
 
     def _compose(self):
-        box = None
+        box = "full"
         for s in reversed(self.screens):
-            box = s.video_box()
-            if box is not None:
+            want = s.video_box()
+            if want is not None:
+                box = want
+                break
+            if s.opaque:
+                box = "hidden"
                 break
         from .screens.live import LiveTV
         live = self.find(LiveTV)

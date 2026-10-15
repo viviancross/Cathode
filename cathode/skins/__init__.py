@@ -85,12 +85,27 @@ class Text:
         return w
 
 
+# Fonts a skin can draw with: key -> (regular file, bold file or None, label).
+FONTS = {
+    "sans": ("LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "Liberation Sans"),
+    "vcr": ("VCR_OSD_MONO.ttf", None, "VCR OSD Mono"),
+    "ibm": ("PxPlus_IBM_VGA8.ttf", None, "IBM VGA"),
+    "vt220": ("Glass_TTY_VT220.ttf", None, "Glass TTY VT220"),
+    "pixelop": ("PixelOperator.ttf", None, "Pixel Operator"),
+    "vt323": ("VT323-Regular.ttf", None, "VT323"),
+    "jersey": ("Jersey10-Regular.ttf", None, "Jersey 10"),
+}
+
+
 class Skin:
     name = "base"
+    label = "Base"
     canvas = (1280, 720)
     nearest = False             # pixel-art upscale (SD skins) vs smooth
     tune_cover = "static"       # what covers a channel change: static | black
     right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume
+    browse_style = "banner"     # BROWSE shows: banner (one channel) | mini (a mini guide)
+    default_font = "vcr"
 
     def __init__(self, app):
         self.app = app
@@ -100,6 +115,45 @@ class Skin:
 
     def reload(self):
         """Pick up changed settings (theme, font)."""
+
+    # ── Per-skin look settings (theme, font) ──────────────────────────────
+    # Each skin keeps its own, so switching skins doesn't drag one skin's
+    # font or colours onto another. Classic keeps 3.x's config fields.
+
+    def font_key(self) -> str:
+        return self.app.config.skin_fonts.get(self.name, self.default_font)
+
+    def set_font_key(self, key: str):
+        self.app.config.skin_fonts[self.name] = key
+
+    def theme_key(self) -> str:
+        return self.app.config.skin_themes.get(self.name, "native")
+
+    def set_theme_key(self, key: str):
+        self.app.config.skin_themes[self.name] = key
+
+    def custom_base(self) -> dict:
+        return self.app.config.skin_custom.get(self.name) or {}
+
+    def set_custom_base(self, base: dict):
+        self.app.config.skin_custom[self.name] = base
+
+    def theme_choices(self) -> list:
+        """(key, label) pairs for the Color theme setting."""
+        from .. import palette
+        return [(k, palette.THEME_LABELS[k]) for k in palette.THEME_ORDER] + [("custom", "Custom")]
+
+    def native_base(self) -> dict:
+        """Base colours of this skin's own look (the theme editor's start)."""
+        from .. import palette
+        return palette.base_colors("blue")
+
+    def f(self, size: int, bold: bool = False):
+        regular, heavy, _ = FONTS.get(self.font_key(), FONTS[self.default_font])
+        return self.text.font(heavy if bold and heavy else regular, size)
+
+    def fb(self, size: int):
+        return self.f(size, bold=True)
 
     def hit(self, rect, fn):
         """Register a clickable region while drawing."""
@@ -129,7 +183,13 @@ class Skin:
         return surf
 
 
+def skin_classes() -> dict:
+    """name -> skin class, in the order the Skin setting cycles them."""
+    from .classic import Classic
+    from .indirect import InDirect, InDirectHD
+    return {c.name: c for c in (Classic, InDirect, InDirectHD)}
+
+
 def load_skin(name: str, app) -> Skin:
     from .classic import Classic
-    skins = {"classic": Classic}
-    return skins.get(name, Classic)(app)
+    return skin_classes().get(name, Classic)(app)

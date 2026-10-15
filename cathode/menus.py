@@ -1,12 +1,8 @@
 """What MENU opens: the box's menu tree. Settings apply as they change and
 are saved straight away."""
 
-from . import autostart, palette, remote as R
+from . import autostart, remote as R
 from .screens.menu import Item, Keyboard, Menu
-
-SKINS = [("classic", "Cathode Classic")]
-FONTS = [("vcr", "VCR OSD Mono"), ("ibm", "IBM VGA"), ("vt220", "Glass TTY VT220"),
-         ("pixelop", "Pixel Operator"), ("vt323", "VT323"), ("jersey", "Jersey 10")]
 
 
 def _cycle(options, current, delta):
@@ -300,14 +296,21 @@ def style_items(app):
             app.invalidate()
         return run
 
-    themes = [(k, palette.THEME_LABELS[k]) for k in palette.THEME_ORDER] + [("custom", "Custom")]
+    from .skins import FONTS, skin_classes
+    skins = [(k, cls.label) for k, cls in skin_classes().items()]
+    fonts = [(k, v[2]) for k, v in FONTS.items()]
+
+    def skin():
+        return app.skin     # changes when the Skin row does
+
     return [
-        Item("Skin", value=lambda: _label(SKINS, cfg.skin),
-             adjust=lambda d: app.set_skin(_cycle(SKINS, cfg.skin, d))),
-        Item("Color theme", value=lambda: _label(themes, cfg.theme),
-             adjust=set_and(lambda d: setattr(cfg, "theme", _cycle(themes, cfg.theme, d)))),
-        Item("Font", value=lambda: _label(FONTS, cfg.font),
-             adjust=set_and(lambda d: setattr(cfg, "font", _cycle(FONTS, cfg.font, d)))),
+        Item("Skin", value=lambda: _label(skins, cfg.skin),
+             adjust=lambda d: app.set_skin(_cycle(skins, cfg.skin, d))),
+        Item("Color theme", value=lambda: _label(skin().theme_choices(), skin().theme_key()),
+             adjust=set_and(lambda d: skin().set_theme_key(
+                 _cycle(skin().theme_choices(), skin().theme_key(), d)))),
+        Item("Font", value=lambda: _label(fonts, skin().font_key()),
+             adjust=set_and(lambda d: skin().set_font_key(_cycle(fonts, skin().font_key(), d)))),
         Item("Scanlines", value=lambda: "Off" if not cfg.crt_enabled else f"{cfg.scanline_alpha * 100 // 115}%",
              adjust=set_and(lambda d: _scanlines(cfg, d))),
         Item("Vignette", value=lambda: "On" if cfg.vignette_enabled else "Off",
@@ -325,33 +328,36 @@ COLOR_ROLES = [("bg", "Background"), ("accent", "Accent"), ("accent2", "Highligh
 def color_items(app):
     """The theme editor: each base colour's red, green and blue, live. The
     rest of the palette is derived (and contrast-solved) from these."""
-    cfg = app.config
-    if cfg.theme != "custom" or not cfg.custom_palette:
-        cfg.custom_palette = palette.base_colors(cfg.theme)
-        cfg.theme = "custom"
+    cfg, skin = app.config, app.skin
+    if skin.theme_key() != "custom" or not skin.custom_base():
+        skin.set_custom_base(skin.native_base())    # start from the look you had
+        skin.set_theme_key("custom")
         cfg.save()
-        app.skin.reload()
+        skin.reload()
 
     def channel(role, k):
         def adj(d):
-            rgb = list(cfg.custom_palette[role])
+            base = skin.custom_base()
+            rgb = list(base[role])
             rgb[k] = max(0, min(255, rgb[k] + 8 * d))
-            cfg.custom_palette[role] = rgb
+            base[role] = rgb
             cfg.save()
-            app.skin.reload()
+            skin.reload()
             app.invalidate()
         return adj
     items = []
     for role, label in COLOR_ROLES:
         for k, ch in enumerate("RGB"):
-            items.append(Item(f"{label} {ch}", value=lambda r=role, k=k: str(cfg.custom_palette[r][k]),
+            items.append(Item(f"{label} {ch}", value=lambda r=role, k=k: str(skin.custom_base()[r][k]),
                               adjust=channel(role, k)))
 
     def reset():
-        cfg.custom_palette = palette.base_colors("blue")
+        skin.set_theme_key("native" if "native" in dict(skin.theme_choices()) else "blue")
+        skin.set_custom_base({})
         cfg.save()
-        app.skin.reload()
-    items.append(Item("Start over from Classic Blue", reset))
+        skin.reload()
+        _reopen(app, style_items(app))
+    items.append(Item("Back to the skin's own colors", reset))
     return items
 
 

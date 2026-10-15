@@ -43,6 +43,9 @@ class Playback(Screen):
         self.app.cancel(self._tick)
         self._tick = self.app.after(0.5, self._monitor)
 
+    def video_box(self):
+        return "full"
+
     # ── Position ──────────────────────────────────────────────────────────
 
     def _monitor(self):

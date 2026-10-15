@@ -9,10 +9,6 @@ import pygame
 from .. import palette
 from . import Skin
 
-_FONTS = {"vcr": "VCR_OSD_MONO.ttf", "ibm": "PxPlus_IBM_VGA8.ttf",
-          "vt220": "Glass_TTY_VT220.ttf", "pixelop": "PixelOperator.ttf",
-          "vt323": "VT323-Regular.ttf", "jersey": "Jersey10-Regular.ttf"}
-
 # SMPTE colour bars, top two thirds (75%).
 _BARS = [(191, 191, 191), (191, 191, 0), (0, 191, 191), (0, 191, 0),
          (191, 0, 191), (191, 0, 0), (0, 0, 191)]
@@ -31,6 +27,7 @@ def span(prog) -> str:
 
 class Classic(Skin):
     name = "classic"
+    label = "Cathode Classic"
     canvas = (1280, 720)
     tune_cover = "static"
 
@@ -41,12 +38,29 @@ class Classic(Skin):
 
     def reload(self):
         """Pick up the configured theme and font."""
-        cfg = self.app.config
-        self.p = palette.resolve(cfg.theme, cfg.custom_palette)
-        self.font_file = _FONTS.get(cfg.font, _FONTS["vcr"])
+        self.p = palette.resolve(self.theme_key(), self.custom_base())
 
-    def f(self, size):
-        return self.text.font(self.font_file, size)
+    # Classic's look lives in 3.x's config fields, so old configs carry over.
+    def font_key(self):
+        return self.app.config.font
+
+    def set_font_key(self, key):
+        self.app.config.font = key
+
+    def theme_key(self):
+        return self.app.config.theme
+
+    def set_theme_key(self, key):
+        self.app.config.theme = key
+
+    def custom_base(self):
+        return self.app.config.custom_palette
+
+    def set_custom_base(self, base):
+        self.app.config.custom_palette = base
+
+    def native_base(self):
+        return palette.base_colors(self.theme_key())
 
     # ── Live TV ───────────────────────────────────────────────────────────
 

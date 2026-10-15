@@ -305,7 +305,8 @@ class Gfx:
                 crt: float = 0.0, vignette: bool = False, seed: float = 0.0):
         """Draw a frame to the window's back buffer.
 
-        video_box: (x, y, w, h) in canvas pixels, or None for the full window.
+        video_box: (x, y, w, h) in canvas pixels, "full" for the whole window,
+        or "hidden".
         cover: (kind, alpha) over the video, kind "static" or "black".
         crt: scanline strength 0..1 (0 skips the CRT pass's darkening).
         """
@@ -323,18 +324,20 @@ class Gfx:
             bx, by, bw, bh = box
             return (ux + bx * uw / cw, uy + by * uh / ch, bw * uw / cw, bh * uh / ch)
 
-        vrect = self._ndc(canvas_px(video_box)) if video_box else (-1, -1, 1, 1)
+        boxed = isinstance(video_box, tuple)
+        vrect = self._ndc(canvas_px(video_box)) if boxed else (-1, -1, 1, 1)
 
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, self._scene.fbo)
         GL.glViewport(0, 0, w, h)
         GL.glClearColor(0, 0, 0, 1)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
         GL.glDisable(GL.GL_BLEND)
-        self._blit(self._plain, self.video.tex, vrect)
+        if video_box != "hidden":
+            self._blit(self._plain, self.video.tex, vrect)
 
         GL.glEnable(GL.GL_BLEND)
         GL.glBlendFunc(GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)    # premultiplied
-        if cover and cover[1] > 0:
+        if cover and cover[1] > 0 and video_box != "hidden":
             p, loc = self._cover
             GL.glUseProgram(p)
             GL.glUniform4f(loc("rect"), *vrect)

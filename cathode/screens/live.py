@@ -87,6 +87,9 @@ class LiveTV(Screen):
         self._reveal_start = time.monotonic()
         self.app.invalidate()
 
+    def video_box(self):
+        return "full"
+
     def suspend(self):
         """Something else (On Demand) is using the picture: let go of it."""
         self.app.cancel(self._timeout)
@@ -211,9 +214,13 @@ class LiveTV(Screen):
         elif a == R.FAV:
             self.app.toggle_favorite(self.channel)
         elif a == R.BROWSE or (a == R.RIGHT and self.app.skin.right_is_browse):
-            from .browse import Browse
             self.hide_banner()
-            self.app.push(Browse(self.app))
+            if self.app.skin.browse_style == "mini":
+                from .miniguide import MiniGuide
+                self.app.push(MiniGuide(self.app))
+            else:
+                from .browse import Browse
+                self.app.push(Browse(self.app))
         elif a in (R.INFO, R.SELECT):
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full
