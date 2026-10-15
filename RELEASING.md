@@ -6,15 +6,24 @@ Checklist for cutting a Cathode release.
    README's "Version" line; add the release's section to `CHANGELOG.md`.
 2. **Run the tests** — `python -m unittest discover tests` (all green before
    anything ships).
-3. **Build the zips** — they land in `../builds/<version>/`, each with a
+3. **Build** — everything lands in `../builds/<version>/`, each with a
    `.sha256` sidecar written next to it:
-   - `python tools/build_source.py` — the Linux / macOS source zip
+   - `python tools/build_source.py` — the source zip (source installs update
+     from it)
    - `python tools/build_windows.py` — the Windows portable zip (run on Windows).
      The zip ships the interpreter and libraries it was built with, so build
      from a fresh venv on a current Python: `py -3.13 -m venv _winbuild\venv313`,
      then `_winbuild\venv313\Scripts\pip install -r requirements.txt pyinstaller`
      and run the script with `_winbuild\venv313\Scripts\python`. It refuses to run
      on Python older than 3.12 or on anything below `requirements.txt`.
+   - The Linux AppImage and Flatpak, in Docker (any OS):
+     `docker build -t cathode-linux-build tools/linux`, then
+     `docker run --rm --privileged -v "$PWD:/src" -v "$PWD/../builds:/builds" cathode-linux-build`.
+     Built on Ubuntu 24.04, so the AppImage needs a distribution at least that
+     new (glibc 2.39).
+   - `python tools/build_macos.py` — the Mac app, once on an Apple Silicon
+     Mac and once on an Intel one (or under Rosetta): `cathode-macos-arm64-*`
+     and `cathode-macos-x86_64-*`. Needs `brew install mpv`.
 4. **Audit the zips** — list each archive's contents and check nothing
    unexpected shipped: local helper scripts, caches, dot-directories, personal
    configs, or backslash paths in the source zip.
@@ -23,8 +32,8 @@ Checklist for cutting a Cathode release.
    `git rev-list -n1 v<version>`: a tag on an older commit publishes the wrong
    source.
 6. **Publish the GitHub release** — create it from the tag, paste the
-   CHANGELOG section as the notes, and upload **both zips and both `.sha256`
-   files**. The updater picks the highest-versioned release and verifies its
+   CHANGELOG section as the notes, and upload **every build and its
+   `.sha256`**. The updater picks the highest-versioned release and verifies its
    download against the sidecar, so a release without one skips verification.
 
 ## Tags: keep the ports off the desktop line
@@ -38,6 +47,6 @@ the desktop app's updater tells them apart **by tag shape**:
 
 A port release tagged `v3.1` would be offered to desktop users as their own
 update. Asset names are the second guard: the updater only accepts a file named
-`cathode-windows-*` or `cathode-linux-macos-*`, so don't reuse those prefixes
-for a port's build. `cathode/updater.py` (`is_mainline_tag`, `_asset_match`)
+`cathode-windows-*`, `cathode-linux-x86_64-*.AppImage` or
+`cathode-linux-macos-*`, so don't reuse those prefixes for a port's build. `cathode/updater.py` (`is_mainline_tag`, `_asset_match`)
 holds both rules, and `tests/test_updater.py` covers them.

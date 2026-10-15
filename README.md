@@ -105,6 +105,10 @@ pip install -r requirements.txt
 python main.py
 ```
 
+On Windows, put `libmpv-2.dll` (from an `mpv-dev-x86_64` archive of
+[shinchiro's builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases))
+in a `_libmpv` folder next to `main.py`.
+
 ## Using it
 
 On first start Cathode asks for your playlist (an M3U address or file) and,

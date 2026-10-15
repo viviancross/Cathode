@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the cross-platform source zip (Linux / macOS).
+"""Build the cross-platform source zip: what source installs update from.
 
 Writes cathode-linux-macos-<version>.zip with forward-slash paths so it extracts
-cleanly on Linux. Bundles the Linux/SteamOS (install.sh) and macOS
-(install-macos.sh) install scripts; the Windows ones are left out.
+cleanly on Linux. Bundles the venv launcher and the Linux helper scripts; the
+Windows launcher is left out.
 """
 
 import fnmatch
@@ -16,14 +16,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import cathode  # noqa: E402
 
-OUT_DIR = os.path.join(os.path.dirname(ROOT), "builds", cathode.__version__)
+# Next to the repo (S:/projects/builds/<version>), also when building from a
+# worktree under .claude/worktrees/.
+REPO = ROOT.split(os.sep + ".claude" + os.sep)[0]
+OUT_DIR = os.path.join(os.path.dirname(REPO), "builds", cathode.__version__)
 
-# Top-level files to include (non-Windows install scripts).
+# Top-level files to include (no Windows launcher).
 TOP_FILES = [
     "main.py", "requirements.txt", "README.md", "CHANGELOG.md",
     "LICENSE", "THIRD_PARTY_NOTICES.md",
-    "cathode.sh", "install.sh", "install-service.sh", "make-shortcut.sh",
-    "install-macos.sh",
+    "cathode.sh", "install-service.sh", "make-shortcut.sh",
 ]
 TREE_DIRS = ["cathode", "assets", "tools", "LICENSES"]
 
@@ -32,7 +34,7 @@ EXCLUDE_DIRS = {"__pycache__", "_winbuild", "_linuxbuild", "_macbuild",
 EXCLUDE_PATTERNS = ["*.pyc", "*.pyo", "*.zip"]
 # Windows-install files never belong in the Linux build; make_steam_art.py is
 # a local Steam-library asset helper, not part of the app.
-EXCLUDE_NAMES = {"install-windows.ps1", "cathode.bat", "make_steam_art.py"}
+EXCLUDE_NAMES = {"cathode.bat", "make_steam_art.py"}
 
 
 def _excluded(name):
