@@ -151,6 +151,21 @@ class Video:
         except Exception:
             pass        # nothing loaded, or not seekable
 
+    def audio_devices(self) -> list:
+        """[{name, description}] mpv can play to; 'auto' first."""
+        try:
+            return list(self.player["audio-device-list"] or [])
+        except Exception:
+            return []
+
+    @property
+    def audio_device(self) -> str:
+        return self.player["audio-device"] or "auto"
+
+    @audio_device.setter
+    def audio_device(self, name: str):
+        self.player["audio-device"] = name or "auto"
+
     def buffered_behind(self) -> float:
         """How far back REW can reach: seconds of past still in the buffer."""
         try:

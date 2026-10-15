@@ -78,6 +78,9 @@ class App:
         self.script = []            # [(seconds, button)]: scripted presses (tests, CI)
         self.toast_text, self.toast_until = "", 0.0
         self._cats = None           # category list, rebuilt when channels or guide change
+        self.last_input = time.monotonic()
+        self.weather = None
+        self.pending_update = None  # install script to run once we've quit
 
     # ── Threads -> UI thread ──────────────────────────────────────────────
 
@@ -200,8 +203,23 @@ class App:
 
     # ── Input ─────────────────────────────────────────────────────────────
 
+    IDLE_SCREENSAVER = 300.0    # seconds of no input on a static page
+
+    def _idle_check(self):
+        """Arm the screensaver over pages that never change by themselves."""
+        from .screens.boot import Boot
+        from .screens.screensaver import Screensaver
+        top = self.top()
+        idle = time.monotonic() - self.last_input
+        static = top.opaque or not self.channels    # a full page, or no TV playing
+        if (self.config.screensaver and idle >= self.IDLE_SCREENSAVER and static
+                and not isinstance(top, (Boot, Screensaver))):
+            self.push(Screensaver(self))
+        self.after(10.0, self._idle_check)
+
     def press(self, action: str):
         """Offer a remote button to the screens, top first."""
+        self.last_input = time.monotonic()
         for s in reversed(self.screens):
             if s.handle(action):
                 self.invalidate()
@@ -220,6 +238,9 @@ class App:
     def click(self, wx: int, wy: int, button: int = 1):
         """A mouse click at window pixels. Left clicks hit what the skin drew
         last frame (topmost first); right is BACK, as a remote's back button."""
+        if self.top().name == "screensaver":
+            self.press(R.SELECT)        # any input just wakes it
+            return
         if button == 3:
             self.press(R.BACK)
             return
@@ -361,6 +382,17 @@ class App:
                            extra=_mpv_extra(self.config.mpv_extra_args))
         self.video.attach_gl(self.gfx.get_proc_address)
         self.video.muted = self.config.muted
+        if self.config.audio_device:
+            self.video.audio_device = self.config.audio_device
+        from .weather import Weather
+        self.weather = Weather(self.config.weather_zip, self.config.weather_units,
+                               self.config.weather_country,
+                               on_update=lambda: self.post(self.invalidate),
+                               user_agent=self.config.user_agent)
+        if self.config.update_check and not self.shot:
+            from . import update_flow
+            update_flow.launch_check(self)
+        self.after(10.0, self._idle_check)
 
         self.push(LiveTV(self))
         for t, button in self.script:
@@ -462,6 +494,7 @@ class App:
         typed, Enter submits, Ctrl+V pastes. Arrows, Backspace and Esc still
         act as remote buttons."""
         kb = self.top()
+        self.last_input = time.monotonic()
         if e.type == pygame.TEXTINPUT:
             kb.text(e.text)
             return True
@@ -486,6 +519,9 @@ class App:
         if self.video:
             self.video.terminate()
         pygame.quit()
+        if self.pending_update:
+            from . import updater
+            updater.spawn_apply(self.pending_update)
 
 
 def _mpv_extra(args) -> dict:

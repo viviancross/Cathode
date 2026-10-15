@@ -206,9 +206,66 @@ def _toggle_autostart(app):
 def system_items(app):
     from . import __version__
     from .screens.diagnostics import Diagnostics
+    from . import update_flow
+    cfg = app.config
     return [
         Item("Diagnostics", lambda: app.push(Diagnostics(app)), close=True),
+        Item("Audio output", submenu=lambda: audio_items(app)),
+        Item("Weather", submenu=lambda: weather_items(app)),
+        Item("Check for updates", lambda: update_flow.open_check(app)),
+        Item("Check at start-up", value=lambda: "Yes" if cfg.update_check else "No",
+             adjust=lambda d: (setattr(cfg, "update_check", not cfg.update_check), cfg.save())),
+        Item("Start-up screen", value=lambda: "On" if cfg.boot_sequence else "Off",
+             adjust=lambda d: (setattr(cfg, "boot_sequence", not cfg.boot_sequence), cfg.save())),
+        Item("Screensaver", value=lambda: "On" if cfg.screensaver else "Off",
+             adjust=lambda d: (setattr(cfg, "screensaver", not cfg.screensaver), cfg.save())),
         Item(f"Cathode {__version__}", enabled=False),
+    ]
+
+
+def audio_items(app):
+    def pick(name):
+        app.config.audio_device = name
+        app.config.save()
+        app.video.audio_device = name
+        app.toast("Audio output changed")
+        app.top().back()
+    current = app.config.audio_device or "auto"
+    return [Item(("> " if d["name"] == current else "  ") + d["description"][:40],
+                 (lambda n=d["name"]: pick(n)))
+            for d in app.video.audio_devices()] or [Item("(no outputs found)", enabled=False)]
+
+
+def weather_items(app):
+    cfg = app.config
+
+    def set_zip():
+        def got(z):
+            if z is not None:
+                cfg.weather_zip = z
+                cfg.save()
+                app.weather.configure(z, cfg.weather_units, cfg.weather_country)
+                app.invalidate()
+        app.push(Keyboard(app, "Zip or postal code (empty turns weather off)", got,
+                          initial=cfg.weather_zip))
+
+    def units(d):
+        cfg.weather_units = "C" if cfg.weather_units == "F" else "F"
+        cfg.save()
+        app.weather.configure(cfg.weather_zip, cfg.weather_units, cfg.weather_country)
+
+    def country(d):
+        from .weather import COUNTRIES
+        codes = [code for code, _ in COUNTRIES]
+        i = codes.index(cfg.weather_country) if cfg.weather_country in codes else 0
+        cfg.weather_country = codes[(i + d) % len(codes)]
+        cfg.save()
+        app.weather.configure(cfg.weather_zip, cfg.weather_units, cfg.weather_country)
+    return [
+        Item("Zip / postal code", set_zip, value=lambda: cfg.weather_zip or "Off"),
+        Item("Country", value=lambda: cfg.weather_country, adjust=country),
+        Item("Units", value=lambda: "Fahrenheit" if cfg.weather_units == "F" else "Celsius",
+             adjust=units),
     ]
 
 

@@ -430,6 +430,9 @@ class Classic(Skin):
         stamp = clock(local) + local.strftime("  %a %b ") + str(local.day)
         t.draw(c, stamp, self.f(18), p["CYAN"], W - pad, (hh - t.ink(self.f(18))[1]) // 2,
                align="right")
+        wx = self.app.weather.current() if self.app.weather else None
+        if wx:
+            self._weather(c, wx, pad, hh, W // 2 - t.width(f_title, "PROGRAM GUIDE") // 2 - pad)
 
         # Preview: a hole the compositor fills with live video.
         vx, vy, vw, vh = self.guide_video_box()
@@ -494,6 +497,74 @@ class Classic(Skin):
         if guide.top + guide.rows < len(vis):
             self._arrow(c, W // 2, grid_y + g["row_h"] * guide.rows + 6, up=False)
         pygame.draw.rect(c, p["GUIDE_BORDER"], (0, 0, W, H), 2)
+
+    def _weather(self, c, w, x, hh, right):
+        """Icon and two lines of conditions, left of the guide's title."""
+        p, t = self.p, self.text
+        f = self.f(14)
+        s = hh - 12
+        line1 = f"{w.get('temp', '')}°{w.get('units', 'F')}  {w.get('conditions', '')}"
+        line2 = "   ".join(x for x in (w.get("city"), f"{w['humidity']}% RH" if w.get("humidity") else "",
+                                      f"{w['rain']}% rain" if w.get("rain") else "") if x)
+        avail = right - x - s - 8
+        if avail < 60:
+            return
+        self._weather_icon(c, x, 6, s, w.get("category", "cloudy"))
+        lh = t.ink(f)[1] + 4
+        y = (hh - 2 * lh + 4) // 2
+        t.draw(c, t.fit(f, line1, avail), f, p["WHITE"], x + s + 8, y)
+        t.draw(c, t.fit(f, line2, avail), f, p["WHITE_DIM"], x + s + 8, y + lh)
+
+    def _weather_icon(self, c, x, y, s, cat):
+        p = self.p
+        night = not 6 <= datetime.now().hour < 19
+
+        def disc(cx, cy, r):
+            col = (228, 228, 214, 255) if night else p["YELLOW"]
+            pygame.draw.circle(c, col, (int(cx), int(cy)), int(r))
+
+        def cloud(bx, by, bw, bh, col):
+            r = bh / 2
+            pygame.draw.circle(c, col, (int(bx + r), int(by + bh - r)), int(r))
+            pygame.draw.circle(c, col, (int(bx + bw - r), int(by + bh - r)), int(r))
+            pygame.draw.ellipse(c, col, (bx + bw * 0.28, by, bw * 0.44, bh * 0.95))
+            pygame.draw.rect(c, col, (bx + r, by + bh - r, bw - 2 * r, r))
+        if cat == "clear":
+            disc(x + s / 2, y + s / 2, s * 0.28)
+            return
+        if cat == "partly":
+            disc(x + s * 0.32, y + s * 0.34, s * 0.2)
+            cloud(x + s * 0.28, y + s * 0.42, s * 0.66, s * 0.4, p["WHITE_DIM"])
+            return
+        cloud(x + s * 0.08, y + s * 0.18, s * 0.84, s * 0.5,
+              p["INK_MUTED"] if cat == "fog" else p["WHITE_DIM"])
+        base = y + s * 0.72
+        for i in range(3):
+            dx = x + s * (0.3 + i * 0.2)
+            if cat == "rain":
+                pygame.draw.line(c, p["CYAN"], (dx, base), (dx - s * 0.08, base + s * 0.2), 2)
+            elif cat == "snow":
+                pygame.draw.circle(c, p["WHITE"], (int(dx), int(base + s * 0.12)), 2)
+        if cat == "storm":
+            cx = x + s / 2
+            pygame.draw.polygon(c, p["YELLOW"], [(cx, base), (cx - s * 0.12, base + s * 0.16),
+                                                 (cx, base + s * 0.16), (cx - s * 0.06, base + s * 0.3)])
+
+    # ── Screensaver ───────────────────────────────────────────────────────
+
+    def draw_screensaver(self, c, ss):
+        W, H = self.canvas
+        c.fill((0, 0, 0, 255))
+        logo = self._boot_logo()
+        f = self.f(40)
+        lw = logo.get_width() if logo else 0
+        bw = max(lw, self.text.width(f, "CATHODE"))
+        bh = (logo.get_height() + 12 if logo else 0) + self.text.ink(f)[1]
+        x, y = ss.position(bw, bh, W, H)
+        if logo:
+            c.blit(logo, (x + (bw - lw) // 2, y))
+            y += logo.get_height() + 12
+        self.text.draw(c, "CATHODE", f, self.p["CYAN"], x + bw // 2, y, align="center")
 
     def _guide_details(self, c, guide, box, now):
         p, t = self.p, self.text
