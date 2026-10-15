@@ -38,18 +38,23 @@ frames. The sources, and what they settled:
   rows of capsule channel cells with a blue crescent and the number over the
   call sign, blue program cells with a light top bevel and a pale
   (173,200,208) selection, "Info Not Available" for gaps; a grey strip at
-  the foot. Banner (2:32): lettered straight onto a dark translucent band:
-  date and clock at the left, the title centred, channel number and call
-  sign at the right, "Time Left" and "List: All Sub" on a second line.
+  the foot. Banner (2:32): three dark translucent capsules over the
+  picture, a short one with the date over the clock, a long middle one with
+  the title over "Time Left" and "List: All Sub", a short one with the
+  number over a five-letter call sign (spaces dropped: HISTI, BIOGR).
   Theme Categories: the grey page, the mark top-left, the title in a white
   pill at the right, two columns of numbered blue pills on a darker band,
   the chosen one white. Loading: an "ATTENTION" dialog (grey, title in a
-  blue pill). Measured (640x480): the tab's ellipse at 58,17 420x197; pills
-  50 tall (the channel one 34) with 20px lettering; header 26 tall at 234
-  with 18px lettering; rows 41 tall on a 47 pitch from 261, the crescent at
-  x 34-86; banner band at 67,58 566x82 with 20px date and clock, a 22px
-  title, 17px "Time Left" / "List" line; menu pills 32 tall on a 40 pitch
-  from 168, 270 wide in two columns from x 50 and 330.
+  blue pill). Measured (640x480): the tab's ellipse at 50,8 600x222, the
+  mark fitted inside x 62-156; pills 42 tall at y 37 / 100 / 160 from x 166
+  with 17px lettering on a 20 pitch; header 26 tall at 233 with 18px
+  lettering, dividers between the half-hours; rows 42 tall on a 46.7 pitch
+  from 261, channel tiles x 0-131 with the crescent clipped inside the tile,
+  the grid x 135-597; banner capsules at y 46, 87 tall: x 55-143, 147-480
+  and 484-580, 18px date and clock, a 22px title at cap top 48, 21px number
+  and call sign, the 17px "Time Left" / "List" line at x 160 / 376; menu
+  pills 32 tall on a 40 pitch from 168, 270 wide in two columns from x 50
+  and 330.
 - **Plate Network HD**: the 2007 teal guide (youtu.be/0eKW6gQJrlk; a 4:3
   capture, mapped onto the 16:9 canvas). Dark teal (0,51,66) page with faint
   swirls, the mark and a red TV-guide tag top-left, the title, rating and
@@ -65,9 +70,10 @@ frames. The sources, and what they settled:
   synopsis 24px from 168 on a 30 pitch, led by the category; list name and
   clock 30px at 268; header 28px; rows from 328 on a 53 pitch, 27px cell
   text, channel labels regular weight in from x 26, the grid from x 255;
-  banner number 38px at 19 below the box top, call sign and list 30px at
-  54 / 82, title 30px at 24 with its rating line at 59, the right column at
-  20 / 50 / 78, the pill 34 tall with 28px lettering.
+  banner number 38px at 10 below the box top, call sign and list 30px at
+  45 / 73, title 30px at 24 with its rating line at 59, the right column at
+  12 / 42 / 72 (both outer stacks centred in the box), the pill 34 tall
+  with 28px lettering.
 - **InDirecTV HD**: the HR20 (youtu.be/fbFCD5yc9O8, 1280x720). Guide: a
   near-white title area (y 0-146) with the stacked mark at x 96 and the
   title at x 300; a light-blue facts strip (y 146-192: clock | hours |
