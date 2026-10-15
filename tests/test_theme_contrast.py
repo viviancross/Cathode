@@ -88,5 +88,19 @@ class TestThemeContrast(unittest.TestCase):
                             f"{name}: SCREEN_BG too bright")
 
 
+class TestEditor(unittest.TestCase):
+    def test_editing_starts_from_the_theme_you_were_on(self):
+        for name in theme.THEME_ORDER:
+            base = theme.base_colors(name)
+            pal = theme.resolve("custom", base)
+            for role, key in (("bg", "TV_BLUE"), ("accent", "CYAN"), ("accent2", "YELLOW"),
+                              ("text", "WHITE"), ("chnum", "CHANNEL_GREEN")):
+                self.assertEqual(list(pal[key][:3]), base[role], f"{name}.{role}")
+
+    def test_a_broken_saved_palette_falls_back(self):
+        self.assertIs(theme.resolve("custom", {"bg": [1]}), theme.PALETTES["blue"])
+        self.assertIs(theme.resolve("nonsense"), theme.PALETTES["blue"])
+
+
 if __name__ == "__main__":
     unittest.main()

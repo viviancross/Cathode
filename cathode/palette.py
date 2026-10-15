@@ -186,6 +186,26 @@ PALETTES = {
 THEME_ORDER = ["blue", "amber", "green", "vhs", "mono", "c64", "red", "synth", "ice"]
 
 
+def base_colors(name: str) -> dict:
+    """The few base colours a shipped theme is built from (role -> [r, g, b]),
+    recovered from its palette: the starting point for editing it."""
+    pal = PALETTES.get(name, PALETTES["blue"])
+    return {"bg": list(pal["TV_BLUE"][:3]), "accent": list(pal["CYAN"][:3]),
+            "accent2": list(pal["YELLOW"][:3]), "text": list(pal["WHITE"][:3]),
+            "chnum": list(pal["CHANNEL_GREEN"][:3])}
+
+
+def resolve(name: str, custom_base: dict = None) -> dict:
+    """The palette to draw with: a shipped theme, or 'custom' built from the
+    editor's base colours."""
+    if name == "custom" and custom_base:
+        try:
+            return custom(**custom_base)
+        except (TypeError, KeyError, IndexError):
+            pass
+    return PALETTES.get(name, PALETTES["blue"])
+
+
 def custom(bg, accent, accent2, text, chnum=(40, 255, 90)) -> dict:
     """A palette from the theme editor's base colours, held to the same
     contrast guarantees as the shipped ones because they are solved, not

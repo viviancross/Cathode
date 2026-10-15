@@ -42,7 +42,7 @@ class Classic(Skin):
     def reload(self):
         """Pick up the configured theme and font."""
         cfg = self.app.config
-        self.p = palette.PALETTES.get(cfg.theme, palette.PALETTES["blue"])
+        self.p = palette.resolve(cfg.theme, cfg.custom_palette)
         self.font_file = _FONTS.get(cfg.font, _FONTS["vcr"])
 
     def f(self, size):

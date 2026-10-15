@@ -80,7 +80,7 @@ def style_items(app):
             app.invalidate()
         return run
 
-    themes = [(k, palette.THEME_LABELS[k]) for k in palette.THEME_ORDER]
+    themes = [(k, palette.THEME_LABELS[k]) for k in palette.THEME_ORDER] + [("custom", "Custom")]
     return [
         Item("Skin", value=lambda: _label(SKINS, cfg.skin),
              adjust=lambda d: app.set_skin(_cycle(SKINS, cfg.skin, d))),
@@ -94,7 +94,45 @@ def style_items(app):
              adjust=set_and(lambda d: setattr(cfg, "vignette_enabled", not cfg.vignette_enabled))),
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
+        Item("Edit colors", submenu=lambda: color_items(app)),
     ]
+
+
+COLOR_ROLES = [("bg", "Background"), ("accent", "Accent"), ("accent2", "Highlight"),
+               ("text", "Text"), ("chnum", "Channel number")]
+
+
+def color_items(app):
+    """The theme editor: each base colour's red, green and blue, live. The
+    rest of the palette is derived (and contrast-solved) from these."""
+    cfg = app.config
+    if cfg.theme != "custom" or not cfg.custom_palette:
+        cfg.custom_palette = palette.base_colors(cfg.theme)
+        cfg.theme = "custom"
+        cfg.save()
+        app.skin.reload()
+
+    def channel(role, k):
+        def adj(d):
+            rgb = list(cfg.custom_palette[role])
+            rgb[k] = max(0, min(255, rgb[k] + 8 * d))
+            cfg.custom_palette[role] = rgb
+            cfg.save()
+            app.skin.reload()
+            app.invalidate()
+        return adj
+    items = []
+    for role, label in COLOR_ROLES:
+        for k, ch in enumerate("RGB"):
+            items.append(Item(f"{label} {ch}", value=lambda r=role, k=k: str(cfg.custom_palette[r][k]),
+                              adjust=channel(role, k)))
+
+    def reset():
+        cfg.custom_palette = palette.base_colors("blue")
+        cfg.save()
+        app.skin.reload()
+    items.append(Item("Start over from Classic Blue", reset))
+    return items
 
 
 def _scanlines(cfg, d):
