@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, call_sign, mix, rgba, vgrad
+from .box import BoxSkin, mix, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -51,9 +51,6 @@ class InDirectHD(BoxSkin):
 
     def roles(self, b):
         navy, cell, sel, text, sky = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
-
-        def sh(c, k):
-            return self.shade(b, c, k)
         return {
             "navy": navy, "cell": cell, "cell_hi": mix(cell, (255, 255, 255), 0.06),
             "gap": mix(navy, cell, 0.7), "sky": sky,
@@ -69,22 +66,18 @@ class InDirectHD(BoxSkin):
             "key_blue": (1, 78, 167),
             "teal": mix(cell, sky, 0.45), "teal_dark": mix(cell, sky, 0.2), "panel": mix(cell, navy, 0.15),
             "margin": mix(cell, sky, 0.7), "bar": mix(sky, text, 0.55), "deep": mix(navy, (0, 0, 0), 0.4),
-            # The HR20's pages, measured off the frames: the blue page, the
-            # list rows and their rules, the info panel, the orange cursor,
-            # the On Demand teal, the trick bar, the pop-up.
-            "pg_top": sh((0, 97, 146), "chnum"), "pg_bot": sh((0, 80, 144), "chnum"),
-            "row": sh((0, 53, 103), "bg"), "row_rule": sh((3, 92, 144), "chnum"),
-            "row_head": sh((23, 36, 63), "bg"), "pnl": sh((0, 60, 110), "bg"), "pnl_bot": sh((0, 52, 97), "bg"),
-            "btn": sh((4, 50, 98), "bg"), "orange": sh((232, 149, 0), "accent2"), "orange_ink": (30, 22, 34),
-            "label": (103, 147, 204), "tip": (186, 214, 64), "dim": (112, 140, 176), "clock": sh((8, 46, 96), "bg"),
-            "key": sh((0, 26, 74), "bg"), "key_edge": sh((30, 96, 150), "chnum"), "field": sh((3, 8, 69), "bg"),
-            "od_top": sh((58, 126, 156), "chnum"), "od_bot": sh((30, 88, 120), "chnum"),
-            "od_col": sh((32, 93, 108), "accent"), "od_panel": sh((29, 80, 96), "accent"),
-            "od_row": sh((44, 112, 128), "accent"), "od_row2": sh((36, 100, 116), "accent"),
-            "od_bar": (150, 176, 192), "od_tile": (230, 242, 242), "od_tag": sh((60, 128, 150), "accent"),
-            "od_sel": sh((232, 176, 44), "accent2"), "od_ink": (24, 40, 60),
-            "tk_band": sh((112, 162, 221), "chnum"), "tk_bar": (251, 117, 24), "tk_state": sh((39, 39, 104), "bg"),
-            "tk_tile": (226, 235, 240), "pop_head": (214, 214, 218), "pop_body": sh((0, 64, 128), "bg"),
+            # The pages wear the guide's colours (the user's call): navy
+            # headers and channel cells, teal cells, the amber cursor with
+            # white shadowed lettering, the white title area, the sky band.
+            "row": cell, "row_rule": mix(navy, cell, 0.7), "row_head": navy, "pnl": mix(cell, navy, 0.15),
+            "pnl_bot": mix(cell, navy, 0.5), "btn": navy, "orange": sel, "orange_ink": text,
+            "label": mix(sky, text, 0.45), "tip": text, "dim": mix(sky, text, 0.45), "clock": text,
+            "key": navy, "key_edge": mix(navy, cell, 0.7), "field": mix(navy, (0, 0, 0), 0.4),
+            "od_col": navy, "od_panel": mix(cell, navy, 0.15), "od_row": cell, "od_row2": mix(cell, navy, 0.2),
+            "od_bar": cell, "od_tile": mix(text, sky, 0.06), "od_tag": sky, "od_sel": sel,
+            "od_ink": mix(navy, (60, 40, 110), 0.4),
+            "tk_band": (33, 132, 193), "tk_bar": sel, "tk_state": navy, "tk_tile": mix(text, sky, 0.06),
+            "pop_head": mix(text, sky, 0.06), "pop_body": navy,
         }
 
     # ── Geometry: the box's own pixels, scaled to the canvas ──────────────
@@ -353,7 +346,7 @@ class InDirectHD(BoxSkin):
             chr_ = pygame.Rect(X(96), y, X(199), rh)
             pygame.draw.rect(c, b["navy"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            t.draw(c, f"{ch.number} {call_sign(ch)}", f_cell, b["text"], X(110), cy)
+            t.draw(c, t.fit(f_cell, f"{ch.number} {ch.name}", chr_.w - X(24)), f_cell, b["text"], X(110), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
             self._cell(c, pygame.Rect(grid_x + grid_w, y, X(1278) - grid_x - grid_w, rh), False)
@@ -522,18 +515,19 @@ class InDirectHD(BoxSkin):
     def _is_playlist(s):
         return bool(s.level) and s.level.get("key") == "recordings"
 
-    def _ital(self, c, s, f, ink, x, y, align="left"):
+    def _ital(self, c, s, f, ink, x, y, align="left", shadow=None):
         """The playlist's bold italic, slanted from the bold face."""
         f.italic = True
         try:
+            if shadow:
+                self.text.draw(c, s, f, shadow, x + 1, y + 1, align=align)
             return self.text.draw(c, s, f, ink, x, y, align=align)
         finally:
             f.italic = False
 
     def _blue(self, c):
         """The blue page under the title area."""
-        W, H = self.canvas
-        vgrad(c, (0, self.Y(192), W, H - self.Y(192)), rgba(self.b["pg_top"]), rgba(self.b["pg_bot"]))
+        self._page(c, self.R(0, 192, 1280, 528))
 
     def _hint(self, c, x, y, key, label, ink, chip):
         """A remote button named in a footer: the button in a small chip,
@@ -556,7 +550,7 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if s.mode != "auth" and self._is_playlist(s):
             return self._playlist(c, s)
-        vgrad(c, (0, 0, W, H), rgba(b["od_top"]), rgba(b["od_bot"]))
+        self._page(c, (0, 0, W, H))
         self._picture(c)
         tile = self.R(32, 35, 312, 150)
         vgrad(c, tile, rgba(b["od_tile"]), rgba(mix(b["od_tile"], b["od_bar"], 0.6)), radius=Y(14))
@@ -577,10 +571,10 @@ class InDirectHD(BoxSkin):
         bar = self.R(356, 634, 880, 40)
         pygame.draw.rect(c, b["od_bar"], bar, border_radius=Y(6))
         hy = bar.y + (bar.h - t.ink(self.f(Y(21)))[1]) // 2
-        x = self._hint(c, bar.x + X(64), hy, "MENU", "Options", b["od_ink"], b["od_tag"])
-        x = self._hint(c, x, hy, "LIST", "My Recordings", b["od_ink"], b["od_tag"])
+        x = self._hint(c, bar.x + X(64), hy, "MENU", "Options", b["text"], b["navy"])
+        x = self._hint(c, x, hy, "LIST", "My Recordings", b["text"], b["navy"])
         if s.status:
-            t.draw(c, s.status.title(), self.fb(Y(21)), b["od_ink"], bar.right - X(20), hy, align="right")
+            t.draw(c, s.status.title(), self.fb(Y(21)), b["text"], bar.right - X(20), hy, align="right")
 
         fh, fd = self.fb(Y(28)), self.f(Y(22))
         if s.mode == "auth":
@@ -609,8 +603,8 @@ class InDirectHD(BoxSkin):
             r = pygame.Rect(X(32), Y(218) + k * Y(42), X(312), Y(40))
             on = i == col_sel
             pygame.draw.rect(c, b["od_sel"] if on else b["od_col"], r)
-            t.draw(c, t.fit(fr, col_rows[i].get("title", "").title(), r.w - X(36)), fr,
-                   b["od_ink"] if on else b["text"], r.x + X(20), r.y + (r.h - t.ink(fr)[1]) // 2)
+            self._shadowed(c, t.fit(fr, col_rows[i].get("title", "").title(), r.w - X(36)), fr, b["text"],
+                           b["sel_shadow"] if on else None, r.x + X(20), r.y + (r.h - t.ink(fr)[1]) // 2)
             if parent:
                 self.hit(r, lambda: s.back())
             else:
@@ -647,22 +641,22 @@ class InDirectHD(BoxSkin):
             r = pygame.Rect(main.x + X(4), main.y + Y(8) + k * Y(44), main.w - X(8), Y(42))
             on = i == s.sel
             pygame.draw.rect(c, b["od_sel"] if on else (b["od_row"] if k % 2 == 0 else b["od_row2"]), r)
-            ink = b["od_ink"] if on else b["text"]
+            sh = b["sel_shadow"] if on else None
             meta = row.get("meta", "")
             mw = t.width(fm, meta) + X(30) if meta else 0
             ty = r.y + (r.h - t.ink(fr)[1]) // 2
-            t.draw(c, t.fit(fr, row.get("title", ""), r.w - mw - X(40)), fr, ink, r.x + X(16), ty)
+            self._shadowed(c, t.fit(fr, row.get("title", ""), r.w - mw - X(40)), fr, b["text"], sh, r.x + X(16), ty)
             if meta:
-                t.draw(c, meta, fm, ink, r.right - X(16), ty, align="right")
+                self._shadowed(c, meta, fm, b["text"], sh, r.right - X(16), ty, align="right")
             off, dur = row.get("offset", 0), row.get("duration", 0)
             if off and dur:
                 pygame.draw.rect(c, b["tk_bar"], (r.x + X(16), r.bottom - Y(5), int((r.w - X(32)) * min(1, off / dur)), Y(3)))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         ax, ay = X(374), Y(654)                 # the key bar's arrow slot
         if top + n_vis < len(rows):
-            pygame.draw.polygon(c, b["od_ink"], [(ax, ay - Y(6)), (ax + X(16), ay - Y(6)), (ax + X(8), ay + Y(6))])
+            pygame.draw.polygon(c, b["text"], [(ax, ay - Y(6)), (ax + X(16), ay - Y(6)), (ax + X(8), ay + Y(6))])
         if top:
-            pygame.draw.polygon(c, b["od_ink"], [(ax + X(22), ay + Y(6)), (ax + X(38), ay + Y(6)),
+            pygame.draw.polygon(c, b["text"], [(ax + X(22), ay + Y(6)), (ax + X(38), ay + Y(6)),
                                                  (ax + X(30), ay - Y(6))])
 
     def _od_posters(self, c, s, main):
@@ -679,8 +673,8 @@ class InDirectHD(BoxSkin):
             on = s.sel == 0
             pygame.draw.rect(c, b["od_sel"] if on else b["od_row"], sort)
             fs = self.f(Y(21))
-            t.draw(c, s.rows[0]["title"], fs, b["od_ink"] if on else b["text"], sort.x + X(12),
-                   sort.y + (sort.h - t.ink(fs)[1]) // 2)
+            self._shadowed(c, s.rows[0]["title"], fs, b["text"], b["sel_shadow"] if on else None, sort.x + X(12),
+                           sort.y + (sort.h - t.ink(fs)[1]) // 2)
             self.hit(sort, lambda: (setattr(s, "sel", 0), s.select()))
         rows = s.rows[off:]
         cols = self.OD_COLS
@@ -742,17 +736,18 @@ class InDirectHD(BoxSkin):
             row = rows[i]
             r = pygame.Rect(head.x, head.bottom + Y(2) + k * Y(48), head.w, Y(46))
             on = i == s.sel
-            pygame.draw.rect(c, b["orange"] if on else b["row"], r)
+            self._cell(c, r, on)
             pygame.draw.rect(c, b["row_rule"], (r.x, r.y - Y(2), r.w, Y(2)))
-            ink = b["orange_ink"] if on else (b["text"] if row.get("playable") else b["dim"])
+            ink = b["text"] if on or row.get("playable") else b["dim"]
+            sh = b["sel_shadow"] if on else None
             ty = r.y + (r.h - t.ink(fr)[1]) // 2
             st = row.get("state", "")
             if st and st != "done":             # still coming down: the box's ring
                 pygame.draw.circle(c, ink, (r.x + X(30), r.centery), Y(12), Y(3))
-            self._ital(c, t.fit(fr, row.get("title", ""), X(520)), fr, ink, r.x + X(62), ty)
+            self._ital(c, t.fit(fr, row.get("title", ""), X(520)), fr, ink, r.x + X(62), ty, shadow=sh)
             meta = row.get("meta", "")
             if meta:
-                self._ital(c, t.fit(fr, meta, X(440)), fr, ink, r.x + X(605), ty)
+                self._ital(c, t.fit(fr, meta, X(440)), fr, ink, r.x + X(605), ty, shadow=sh)
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         foot = self.R(95, 645, 1085, 38)
         if top + n_vis < len(rows):
@@ -797,8 +792,8 @@ class InDirectHD(BoxSkin):
             pygame.draw.rect(c, b["orange"] if on else b["btn"], r)
             pygame.draw.rect(c, b["row_rule"], (r.x, r.bottom, r.w, Y(2)))
             f = self.fb(Y(25)) if on else fb_
-            t.draw(c, t.fit(f, self.button_words(info.label(name)), r.w - X(40)), f, b["orange_ink"] if on else b["text"],
-                   r.x + X(34), r.y + (r.h - t.ink(f)[1]) // 2)
+            self._shadowed(c, t.fit(f, self.button_words(info.label(name)), r.w - X(40)), f, b["text"],
+                           b["sel_shadow"] if on else None, r.x + X(34), r.y + (r.h - t.ink(f)[1]) // 2)
             self.hit(r, lambda k=k, name=name: (setattr(info, "focus", k), info.press(name)))
         x, y, w = pn.x + X(40), pn.y + Y(26), pn.w - X(80)
         lh = t.ink(fb_)[1] + Y(20)
@@ -866,11 +861,13 @@ class InDirectHD(BoxSkin):
                 else:
                     label = self.KEY_WORDS.get(cell, cell)
                 f = fk if len(label) == 1 else self.fb(Y(24))
-                ink = b["orange_ink"] if on else b["text"]
+                sh = b["sel_shadow"] if on else None
                 if rect is not None:
-                    t.draw(c, label, self.f(Y(26)), ink, cell_r.x + X(14), cell_r.y + (ch - t.ink(self.f(Y(26)))[1]) // 2)
+                    self._shadowed(c, label, self.f(Y(26)), b["text"], sh, cell_r.x + X(14),
+                                   cell_r.y + (ch - t.ink(self.f(Y(26)))[1]) // 2)
                 else:
-                    t.draw(c, label, f, ink, cell_r.centerx, cell_r.y + (ch - t.ink(f)[1]) // 2, align="center")
+                    self._shadowed(c, label, f, b["text"], sh, cell_r.centerx, cell_r.y + (ch - t.ink(f)[1]) // 2,
+                                   align="center")
                 self.hit(cell_r, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                   kb._press(cell)))
         field = self.R(692, 352, 448, 42)
@@ -898,7 +895,7 @@ class InDirectHD(BoxSkin):
         pn = self.R(95, 222, 1085, 498)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
         pygame.draw.rect(c, b["orange"], self.R(120, 255, 20, 430))
-        pygame.draw.circle(c, b["orange_ink"], (X(130), Y(275)), Y(8))
+        pygame.draw.circle(c, b["navy"], (X(130), Y(275)), Y(8))
         f = self.f(Y(25))
         y = Y(264)
         for label, value, bar in [("Signal Strength:", d.signal(), True), ("Signal Quality:", d.quality(), True)] + \

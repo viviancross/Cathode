@@ -88,13 +88,6 @@ class BoxSkin(Classic):
     def roles(self, base) -> dict:
         return {}
 
-    def shade(self, base, measured, key):
-        """A colour measured off the real box, moved as far as the chosen
-        theme moved base colour `key` from the native look: exact on the
-        native theme, following the others."""
-        n = self.NATIVE[key]
-        return tuple(max(0, min(255, measured[i] + base[key][i] - n[i])) for i in range(3))
-
     # The On Demand info buttons, in the boxes' own words.
     BUTTON_WORDS = {"PLAY": "Play", "PLAY ALL": "Play All", "SEASONS": "Seasons", "SHUFFLE": "Shuffle",
                     "+ QUEUE": "Add to Queue", "+ WATCHLIST": "Add to Watchlist",

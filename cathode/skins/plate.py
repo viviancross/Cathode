@@ -52,8 +52,6 @@ class PlateHD(BoxSkin):
     def roles(self, b):
         page, now_, later, text, gold = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
 
-        def sh(c, k):
-            return self.shade(b, c, k)
         return {
             "page": page, "page_hi": mix(page, (40, 120, 130), 0.35), "page_lo": mix(page, (0, 0, 0), 0.3),
             "now": now_, "later": later, "edge": mix(later, (120, 160, 200), 0.3),
@@ -61,22 +59,20 @@ class PlateHD(BoxSkin):
             "soft": mix(text, page, 0.3), "muted": mix(text, page, 0.5),
             "banner": (34, 35, 33), "banner_ink": text, "pill": (84, 84, 86), "pill_ink": text,
             "tag": (200, 30, 40), "dish": (210, 30, 40),
-            "list_panel": (232, 238, 240), "row": mix(page, (40, 120, 130), 0.5), "row_ink": text,
-            "row_edge": mix(page, (0, 0, 0), 0.3), "cursor": gold, "cursor_ink": mix(later, (0, 0, 0), 0.3),
-            "ink": mix(later, (0, 0, 0), 0.3), "pip": (0, 0, 0), "pip_edge": mix(page, (120, 170, 180), 0.5),
-            "panel_top": (236, 238, 240), "panel_bot": (190, 196, 204),
+            "row": mix(page, (40, 120, 130), 0.5), "row_ink": text, "row_edge": mix(page, (0, 0, 0), 0.3),
+            "cursor": gold, "cursor_ink": mix(later, (0, 0, 0), 0.3), "pip": (0, 0, 0),
+            "pip_edge": mix(page, (120, 170, 180), 0.5),
             "sel": gold, "sel_ink": mix(later, (0, 0, 0), 0.3), "deep": mix(page, (0, 0, 0), 0.4),
-            # The ViP's pages, measured off the frames (2009-11): the blue
-            # page and its header, the pale list panel and its rows, the
-            # amber cursor, the white capsule buttons, the dark info panel.
-            "vp_top": sh((42, 59, 105), "accent2"), "vp_mid": sh((40, 92, 170), "accent2"),
-            "vp_bot": sh((15, 43, 100), "accent2"), "vp_hdr": sh((86, 161, 226), "accent2"),
-            "vp_panel": (223, 239, 243), "vp_panel_edge": sh((92, 97, 135), "accent2"),
-            "vp_row": (236, 241, 252), "vp_row_edge": (150, 166, 196), "vp_ink": (22, 34, 82),
-            "vp_amber": sh((232, 160, 60), "chnum"), "vp_amber_edge": sh((195, 131, 54), "chnum"),
-            "vp_btn": (238, 244, 250), "vp_btn_edge": (120, 128, 155), "vp_info": sh((129, 148, 178), "accent2"),
-            "vp_info_hd": sh((106, 128, 166), "accent2"), "vp_green": (52, 132, 72), "vp_green2": (64, 146, 84),
-            "vp_orange": (236, 104, 34), "vp_dim": (150, 166, 196), "vp_field": (182, 204, 236),
+            # Panels, dialogs and the pages' parts, in the guide's colours.
+            "list_panel": (58, 54, 66), "panel_top": (58, 54, 66), "panel_bot": (10, 18, 30), "ink": text,
+            "pb_track": (84, 84, 86), "pb_edge": (10, 18, 30), "pb_fill": gold,
+            "vp_top": mix(page, (40, 120, 130), 0.35), "vp_mid": page, "vp_bot": mix(page, (0, 0, 0), 0.3),
+            "vp_hdr": mix(mix(page, (40, 120, 130), 0.35), text, 0.15),
+            "vp_panel": (58, 54, 66), "vp_panel_edge": mix(page, (120, 170, 180), 0.5),
+            "vp_row": later, "vp_row_edge": mix(later, (120, 160, 200), 0.3), "vp_ink": text,
+            "vp_amber": gold, "vp_amber_edge": mix(gold, (0, 0, 0), 0.3), "vp_btn": (84, 84, 86),
+            "vp_btn_edge": (40, 40, 42), "vp_info": later, "vp_green": now_, "vp_green2": mix(now_, later, 0.35),
+            "vp_orange": (200, 30, 40), "vp_dim": mix(text, page, 0.5), "vp_field": (10, 18, 30),
         }
 
     def X(self, v) -> int:
@@ -189,11 +185,11 @@ class PlateHD(BoxSkin):
         self.cb(c, self.fit_cb(f_mid, ch.name.upper(), X(200)), f_mid, ink, cx, r.y + Y(45), align="center")
         self.cb(c, self.fit_cb(f_mid, g_list(self), X(200)), f_mid, ink, cx, r.y + Y(73), align="center")
         mid = r.x + X(607)
-        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(560)), f_mid, ink, mid, r.y + Y(24), align="center")
+        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(560)), f_mid, ink, mid, r.y + Y(12), align="center")
         now = datetime.now(timezone.utc)
         if cur:
             bits = [s for s in (cur.rating, f"{ampm(cur.start)} - {ampm(cur.stop)}") if s]
-            self.cb(c, "   ".join(bits), f_mid, ink, mid, r.y + Y(59), align="center")
+            self.cb(c, "   ".join(bits), f_mid, ink, mid, r.y + Y(46), align="center")
         local = datetime.now()
         rx = r.right - X(20)
         self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_mid, ink, rx, r.y + Y(12), align="right")
@@ -202,7 +198,7 @@ class PlateHD(BoxSkin):
             self.cb(c, time_left(cur, now), f_mid, ink, rx, r.y + Y(72), align="right")
         if nxt:
             fn = self.fb(Y(17))
-            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(84), align="center")
+            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(78), align="center")
         label = tag or ("INFO FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
@@ -272,7 +268,7 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         c.fill((0, 0, 0, 255))
         r = self.R(290, 250, 700, 220)
-        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba((255, 255, 255)), edge_w=Y(3))
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba(b["pip_edge"]), edge_w=Y(3))
         pill = pygame.Rect(r.x + X(30), r.y + Y(14), r.w - X(60), Y(36))
         vgrad(c, pill, rgba(mix(b["later"], (255, 255, 255), 0.35)), rgba(b["later"]), radius=Y(10))
         f = self.fb(Y(22))
@@ -285,13 +281,13 @@ class PlateHD(BoxSkin):
     def _progress_bar(self, c, bar):
         """The dialog's inset bar, its dark segments walking along."""
         b, X = self.b, self.X
-        pygame.draw.rect(c, (255, 255, 255), bar)
-        pygame.draw.rect(c, b["ink"], bar, 1)
+        pygame.draw.rect(c, b["pb_track"], bar)
+        pygame.draw.rect(c, b["pb_edge"], bar, 1)
         seg = max(4, X(12))
         n = (bar.w - X(8)) // (seg + X(3))
         lit = int(time.monotonic() * 4) % (n + 1)
         for i in range(lit):
-            pygame.draw.rect(c, b["ink"], (bar.x + X(4) + i * (seg + X(3)), bar.y + 3, seg, bar.h - 6))
+            pygame.draw.rect(c, b["pb_fill"], (bar.x + X(4) + i * (seg + X(3)), bar.y + 3, seg, bar.h - 6))
 
     # ── Guide ─────────────────────────────────────────────────────────────
 
@@ -347,7 +343,7 @@ class PlateHD(BoxSkin):
             chr_ = pygame.Rect(0, y, X(247), rh)
             pygame.draw.rect(c, b["chan"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            self.cb(c, f"{ch.number} {dish_call(ch)}", f_chan, b["text"], X(26), cy)
+            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(220)), f_chan, b["text"], X(26), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["gold"], (chr_.right - X(14), y + Y(12)), Y(5))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
@@ -421,7 +417,7 @@ class PlateHD(BoxSkin):
                 self.cb(c, self.fit_cb(fc, f"{ampm(on.start)} - {ampm(on.stop)}  {on.title}", X(580)), fc, b["text"], X(597), Y(588))
         lp = self.R(51, 127, 493, 567)
         pygame.draw.rect(c, b["list_panel"], lp, border_radius=Y(14))
-        pygame.draw.rect(c, (255, 255, 255), lp, Y(3), border_radius=Y(14))
+        pygame.draw.rect(c, b["pip_edge"], lp, Y(3), border_radius=Y(14))
         n = len(m.items)
         rh = Y(53)
         n_vis = max(1, (lp.h - Y(32)) // rh)
@@ -469,7 +465,7 @@ class PlateHD(BoxSkin):
     keyboard_layer = "ABC"
 
     def page_video_box(self, screen):
-        r = self.R(660, 108, 360, 203)
+        r = self.R(800, 100, 440, 248)
         return (r.x, r.y, r.w, r.h)
 
     def ondemand_cols(self, screen):
@@ -535,10 +531,11 @@ class PlateHD(BoxSkin):
         pygame.draw.rect(c, edge, r.inflate(Y(4), Y(4)), border_radius=r.h)
         vgrad(c, r, rgba(mix(fill, (255, 255, 255), 0.4)), rgba(fill), radius=r.h // 2)
         f = self.fb(Y(24))
-        self.cb(c, self.fit_cb(f, label, r.w - Y(20)), f, b["vp_ink"], r.centerx, r.y + (r.h - self.text.ink(f)[1]) // 2,
+        self.cb(c, self.fit_cb(f, label, r.w - Y(20)), f, b["sel_ink"] if on else b["vp_ink"], r.centerx,
+                r.y + (r.h - self.text.ink(f)[1]) // 2,
                 align="center")
 
-    def _vip_buttons(self, c, labels, focus, x=680, y=372, w=250, h=44, pitch=62, hits=None):
+    def _vip_buttons(self, c, labels, focus, x=870, y=412, w=300, h=44, pitch=58, hits=None):
         for k, label in enumerate(labels):
             r = self.R(x, y + k * pitch, w, h)
             self._vip_button(c, r, label, k == focus)
@@ -557,7 +554,7 @@ class PlateHD(BoxSkin):
             fill = b["vp_amber"] if on else (b["vp_green"] if k % 2 == 0 else b["vp_green2"]) if green else b["vp_row"]
             pygame.draw.rect(c, fill, r)
             pygame.draw.rect(c, b["vp_row_edge"], r, 1)
-            ink = b["vp_ink"] if on or not green else b["text"]
+            ink = b["sel_ink"] if on else b["text"]
             meta = row.get("meta", "")
             mw = self.measure(lambda cc, x, y: self.cb(cc, meta, fm, ink, x, y)) + X(20) if meta else 0
             ty = r.y + (r.h - t.ink(f)[1]) // 2
@@ -580,7 +577,7 @@ class PlateHD(BoxSkin):
         title = "My Recordings" if rec else "On Demand"
         sub = "" if rec or not s.level or len(s.stack) < 2 else s.level["title"].title()
         self._vip_page(c, title, sub)
-        panel = self.R(40, 336, 560, 360)
+        panel = self.R(40, 336, 740, 360)
         self._vip_panel(c, panel)
         fh = self.fb(Y(22))
         fh.italic = True
@@ -625,12 +622,12 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f, fd = self.fb(Y(26)), self.fb(Y(22))
         y = Y(130)
-        for line in t.wrap(f, row.get("title", ""), int(X(560) / 0.86), 2):
+        for line in t.wrap(f, row.get("title", ""), int(X(720) / 0.86), 2):
             self.cb(c, line, f, b["text"], X(48), y)
             y += Y(34)
         meta = row.get("meta", "")
         if meta:
-            self.cb(c, self.fit_cb(fd, meta, X(560)), fd, b["text"], X(48), y + Y(6))
+            self.cb(c, self.fit_cb(fd, meta, X(720)), fd, b["text"], X(48), y + Y(6))
 
     def draw_iteminfo(self, c, info):
         """The ViP's DVR Event page: the title centred over the facts, the
@@ -641,14 +638,14 @@ class PlateHD(BoxSkin):
         d = info.detail
         self._vip_page(c, "Event Info")
         f = self.fb(Y(28))
-        self.cb(c, self.fit_cb(f, d.get("title", ""), X(580)), f, b["text"], X(330), Y(118), align="center")
+        self.cb(c, self.fit_cb(f, d.get("title", ""), X(740)), f, b["text"], X(430), Y(118), align="center")
         fm = self.fb(Y(23))
         meta = d.get("subtitle") or d.get("meta", "")
         if meta:
-            self.cb(c, self.fit_cb(fm, meta, X(580)), fm, b["text"], X(330), Y(162), align="center")
+            self.cb(c, self.fit_cb(fm, meta, X(740)), fm, b["text"], X(430), Y(162), align="center")
         if d.get("duration"):
-            self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], X(330), Y(200), align="center")
-        panel = self.R(80, 300, 500, 330)
+            self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], X(430), Y(200), align="center")
+        panel = self.R(40, 300, 740, 360)
         self._vip_panel(c, panel)
         pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
         fh = self.fb(Y(22))
@@ -660,11 +657,11 @@ class PlateHD(BoxSkin):
             fh.italic = False
         fd = self.fb(Y(22))
         y = panel.y + Y(54)
-        for line in t.wrap(fd, d.get("summary", "") or "No description available.", int((panel.w - X(60)) / 0.86), 7):
+        for line in t.wrap(fd, d.get("summary", "") or "No description available.", int((panel.w - X(60)) / 0.86), 8):
             self.cb(c, line, fd, b["vp_ink"], panel.centerx, y, align="center")
             y += Y(30)
         names = info.buttons()
-        self._vip_buttons(c, [self.button_words(info.label(n)) for n in names], info.focus, y=372, pitch=58,
+        self._vip_buttons(c, [self.button_words(info.label(n)) for n in names], info.focus,
                           hits=[lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)])
 
     # The keyboard: the Themes & Search pop-up: a grey-blue card over the
@@ -726,7 +723,8 @@ class PlateHD(BoxSkin):
                     vgrad(c, rect, rgba(mix(fill, (255, 255, 255), 0.5)), rgba(fill), radius=Y(10))
                     label = cell if len(cell) == 1 else words[cell]
                     fl = fk if len(cell) == 1 else self.fb(Y(22))
-                    self.cb(c, label, fl, b["vp_ink"], rect.centerx, rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
+                    self.cb(c, label, fl, b["sel_ink"] if on else b["vp_ink"], rect.centerx,
+                            rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
                 self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                 kb._press(cell)))
 
@@ -811,11 +809,11 @@ class PlateHD(BoxSkin):
     def draw_toast(self, c, msg):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(24))
-        w = min(X(1100), self.measure(lambda cc, x, y: self.cb(cc, msg, f, b["vp_ink"], x, y)) + X(60))
+        w = min(X(1100), self.measure(lambda cc, x, y: self.cb(cc, msg, f, b["vp_ink"], x, y)) + X(64))
         r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(50))
         pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=r.h)
         vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=r.h // 2)
-        self.cb(c, self.fit_cb(f, msg, w - X(60)), f, b["vp_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2,
+        self.cb(c, self.fit_cb(f, msg, w - X(56)), f, b["vp_ink"], r.centerx, r.y + (r.h - t.ink(f)[1]) // 2,
                 align="center")
 
     def _message(self, c, msg):
@@ -845,7 +843,7 @@ class PlateHD(BoxSkin):
         caption = {"starting": "Starting up...", "signal": "Acquiring satellite signal.",
                    "guide": "Retrieving program information from satellite.", "done": "Ready"}[stage]
         r = self.R(290, 440, 700, 110)
-        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba((255, 255, 255)), edge_w=Y(3))
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba(b["pip_edge"]), edge_w=Y(3))
         pill = pygame.Rect(r.x + X(30), r.y + Y(14), r.w - X(60), Y(36))
         vgrad(c, pill, rgba(mix(b["later"], (255, 255, 255), 0.35)), rgba(b["later"]), radius=Y(10))
         f = self.fb(Y(22))
@@ -889,7 +887,8 @@ class Plate(PlateHD):
             cursor=(250, 250, 252), cursor_ink=ink, row=pillb, row_hi=mix(pillb, (255, 255, 255), 0.35),
             row_ink=text, muted=mix(ink, grey, 0.4), list_panel=mix(grey, (255, 255, 255), 0.55),
             pill=pillb, pill_hi=mix(pillb, (255, 255, 255), 0.35), pill_ink=text,
-            panel_top=(236, 236, 238), panel_bot=(176, 180, 192), dish=(210, 30, 40))
+            panel_top=(236, 236, 238), panel_bot=(176, 180, 192), dish=(210, 30, 40),
+            pb_track=(255, 255, 255), pb_edge=ink, pb_fill=ink)
         return r
 
     # SD coordinates are the 4:3 frame's own 640x480.
