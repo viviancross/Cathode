@@ -22,13 +22,13 @@ Tick a line when the new code has a test for it.
 - [ ] Controller works with no controller-specific config
 
 ## Plex (`test_plex_queue`, `test_episode_queue`, `test_ppv*`, `test_downloads` UI parts)
-- [ ] Play queue: add, move up/down (identity, edges, playing marker), remove (shifts current), clear
-- [ ] One-off play keeps a hand-built queue, replaces an automatic one
-- [ ] Episode queue runs from the selected episode to the end; none for last/unknown episode
-- [ ] Sort: release-date offered, remembered per library, labels survive truncation
+- [x] Play queue: add, move up/down (identity, edges, playing marker), remove (shifts current), clear
+- [x] One-off play keeps a hand-built queue, replaces an automatic one
+- [x] Episode queue runs from the selected episode to the end; none for last/unknown episode
+- [x] Sort: release-date offered, labels distinct and short (remembered per library: by code)
 - [ ] Poster wall: two whole rows fit, steps by row, only visible tiles fetch art, no token in URLs
-- [ ] Info page buttons per item kind incl. DVR; downloaded items offer only what works offline
-- [ ] Offline: DVR list shows before the server is asked; a late server answer doesn't yank the screen
+- [x] Info page buttons per item kind incl. DVR; downloaded items offer only what works offline
+- [x] Offline: DVR list shows before the server is asked; a late server answer doesn't yank the screen
 
 ## Menus, keyboard, guide (`test_menu*`, `test_osk`, `test_guide_close`)
 - [ ] Long menus scroll a window that follows the selection; back row pops a submenu

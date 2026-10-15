@@ -53,6 +53,8 @@ def main_items(app):
             Item(c, guide(c), close=True) for c in app.categories() if c not in ("All", "Favorites")
         ] or [Item("(no genres in this lineup)", enabled=False)], enabled=bool(app.channels)),
         Item("Favorites", guide("Favorites"), close=True, enabled=bool(app.channels)),
+        Item("On Demand", lambda: open_ondemand(app), close=True),
+        Item("My Recordings", lambda: open_ondemand(app, recordings=True), close=True),
         Item("Settings", submenu=lambda: settings_items(app)),
         Item("Exit Cathode", app.quit, close=True),
     ]
@@ -63,9 +65,182 @@ def settings_items(app):
         Item("Picture & Style", submenu=lambda: style_items(app)),
         Item("Channels", submenu=lambda: channel_items(app)),
         Item("Display", submenu=lambda: display_items(app)),
+        Item("On Demand", submenu=lambda: ondemand_settings(app)),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("System", submenu=lambda: system_items(app)),
     ]
+
+
+# ── On Demand ─────────────────────────────────────────────────────────────
+
+def open_ondemand(app, recordings=False):
+    from .screens.ondemand import OnDemandScreen, RECORDINGS, LIBRARIES
+    app.push(OnDemandScreen(app, RECORDINGS if recordings else LIBRARIES))
+
+
+def ondemand_settings(app):
+    from . import plex
+    cfg = app.config
+    od = app.ondemand
+    if not od.signed_in:
+        return [Item("Not signed in: open On Demand to link your Plex account", enabled=False)]
+
+    def toggle_library(key):
+        hidden = cfg.plex_hidden_libraries
+        hidden.remove(key) if key in hidden else hidden.append(key)
+        cfg.save()
+
+    def set_server(sid):
+        cfg.plex_server_id, cfg.plex_server = sid, ""
+        cfg.save()
+        od.reset()
+        app.toast("Server changed: reopen On Demand")
+
+    def change_user():
+        from .screens.ondemand import OnDemandScreen
+        while app.top().name == "menu":
+            app.pop()
+        screen = OnDemandScreen(app)
+        app.push(screen)
+        screen.choose_user()
+
+    def unlink():
+        od.unlink()
+        app.toast("Plex account unlinked")
+    items = [
+        Item("View", value=lambda: "Poster wall" if cfg.ppv_view == "wall" else "List",
+             adjust=lambda d: (setattr(cfg, "ppv_view", "list" if cfg.ppv_view == "wall" else "wall"),
+                               cfg.save())),
+        Item("Quality", value=lambda: cfg.plex_quality,
+             adjust=lambda d: (setattr(cfg, "plex_quality",
+                                       _cycle([(q, q) for q in plex.QUALITY_OPTIONS], cfg.plex_quality, d)),
+                               cfg.save())),
+        Item("Libraries", submenu=lambda: [
+            Item(s["title"], value=lambda k=s["key"]: "Hidden" if k in cfg.plex_hidden_libraries else "Shown",
+                 adjust=lambda d, k=s["key"]: toggle_library(k))
+            for s in cfg.plex_sections] or [Item("(open On Demand first)", enabled=False)]),
+    ]
+    if len(cfg.plex_servers) > 1:
+        items.append(Item("Server", submenu=lambda: [
+            Item(("> " if s["id"] == cfg.plex_server_id else "  ") + s["title"]
+                 + ("" if s.get("owned") else " (shared)"), (lambda i=s["id"]: set_server(i)), close=True)
+            for s in cfg.plex_servers]))
+    items += [
+        Item("Who's watching", change_user, value=lambda: cfg.plex_user_name or "Account"),
+        Item("Unlink Plex account", unlink, close=True),
+    ]
+    return items
+
+
+def ondemand_menu(app, screen):
+    """MENU inside On Demand."""
+    lvl = screen.level
+    items = []
+    if lvl and lvl.get("loader") and lvl.get("sortable"):
+        items.append(Item("Sort", screen.sort_menu, close=True))
+    items += [
+        Item("View", value=lambda: "Poster wall" if app.config.ppv_view == "wall" else "List",
+             adjust=lambda d: (setattr(app.config, "ppv_view",
+                                       "list" if app.config.ppv_view == "wall" else "wall"),
+                               app.config.save())),
+        Item(f"Play queue ({len(app.ondemand.queue.items)})", submenu=lambda: queue_items(app)),
+        Item("On Demand settings", submenu=lambda: ondemand_settings(app)),
+        Item("Back to TV", screen.leave, close=True),
+    ]
+    app.push(Menu(app, "ON DEMAND", items))
+
+
+def queue_items(app):
+    from .screens.playback import Playback
+    q = app.ondemand.queue
+    if not q.items:
+        return [Item("(empty: use + QUEUE on an info page)", enabled=False)]
+    playing = app.find(Playback)
+
+    def entry(i):
+        def play():
+            if playing:
+                playing.od.report(playing.rk, playing.pos, playing.dur, "stopped")
+            app.ondemand.play_queue_at(i)
+
+        def move(d):
+            j = q.move(i, d)
+            _reopen(app, queue_items(app))
+            app.top().cursor = j
+
+        def remove():
+            q.remove(i)
+            _reopen(app, queue_items(app))
+        return [Item(f"#{i + 1} of {len(q.items)}", enabled=False),
+                Item("Play now", play, close=True),
+                Item("Move up", lambda: move(-1), enabled=i > 0),
+                Item("Move down", lambda: move(1), enabled=i < len(q.items) - 1),
+                Item("Remove", remove)]
+    items = [Item(("> " if i == q.pos and playing else "  ") + e["title"],
+                  submenu=lambda i=i: entry(i)) for i, e in enumerate(q.items)]
+
+    def clear():
+        q.clear()
+        app.top().refresh(queue_items(app))
+    items.append(Item("Clear the queue", clear))
+    return items
+
+
+SUB_SIZES = [(28, "Small"), (38, "Medium"), (52, "Large"), (68, "Extra large")]
+SUB_COLORS = [("#FFFFFFFF", "White"), ("#FFFFFF00", "Yellow"), ("#FF00FFFF", "Cyan"),
+              ("#FF00FF00", "Green")]
+SUB_BACKS = [("", "None"), ("#96000000", "Shaded"), ("#FF000000", "Black")]
+
+
+def playback_menu(app, pb):
+    v, cfg = app.video, app.config
+
+    def tracks(kind):
+        def pick(tid):
+            v.set_track(kind, tid)
+            app.top().refresh(tracks(kind))
+        rows = [Item(("> " if t["selected"] else "  ") + " ".join(
+            str(x) for x in (t["id"], t["lang"], t["title"]) if x), (lambda i=t["id"]: pick(i)))
+            for t in v.tracks(kind)]
+        if kind == "sub":
+            off = not any(t["selected"] for t in v.tracks("sub"))
+            rows.insert(0, Item(("> " if off else "  ") + "Off", lambda: pick(None)))
+        return rows or [Item("(none)", enabled=False)]
+
+    def style(attr, options, apply):
+        def adj(d):
+            setattr(cfg, attr, _cycle(options, getattr(cfg, attr), d))
+            cfg.save()
+            apply(getattr(cfg, attr))
+        return Item(attr.replace("sub_", "Subtitle ").replace("back", "background"),
+                    value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
+    fonts = [("", "Default")] + [(f, f) for f in _subtitle_fonts()]
+    app.push(Menu(app, "PLAYING", [
+        Item("Audio track", submenu=lambda: tracks("audio")),
+        Item("Subtitles", submenu=lambda: tracks("sub")),
+        style("sub_size", SUB_SIZES, lambda s: v.sub_style(size=s)),
+        style("sub_color", SUB_COLORS, lambda c: v.sub_style(color=c)),
+        style("sub_back", SUB_BACKS, lambda b: v.sub_style(back=b)),
+        style("sub_font", fonts, lambda f: v.sub_style(font=f or "sans-serif")),
+        Item(f"Play queue ({len(app.ondemand.queue.items)})", submenu=lambda: queue_items(app)),
+        Item("Stop", pb.stop, close=True),
+    ]))
+
+
+def _subtitle_fonts():
+    """Family names of the bundled fonts mpv can use for subtitles."""
+    import os
+    import pygame
+    from . import paths
+    d = paths.asset("fonts")
+    names = []
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if f.lower().endswith((".ttf", ".otf")):
+            try:
+                names.append(pygame.font.Font(os.path.join(d, f), 12).name)
+            except (pygame.error, AttributeError):
+                pass
+    return [n for n in names if n]
 
 
 # ── Remote control ────────────────────────────────────────────────────────

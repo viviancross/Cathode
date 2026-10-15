@@ -357,6 +357,255 @@ class Classic(Skin):
         t.draw(c, "Type on a keyboard or pick keys.  Ctrl+V pastes.  LB/RB move the cursor.",
                f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
 
+    # ── On Demand: browse ─────────────────────────────────────────────────
+
+    OD_ROW_H = 56
+    OD_TOP = 96
+    OD_TILE = (150, 225)        # poster, 2:3: two whole rows fit under the header
+    OD_GAP = 26
+
+    def ondemand_cols(self, screen) -> int:
+        W = self.canvas[0]
+        return max(1, (W - 60 + self.OD_GAP) // (self.OD_TILE[0] + self.OD_GAP))
+
+    def ondemand_page(self, screen) -> int:
+        H = self.canvas[1]
+        if screen.view == "wall":
+            return self.ondemand_cols(screen) * 2
+        return (H - self.OD_TOP - 30) // self.OD_ROW_H
+
+    def draw_ondemand(self, c, s):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        c.fill(p["SCREEN_BG"])
+        f_title, f_crumb, f_btn = self.f(30), self.f(15), self.f(18)
+        pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, 76))
+        pygame.draw.rect(c, p["OSD_BORDER"], (0, 74, W, 2))
+        title = s.level["title"] if s.level and s.mode == "browse" else "ON DEMAND"
+        t.draw(c, t.fit(f_title, title, W - 420), f_title, p["YELLOW"], 30, 16)
+        t.draw(c, t.fit(f_crumb, s.crumb(), W - 420), f_crumb, p["INK_MUTED"], 30, 52)
+        x = W - 30
+        for label, fn in (("MENU", lambda: s.handle("MENU")), ("BACK", s.back)):
+            w = t.width(f_btn, label) + 28
+            r = pygame.Rect(x - w, 20, w, 36)
+            pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r, border_radius=6)
+            pygame.draw.rect(c, p["OSD_BORDER"], r, 1, border_radius=6)
+            t.draw(c, label, f_btn, p["CYAN"], r.centerx, r.y + 10, align="center")
+            self.hit(r, fn)
+            x -= w + 12
+        if s.status:
+            t.draw(c, s.status, f_btn, p["ORANGE"], x - 10, 30, align="right")
+
+        if s.mode == "auth":
+            self._od_auth(c, s)
+        elif s.view == "wall":
+            self._od_wall(c, s)
+        else:
+            self._od_list(c, s)
+
+    def _od_auth(self, c, s):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        t.draw(c, "Link your Plex account", self.f(30), p["WHITE"], W // 2, 180, align="center")
+        if s.auth_code:
+            t.draw(c, "On a phone or computer, go to", self.f(22), p["WHITE_DIM"], W // 2, 250,
+                   align="center")
+            t.draw(c, s.auth_link or "plex.tv/link", self.f(30), p["CYAN"], W // 2, 290, align="center")
+            t.draw(c, "and enter this code:", self.f(22), p["WHITE_DIM"], W // 2, 350, align="center")
+            t.draw(c, s.auth_code, self.f(84), p["CHANNEL_GREEN"], W // 2, 400, align="center")
+        t.draw(c, "BACK to return to TV", self.f(16), p["INK_MUTED"], W // 2, H - 44, align="center")
+
+    def _od_list(self, c, s):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        rows, rh = s.rows, self.OD_ROW_H
+        n_vis = self.ondemand_page(s)
+        top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
+        f_row, f_meta = self.f(22), self.f(17)
+        y = self.OD_TOP
+        for i in range(top, min(len(rows), top + n_vis)):
+            row = rows[i]
+            r = pygame.Rect(30, y, W - 60, rh - 6)
+            sel = i == s.sel
+            pygame.draw.rect(c, p["GUIDE_SELECTED"] if sel else p["OSD_BG"][:3] + (255,), r,
+                             border_radius=6)
+            ink = p["SEL_TEXT"] if sel else p["WHITE"]
+            meta = row.get("meta", "")      # recordings: their state ("42%", "PAUSED")
+            mw = t.width(f_meta, meta) + 20 if meta else 0
+            ty = r.y + (r.h - t.ink(f_row)[1]) // 2
+            t.draw(c, t.fit(f_row, row.get("title", ""), r.w - mw - 40), f_row, ink, r.x + 16, ty)
+            if meta:
+                t.draw(c, meta, f_meta, p["SEL_TEXT_DIM"] if sel else p["INK_MUTED"], r.right - 16,
+                       r.y + (r.h - t.ink(f_meta)[1]) // 2, align="right")
+            off, dur = row.get("offset", 0), row.get("duration", 0)
+            if off and dur:             # part way through: a resume bar along the row
+                pygame.draw.rect(c, p["TRACK"], (r.x + 16, r.bottom - 7, r.w - 32, 3))
+                pygame.draw.rect(c, p["ORANGE"], (r.x + 16, r.bottom - 7, int((r.w - 32) * min(1, off / dur)), 3))
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+            y += rh
+        if top > 0:
+            self._arrow(c, W // 2, self.OD_TOP - 8, up=True)
+        if top + n_vis < len(rows):
+            self._arrow(c, W // 2, y + 2, up=False)
+
+    def _od_wall(self, c, s):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        off = s.wall_offset
+        rows = s.rows[off:]
+        cols = self.ondemand_cols(s)
+        tw, th = self.OD_TILE
+        gap = self.OD_GAP
+        f = self.f(15)
+        label_h = 2 * (t.ink(f)[1] + 4) + 8
+        row_h = th + label_h + gap
+        x0 = (W - (cols * tw + (cols - 1) * gap)) // 2
+        y = self.OD_TOP + 8
+        if off:     # the Sort row: a bar above the posters, not a poster
+            bar = pygame.Rect(x0, y - 4, W - 2 * x0, 32)
+            on = s.sel == 0
+            pygame.draw.rect(c, p["GUIDE_SELECTED"] if on else p["OSD_BG"][:3] + (255,), bar,
+                             border_radius=6)
+            t.draw(c, s.rows[0]["title"], f, p["SEL_TEXT"] if on else p["WHITE_DIM"], bar.x + 12,
+                   bar.y + (bar.h - t.ink(f)[1]) // 2)
+            self.hit(bar, lambda: (setattr(s, "sel", 0), s.select()))
+            y += 40
+        cur = max(0, s.sel - off)
+        first_row = max(0, cur // cols - 1)
+        for i in range(first_row * cols, min(len(rows), (first_row + 2) * cols)):
+            row = rows[i]
+            col = i % cols
+            r = pygame.Rect(x0 + col * (tw + gap), y + (i // cols - first_row) * row_h, tw, th)
+            sel = i + off == s.sel
+            pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r)
+            art = self.app.ondemand.poster(row.get("thumb", ""), tw, th) if row.get("thumb") else None
+            if art:
+                c.blit(art, art.get_rect(center=r.center))
+            else:
+                lines = t.wrap(f, row.get("title", ""), tw - 16, 4)
+                ly = r.y + 20
+                for line in lines:
+                    t.draw(c, line, f, p["WHITE_DIM"], r.centerx, ly, align="center")
+                    ly += t.ink(f)[1] + 6
+            seen, dur = row.get("offset", 0), row.get("duration", 0)
+            if seen and dur:
+                pygame.draw.rect(c, p["TRACK"], (r.x, r.bottom - 5, r.w, 5))
+                pygame.draw.rect(c, p["ORANGE"], (r.x, r.bottom - 5, int(r.w * min(1, seen / dur)), 5))
+            pygame.draw.rect(c, p["YELLOW"] if sel else p["OSD_BORDER"], r.inflate(6, 6) if sel else r,
+                             3 if sel else 1)
+            if art:     # with no art the title is already on the plate
+                for k, line in enumerate(t.wrap(f, row.get("title", ""), tw, 2)):
+                    t.draw(c, line, f, p["WHITE"] if sel else p["WHITE_DIM"], r.centerx,
+                           r.bottom + 8 + k * (t.ink(f)[1] + 4), align="center")
+            self.hit(r, lambda i=i + off: (setattr(s, "sel", i), s.select()))
+
+    # ── On Demand: item info ──────────────────────────────────────────────
+
+    def draw_iteminfo(self, c, info):
+        from ..screens.iteminfo import PRIMARY, hms
+        W, H = self.canvas
+        p, t = self.p, self.text
+        d = info.detail
+        c.fill(p["SCREEN_BG"])
+        poster = pygame.Rect(60, 70, 300, 450)
+        pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), poster)
+        # A server URL (token in the headers) or, for a recording, a file on disk.
+        art = self.logo(d.get("poster", ""), poster.w, poster.h, headers=d.get("poster_headers") or None)
+        if art:
+            c.blit(art, art.get_rect(center=poster.center))
+        pygame.draw.rect(c, p["OSD_BORDER"], poster, 2)
+
+        x, w = poster.right + 50, W - poster.right - 110
+        f_title, f_meta, f_text = self.f(40), self.f(20), self.f(20)
+        y = 76
+        for line in t.wrap(f_title, d.get("title", ""), w, 2):
+            t.draw(c, line, f_title, p["WHITE"], x, y)
+            y += t.ink(f_title)[1] + 10
+        meta = d.get("subtitle") or d.get("meta", "")
+        if meta:
+            t.draw(c, t.fit(f_meta, meta, w), f_meta, p["CYAN"], x, y + 6)
+            y += t.ink(f_meta)[1] + 22
+        if d.get("offset", 0) > 5:
+            t.draw(c, f"Resume at {hms(d['offset'])}", f_meta, p["ORANGE"], x, y)
+            y += t.ink(f_meta)[1] + 18
+        lh = t.ink(f_text)[1] + 10
+        for line in t.wrap(f_text, d.get("summary", ""), w, max(1, (520 - y) // lh)):
+            t.draw(c, line, f_text, p["WHITE_DIM"], x, y)
+            y += lh
+
+        bs = info.buttons()
+        f_btn = self.f(20)
+        bw = min(200, (W - 120 - (len(bs) - 1) * 16) // len(bs))
+        bx = 60
+        for i, b in enumerate(bs):
+            r = pygame.Rect(bx, H - 140, bw, 56)
+            sel = i == info.focus
+            fill = p["GUIDE_SELECTED"] if sel else p["BTN_PRIMARY_BG"] if b in PRIMARY else p["OSD_BG"]
+            pygame.draw.rect(c, fill[:3] + (255,), r, border_radius=8)
+            pygame.draw.rect(c, p["CYAN"] if b in PRIMARY else p["OSD_BORDER"], r, 2, border_radius=8)
+            ink = p["SEL_TEXT"] if sel else p["BTN_PRIMARY_TEXT"] if b in PRIMARY else p["WHITE"]
+            t.draw(c, t.fit(f_btn, info.label(b), bw - 16), f_btn, ink, r.centerx,
+                   r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
+            self.hit(r, lambda i=i, b=b: (setattr(info, "focus", i), info.press(b)))
+            bx += bw + 16
+
+    # ── On Demand: playback ───────────────────────────────────────────────
+
+    def draw_playback(self, c, pb):
+        from ..screens.iteminfo import hms
+        W, H = self.canvas
+        p, t = self.p, self.text
+        paused = self.app.video.paused
+        tag = "|| PAUSE" if paused else pb.flash[0] if time.monotonic() < pb.flash[1] else ""
+        if tag:
+            t.draw(c, tag, self.f(48), p["WHITE"], 48, 40, outline=(0, 0, 0))
+        if pb.skip_label:
+            r = pygame.Rect(W - 300, H - 230 if pb.bar_visible() else H - 110, 250, 56)
+            pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), r, border_radius=8)
+            pygame.draw.rect(c, p["YELLOW"], r, 2, border_radius=8)
+            t.draw(c, pb.skip_label + "  (OK)", self.f(20), p["YELLOW"], r.centerx,
+                   r.y + (r.h - t.ink(self.f(20))[1]) // 2, align="center")
+            self.hit(r, lambda: pb.handle("SELECT"))
+        if not pb.bar_visible():
+            return
+        bar = pygame.Rect(26, H - 170, W - 52, 150)
+        pygame.draw.rect(c, p["OSD_BG"], bar, border_radius=8)
+        pygame.draw.rect(c, p["OSD_BORDER"], (bar.x, bar.y, bar.w, 3))
+        f_title, f_sub, f_btn = self.f(26), self.f(17), self.f(19)
+        t.draw(c, t.fit(f_title, pb.title, bar.w - 300), f_title, p["WHITE"], bar.x + 20, bar.y + 16)
+        t.draw(c, t.fit(f_sub, pb.subtitle, bar.w - 300), f_sub, p["CYAN"], bar.x + 20, bar.y + 50)
+        q = self.app.ondemand.queue
+        if q.items and q.pos >= 0:
+            t.draw(c, f"{q.pos + 1} of {len(q.items)}", f_sub, p["INK_MUTED"], bar.right - 20,
+                   bar.y + 20, align="right")
+        # Timeline: elapsed, track, duration. Click to jump.
+        tl = pygame.Rect(bar.x + 110, bar.y + 82, bar.w - 220, 8)
+        pygame.draw.rect(c, p["TRACK"], tl)
+        frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
+        pygame.draw.rect(c, p["GREEN"], (tl.x, tl.y, int(tl.w * frac), tl.h))
+        pygame.draw.rect(c, p["WHITE"], (tl.x + int(tl.w * frac) - 2, tl.y - 5, 4, tl.h + 10))
+        t.draw(c, hms(pb.pos), f_sub, p["WHITE"], tl.x - 14, tl.y - 4, align="right")
+        t.draw(c, hms(pb.dur) if pb.dur else "--:--", f_sub, p["WHITE"], tl.right + 14, tl.y - 4)
+        self.hit(tl.inflate(0, 24), lambda: pb.seek_to(self._click_frac(tl)))
+        # Transport buttons, for the mouse (the remote acts on its own keys).
+        buttons = [("|<<", lambda: pb.skip(-1)), ("<< 10", lambda: pb.seek(-10)),
+                   ("PLAY" if paused else "PAUSE", pb.toggle_pause), ("STOP", pb.stop),
+                   ("30 >>", lambda: pb.seek(30)), (">>|", lambda: pb.skip(1))]
+        bw = 104
+        x = bar.centerx - (len(buttons) * bw + (len(buttons) - 1) * 10) // 2
+        for label, fn in buttons:
+            r = pygame.Rect(x, bar.y + 104, bw, 34)
+            pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r, border_radius=6)
+            pygame.draw.rect(c, p["OSD_BORDER"], r, 1, border_radius=6)
+            t.draw(c, label, f_btn, p["WHITE"], r.centerx, r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
+            self.hit(r, fn)
+            x += bw + 10
+
+    def _click_frac(self, rect) -> float:
+        """Where the last click landed across `rect`, 0..1."""
+        pt = self.app.gfx.to_canvas(self.canvas, *pygame.mouse.get_pos())
+        return max(0.0, min(1.0, ((pt[0] if pt else rect.x) - rect.x) / max(1, rect.w)))
+
     # ── Remap capture ─────────────────────────────────────────────────────
 
     def draw_capture(self, c, cap):

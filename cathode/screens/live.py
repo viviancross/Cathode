@@ -30,6 +30,7 @@ class LiveTV(Screen):
         self.volume_until = 0.0
         self.digits = ""
         self.trick_until = 0.0
+        self.suspended = False                      # On Demand has the picture
         self.behind, self._paused_at = 0.0, 0.0     # pause-live bookkeeping
         self._reveal_start = 0.0
         self._timeout = self._digit_timer = self._banner_timer = None
@@ -86,7 +87,22 @@ class LiveTV(Screen):
         self._reveal_start = time.monotonic()
         self.app.invalidate()
 
+    def suspend(self):
+        """Something else (On Demand) is using the picture: let go of it."""
+        self.app.cancel(self._timeout)
+        self.suspended, self.standby = True, False
+        self.phase = "watch"
+
+    def resume(self):
+        """Back to live TV after On Demand."""
+        if self.suspended:
+            self.suspended = False
+            if self.channels:
+                self.tune(self.idx)
+
     def on_video(self, kind, **data):
+        if self.suspended:
+            return                      # about On Demand's video, not ours
         if kind == "video_started":
             self.standby = False
             if self.phase == "cover":
@@ -163,6 +179,11 @@ class LiveTV(Screen):
             return self._digit(a[-1])
         if a == R.SELECT and self.digits:
             self._commit_digits()
+            return True
+        if a == R.LIST:                 # works with no channels too: recordings are local
+            from .ondemand import OnDemandScreen, RECORDINGS
+            self.hide_banner()
+            self.app.push(OnDemandScreen(self.app, RECORDINGS))
             return True
         if not self.channels and a not in (R.VOL_UP, R.VOL_DOWN, R.MUTE):
             return False

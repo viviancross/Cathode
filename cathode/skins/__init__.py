@@ -110,15 +110,16 @@ class Skin:
         if fn:
             fn(canvas, screen)
 
-    def logo(self, url: str, max_w: int, max_h: int) -> Optional[pygame.Surface]:
-        """A channel logo fitted to the box, as a pygame surface; None while it
-        loads or when there isn't one."""
+    def logo(self, url: str, max_w: int, max_h: int, headers=None) -> Optional[pygame.Surface]:
+        """A channel logo or poster fitted to the box, as a pygame surface;
+        None while it loads or when there isn't one. `headers` (a Plex token)
+        go with the fetch but never into the URL or the cache name."""
         if not url or not self.app.logos:
             return None
         key = (url, max_w, max_h)
         surf = self._logo_surfaces.get(key)
         if surf is None:
-            im = self.app.logos.get(url, max_w, max_h)
+            im = self.app.logos.get(url, max_w, max_h, headers=headers)
             if im is None:
                 return None
             surf = pygame.image.frombytes(im.convert("RGBA").tobytes(), im.size, "RGBA")

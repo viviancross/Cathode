@@ -69,6 +69,7 @@ class App:
         self.running = False
         self.dirty = True
         self.gfx = self.video = self.skin = self.remote = self.logos = None
+        self.ondemand = None
         self._timers = []
         self._seq = itertools.count()
         self._frame_pending = False
@@ -213,7 +214,7 @@ class App:
         idle = time.monotonic() - self.last_input
         static = top.opaque or not self.channels    # a full page, or no TV playing
         if (self.config.screensaver and idle >= self.IDLE_SCREENSAVER and static
-                and not isinstance(top, (Boot, Screensaver))):
+                and not isinstance(top, (Boot, Screensaver)) and top.name != "playback"):
             self.push(Screensaver(self))
         self.after(10.0, self._idle_check)
 
@@ -389,6 +390,9 @@ class App:
         self.video.muted = self.config.muted
         if self.config.audio_device:
             self.video.audio_device = self.config.audio_device
+        from .ondemand import OnDemand
+        self.ondemand = OnDemand(self)
+        self.ondemand.downloads.resume()     # anything a quit or a dropout interrupted
         from .weather import Weather
         self.weather = Weather(self.config.weather_zip, self.config.weather_units,
                                self.config.weather_country,
@@ -483,6 +487,8 @@ class App:
             self.running = False
         elif e.type in (pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED, pygame.WINDOWEXPOSED):
             self.invalidate()
+        elif e.type == pygame.WINDOWFOCUSGAINED and self.ondemand:
+            self.ondemand.downloads.resume()     # a sleep or a dropout may have paused it
         elif getattr(self.top(), "wants_raw", False) and self.top().raw(e):
             self.invalidate()           # a remap capture took it
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button in (1, 3):

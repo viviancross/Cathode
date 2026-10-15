@@ -496,6 +496,9 @@ class PlexClient:
         # in mpv's log file. The caller passes these to the player.
         return {"url": url, "offset": offset, "time_base": time_base,
                 "title": title, "subtitle": subtitle, "markers": _markers(m),
+                # The server knows the length; a transcode's own clock only
+                # knows what it has made so far.
+                "duration": int(m.get("duration", 0)) // 1000,
                 "headers": {"X-Plex-Token": self._server_token}}
 
     def on_deck(self) -> List[dict]:

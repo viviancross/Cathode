@@ -37,7 +37,8 @@ class Video:
             osc=False, cache="yes", demuxer_max_bytes="64MiB",
             # Pause-live: keep the recent past so REW can reach back into it.
             demuxer_max_back_bytes="128MiB",
-            vf="bwdif=deint=1", volume=str(volume))
+            vf="bwdif=deint=1", volume=str(volume),
+            sub_fonts_dir=paths.asset("fonts"))     # the bundled fonts, for subtitles
         if user_agent:
             opts["user_agent"] = user_agent
         if any(s in renderer.lower() for s in _SOFTWARE_GL):
@@ -151,12 +152,47 @@ class Video:
         except Exception:
             pass        # nothing loaded, or not seekable
 
+    def prop(self, name):
+        """A property, or None when there's nothing loaded to have it.
+        (python-mpv's player[name] reads *options*: properties such as
+        time-pos are attributes, dashes as underscores.)"""
+        try:
+            return getattr(self.player, name.replace("-", "_"))
+        except Exception:
+            return None
+
+    def tracks(self, kind: str) -> list:
+        """[{id, lang, title, selected}] for kind 'audio' or 'sub'."""
+        out = []
+        for t in self.prop("track-list") or []:
+            if t.get("type") == kind:
+                out.append({"id": t.get("id"), "lang": t.get("lang", ""),
+                            "title": t.get("title", ""), "selected": bool(t.get("selected"))})
+        return out
+
+    def set_track(self, kind: str, tid):
+        self.player["aid" if kind == "audio" else "sid"] = tid if tid is not None else "no"
+
+    def sub_style(self, font=None, size=None, color=None, back=None):
+        if font:
+            self.player["sub-font"] = font
+        if size:
+            self.player["sub-font-size"] = int(size)
+        if color:
+            self.player["sub-color"] = color
+        if back is not None:
+            self.player["sub-back-color"] = back or "#00000000"
+            self.player["sub-border-style"] = "background-box" if back else "outline-and-shadow"
+
+    def chapter(self, d: int):
+        try:
+            self.player.command("add", "chapter", d)
+        except Exception:
+            pass
+
     def audio_devices(self) -> list:
         """[{name, description}] mpv can play to; 'auto' first."""
-        try:
-            return list(self.player["audio-device-list"] or [])
-        except Exception:
-            return []
+        return list(self.prop("audio-device-list") or [])
 
     @property
     def audio_device(self) -> str:
@@ -168,25 +204,15 @@ class Video:
 
     def buffered_behind(self) -> float:
         """How far back REW can reach: seconds of past still in the buffer."""
-        try:
-            ranges = (self.player["demuxer-cache-state"] or {}).get("seekable-ranges") or []
-            pos = self.player["time-pos"]
-        except Exception:
-            return 0.0
+        ranges = (self.prop("demuxer-cache-state") or {}).get("seekable-ranges") or []
+        pos = self.prop("time-pos")
         if not ranges or pos is None:
             return 0.0
         return max(0.0, float(pos) - min(float(r["start"]) for r in ranges))
 
     def stats(self) -> dict:
         """What the diagnostics screen shows as a 'signal' readout."""
-        p = self.player
-
-        def get(name):
-            try:
-                return p[name]
-            except Exception:
-                return None
-        return {k: get(k) for k in ("video-bitrate", "audio-bitrate", "frame-drop-count",
+        return {k: self.prop(k) for k in ("video-bitrate", "audio-bitrate", "frame-drop-count",
                                     "decoder-frame-drop-count", "demuxer-cache-duration",
                                     "hwdec-current", "video-codec", "width", "height",
                                     "container-fps", "cache-buffering-state")}
