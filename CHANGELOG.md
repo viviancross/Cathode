@@ -8,17 +8,15 @@ a retro-themed player.
 - **Three skins.** Cathode Classic is 3.x's look. **InDirecTV** and
   **InDirecTV HD** are DirecTV-style boxes (D10/R15 era and HR20), **Plate Network**
   and **Plate Network HD** Dish-style ones (301/522 era and ViP622/722). The SD
-  variants draw in 4:3. Their screens follow period captures of the real
-  boxes: the channel banner across the top, three half-hour columns in the
-  guide, DirecTV's light swoosh panel and colour-key bar, Dish's silver cells,
-  grey dialogs with the signal meter and menus numbered down the right. Each
-  has a mark of its own; no real logos ship. Each skin keeps its own colour
-  theme and font, and any skin can use any theme, the colour editor, any font
-  and the CRT effect.
+  variants draw in 4:3. Their screens are drawn to measurements from video
+  of the real boxes: the 1997 DSS receiver's purple pages, the HR20's blue
+  banner and cyan guide, the 2005 Dish guide's blue tab and pills, the 2007
+  teal guide. Each has a mark of its own; no real logos ship. Each skin
+  keeps its own colour theme and font, and any skin can use any theme, the
+  colour editor, any font and the CRT effect.
 - **Box behaviour.** A start-up screen that follows the real loading, a
   banner on every tune (INFO again for the description), browse without
-  tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss
-  screen for dead channels, PREV, a THEMES button for genres, guide paging
+  tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus.
 - **Pause live TV**, rewind and fast-forward through the buffer, back to live.
 - **On Demand and My Recordings** are Plex-Per-View and the DVR, rebuilt on

@@ -59,6 +59,9 @@ class InDirectHD(BoxSkin):
             "strip": mix(text, sky, 0.3), "strip_rule": mix(text, sky, 0.08),
             "ink": mix(navy, (60, 40, 110), 0.4), "strip_ink": mix(cell, (80, 120, 140), 0.5),
             "watermark": mix(text, navy, 0.3),
+            "band": (33, 132, 193), "band_edge": (0, 68, 126), "paper": (244, 238, 253),
+            "paper_ink": (23, 85, 129), "keybar": (55, 100, 142), "key_yellow": (224, 208, 49),
+            "key_blue": (1, 78, 167),
             "teal": mix(cell, sky, 0.45), "teal_dark": mix(cell, sky, 0.2), "panel": mix(cell, navy, 0.15),
             "margin": mix(cell, sky, 0.7), "bar": mix(sky, text, 0.55), "deep": mix(navy, (0, 0, 0), 0.4),
         }
@@ -145,41 +148,67 @@ class InDirectHD(BoxSkin):
     # ── Live: banner, digits, signal loss, volume, trick ──────────────────
 
     def _band(self, c, rect):
-        """The translucent navy band laid over the picture, a sky line under it."""
+        """The translucent sky-blue band laid over the picture, a darker edge
+        along its top."""
         rect = pygame.Rect(rect)
-        vgrad(c, rect, rgba(self.b["navy"], 226), rgba(self.b["navy"], 236))
-        pygame.draw.rect(c, self.b["sky"], (rect.x, rect.bottom - self.Y(3), rect.w, self.Y(3)))
+        band = pygame.Surface(rect.size, pygame.SRCALPHA)
+        band.fill((*self.b["band"], 225))
+        c.blit(band, rect.topleft)
+        pygame.draw.rect(c, self.b["band_edge"], (rect.x, rect.y, rect.w, self.Y(8)))
 
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
-        """The channel banner across the top: mark, channel and clock on the
-        first line, the title on the second; INFO again adds the synopsis."""
+        """The channel banner as the HR20 drew it: logo, number over call
+        sign, the title; a white strip of facts; the favourites bar with the
+        colour keys. INFO again adds the synopsis under it."""
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        r = self.R(0, 0, 1280, 120)
-        self._band(c, r)
-        if tag:
-            self.chip(c, X(96), r.bottom + Y(8), tag, self.fb(Y(16)), rgba(b["sel"]), b["sel_ink"])
-        self.mark_inline(c, X(96), Y(26), 40, b["text"])
-        f_num, f_call = self.fb(Y(36)), self.f(Y(22))
-        nw = t.draw(c, str(ch.number), f_num, b["text"], X(300), Y(16))
-        t.draw(c, t.fit(f_call, ch.name.upper(), X(300)), f_call, b["soft"], X(300) + nw + X(12), Y(28))
-        t.draw(c, stamp(), self.fb(Y(24)), b["text"], X(1184), Y(18), align="right")
-        f_title, f_line = self.fb(Y(28)), self.f(Y(22))
-        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(300), Y(64))
+        self._band(c, self.R(0, 0, 1280, 131))
+        epg = self.app.epg
+        url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
+        logo = self.logo(url or ch.logo, X(110), Y(62))
+        if logo:
+            c.blit(logo, logo.get_rect(center=(X(155), Y(92))))
+        else:
+            self.tile(c, (X(100), Y(60), X(66), Y(62)), b["sky"])
+        f_num, f_call, f_title = self.fb(Y(30)), self.f(Y(24)), self.fb(Y(30))
+        t.draw(c, str(ch.number), f_num, b["text"], X(240), Y(62))
+        t.draw(c, t.fit(f_call, ch.name.upper(), X(140)), f_call, b["text"], X(240), Y(99))
+        t.draw(c, t.fit(f_title, cur.title if cur else ch.name, X(560)), f_title, b["text"], X(385), Y(93))
+        if ch.group:
+            t.draw(c, t.fit(f_call, ch.group, X(260)), f_call, b["text"], X(1105), Y(99), align="right")
+        strip = self.R(0, 134, 1280, 52)
+        paper = pygame.Surface(strip.size, pygame.SRCALPHA)
+        paper.fill((*b["paper"], 240))
+        c.blit(paper, strip.topleft)
+        fs = self.fb(Y(23))
+        sy = strip.y + (strip.h - t.ink(fs)[1]) // 2
+        t.draw(c, stamp(), fs, b["paper_ink"], X(96), sy)
         if cur:
-            bits = [hours(cur)] + [s for s in (cur.rating, cur.episode) if s]
-            t.draw(c, t.fit(f_line, "   ".join(bits), X(380)), f_line, b["soft"], X(1184), Y(68), align="right")
-            now = datetime.now(timezone.utc)
-            left = max(0, int((cur.stop - now).total_seconds() // 60))
-            t.draw(c, f"{left} min left", self.f(Y(18)), b["soft"], X(1184), Y(96), align="right")
-        if nxt:
-            fs = self.f(Y(18))
-            t.draw(c, t.fit(fs, f"Next: {nxt.title}  {ampm(nxt.start)}", X(620)), fs, b["soft"], X(300), Y(96))
+            t.draw(c, hours(cur), fs, b["paper_ink"], X(385), sy)
+            if cur.rating:
+                t.draw(c, cur.rating, fs, b["paper_ink"], X(808), sy)
+        lock = pygame.Rect(X(1112), strip.y + Y(18), X(26), Y(18))      # the box's lock, open
+        pygame.draw.rect(c, b["paper_ink"], lock, 3, border_radius=3)
+        pygame.draw.arc(c, b["paper_ink"], (lock.x + X(4), lock.y - Y(12), X(16), Y(20)), 0.2, 3.0, 3)
+        bar = self.R(96, 186, 1088, 22)
+        kb = pygame.Surface(bar.size, pygame.SRCALPHA)
+        kb.fill((*b["keybar"], 215))
+        c.blit(kb, bar.topleft)
+        fk = self.fb(Y(20))
+        ky = bar.y + (bar.h - t.ink(fk)[1]) // 2
+        t.draw(c, f"Favorites List:  {g_list(self)}", fk, b["text"], X(112), ky)
+        for dot, label, dx in ((b["key_yellow"], "TV Options", 820), (b["key_blue"], "Mini Guide", 1005)):
+            pygame.draw.circle(c, dot, (X(dx), bar.centery), Y(9))
+            t.draw(c, label, fk, b["text"], X(dx + 20), ky)
+        if tag:
+            self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(16)), rgba(b["sel"]), b["sel_ink"])
         if full and cur and cur.description:
             f = self.f(Y(22))
             lines = t.wrap(f, cur.description, X(1088), 3)
-            d = pygame.Rect(0, r.bottom, W, Y(16) + len(lines) * Y(30))
-            vgrad(c, d, rgba(b["navy"], 226), rgba(b["deep"], 236))
+            d = pygame.Rect(0, bar.bottom + Y(4), W, Y(16) + len(lines) * Y(30))
+            dd = pygame.Surface(d.size, pygame.SRCALPHA)
+            dd.fill((*b["navy"], 226))
+            c.blit(dd, d.topleft)
             y = d.y + Y(10)
             for line in lines:
                 t.draw(c, line, f, b["text"], X(96), y)
@@ -190,33 +219,15 @@ class InDirectHD(BoxSkin):
     def _digits(self, c, digits):
         """Typed digits take the channel's place on a short band."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        r = self.R(0, 0, 1280, 70)
-        self._band(c, r)
-        f = self.fb(Y(40))
-        t.draw(c, digits + "-" * (3 - len(digits)), f, b["text"], X(300), Y(12))
-        t.draw(c, stamp(), self.fb(Y(24)), b["text"], X(1184), Y(18), align="right")
-
-    def _signal_loss(self, c):
-        b, t, X, Y = self.b, self.text, self.X, self.Y
-        c.fill((0, 0, 0, 255))
-        band = self.R(0, 150, 1280, 96)
-        pygame.draw.rect(c, b["navy"], band)
-        pygame.draw.rect(c, b["sky"], (band.x, band.y, band.w, Y(3)))
-        pygame.draw.rect(c, b["sky"], (band.x, band.bottom - Y(3), band.w, Y(3)))
-        t.draw(c, "Searching for satellite signal. (771)", self.fb(Y(28)), b["text"], X(96), band.y + Y(32))
-        f = self.f(Y(22))
-        y = band.bottom + Y(26)
-        for line in t.wrap(f, "The channel isn't sending a picture. Cathode keeps trying; press GUIDE or "
-                              "a channel number to watch something else.", X(1088), 3):
-            t.draw(c, line, f, b["soft"], X(96), y)
-            y += Y(32)
+        self._band(c, self.R(0, 0, 1280, 70))
+        t.draw(c, digits + "-" * (3 - len(digits)), self.fb(Y(36)), b["text"], X(240), Y(16))
+        t.draw(c, stamp(), self.fb(Y(24)), b["text"], X(1184), Y(22), align="right")
 
     def _volume(self, c, cx, cy):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         v = self.app.video
         r = self.R(340, 630, 600, 50)
-        vgrad(c, r, rgba(b["navy"], 226), rgba(b["navy"], 236), radius=Y(6))
-        pygame.draw.rect(c, b["sky"], (r.x, r.bottom - Y(3), r.w, Y(3)))
+        self._band(c, r)
         f = self.fb(Y(22))
         t.draw(c, "MUTE" if v.muted else "VOLUME", f, (245, 28, 46) if v.muted else b["text"], r.x + X(20),
                r.y + (r.h - t.ink(f)[1]) // 2)
@@ -230,8 +241,7 @@ class InDirectHD(BoxSkin):
     def _trick(self, c, s):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         r = self.R(96, 600, 1088, 70)
-        vgrad(c, r, rgba(b["navy"], 226), rgba(b["navy"], 236), radius=Y(6))
-        pygame.draw.rect(c, b["sky"], (r.x, r.bottom - Y(3), r.w, Y(3)))
+        self._band(c, r)
         behind = s["behind"]
         mm, ss = divmod(int(behind), 60)
         tag = ("PAUSE" if s["paused"] else "LIVE" if behind < 2 else "PLAY")
@@ -424,8 +434,7 @@ class InDirectHD(BoxSkin):
         rh = Y(40)
         r = pygame.Rect(0, 0, W, Y(44) + rh * len(rows) + Y(10))
         r.bottom = H
-        vgrad(c, r, rgba(b["navy"], 226), rgba(b["navy"], 236))
-        pygame.draw.rect(c, b["sky"], (0, r.y, W, Y(3)))
+        self._band(c, r)
         fh = self.fb(Y(22))
         t.draw(c, "Mini Guide", fh, b["text"], X(96), r.y + Y(12))
         t.draw(c, stamp(), fh, b["text"], X(1184), r.y + Y(12), align="right")
@@ -479,23 +488,343 @@ class InDirectHD(BoxSkin):
 
 
 class InDirect(InDirectHD):
-    """The SD era: the same screens in 4:3 on a navy ground, gold selection."""
+    """The SD era, after a 1997 DSS receiver: a purple ground with a lavender
+    page, teal bands, grey (light) selection; the channel banner across the
+    top with a two-line schedule; a numbered Main Menu with the chosen item
+    explained in a teal box. 640x480, geometry from the box's own frame."""
     name = "indirect"
     label = "InDirecTV"
     canvas = (640, 480)
+    guide_hours = 2                 # four half-hour columns, as the DSS showed
+    guide_rows = 6
     SD = True
-    NATIVE = {"bg": [6, 24, 70], "accent": [22, 62, 140], "accent2": [234, 190, 40],
-              "text": [255, 255, 255], "chnum": [40, 120, 220]}
+    # Measured from the frames: the purple band, the lavender page, the teal
+    # bar, the light selection; the amber was the box's own highlight colour.
+    NATIVE = {"bg": [56, 51, 86], "accent": [112, 106, 142], "accent2": [168, 168, 170],
+              "text": [255, 255, 255], "chnum": [100, 136, 138]}
 
     def roles(self, b):
-        r = super().roles(b)
-        navy, cell, text, sky = b["bg"], b["accent"], b["text"], b["chnum"]
-        # No white or cyan in the SD era: the top is navy fading to black.
-        r.update(paper_top=mix(navy, cell, 0.3), paper_bot=mix(navy, (0, 0, 0), 0.3),
-                 strip=mix(navy, cell, 0.5), strip_rule=mix(cell, text, 0.3), strip_ink=text,
-                 page_top=mix(navy, (0, 0, 0), 0.3), page_mid=mix(navy, (0, 0, 0), 0.2), page_bot=mix(navy, (0, 0, 0), 0.45),
-                 ink=text, watermark=mix(navy, cell, 0.6),
-                 sel_ink=(20, 16, 0), sel_shadow=None,
-                 teal=mix(navy, cell, 0.4), teal_dark=mix(navy, cell, 0.15), panel=mix(navy, (0, 0, 0), 0.35),
-                 margin=mix(navy, cell, 0.6), bar=mix(cell, text, 0.5))
+        purple, page, sel, text, teal = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
+        return {
+            "purple": purple, "page": page, "page_hi": mix(page, (255, 255, 255), 0.08),
+            "teal": teal, "teal_dark": mix(teal, (0, 0, 0), 0.25),
+            "sel": sel, "sel_ink": mix(purple, (0, 0, 0), 0.5), "shadow": mix(purple, (0, 0, 0), 0.6),
+            "text": text, "soft": mix(text, page, 0.35), "rule": mix(page, (255, 255, 255), 0.3),
+            "tile": mix(text, page, 0.4), "box": mix(purple, (0, 0, 0), 0.35),
+            # The shared pieces (volume, mini guide...) read these.
+            "navy": purple, "cell": page, "cell_hi": mix(page, (255, 255, 255), 0.06),
+            "gap": mix(page, (0, 0, 0), 0.3), "sky": teal, "deep": mix(purple, (0, 0, 0), 0.4),
+            "sel_hi": mix(sel, (255, 255, 255), 0.25), "sel_shadow": None, "mark": text, "ink": text,
+        }
+
+    # The DSS frame's own 320x240 (the capture's size), scaled to the canvas.
+    def X(self, v) -> int:
+        return int(round(v * self.canvas[0] / 320))
+
+    def Y(self, v) -> int:
+        return int(round(v * self.canvas[1] / 240))
+
+    def _shadowed(self, c, s, f, ink, shadow, x, y, align="left"):
+        """The DSS lettered everything with a dark drop shadow."""
+        if shadow:
+            self.text.draw(c, s, f, shadow, x + 2, y + 2, align=align)
+        return self.text.draw(c, s, f, ink, x, y, align=align)
+
+    def mark(self, c, x, y, size):
+        """The tile alone, as the box's banner showed only its logo."""
+        self.tile(c, (x, y, size, size), self.b["teal"])
+
+    # ── Live: banner, digits, volume, trick ───────────────────────────────
+
+    def _banner(self, c, ch, cur, nxt, full=False, tag=None):
+        """The DSS banner, to the frame: a purple band y 0-56, the logo and
+        the channel number in a grey tile at the left, the title at x 57,
+        then Start / End lines with the rating and list, the clock and date
+        right-aligned."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        r = self.R(0, 0, 320, 56)
+        vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
+        if tag:
+            self.chip(c, X(12), r.bottom + Y(4), tag, self.fb(Y(9)), rgba(b["sel"]), b["sel_ink"])
+        self.mark(c, X(22), Y(14), Y(22))
+        num = pygame.Rect(X(23), Y(41), X(24), Y(13))
+        pygame.draw.rect(c, b["tile"], num, border_radius=2)
+        fn = self.fb(Y(10))
+        t.draw(c, str(ch.number), fn, b["sel_ink"], num.centerx, num.y + (num.h - t.ink(fn)[1]) // 2, align="center")
+        f_title = self.fb(Y(16))
+        self._shadowed(c, t.fit(f_title, cur.title if cur else ch.name, X(240)), f_title, b["text"], b["shadow"],
+                       X(57), Y(5))
+        fs = self.fb(Y(11))
+        local = datetime.now()
+        cat = g_cat(self)
+        rows = [("Start", ampm(cur.start) + "m" if cur else "", (cur.rating or "NR") if cur else "",
+                 ampm(local) + "m"),
+                ("End", ampm(cur.stop) + "m" if cur else "", "Normal List" if cat == "All" else cat,
+                 f"{local:%a} {local.month}/{local.day}/{local:%y}")]
+        for k, (lab, when_, mid, right) in enumerate(rows):
+            y = Y(26 + 12 * k)
+            self._shadowed(c, lab, fs, b["text"], b["shadow"], X(57), y)
+            self._shadowed(c, when_, fs, b["text"], b["shadow"], X(100), y)
+            self._shadowed(c, mid, fs, b["text"], b["shadow"], X(165), y)
+            self._shadowed(c, right, fs, b["text"], b["shadow"], X(300), y, align="right")
+        if full and cur and cur.description:
+            f = self.f(Y(12))
+            lines = t.wrap(f, cur.description, X(296), 3)
+            d = pygame.Rect(0, r.bottom, W, Y(8) + len(lines) * Y(15))
+            vgrad(c, d, rgba(b["purple"], 230), rgba(b["deep"], 240))
+            y = d.y + Y(4)
+            for line in lines:
+                self._shadowed(c, line, f, b["text"], b["shadow"], X(12), y)
+                y += Y(15)
+        if self._tick is None or self._tick[0] <= time.monotonic():
+            self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
+
+    def _digits(self, c, digits):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        r = self.R(0, 0, 320, 36)
+        vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
+        self.mark(c, X(22), Y(7), Y(22))
+        self._shadowed(c, digits + "-" * (3 - len(digits)), self.fb(Y(18)), b["text"], b["shadow"], X(57), Y(8))
+
+    def _notice(self, c, lines, y_bottom=None, min_w=0):
+        """The DSS's purple notice box with its light bevel, bottom left (the
+        'This showing is no longer available' card); returns its rect."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f = self.fb(Y(12))
+        w = max(max(t.width(f, s) for s in lines) + X(24), min_w)
+        r = pygame.Rect(X(52), 0, min(w, X(224)), Y(8) + len(lines) * Y(13))
+        r.bottom = y_bottom if y_bottom is not None else Y(227)
+        pygame.draw.rect(c, b["purple"], r)
+        pygame.draw.rect(c, b["rule"], r, 2)
+        y = r.y + Y(4)
+        for s in lines:
+            self._shadowed(c, s, f, b["text"], b["shadow"], r.x + X(12), y)
+            y += Y(13)
         return r
+
+    def _volume(self, c, cx, cy):
+        b, X, Y = self.b, self.X, self.Y
+        v = self.app.video
+        r = self._notice(c, ["Mute" if v.muted else f"Volume  {v.volume}"], min_w=X(190))
+        bar = pygame.Rect(r.x + X(100), r.y + Y(8), X(80), Y(7))
+        pygame.draw.rect(c, b["gap"], bar)
+        if not v.muted:
+            pygame.draw.rect(c, b["teal"], (bar.x, bar.y, int(bar.w * v.volume / 100), bar.h))
+
+    def _trick(self, c, s):
+        b, X, Y = self.b, self.X, self.Y
+        behind = s["behind"]
+        mm, ss = divmod(int(behind), 60)
+        tag = "Paused" if s["paused"] else ("Live" if behind < 2 else "Playing")
+        when_ = f"-{mm}:{ss:02d}" if behind >= 1 else "Live"
+        r = self._notice(c, [f"{tag}        {when_}"], min_w=X(190))
+        bar = pygame.Rect(r.x + X(12), r.bottom - Y(6), r.w - X(24), Y(3))
+        pygame.draw.rect(c, b["gap"], bar)
+        span = s["buffer"] + behind
+        if span >= 2:
+            x = bar.x + int(bar.w * s["buffer"] / span)
+            pygame.draw.rect(c, b["teal"], (bar.x, bar.y, x - bar.x, bar.h))
+            pygame.draw.rect(c, b["text"], (x - 1, bar.y - 2, 3, bar.h + 4))
+
+    # ── Guide: the DSS Program Guide ──────────────────────────────────────
+
+    def guide_video_box(self):
+        return "hidden"                  # the DSS guide was a full page
+
+    def draw_guide(self, c, g):
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        pygame.draw.rect(c, b["purple"], (0, 0, W, Y(42)))
+        pygame.draw.rect(c, b["page"], (0, Y(42), W, H - Y(42)))
+        f_head, f_small, f_cell = self.fb(Y(16)), self.fb(Y(11)), self.fb(Y(12))
+        self._shadowed(c, "Norm", f_small, b["soft"], b["shadow"], X(24), Y(14))
+        self._shadowed(c, "Program Guide", f_head, b["text"], b["shadow"], X(55), Y(14))
+        local = datetime.now()
+        self._shadowed(c, f"{local:%a} {local.month}/{local.day}/{local:%y}", f_small, b["text"], b["shadow"],
+                       X(248), Y(14), align="right")
+        self._shadowed(c, ampm(local).upper() + "M", f_small, b["text"], b["shadow"], X(300), Y(14), align="right")
+        # The second line: page, and the half hours.
+        start, end = g.window()
+        rows_all = g.filtered()
+        page, pages = g.top // g.rows + 1, max(1, (len(rows_all) + g.rows - 1) // g.rows)
+        self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(30))
+        slots = int(g.hours * 2)
+        col_w = 240 / slots
+        for i in range(slots):
+            self._shadowed(c, ampm(start + timedelta(minutes=30 * i)).upper() + "M", f_small, b["text"],
+                           b["shadow"], X(55 + col_w * i), Y(30))
+        # The rows: a channel tile, then bevelled page-coloured cells.
+        rows = rows_all[g.top: g.top + g.rows]
+        now = datetime.now(timezone.utc)
+        epg = self.app.epg
+        mins = g.hours * 60
+        grid_x, grid_w = X(55), X(242)
+        for i, ch in enumerate(rows):
+            y = Y(43 + 28 * i)
+            rh = Y(26)
+            row_sel = g.focus == "grid" and g.top + i == g.cursor
+            tile = pygame.Rect(X(24), y, X(27), rh)
+            self._bevel(c, tile, b["page"])
+            self._shadowed(c, t.fit(f_small, ch.name.upper(), X(25)), f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
+            self._shadowed(c, str(ch.number), f_small, b["text"], b["shadow"], tile.x + X(2), y + Y(14))
+            cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
+            progs = epg.programs_in_window(cid, start, end) if cid else []
+            if not progs:
+                cell = pygame.Rect(grid_x, y, grid_w, rh)
+                self._bevel(c, cell, b["sel"] if row_sel else b["page"])
+                self._shadowed(c, "No Information", f_cell, b["sel_ink"] if row_sel else b["text"],
+                               None if row_sel else b["shadow"], cell.x + X(4), y + Y(2))
+            for p in progs:
+                a = max(0.0, (p.start - start).total_seconds() / 60)
+                e = min(float(mins), (p.stop - start).total_seconds() / 60)
+                if e <= a:
+                    continue
+                cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(2), rh)
+                on = row_sel and p.start <= max(now, start) < p.stop
+                self._bevel(c, cell, b["sel"] if on else b["page"])
+                ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
+                lines = t.wrap(f_cell, p.title, cell.w - X(8), 2)
+                for k, line in enumerate(lines):
+                    self._shadowed(c, line, f_cell, ink, shadow, cell.x + X(4), y + Y(2) + k * Y(12))
+            self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
+                                                         setattr(g, "focus", "grid"), g.handle("SELECT")))
+        # The teal buttons along the bottom: page, the lists, Exit.
+        y = Y(212)
+        labels = [("v", "PAGE_DOWN"), (g.category if g.category != "All" else "Movies", "THEMES"),
+                  ("Sports", "THEMES"), ("Other", "THEMES"), ("All", "THEMES"), ("Exit", "EXIT")]
+        bx = X(24)
+        bw = X(45)
+        for k, (lab, action) in enumerate(labels):
+            r = pygame.Rect(bx + k * (bw + X(1)), y, bw, Y(11))
+            on = k == 1 and g.focus == "category"
+            pygame.draw.rect(c, b["sel"] if on else b["teal"], r)
+            pygame.draw.rect(c, b["teal_dark"], (r.x, r.bottom - 1, r.w, 1))
+            if lab == "v":
+                pygame.draw.polygon(c, b["purple"], [(r.centerx - X(5), r.y + Y(3)), (r.centerx + X(5), r.y + Y(3)),
+                                                      (r.centerx, r.bottom - Y(3))])
+            else:
+                self._shadowed(c, t.fit(f_small, lab, bw - X(6)), f_small, b["sel_ink"] if on else b["text"],
+                               None if on else b["shadow"], r.centerx, r.y + Y(1), align="center")
+            self.hit(r, lambda a=action: g.handle(a))
+
+    def _bevel(self, c, r, fill):
+        """A cell with the DSS's light top-left / dark bottom-right edges."""
+        b = self.b
+        pygame.draw.rect(c, fill, r)
+        hi, lo = mix(fill, (255, 255, 255), 0.35), mix(fill, (0, 0, 0), 0.35)
+        pygame.draw.line(c, hi, r.topleft, r.topright)
+        pygame.draw.line(c, hi, r.topleft, r.bottomleft)
+        pygame.draw.line(c, lo, r.bottomleft, r.bottomright)
+        pygame.draw.line(c, lo, r.topright, r.bottomright)
+
+    # ── Menu: the DSS Main Menu ───────────────────────────────────────────
+
+    def menu_video_box(self, menu):
+        return "hidden"
+
+    def draw_menu(self, c, m):
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        pygame.draw.rect(c, b["purple"], (0, 0, W, Y(57)))
+        pygame.draw.rect(c, b["teal"], (0, Y(57), W, Y(12)))
+        pygame.draw.rect(c, b["page"], (0, Y(69), W, H - Y(69)))
+        f_head, f_small, f_row = self.fb(Y(16)), self.fb(Y(11)), self.fb(Y(12))
+        title = "DSS Main Menu" if m.title == "MAIN MENU" else m.title.title()
+        self._shadowed(c, title, f_head, b["text"], b["shadow"], X(55), Y(16))
+        self._shadowed(c, "Use arrows to point to an item, then press SELECT.", f_small, b["text"], b["shadow"],
+                       X(55), Y(34))
+        self._shadowed(c, "Pressing the number also selects the item.", f_small, b["text"], b["shadow"], X(55), Y(46))
+        n = len(m.items)
+        rh = Y(14)
+        n_vis = max(1, (Y(190) - Y(74)) // rh)
+        first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
+        for k, i in enumerate(range(first, min(n, first + n_vis))):
+            it = m.items[i]
+            y = Y(74) + k * rh
+            sel = i == m.cursor
+            row = pygame.Rect(X(52), y - Y(2), X(218), rh)
+            if sel:
+                pygame.draw.rect(c, b["sel"], row)
+                pygame.draw.rect(c, b["shadow"], (row.x, row.bottom, row.w, 1))
+                pygame.draw.rect(c, b["shadow"], (row.right, row.y, 1, row.h))
+            num = str((i + 1) % 10) if i < 10 else " "
+            label = f"{num} {it.label}"
+            if it.value:
+                label += f"   {it.value()}"
+            ink = (b["sel_ink"] if sel else b["text"]) if it.enabled else b["soft"]
+            self._shadowed(c, t.fit(f_row, label, row.w - X(8)), f_row, ink, None if sel else b["shadow"],
+                           row.x + X(3), y)
+            self.hit(row, lambda i=i: m.activate(i))
+        it = m.items[m.cursor] if 0 <= m.cursor < n else None
+        if it:
+            box = self.R(52, 198, 220, 24)
+            pygame.draw.rect(c, b["teal"], box)
+            pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
+            pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
+            self._shadowed(c, str((m.cursor + 1) % 10), self.fb(Y(14)), b["text"], b["shadow"], box.x + X(6), box.y + Y(5))
+            if it.value:
+                hint = "LEFT / RIGHT change this setting." if it.adjust else "SELECT changes this setting."
+            elif it.submenu:
+                hint = "SELECT opens this menu."
+            else:
+                hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, "SELECT chooses this.")
+            self._shadowed(c, t.fit(f_row, hint, box.w - X(26)), f_row, b["text"], b["shadow"], box.x + X(20), box.y + Y(6))
+
+    # ── Mini guide: the DSS had none; a purple band of rows ───────────────
+
+    def draw_miniguide(self, c, mg):
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        rows = mg.rows()
+        rh = Y(13)
+        r = pygame.Rect(0, 0, W, Y(14) + rh * len(rows) + Y(4))
+        r.bottom = H
+        vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
+        f = self.fb(Y(11))
+        self._shadowed(c, "Mini Guide", self.fb(Y(12)), b["text"], b["shadow"], X(12), r.y + Y(2))
+        y = r.y + Y(14)
+        for ch, cur, nxt, sel in rows:
+            row = pygame.Rect(X(12), y, X(296), rh - Y(2))
+            if sel:
+                pygame.draw.rect(c, b["sel"], row)
+            ink, shadow = (b["sel_ink"], None) if sel else (b["text"], b["shadow"])
+            ty = row.y + (row.h - t.ink(f)[1]) // 2
+            self._shadowed(c, t.fit(f, f"{ch.number} {ch.name.upper()}", X(58)), f, ink, shadow, row.x + X(2), ty)
+            self._shadowed(c, t.fit(f, cur.title if cur else "No Information", X(120)), f, ink, shadow, row.x + X(64), ty)
+            if nxt:
+                self._shadowed(c, t.fit(f, f"{ampm(nxt.start)}m  {nxt.title}", X(104)), f, ink if sel else b["soft"],
+                               shadow, row.x + X(190), ty)
+            self.hit(row, lambda ch=ch: mg.pick(ch))
+            y += rh
+
+    # ── Boot ──────────────────────────────────────────────────────────────
+
+    def draw_boot(self, c, boot):
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        stage = boot.stage()
+        pygame.draw.rect(c, b["purple"], (0, 0, W, H))
+        self.tile(c, (W // 2 - X(15), Y(74), X(30), Y(30)), b["teal"])
+        f = self.fb(Y(9))
+        w = sum(t.width(f, ch) for ch in "InDirecTV") + X(1) * 8
+        self._spaced(c, "InDirecTV", f, b["text"], W // 2 - w // 2, Y(110), X(1))
+        if stage == "starting":
+            return
+        caption = {"signal": "Acquiring satellite signal...", "guide": "Receiving program guide...",
+                   "done": "Ready"}[stage]
+        self._notice(c, [caption, "Press any button to skip."], y_bottom=Y(165))
+
+
+def g_cat(skin) -> str:
+    """The guide's current list name, for the banner's 'Normal List' slot."""
+    from ..screens.guide import Guide
+    g = skin.app.find(Guide) if hasattr(skin.app, "find") else None
+    return g.category if g else "All"
+
+
+def g_list(skin) -> str:
+    """The guide's current list name, for the banner's favourites slot."""
+    from ..screens.guide import Guide
+    g = skin.app.find(Guide) if hasattr(skin.app, "find") else None
+    return g.category if g and g.category != "All" else "Channels I Get"

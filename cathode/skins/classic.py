@@ -9,10 +9,6 @@ import pygame
 from .. import palette
 from . import Skin
 
-# SMPTE colour bars, top two thirds (75%).
-_BARS = [(191, 191, 191), (191, 191, 0), (0, 191, 191), (0, 191, 0),
-         (191, 0, 191), (191, 0, 0), (0, 0, 191)]
-
 
 def clock(dt: datetime) -> str:
     return dt.strftime("%I:%M %p").lstrip("0")
@@ -70,8 +66,6 @@ class Classic(Skin):
         if live.message:
             self._message(c, live.message)
             return
-        if live.standby and live.phase != "cover":
-            self._standby(c)
         if live.phase == "cover" and live.channel:
             # The channel being tuned, big and top-left, over the static.
             self.text.draw(c, str(live.channel.number), self.f(96), p["CHANNEL_GREEN"],
@@ -199,21 +193,6 @@ class Classic(Skin):
             pygame.draw.rect(c, p["TRACK"], (cx - 60, box.bottom + 8, 120, 6))
             col = p["GREEN"] if v.volume < 80 else p["YELLOW"] if v.volume < 95 else p["RED"]
             pygame.draw.rect(c, col, (cx - 60, box.bottom + 8, int(120 * v.volume / 100), 6))
-
-    def _standby(self, c):
-        """Dead stream: colour bars and a card instead of black."""
-        W, H = self.canvas
-        bw = W / 7
-        for i, col in enumerate(_BARS):
-            pygame.draw.rect(c, (*col, 255), (round(i * bw), 0, round((i + 1) * bw) - round(i * bw),
-                                              int(H * 0.67)))
-        pygame.draw.rect(c, (16, 16, 16, 255), (0, int(H * 0.67), W, H - int(H * 0.67)))
-        card = pygame.Rect(0, 0, int(W * 0.56), int(H * 0.18))
-        card.center = (W // 2, int(H * 0.45))
-        pygame.draw.rect(c, (0, 0, 0, 255), card)
-        pygame.draw.rect(c, self.p["OSD_BORDER"], card, 3)
-        self.text.draw(c, "PLEASE STAND BY", self.f(56), self.p["WHITE"], card.centerx,
-                       card.centery - 20, align="center")
 
     # ── Browse ────────────────────────────────────────────────────────────
 

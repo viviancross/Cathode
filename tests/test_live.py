@@ -147,13 +147,12 @@ class TestTuning(unittest.TestCase):
         self.live.handle(R.UP)                     # tune again: first timeout is cancelled
         self.app.fire(lambda t: t[0] == self.app.config.tune_timeout and t is self.app.timers[0])
         self.assertEqual(self.live.phase, "cover")
-        self.assertFalse(self.live.standby)
 
-    def test_a_dead_stream_reveals_onto_the_standby_card(self):
+    def test_a_dead_stream_reveals_anyway(self):
         self.app.fire(lambda t: t[0] == self.app.config.tune_timeout)
-        self.assertTrue(self.live.standby)
-        self.live.on_video("video_started")        # a late frame replaces the card
-        self.assertFalse(self.live.standby)
+        self.assertEqual(self.live.phase, "reveal")
+        self.live.on_video("video_started")        # a late frame just plays
+        self.assertEqual(self.live.phase, "reveal")
 
     def test_prev_goes_back_to_the_channel_before(self):
         self.live.handle(R.UP)

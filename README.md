@@ -19,11 +19,15 @@ Style > Skin**:
 - **Cathode Classic**: Cathode 3's retro-CRT look. Phosphor colour themes,
   pixel fonts, static when you change channel.
 - **InDirecTV / InDirecTV HD**: a DirecTV-style box. HD after the HR20
-  (light swoosh panel, navy grid, amber selection, the colour keys, a mini guide); SD after the
-  D10/R15 era (the same screens on dark navy, gold selection, 4:3).
-- **Plate Network / Plate Network HD**: a Dish Network-style box. HD after the ViP622/722
-  (silver guide cells, green selection, grey dialogs, numbered menus, RIGHT to browse); SD
-  after the 301/522 era (capsule shapes, blue cells, a pale selection, 4:3).
+  (sky-blue banner with the favourites bar, cyan guide page, navy grid,
+  amber selection, the colour keys, a mini guide); SD after a 1997 DSS
+  receiver (purple and lavender pages, bevelled cells, drop-shadowed
+  lettering, 4:3).
+- **Plate Network / Plate Network HD**: a Dish Network-style box. HD after
+  the 2007 teal guide (teal page, charcoal channel cells, teal and navy
+  program cells, a gold frame, a grey banner, numbered menus, RIGHT to
+  browse); SD after the 2005 receivers (grey page with the blue tab of
+  pills, blue cells with a pale selection, a bare banner, 4:3).
 
 Each skin keeps its own colour theme and font. Every skin can use any colour
 theme, the colour editor, any font, and the CRT scanlines and vignette.
@@ -42,7 +46,7 @@ redrawn unless something changed, so an idle Cathode costs next to nothing.
   channel numbers, PREV for the last channel.
 - **Like a box**: start-up screen while it finds its signal, a banner on
   every tune (INFO again for the full description), browse other channels
-  without tuning, a mini guide, a signal-loss screen for dead channels.
+  without tuning, a mini guide, PREV and a THEMES button.
 - **Pause live TV**: pause, rewind and fast-forward through what's buffered,
   then back to live.
 - **On Demand (Plex)**: sign in with a code, browse and search your

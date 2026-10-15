@@ -37,7 +37,7 @@ Tick a line when the new code has a test for it.
 - [ ] Guide close control is hittable and doesn't overlap the category bar
 
 ## Look (`test_delight`, `test_crt`, `test_motion`, `test_fonts`, `test_ascii_ui`, `test_ui_aspect`)
-- [ ] Stand-by card renders on a dead stream and clears when a frame arrives
+- [x] ~~Stand-by card on a dead stream~~ dropped in 4.0: a dead channel shows black with the banner up
 - [ ] Power-off collapse: bounded, honours reduced motion, never blocks exit
 - [ ] Screensaver arms only when idle on home/guide, never when disabled, never paints after state changes
 - [ ] CRT: pitch follows screen height, soft profile, vignette leaves the middle alone, text stays readable

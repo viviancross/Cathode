@@ -132,7 +132,10 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
         for name, cls in skin_classes().items():
             app = FakeApp()
             skin = cls(app)
-            x, y, w, h = skin.guide_video_box()
+            box = skin.guide_video_box()
+            if box == "hidden":             # a full-page guide (the DSS had no picture window)
+                continue
+            x, y, w, h = box
             W, H = skin.canvas
             self.assertTrue(0 <= x and 0 <= y and x + w <= W and y + h <= H, name)
 
