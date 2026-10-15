@@ -1,103 +1,51 @@
 #!/usr/bin/env python3
-"""Cathode — retro IPTV player for Steam Deck."""
+"""Cathode: a satellite-box-style IPTV player."""
 
 import argparse
-import sys
 import os
+import sys
 
-# Ensure this file's directory (the project root, which contains the `cathode`
-# package) is importable no matter how the script is launched or what the
-# current working directory is.
+# The project root (which holds the `cathode` package) importable however
+# this is launched.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cathode.app import App
-from cathode.config import Config
+from cathode import paths  # noqa: E402
+from cathode.config import Config  # noqa: E402
+from cathode.instance import fatal, hold_instance_lock, start_log  # noqa: E402
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Cathode — retro 80s/90s cable TV IPTV player"
-    )
-    parser.add_argument(
-        "--playlist", "-p",
-        metavar="URL_OR_FILE",
-        help="M3U playlist URL or file path",
-    )
-    parser.add_argument(
-        "--epg", "-e",
-        metavar="URL_OR_FILE",
-        help="XMLTV EPG URL or file path",
-    )
-    parser.add_argument(
-        "--config", "-c",
-        metavar="FILE",
-        default=os.path.expanduser("~/.config/cathode/config.json"),
-        help="Config file path (default: ~/.config/cathode/config.json)",
-    )
-    parser.add_argument(
-        "--width", type=int, default=None,
-        help="Display width (default: 1920 fullscreen, 1280 windowed)",
-    )
-    parser.add_argument(
-        "--height", type=int, default=None,
-        help="Display height (default: 1080 fullscreen, 720 windowed)",
-    )
-    parser.add_argument(
-        "--fullscreen", "-f", action="store_true", default=None,
-        help="Run fullscreen (the default unless --windowed)",
-    )
-    parser.add_argument(
-        "--windowed", "-w", action="store_true",
-        help="Run in a window instead of fullscreen (good for testing the UI)",
-    )
-    parser.add_argument(
-        "--demo", action="store_true",
-        help="Demo mode: built-in test-pattern channels + fake EPG, "
-             "no playlist or network needed (implies --windowed)",
-    )
-    parser.add_argument(
-        "--mpv", choices=["auto", "flatpak", "system"], default="auto",
-        help="Which mpv to drive (default: auto — Flatpak on Steam Deck, "
-             "else a system mpv binary)",
-    )
-    parser.add_argument(
-        "--channel", type=int, default=None,
-        help="Start on this channel number",
-    )
-    args = parser.parse_args()
-
-    # Resolve fullscreen vs windowed (demo defaults to windowed)
-    if args.windowed:
-        fullscreen = False
-    elif args.fullscreen:
-        fullscreen = True
-    elif args.demo:
-        fullscreen = False
-    else:
-        fullscreen = True
-
-    # Resolve dimensions from mode if not explicitly given
-    width  = args.width  or (1920 if fullscreen else 1280)
-    height = args.height or (1080 if fullscreen else 720)
+    ap = argparse.ArgumentParser(description="Cathode: a satellite-box-style IPTV player")
+    ap.add_argument("--playlist", "-p", metavar="URL_OR_FILE", help="M3U playlist")
+    ap.add_argument("--epg", "-e", metavar="URL_OR_FILE", help="XMLTV guide")
+    ap.add_argument("--config", "-c", metavar="FILE", default=paths.config_path())
+    ap.add_argument("--windowed", "-w", action="store_true", help="start in a window")
+    ap.add_argument("--channel", type=int, help="start on this channel number")
+    ap.add_argument("--skin", help="classic | plate | plate_hd | indirect | indirect_hd")
+    ap.add_argument("--shot", metavar="PNG", help="save a frame after --seconds and exit")
+    ap.add_argument("--seconds", type=float, default=5.0)
+    ap.add_argument("--press", default="", metavar="T:BUTTON,...",
+                    help="press remote buttons at these times, e.g. 1:INFO,2.5:DIGIT1")
+    args = ap.parse_args()
 
     config = Config(args.config)
     if args.playlist:
-        config.playlist_url = args.playlist
-    if args.epg:
-        config.epg_url = args.epg
+        config.playlist_url, config.epg_url = args.playlist, args.epg or ""
+    if args.skin:
+        config.skin = args.skin
 
-    # No early playlist check here: App.run() prompts for a playlist when none
-    # is configured (first run) and re-prompts if one fails to load.
+    from cathode.updater import LOCK_FILE      # the update installer holds it too
+    runtime = paths.cache_dir()
+    lock = hold_instance_lock(os.path.join(runtime, LOCK_FILE))
+    if not lock:
+        fatal("Cathode is already running, or finishing an update.")
+    start_log(runtime)
 
-    app = App(
-        config=config,
-        width=width,
-        height=height,
-        fullscreen=fullscreen,
-        start_channel=args.channel,
-        demo=args.demo,
-        mpv_backend=args.mpv,
-    )
+    from cathode.app import App
+    app = App(config, fullscreen=not args.windowed and not args.shot, start_channel=args.channel)
+    if args.shot:
+        app.shot = (args.shot, args.seconds)
+    app.script = [(float(t), b) for t, _, b in (p.partition(":") for p in args.press.split(",") if p)]
     app.run()
 
 

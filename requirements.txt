@@ -1,10 +1,10 @@
-# mpv itself is provided by Flatpak (io.mpv.Mpv) and controlled over a JSON
-# IPC socket — we do NOT link libmpv in-process, so python-mpv is not needed.
-# Networking (playlist/EPG/logo fetches) uses the stdlib urllib, so there's no
-# `requests` dependency.
-# 10.3.0: fixes for CVE-2023-4863 (libwebp), CVE-2023-50447, CVE-2024-28219.
+# The window, input and controllers (bundles SDL2 on every platform).
+pygame-ce>=2.5.0
+# libmpv bindings. libmpv itself comes from the platform: libmpv-2.dll on
+# Windows (bundled), Homebrew mpv on macOS, libmpv2 on Linux.
+mpv>=1.0.6
+PyOpenGL>=3.1.7
+# Image decoding (logos, posters). 10.3.0: libwebp and other CVE fixes.
 Pillow>=10.3.0
-numpy>=1.24.0
-# CA bundle so HTTPS (Plex sign-in, etc.) verifies on macOS, whose bundled
-# Python often lacks system certificates.
+# CA bundle so HTTPS verifies on macOS, whose bundled Python often lacks one.
 certifi>=2023.0.0

@@ -90,6 +90,7 @@ class Config:
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance
+    skin: str = "classic"          # classic | plate | plate_hd | indirect | indirect_hd
     font: str = "vcr"              # vcr | ibm | vt220 | pixelop | vt323 | jersey
     theme: str = "blue"           # blue | amber | green | vhs | mono | custom | ...
     # Custom palette saved by the theme editor: {bg,accent,accent2,text -> [r,g,b]}

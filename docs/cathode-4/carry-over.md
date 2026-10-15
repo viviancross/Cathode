@@ -6,11 +6,11 @@ code before 4.0. Read the originals with `git show 432d6de:tests/<file>.py`.
 Tick a line when the new code has a test for it.
 
 ## Live TV and tuning (`test_tune_races`)
-- [ ] A late playback-restart from the replaced file never reveals the new channel
-- [ ] Rapid presses each move exactly one channel; mpv ends on the channel the banner shows
-- [ ] A stale tune timeout doesn't reveal the next channel
-- [ ] Per-stream HTTP headers and the load they belong to go out together
-- [ ] Tuning with no channels loaded is safe
+- [x] A late playback-restart from the replaced file never reveals the new channel
+- [x] Rapid presses each move exactly one channel; mpv ends on the channel the banner shows
+- [x] A stale tune timeout doesn't reveal the next channel
+- [x] Per-stream HTTP headers and the load they belong to go out together
+- [x] Tuning with no channels loaded is safe
 
 ## Input routing (`test_input_routing`, `test_gamepad_*`)
 - [ ] Topmost screen owns input: keyboard over dialog over playback over live
@@ -49,4 +49,4 @@ Tick a line when the new code has a test for it.
 - [x] Second instance refused while the first holds the lock (`test_updater` covers `hold_instance_lock`)
 - [ ] Log goes to cathode.log, previous run kept as cathode.log.1
 - [ ] A failed update install is reported on the next launch
-- [ ] EPG reloads on a timer, stops when the playlist changes, keeps the old guide if a reload fails
+- [x] EPG reloads on a timer, stops when the playlist changes, keeps the old guide if a reload fails
