@@ -29,6 +29,8 @@ class LiveTV(Screen):
         self.banner_full = False    # INFO pressed again: the expanded banner
         self.volume_until = 0.0
         self.digits = ""
+        self.trick_until = 0.0
+        self.behind, self._paused_at = 0.0, 0.0     # pause-live bookkeeping
         self._reveal_start = 0.0
         self._timeout = self._digit_timer = self._banner_timer = None
 
@@ -64,6 +66,7 @@ class LiveTV(Screen):
         self.idx = idx
         ch = self.channels[idx]
         self.phase, self.standby = "cover", False
+        self.behind = 0.0                   # a fresh tune is live
         self.app.cancel(self._timeout)
         self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
         self.app.video.play(ch.url)
@@ -202,9 +205,67 @@ class LiveTV(Screen):
         elif a == R.MUTE:
             self.app.video.muted = not self.app.video.muted
             self.show_volume()
+        elif a in (R.PAUSE, R.PLAY, R.REW, R.FF, R.REPLAY, R.SKIP, R.STOP):
+            self._trick(a)
         else:
             return False
         return True
+
+    # ── Pause live TV ─────────────────────────────────────────────────────
+
+    def _trick(self, a):
+        """Pause, rewind and fast-forward within the buffered past of a live
+        channel, as a DVR box does. How far behind live we are is kept here:
+        mpv's cache can't say (on a live stream it always runs a few seconds
+        ahead of the picture)."""
+        v = self.app.video
+        now = time.monotonic()
+        if a in (R.PAUSE, R.PLAY):
+            if v.paused:
+                self.behind += now - self._paused_at
+                v.paused = False
+            elif a == R.PAUSE:
+                self._paused_at = now
+                v.paused = True
+        elif a in (R.REW, R.REPLAY):
+            step = min(10.0 if a == R.REW else 7.0, v.buffered_behind() or 10.0)
+            v.seek(-step)
+            self.behind += step
+        elif a == R.FF:
+            step = min(10.0, self.behind_now())          # never past live
+            if step > 0:
+                v.seek(step)
+                self.behind = max(0.0, self.behind - step)
+        elif a in (R.SKIP, R.STOP):
+            if self.behind_now() > 1:
+                self.tune(self.idx)            # back to live
+                self.app.toast("LIVE")
+                return
+        self.trick_until = now + 4.0
+        self._trick_tick()
+
+    def behind_now(self) -> float:
+        paused = self.app.video.paused
+        return self.behind + (time.monotonic() - self._paused_at if paused else 0.0)
+
+    def _trick_tick(self):
+        """Keep the trick bar's numbers moving while it's up."""
+        self.app.invalidate()
+        if self.trick_visible() and not self._trick_timer_live():
+            self._trick_timer = self.app.after(1.0, self._trick_tick)
+
+    def _trick_timer_live(self) -> bool:
+        t = getattr(self, "_trick_timer", None)
+        return bool(t) and not t[3] and t[0] > time.monotonic()
+
+    def trick_visible(self) -> bool:
+        """The bar stays while paused or behind live, and briefly after a press."""
+        v = self.app.video
+        return bool(v and self.channel) and (v.paused or time.monotonic() < self.trick_until)
+
+    def trick_state(self) -> dict:
+        v = self.app.video
+        return {"paused": v.paused, "behind": self.behind_now(), "buffer": v.buffered_behind()}
 
     def _digit(self, d: str) -> bool:
         if not self.channels:

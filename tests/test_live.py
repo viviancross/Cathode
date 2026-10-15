@@ -4,6 +4,7 @@ lift the cover. Carried over from 3.4's test_tune_races."""
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -16,10 +17,18 @@ from cathode.screens.live import LiveTV
 class FakeVideo:
     def __init__(self):
         self.played = []
-        self.volume, self.muted = 50, False
+        self.seeks = []
+        self.volume, self.muted, self.paused = 50, False, False
 
     def play(self, url, headers=None, start=0):
         self.played.append(url)
+        self.paused = False
+
+    def seek(self, s, mode="relative"):
+        self.seeks.append(s)
+
+    def buffered_behind(self):
+        return 60.0
 
 
 class FakeSkin:
@@ -119,6 +128,51 @@ class TestTuning(unittest.TestCase):
         self.assertFalse(self.live.banner_full)
         self.live.handle(R.INFO)
         self.assertTrue(self.live.banner_full)
+
+
+class TestPauseLive(unittest.TestCase):
+    def setUp(self):
+        self.app = FakeApp()
+        self.app.toast = lambda *a, **k: None
+        self.live = LiveTV(self.app)
+        self.live.channels_loaded()
+        self.clock = [100.0]
+        p = mock.patch("cathode.screens.live.time.monotonic", lambda: self.clock[0])
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_time_spent_paused_puts_you_behind_live(self):
+        self.live.handle(R.PAUSE)
+        self.clock[0] += 30
+        self.assertAlmostEqual(self.live.behind_now(), 30)
+        self.live.handle(R.PAUSE)
+        self.clock[0] += 30
+        self.assertAlmostEqual(self.live.behind_now(), 30)    # playing again: gap holds
+
+    def test_rewind_and_fast_forward_move_through_the_buffer(self):
+        self.live.handle(R.REW)
+        self.live.handle(R.REW)
+        self.assertEqual(self.live.behind_now(), 20)
+        self.live.handle(R.FF)
+        self.assertEqual(self.live.behind_now(), 10)
+        self.assertEqual(self.app.video.seeks, [-10, -10, 10])
+
+    def test_fast_forward_never_passes_live(self):
+        self.live.handle(R.FF)
+        self.assertEqual(self.app.video.seeks, [])
+        self.assertEqual(self.live.behind_now(), 0)
+
+    def test_skip_jumps_back_to_live(self):
+        self.live.handle(R.REW)
+        played = len(self.app.video.played)
+        self.live.handle(R.SKIP)
+        self.assertEqual(len(self.app.video.played), played + 1)
+        self.assertEqual(self.live.behind_now(), 0)
+
+    def test_a_new_channel_is_live(self):
+        self.live.handle(R.REW)
+        self.live.handle(R.UP)
+        self.assertEqual(self.live.behind_now(), 0)
 
 
 class TestNoChannels(unittest.TestCase):

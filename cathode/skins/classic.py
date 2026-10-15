@@ -69,6 +69,26 @@ class Classic(Skin):
                            p["CHANNEL_GREEN"], W - 48, 40, align="right", outline=(0, 0, 0))
         if live.volume_visible():
             self._volume(c, W // 2, int(H * 0.72))
+        if live.trick_visible() and live.phase != "cover":
+            self._trick(c, live.trick_state())
+
+    def _trick(self, c, s):
+        """VCR-style transport tag top-left, and where you are in the buffer."""
+        p, t = self.p, self.text
+        behind = s["behind"]
+        mm, ss = divmod(int(behind), 60)
+        if s["paused"]:
+            tag = f"|| PAUSE  -{mm}:{ss:02d}" if behind >= 1 else "|| PAUSE"
+        else:
+            tag = f">  -{mm}:{ss:02d}" if behind >= 2 else ">  LIVE"
+        t.draw(c, tag, self.f(48), p["WHITE"], 48, 40, outline=(0, 0, 0))
+        span = s["buffer"] + behind
+        if span >= 2:
+            bar = pygame.Rect(48, 104, 360, 8)
+            pygame.draw.rect(c, p["TRACK"], bar)
+            x = bar.x + int(bar.w * s["buffer"] / span)
+            pygame.draw.rect(c, p["CYAN"], (bar.x, bar.y, x - bar.x, bar.h))
+            pygame.draw.rect(c, p["WHITE"], (x - 2, bar.y - 6, 4, bar.h + 12))
 
     def _banner(self, c, live):
         W, H = self.canvas

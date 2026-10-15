@@ -151,6 +151,17 @@ class Video:
         except Exception:
             pass        # nothing loaded, or not seekable
 
+    def buffered_behind(self) -> float:
+        """How far back REW can reach: seconds of past still in the buffer."""
+        try:
+            ranges = (self.player["demuxer-cache-state"] or {}).get("seekable-ranges") or []
+            pos = self.player["time-pos"]
+        except Exception:
+            return 0.0
+        if not ranges or pos is None:
+            return 0.0
+        return max(0.0, float(pos) - min(float(r["start"]) for r in ranges))
+
     def stats(self) -> dict:
         """What the diagnostics screen shows as a 'signal' readout."""
         p = self.player
