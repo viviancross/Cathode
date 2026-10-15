@@ -912,6 +912,7 @@ class Plate(PlateHD):
     def roles(self, b):
         r = super().roles(b)
         blue, grey, sel, text, pillb = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
+        sel_hi = (250, 250, 252)
         ink = mix(pillb, (0, 0, 0), 0.4)
         r.update(
             blue=blue, blue_hi=mix(blue, (255, 255, 255), 0.3), blue_lo=mix(blue, (0, 0, 0), 0.25),
@@ -925,7 +926,21 @@ class Plate(PlateHD):
             row_ink=text, muted=mix(ink, grey, 0.4), list_panel=mix(grey, (255, 255, 255), 0.55),
             pill=pillb, pill_hi=mix(pillb, (255, 255, 255), 0.35), pill_ink=text,
             panel_top=(236, 236, 238), panel_bot=(176, 180, 192), dish=(210, 30, 40),
-            pb_track=(255, 255, 255), pb_edge=ink, pb_fill=ink)
+            pb_track=(255, 255, 255), pb_edge=ink, pb_fill=ink,
+            # The 2005 menu page (Theme Categories frame): darker ground, a
+            # dark band behind the rows, navy-to-blue lens pills.
+            m_page_top=mix(grey, (0, 0, 0), 0.33), m_page_bot=mix(grey, (0, 0, 0), 0.45),
+            m_band_top=mix(grey, (0, 0, 0), 0.70), m_band_bot=mix(grey, (0, 0, 0), 0.14),
+            m_below_top=mix(grey, (0, 0, 0), 0.70), m_below_bot=mix(grey, (0, 0, 0), 0.55),
+            m_rule=mix(grey, (0, 0, 0), 0.26),
+            m_p0=mix(pillb, (0, 0, 0), 0.28), m_p1=mix(pillb, (50, 60, 190), 0.6),
+            m_p2=mix(pillb, (130, 150, 240), 0.62), m_p3=mix(pillb, (80, 100, 170), 0.5),
+            m_rim=mix(grey, (90, 90, 140), 0.55), m_lip=mix(pillb, (0, 0, 0), 0.5),
+            m_sel_top=mix(sel_hi, (200, 200, 255), 0.3), m_sel=mix(sel_hi, (0, 0, 0), 0.16),
+            m_sel_bot=mix(sel_hi, (0, 0, 0), 0.24), m_sel_ink=(18, 18, 24),
+            m_ink=mix(text, (200, 200, 255), 0.12), m_shadow=(16, 18, 40),
+            m_title_top=mix(grey, (0, 0, 0), 0.45), m_title_bot=mix(grey, (0, 0, 0), 0.62),
+            m_title_rim=mix(grey, (0, 0, 0), 0.18))
         return r
 
     # SD coordinates are the 4:3 frame's own 640x480.
@@ -1254,60 +1269,177 @@ class Plate(PlateHD):
     def menu_video_box(self, menu):
         return "hidden"
 
+    # ── The 2005 menu page, measured off the Theme Categories frame ───────
+
+    def _lens_mask(self, w, h, lp, rp):
+        """A white pill on clear, pointed at the ends asked for (the box's
+        bullet ends) and square at the others; drawn at 3x and scaled down
+        for smooth edges, cached."""
+        key = (w, h, lp, rp)
+        cache = self.__dict__.setdefault("_lens_cache", {})
+        m = cache.get(key)
+        if m is None:
+            k = 3
+            W, H = w * k, h * k
+            e = min(int(H * 0.7), W // 3)          # how far a point runs past the body
+            mid = H * 0.58                          # the point sits a little below centre
+
+            def bez(p0, p1, p2, n=14):
+                return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+                         (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1])
+                        for t in (i / n for i in range(n + 1))]
+            pts = []
+            if lp:
+                pts += bez((e, H - 1), (e * 0.36, H - 1), (0, mid)) + bez((0, mid), (e * 0.4, 0), (e, 0))
+            else:
+                pts += [(0, H - 1), (0, 0)]
+            if rp:
+                pts += bez((W - 1 - e, 0), (W - 1 - e * 0.4, 0), (W - 1, mid)) + \
+                    bez((W - 1, mid), (W - 1 - e * 0.36, H - 1), (W - 1 - e, H - 1))
+            else:
+                pts += [(W - 1, 0), (W - 1, H - 1)]
+            big = pygame.Surface((W, H), pygame.SRCALPHA)
+            pygame.draw.polygon(big, (255, 255, 255, 255), pts)
+            m = cache[key] = pygame.transform.smoothscale(big, (w, h))
+        return m
+
+    def _lens_fill(self, w, h, lp, rp, stops):
+        """The pill shape filled with a vertical gradient: stops are
+        (fraction, colour) pairs from top to bottom."""
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        for (f0, c0), (f1, c1) in zip(stops, stops[1:]):
+            y0, y1 = int(h * f0), int(h * f1)
+            if y1 > y0:
+                vgrad(surf, (0, y0, w, y1 - y0), rgba(c0), rgba(c1))
+        surf.blit(self._lens_mask(w, h, lp, rp), (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        return surf
+
+    def _lens(self, c, r, lp=True, rp=True, on=False):
+        """A 2005 menu pill: the pale rim above, the dark lip below, the
+        body navy at the top running to bright blue (pale grey when chosen)."""
+        b, Y = self.b, self.Y
+        w, h = r.size
+        lip = self._lens_fill(w, h, lp, rp, [(0, b["m_lip"]), (1, b["m_lip"])])
+        rim = self._lens_fill(w, h, lp, rp, [(0, b["m_rim"]), (1, b["m_rim"])])
+        c.blit(lip, (r.x, r.y + Y(2)))
+        c.blit(rim, (r.x, r.y - Y(3)))
+        if on:
+            stops = [(0, b["m_sel_top"]), (0.18, b["m_sel"]), (0.85, b["m_sel"]), (1, b["m_sel_bot"])]
+        else:
+            stops = [(0, b["m_p0"]), (0.24, b["m_p1"]), (0.82, b["m_p2"]), (1, b["m_p3"])]
+        c.blit(self._lens_fill(w, h, lp, rp, stops), r.topleft)
+
+    def _lens_text(self, c, s, f, x, y, on, align="left"):
+        """Pill lettering: pale with a dark drop shadow, dark on the chosen."""
+        b, t, Y = self.b, self.text, self.Y
+        if on:
+            return t.draw(c, s, f, b["m_sel_ink"], x, y, align=align)
+        t.draw(c, s, f, b["m_shadow"], x + Y(2), y + Y(2), align=align)
+        return t.draw(c, s, f, b["m_ink"], x, y, align=align)
+
+    def _menu_page(self, c, title):
+        """The page every SD menu shares: the darker grey ground, the light
+        mark with its shadow, the dark grey title pill with light lettering."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        vgrad(c, (0, 0, W, H), rgba(b["m_page_top"]), rgba(b["m_page_bot"]))
+        swirl = pygame.Surface((W, H), pygame.SRCALPHA)
+        for k in range(3):
+            pygame.draw.ellipse(swirl, (255, 255, 255, 22), (-W // 2 + k * W // 5, -H // 6 + k * H // 9, W, H),
+                                max(2, H // 50))
+        c.blit(swirl, (0, 0))
+        ew = X(60)                                      # the frame's darker sides
+        for i in range(ew):
+            a = int(90 * (1 - i / ew) ** 2)
+            shade = pygame.Surface((1, H), pygame.SRCALPHA)
+            shade.fill((0, 0, 0, a))
+            c.blit(shade, (i, 0))
+            c.blit(shade, (W - 1 - i, 0))
+        self.wordmark(c, X(62), Y(38), Y(44), b["m_shadow"], b["m_shadow"])
+        self.wordmark(c, X(60), Y(36), Y(44), b["m_ink"], b["dish"])
+        tp = pygame.Rect(X(318), Y(60), X(340), Y(40))
+        rad = tp.h // 2
+        pygame.draw.rect(c, b["m_lip"], tp.move(0, Y(3)), border_top_left_radius=rad, border_bottom_left_radius=rad)
+        pygame.draw.rect(c, b["m_title_rim"], tp.move(0, -Y(2)), border_top_left_radius=rad, border_bottom_left_radius=rad)
+        vgrad(c, tp, rgba(b["m_title_top"]), rgba(b["m_title_bot"]), radius=rad)   # its right end runs off screen
+        f_title = self.fb(Y(27))
+        ty = tp.y + (tp.h - t.cap(f_title)) // 2
+        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["m_shadow"], tp.x + X(17), ty + Y(2))
+        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["m_ink"], tp.x + X(15), ty)
+
+    def _menu_band(self, c, y, h):
+        """The band the rows sit on, as the frame shows it: a pale rule
+        above, dark at the top running light to the foot, dark below it."""
+        b, Y = self.b, self.Y
+        W, H = self.canvas
+        band = pygame.Rect(0, y, W, h)
+        pygame.draw.rect(c, b["m_rule"], (0, y - Y(2), W, Y(2)))
+        vgrad(c, band, rgba(b["m_band_top"]), rgba(b["m_band_bot"]))
+        if band.bottom < H:
+            vgrad(c, (0, band.bottom, W, H - band.bottom), rgba(b["m_below_top"]), rgba(b["m_below_bot"]))
+        return band
+
     def draw_menu(self, c, m):
         """A grey page, the mark top-left, the title in a pill at the right,
         two columns of numbered blue pills (one for a long list), the chosen
         one white."""
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._grey_page(c, (0, 0, W, H))
-        self.wordmark(c, X(60), Y(36), Y(44), b["ink"], b["dish"])
-        f_title = self.fb(Y(27))
-        title = "Main Menu" if m.title == "MAIN MENU" else m.title.title()
-        tp = pygame.Rect(X(300), Y(58), X(340), Y(44))
-        pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.3), tp.move(0, Y(3)), border_top_left_radius=tp.h // 2,
-                         border_bottom_left_radius=tp.h // 2)
-        pygame.draw.rect(c, b["grey_hi"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
-        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(15), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
+        self._menu_page(c, "Main Menu" if m.title == "MAIN MENU" else m.title.title())
         n = len(m.items)
         cols = self.menu_cols(m)
-        rh = Y(40)
-        per_col = self.menu_rows(m) if cols == 2 else max(1, (Y(430) - Y(165)) // rh)
+        # The 2005 page's rhythm: rows 36 tall on a 45 pitch from y 163, the
+        # band 6 above the first and 6 below the last; five rows a column in
+        # the two-column grid, six in a list (the footer needs the rest).
+        top, rh, ph = Y(163), Y(45), Y(36)
+        per_col = self.menu_rows(m) if cols == 2 else 6
         n_vis = per_col * cols
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
+        rows_used = min(per_col, max(1, n - first if cols == 1 else min(per_col, n)))
+        self._menu_band(c, top - Y(8), rows_used * rh - (rh - ph) + Y(16))
         f_row = self.fb(Y(20))
-        band = self.R(0, 160, 640, 270 if cols == 2 else per_col * rh + Y(20))
-        pygame.draw.rect(c, b["grey_lo"], band)
-        if cols == 2:
-            pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.5), (X(319), band.y, X(2), band.h))
-        col_w = X(280) if cols == 2 else X(540)
+        left, mid, right = X(50), X(321), X(592)
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
             col, row_i = (k // per_col, k % per_col) if cols == 2 else (0, k)
-            x = X(50) + col * X(280)
-            y = band.y + Y(8) + row_i * rh
+            y = top + row_i * rh
+            if cols == 2:
+                # One capsule a row, split at the centre: the left half
+                # rounded on the left, the right half on the right (a left
+                # half with nothing beside it closes its own end).
+                partner = (k + per_col if col == 0 else k - per_col) + first
+                alone = col == 0 and partner >= min(n, first + n_vis)
+                row = pygame.Rect(left, y, mid - left, ph) if col == 0 else pygame.Rect(mid, y, right - mid, ph)
+                round_l, round_r = col == 0, col == 1 or alone
+            else:
+                row = pygame.Rect(left, y, right - left, ph)
+                round_l = round_r = True
             sel = i == m.cursor
-            row = pygame.Rect(x, y, col_w - X(10), Y(32))
-            fill, ink = (b["cursor"], b["cursor_ink"]) if sel else (b["row"], b["row_ink"])
-            if not it.enabled:
-                ink = mix(ink, fill, 0.5)
-            pygame.draw.rect(c, fill, row, border_radius=row.h // 2)
-            if not sel:
-                self._gloss(c, row)
-            ty = row.y + (row.h - t.ink(f_row)[1]) // 2
+            self._lens(c, row, lp=round_l, rp=round_r, on=sel)
+            if cols == 2 and col == 1:
+                pygame.draw.rect(c, b["m_lip"], (mid - X(1), y, X(2), ph))
+            ty = row.y + (row.h - t.cap(f_row)) // 2
             num = str((i + 1) % 10) if i < 10 else ""
             label = f"{num} {it.label}".strip()
-            lw = t.draw(c, t.fit(f_row, label, row.w - (X(165) if it.value else X(50))), f_row, ink, row.x + X(28), ty)
+            pad = X(28) if round_l else X(8)
+            lw = self._lens_text(c, t.fit(f_row, label, row.w - pad - (X(140) if it.value else X(36))), f_row,
+                                 row.x + pad, ty, sel)
+            if not it.enabled and not sel:
+                veil = pygame.Surface((lw + X(4), row.h), pygame.SRCALPHA)
+                veil.fill(b["m_p2"][:3] + (110,))
+                c.blit(veil, (row.x + pad - X(2), row.y))
+            end = row.right - (X(30) if round_r else X(14))
             if it.value:
                 v = it.value()
                 v = f"< {v} >" if sel and it.adjust else v
-                t.draw(c, t.fit(f_row, v, row.w - lw - X(66)), f_row, ink, row.right - X(22), ty, align="right")
+                self._lens_text(c, t.fit(f_row, v, row.w - pad - lw - X(48)), f_row, end, ty, sel, align="right")
             elif it.submenu:
-                t.draw(c, ">", f_row, ink, row.right - X(22), ty, align="right")
+                self._lens_text(c, ">", f_row, end, ty, sel, align="right")
             self.hit(row, lambda i=i: m.activate(i))
+        f_foot = self.f(Y(11))
+        t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", f_foot, b["m_ink"], X(40), Y(456))
         if n > n_vis:
-            t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(11)), b["ink"], X(40), band.bottom + Y(6))
-        t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+            t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", f_foot, b["m_ink"], X(600), Y(456), align="right")
 
     # ── Pages: the 2005 box's grey pages ──────────────────────────────────
     # The 322/522 drew everything on the grey swirl page: the mark top-left,
@@ -1330,16 +1462,7 @@ class Plate(PlateHD):
     def _sd_page(self, c, title):
         """The grey page with the mark and the title pill (the Theme
         Categories page's top)."""
-        W, H = self.canvas
-        b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._grey_page(c, (0, 0, W, H))
-        self.wordmark(c, X(60), Y(36), Y(44), b["ink"], b["dish"])
-        f_title = self.fb(Y(27))
-        tp = pygame.Rect(X(300), Y(58), X(340), Y(44))
-        pygame.draw.rect(c, mix(b["grey_lo"], (0, 0, 0), 0.3), tp.move(0, Y(3)), border_top_left_radius=tp.h // 2,
-                         border_bottom_left_radius=tp.h // 2)
-        pygame.draw.rect(c, b["grey_hi"], tp, border_top_left_radius=tp.h // 2, border_bottom_left_radius=tp.h // 2)
-        t.draw(c, t.fit(f_title, title, tp.w - X(40)), f_title, b["ink"], tp.x + X(15), tp.y + (tp.h - t.ink(f_title)[1]) // 2)
+        self._menu_page(c, title)
 
     def _gloss(self, c, r, radius=None):
         """The 2005 pill's sheen across its top half: a lighter capsule on a
@@ -1353,22 +1476,18 @@ class Plate(PlateHD):
     def _sd_pill(self, c, r, label, on, right=""):
         """A blue capsule pill with its light top line, white when chosen."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        fill, ink = (b["cursor"], b["cursor_ink"]) if on else (b["row"], b["row_ink"])
-        pygame.draw.rect(c, fill, r, border_radius=r.h // 2)
-        if not on:
-            self._gloss(c, r)
+        self._lens(c, r, on=on)
         f = self.fb(Y(19))
         ty = r.y + (r.h - t.cap(f)) // 2
         rw = t.width(f, right) + X(16) if right else 0
-        t.draw(c, t.fit(f, label, r.w - X(36) - rw), f, ink, r.x + X(20), ty)
+        if label:
+            self._lens_text(c, t.fit(f, label, r.w - X(48) - rw), f, r.x + X(24), ty, on)
         if right:
-            t.draw(c, right, f, ink, r.right - X(18), ty, align="right")
+            self._lens_text(c, right, f, r.right - X(24), ty, on, align="right")
 
     def _sd_band(self, c, y, h):
         b, X, Y = self.b, self.X, self.Y
-        band = pygame.Rect(0, y, self.canvas[0], h)
-        pygame.draw.rect(c, b["grey_lo"], band)
-        return band
+        return self._menu_band(c, y, h)
 
     def _sd_side(self, c, labels, focus, y0=170, hits=None):
         """Blue pill buttons in a column at the right, the chosen one white."""

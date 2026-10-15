@@ -52,9 +52,15 @@ frames. The sources, and what they settled:
   from 261, channel tiles x 0-131 with the crescent clipped inside the tile,
   the grid x 135-597; banner capsules at y 46, 87 tall: x 55-143, 147-480
   and 484-580, 18px date and clock, a 22px title at cap top 48, 21px number
-  and call sign, the 17px "Time Left" / "List" line at x 160 / 376; menu
-  pills 32 tall on a 40 pitch from 168, 270 wide in two columns from x 50
-  and 330.
+  and call sign, the 17px "Time Left" / "List" line at x 160 / 376. Menus
+  (Theme Categories frame): rows 36 tall on a 45 pitch from y 163,
+  pointed bullet-ended pills from x 50 to 592, a two-column row one pill
+  split at x 321; pills navy at the top (24,27,81) running to bright blue
+  (95,112,190), a pale rim above and a dark lip below, lettering pale with
+  a dark drop shadow, the chosen pill pale grey with dark lettering; the
+  band behind the rows dark at the top running light to its foot, dark
+  below it; a darker page (about 120 grey) with the title in a dark grey
+  pill in light lettering.
 - **Plate Network HD**: the 2007 teal guide (youtu.be/0eKW6gQJrlk; a 4:3
   capture, mapped onto the 16:9 canvas). Dark teal (0,51,66) page with faint
   swirls, the mark and a red TV-guide tag top-left, the title, rating and
