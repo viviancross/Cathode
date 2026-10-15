@@ -3,37 +3,54 @@
 What the real boxes did, gathered from their user manuals and period reviews.
 Skins evoke these boxes; they ship no brand names, logos, or proprietary fonts.
 
-Behavior below is from the manuals. The look was checked against period
-captures (video frames of the real receivers, 2026-10-15; not stored here).
-What they settled:
+Behavior below is from the manuals. The look is drawn to measurements taken
+from period captures (video frames and stills of the real receivers,
+2026-10-15; not stored here): the skins' geometry is written in the boxes'
+own 1280x720 (HD) and 640x480 (SD) pixels and scaled to the canvas, and the
+base colours were read off the frames. What the captures settled:
 
 - Both families drew the **channel banner across the top** of the picture.
   DirecTV: a translucent blue band, channel and clock on the first line, the
   title on the second. Dish SD: a steel-blue capsule with white lettering;
   Dish ViP: silver with navy lettering, "Time Left" rather than a progress bar.
 - Both guides showed **1.5 hours in three half-hour columns**.
-- **HR20 guide**: white-to-blue panel with a soft sweep of light, the mark and
-  the title side by side, a strip of facts (clock | hours | rating), the
-  synopsis in navy; "guide" watermarked beside the picture window; navy grid
-  with white text, amber selection with white text, "<" in light blue for
-  programmes already started; a bottom bar with the list name at the left and
-  the colour keys explained at the right. Setup pages use the same light panel
-  with the list down the left and the picture top-right.
-- **DirecTV SD** (D10/R15/D12): the same screens on a navy-to-black ground,
-  gold selection with dark text.
-- **ViP622/722 guide**: navy info area, a green "List:" tab, the clock under
-  it, title and synopsis centred, the picture top-right with the channel
-  captioned under it; silver cells with navy text and navy edges, channel
-  cells with the number over the call sign right-aligned, green selection.
-  Dialogs are grey rounded panels with the title in a blue pill, buttons as
-  pills, and the Point Dish meter (a 0-125 scale, red "Not Locked" until it
-  locks). List menus: capsule rows in a white panel, numbered down the right,
-  amber cursor, picture window at the right. Start-up: the mark with a
-  reflection, "Starting up...".
-- **Dish 301-era**: light periwinkle top with white pills (date, favourite
-  list, channel), capsule-ended channel cells, blue program cells with white
-  bold text, a pale selection; grey menu panels with blue pill buttons and a
-  white cursor.
+- **HR20 guide** (1280x720): a near-white title area (y 0-146) with the
+  stacked mark at x 96 and the title at x 300; a light-blue facts strip
+  (y 146-192: clock | hours | rating, light rules between); the synopsis in
+  white on a cyan page; "guide" watermarked at x 830 beside the picture
+  (850,49 323x182, white frame); a navy header (y 313) with the day and three
+  half-hours; 48px rows from y 352 with navy channel cells (x 96-295) and
+  teal program cells (x 299-1184), amber (240,165,22) selection with white
+  text and a dark shadow; a teal bottom bar (y 639) with the list name at
+  the left and the red/green/yellow keys at x 619/772/926. Setup pages keep
+  the title area, list the options down the left on teal with a light bar
+  on the chosen row, explain it in a darker panel at the right, and keep
+  the picture top-right.
+- **DirecTV SD** (D10/R15/D12): the same layout in 4:3 on a navy-to-black
+  ground, gold selection with dark text, no white areas.
+- **ViP622/722 guide** (1280x720): navy page with a lighter wash, the mark at
+  x 100, a green "List:" tab at x 250 and the clock under it, title and
+  synopsis centred at x 420, the picture at (728,36 450x253) captioned in a
+  dark strip; a blue-grey header at y 334; 62px rows from y 368 with
+  light-blue channel cells (x 0-265, number over call sign right-aligned)
+  and grey (199,200,199) program cells with a dark edge, green (74,131,75)
+  selection; a lighter margin at x 1184. Channel banner: light blue, number
+  in a navy box at the left, "Time Left". Main Menu and list pages: the title
+  in bold slanted caps, a blue-white panel (51,127 493x567) of pale rows with
+  the number in its own box at the right, amber (246,213,85) cursor, the
+  picture framed in near-black at the right with the channel above and
+  what's on below. Dialogs: grey rounded panels, the title in a blue pill,
+  the Point Dish meter (0-125, red "Not Locked" until it locks).
+- **Dish 322/522 era** (2005 guide, 640x480): a striped light-grey page
+  darkening toward the foot; a big blue ellipse tab at the top-left with the
+  mark and TV-guide tag inside and three white capsule pills (date/time,
+  favourite list, channel); the picture top-right; a dark grey header at
+  y 245; 50px rows with capsule channel cells (a blue crescent at the left)
+  and blue (59,88,150) program cells, a pale (209,246,255) selection; a
+  white rule and grey strip at the foot. Channel banner: deep blue
+  (3,22,126) band at y 28 with a periwinkle date pill at the left, the
+  channel number under it, white text. Menus: the same tab, a white list
+  panel of blue capsule rows numbered at the right, pale cursor.
 
 ## InDirecTV (DirecTV-style)
 
