@@ -1,0 +1,39 @@
+# Cathode's Flatpak: the same PyInstaller build as the AppImage (libmpv and
+# what it links inside), on the freedesktop runtime for what the AppImage
+# leaves to the host (X11, GL, ALSA/PipeWire, fonts). tools/build_linux.py
+# stages the build next to this file as Cathode/ and builds the bundle.
+# ponytail: a binary repack, fine for the release bundle; Flathub would want
+# mpv and Python built from source in here instead.
+id: io.github.viviancross.Cathode
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: cathode
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=pulseaudio
+  # The GPU, and game controllers (the Steam Deck's included).
+  - --device=all
+  # Playlists, guides and download folders anywhere in home; the shared
+  # ~/.config/cathode settings; launch at login (~/.config/autostart).
+  - --filesystem=home
+  # Keep the screen awake while watching.
+  - --talk-name=org.freedesktop.ScreenSaver
+modules:
+  - name: cathode
+    buildsystem: simple
+    # Prebuilt: PyInstaller's executable carries its archive, which
+    # stripping would cut off.
+    build-options:
+      no-debuginfo: true
+      strip: false
+    build-commands:
+      - mkdir -p /app/lib && cp -a Cathode /app/lib/cathode
+      - mkdir -p /app/bin && ln -s /app/lib/cathode/Cathode /app/bin/cathode
+      - install -Dm644 cathode.png /app/share/icons/hicolor/256x256/apps/io.github.viviancross.Cathode.png
+      - install -Dm644 cathode.desktop /app/share/applications/io.github.viviancross.Cathode.desktop
+    sources:
+      - type: dir
+        path: stage

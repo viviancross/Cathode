@@ -10,8 +10,12 @@ _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 def command() -> list:
-    """How to start this install: the frozen executable, or this Python on
-    main.py."""
+    """How to start this install: the AppImage file (not its temporary mount),
+    the Flatpak, the frozen executable, or this Python on main.py."""
+    if os.environ.get("APPIMAGE"):
+        return [os.environ["APPIMAGE"]]
+    if os.environ.get("FLATPAK_ID"):
+        return ["flatpak", "run", os.environ["FLATPAK_ID"]]
     if getattr(sys, "frozen", False):
         return [sys.executable]
     main = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
@@ -27,7 +31,9 @@ def _mac_plist() -> str:
 
 
 def _linux_desktop() -> str:
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    # In a Flatpak XDG_CONFIG_HOME is the sandbox's own; autostart is read
+    # from the real one (the manifest grants home).
+    base = (None if os.environ.get("FLATPAK_ID") else os.environ.get("XDG_CONFIG_HOME"))         or os.path.expanduser("~/.config")
     return os.path.join(base, "autostart", "cathode.desktop")
 
 

@@ -1,9 +1,11 @@
-"""Build the Linux AppImage: PyInstaller's one-folder app plus the system's
-libmpv (and what it links, bar what must come from the host) in an AppDir,
-packed by appimagetool. Run on Linux, or in the container:
+"""Build the Linux AppImage and Flatpak bundle: PyInstaller's one-folder app
+plus the system's libmpv (and what it links, bar what must come from the host),
+packed by appimagetool and, when flatpak-builder is installed, flatpak-builder
+(tools/linux/io.github.viviancross.Cathode.yml). Run on Linux, or in the
+container (privileged: flatpak-builder sandboxes its build):
 
     docker build -t cathode-linux-build tools/linux
-    docker run --rm -v "$PWD:/src" -v "<builds dir>:/builds" cathode-linux-build
+    docker run --rm --privileged -v "$PWD:/src" -v "<builds dir>:/builds" cathode-linux-build
 
 The AppImage runs on distributions at least as new as the one it was built
 on (glibc): build on the oldest you want to support.
@@ -28,6 +30,8 @@ WORK = os.environ.get("CATHODE_WORK") or os.path.join(ROOT, "_linuxbuild")
 # The AppImage project's list of libraries that must come from the host
 # (glibc, GL, X11/Wayland, ALSA...): bundling those breaks on other systems.
 EXCLUDELIST = os.environ.get("APPIMAGE_EXCLUDELIST", "/opt/excludelist")
+APP_ID = "io.github.viviancross.Cathode"
+RUNTIME = "org.freedesktop.Platform//24.08"     # as in the manifest
 
 
 def log(msg):
@@ -69,11 +73,13 @@ def build():
     return app
 
 
-def drop_host_libs(app):
-    """Remove bundled libraries that must come from the host system."""
+def drop_host_libs(app) -> dict:
+    """Take out the bundled libraries that must come from the host system.
+    Returns {path in the app: held copy}, for the Flatpak to put back what its
+    runtime lacks."""
     if not os.path.exists(EXCLUDELIST):
         log(f"WARNING: no excludelist at {EXCLUDELIST}; keeping every library")
-        return
+        return {}
     names = set()
     for line in open(EXCLUDELIST, encoding="utf-8"):
         line = line.split("#")[0].strip()
@@ -83,12 +89,23 @@ def drop_host_libs(app):
     # install: from the host, its absence would stop libmpv loading at all.
     # mpv tries PipeWire and Pulse first, so the bundled copy rarely talks.
     names.discard("libjack.so.0")
-    gone = 0
+    held = {}
+    store = os.path.join(WORK, "held")
+    shutil.rmtree(store, ignore_errors=True)
     for path in glob.glob(os.path.join(app, "_internal", "**", "*.so*"), recursive=True):
         if os.path.basename(path) in names:
-            os.remove(path)
-            gone += 1
-    log(f"left {gone} host libraries to the host")
+            rel = os.path.relpath(path, app)
+            held[rel] = os.path.join(store, rel)
+            os.makedirs(os.path.dirname(held[rel]), exist_ok=True)
+            shutil.move(path, held[rel])
+    log(f"left {len(held)} host libraries to the host")
+    return held
+
+
+def desktop(path, exe, icon):
+    with open(path, "w", newline="\n") as f:
+        f.write("[Desktop Entry]\nType=Application\nName=Cathode\nComment=IPTV like a satellite box\n"
+                f"Exec={exe}\nIcon={icon}\nCategories=AudioVideo;Video;Player;TV;\n")
 
 
 def appdir(app):
@@ -102,9 +119,7 @@ def appdir(app):
         f.write('#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\n'
                 'exec "$HERE/usr/lib/cathode/Cathode" "$@"\n')
     os.chmod(os.path.join(d, "AppRun"), 0o755)
-    with open(os.path.join(d, "cathode.desktop"), "w", newline="\n") as f:
-        f.write("[Desktop Entry]\nType=Application\nName=Cathode\nComment=IPTV like a satellite box\n"
-                "Exec=Cathode\nIcon=cathode\nCategories=AudioVideo;Video;Player;TV;\n")
+    desktop(os.path.join(d, "cathode.desktop"), "Cathode", "cathode")
     shutil.copy2(os.path.join(ROOT, "assets", "cathode.png"), os.path.join(d, "cathode.png"))
     return d
 
@@ -123,13 +138,49 @@ def package(d):
     log(f"DONE -> {out}  ({os.path.getsize(out) / 1024 / 1024:.1f} MB)")
 
 
+def flatpak(d, held):
+    """The AppDir's app, rebuilt as a Flatpak bundle on the freedesktop runtime.
+    Of the libraries left to the host, the ones the runtime doesn't ship
+    (libusb, JACK...) go back in."""
+    if not shutil.which("flatpak-builder"):
+        log("no flatpak-builder: skipping the Flatpak")
+        return
+    fp = os.path.join(WORK, "flatpak")
+    shutil.rmtree(fp, ignore_errors=True)
+    stage = os.path.join(fp, "stage")
+    shutil.copytree(os.path.join(d, "usr", "lib", "cathode"), os.path.join(stage, "Cathode"), symlinks=True)
+    runtime = subprocess.run(["flatpak", "info", "--show-location", RUNTIME], check=True,
+                             capture_output=True, text=True).stdout.strip()
+    has = set()
+    for libdir in ("lib/x86_64-linux-gnu", "lib"):
+        has.update(os.listdir(os.path.join(runtime, "files", libdir)))
+    back = [rel for rel in held if os.path.basename(rel) not in has]
+    for rel in back:
+        shutil.copy2(held[rel], os.path.join(stage, "Cathode", rel))
+    log(f"put back for the runtime: {', '.join(sorted(os.path.basename(r) for r in back)) or 'none'}")
+    shutil.copy2(os.path.join(ROOT, "assets", "cathode.png"), os.path.join(stage, "cathode.png"))
+    desktop(os.path.join(stage, "cathode.desktop"), "cathode", APP_ID)
+    manifest = os.path.join(fp, f"{APP_ID}.yml")
+    shutil.copy2(os.path.join(ROOT, "tools", "linux", f"{APP_ID}.yml"), manifest)
+    log("running flatpak-builder...")
+    subprocess.run(["flatpak-builder", "--force-clean", "--disable-rofiles-fuse", "--repo=repo",
+                    "build", manifest], check=True, cwd=fp)
+    out = os.path.join(BUILDS, f"cathode-linux-x86_64-{cathode.__version__}.flatpak")
+    subprocess.run(["flatpak", "build-bundle", "repo", out, APP_ID], check=True, cwd=fp)
+    from build_source import write_sha256
+    write_sha256(out)
+    log(f"DONE -> {out}  ({os.path.getsize(out) / 1024 / 1024:.1f} MB)")
+
+
 def main():
     if not sys.platform.startswith("linux"):
         raise SystemExit("[build] run this on Linux (or in tools/linux's container)")
     os.makedirs(WORK, exist_ok=True)
     app = build()
-    drop_host_libs(app)
-    package(appdir(app))
+    held = drop_host_libs(app)
+    d = appdir(app)
+    package(d)
+    flatpak(d, held)
 
 
 if __name__ == "__main__":

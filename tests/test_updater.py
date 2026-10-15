@@ -114,7 +114,7 @@ class TestAssetMatch(unittest.TestCase):
                   "size": 1}]
         for nm in ("nt", "posix"):
             with mock.patch.object(updater.os, "name", nm), \
-                    mock.patch.object(updater.sys, "frozen", True, create=True):
+                    mock.patch.object(updater.sys, "frozen", nm == "nt", create=True):
                 self.assertIsNone(updater.pick_asset(forks), nm)
                 self.assertEqual(
                     updater.pick_asset(forks + self.ASSETS)["url"],
@@ -129,7 +129,7 @@ class TestAssetMatch(unittest.TestCase):
                  for a in self.ASSETS]
         for nm, want in (("nt", "u2"), ("posix", "u1")):
             with mock.patch.object(updater.os, "name", nm), \
-                    mock.patch.object(updater.sys, "frozen", True, create=True):
+                    mock.patch.object(updater.sys, "frozen", nm == "nt", create=True):
                 self.assertIsNone(updater.pick_asset(sides), nm)
                 # ...and it still loses when it is listed first.
                 self.assertEqual(
@@ -150,6 +150,27 @@ class TestAssetMatch(unittest.TestCase):
         with mock.patch.object(updater.os, "name", "nt"), \
                 mock.patch.object(updater.sys, "frozen", False, create=True):
             self.assertEqual(updater.pick_asset(self.ASSETS)["url"], "u1")
+
+    def test_appimage_gets_the_appimage(self):
+        assets = self.ASSETS + [
+            {"name": "cathode-linux-x86_64-2.1.AppImage.sha256", "url": "side", "size": 1},
+            {"name": "cathode-linux-x86_64-2.1.flatpak", "url": "fp", "size": 1},
+            {"name": "cathode-linux-x86_64-2.1.AppImage", "url": "u3", "size": 3}]
+        with mock.patch.dict(updater.os.environ, {"APPIMAGE": "/apps/Cathode.AppImage"}):
+            self.assertEqual(updater.build_kind(), "appimage")
+            self.assertEqual(updater.pick_asset(assets)["url"], "u3")
+            self.assertEqual(updater.install_dir(), "/apps/Cathode.AppImage")
+
+    def test_the_mac_app_and_flatpak_only_notify(self):
+        with mock.patch.object(updater.os, "name", "posix"),                 mock.patch.object(updater.sys, "frozen", True, create=True):
+            self.assertEqual(updater.build_kind(), "macos")
+            self.assertFalse(updater.self_installs())
+            self.assertIsNone(updater.pick_asset(self.ASSETS))
+        real = os.path.exists
+        with mock.patch.object(updater.os.path, "exists",
+                               lambda p: p == "/.flatpak-info" or real(p)):
+            self.assertEqual(updater.build_kind(), "flatpak")
+            self.assertIsNone(updater.pick_asset(self.ASSETS))
 
     def test_none_when_no_match(self):
         with mock.patch.object(updater.os, "name", "posix"):
@@ -266,6 +287,23 @@ class TestApplyScript(unittest.TestCase):
             self.assertEqual(Path(dest, pkg, "keep.py").read_text(), "v1")
             self.assertTrue(os.path.exists(archive))
             self.assertTrue(os.path.exists(os.path.join(updates, updater.FAILED_LOG)))
+
+    @unittest.skipIf(os.name == "nt", "AppImages are Linux only")
+    def test_an_appimage_replaces_the_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = os.path.join(tmp, "O'Brien", "Cathode.AppImage")
+            updates = os.path.join(tmp, "updates")
+            os.makedirs(os.path.dirname(dest))
+            os.makedirs(updates)
+            Path(dest).write_text("v1")
+            archive = os.path.join(updates, "cathode-linux-x86_64-2.1.AppImage")
+            Path(archive).write_text("v2")
+            script = self._run(archive, dest, updates)
+            self.assertEqual(Path(dest).read_text(), "v2")
+            self.assertTrue(os.access(dest, os.X_OK))
+            for left in (archive, script, dest + ".new",
+                         os.path.join(updates, updater.FAILED_LOG)):
+                self.assertFalse(os.path.exists(left), left)
 
     def test_powershell_quoting(self):
         self.assertEqual(updater._ps_quote("C:\\O'Brien"), "'C:\\O''Brien'")

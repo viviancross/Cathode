@@ -62,10 +62,28 @@ class UpdateError(Exception):
     pass
 
 
+def build_kind() -> str:
+    """How this Cathode was installed, which decides how it updates:
+    'windows' (the portable exe), 'appimage', 'source' (a checkout or the
+    source zip) install themselves; 'flatpak' and 'macos' (the .app) only say
+    an update is out."""
+    if os.path.exists("/.flatpak-info"):
+        return "flatpak"
+    if os.environ.get("APPIMAGE"):
+        return "appimage"
+    if getattr(sys, "frozen", False):
+        return "windows" if os.name == "nt" else "macos"
+    return "source"
+
+
+def self_installs() -> bool:
+    return build_kind() in ("windows", "appimage", "source")
+
+
 def _asset_match(name: str) -> bool:
     """Pick the release asset for this build: the Windows exe gets the portable
-    Windows zip; the Deck, Linux, macOS and source runs on Windows all use the
-    cathode-linux-macos source zip.
+    Windows zip, the AppImage the AppImage, and source runs (any OS) the
+    cathode-linux-macos source zip. Flatpak and the macOS app pick nothing.
 
     Matched on the desktop build's full filename prefix, not on a loose
     substring. A port release that happened to carry its own windows zip would
@@ -75,11 +93,14 @@ def _asset_match(name: str) -> bool:
     # build does. Today it loses only because the zip happens to sort first.
     if n.endswith(".sha256"):
         return False
-    # Only the frozen exe takes the Windows build: a source checkout run with
-    # python on Windows would otherwise get the PyInstaller tree copied over it.
-    if os.name == "nt" and getattr(sys, "frozen", False):
+    kind = build_kind()
+    if kind == "windows":
         return n.startswith("cathode-windows-")
-    return n.startswith("cathode-linux-macos-")
+    if kind == "appimage":
+        return n.startswith("cathode-linux-x86_64-") and n.endswith(".appimage")
+    if kind == "source":
+        return n.startswith("cathode-linux-macos-")
+    return False
 
 
 def _release_entry(data: dict) -> dict:
@@ -189,8 +210,11 @@ def verify_sha256(path: str, checksum_url: str):
 
 
 def install_dir() -> str:
-    """Where the running build lives. Frozen: the exe's folder. Source: the repo
-    root (the parent of the cathode/ package, where main.py sits)."""
+    """Where the running build lives. Frozen: the exe's folder. AppImage: the
+    .AppImage file itself. Source: the repo root (the parent of the cathode/
+    package, where main.py sits)."""
+    if os.environ.get("APPIMAGE"):
+        return os.environ["APPIMAGE"]
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -211,8 +235,8 @@ def _ps_quote(s: str) -> str:
 def write_apply_script(archive: str, dest: str, updates_dir: str,
                        pid: Optional[int] = None) -> str:
     """Write an install script that waits for this process (`pid`) to exit,
-    then extracts `archive` over `dest` so the NEXT launch runs the new version.
-    Binary build archives nest everything under a top-level Cathode/ dir
+    then extracts `archive` over `dest` so the NEXT launch runs the new version
+    (an AppImage `archive` simply replaces the `dest` file). Binary build archives nest everything under a top-level Cathode/ dir
     (stripped); the source zip is flat. Returns the script path. The app spawns
     it on quit.
 
@@ -264,15 +288,15 @@ try {{
         path = os.path.join(updates_dir, "apply_update.sh")
         q = shlex.quote
         py = q(sys.executable or "python3")
-        script = f"""#!/bin/sh
-exec >>{q(log)} 2>&1
-trap '[ $? -eq 0 ] || echo "$(date) update not applied"' EXIT
-set -e
-i=0
-while kill -0 {int(pid)} 2>/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
-# Hold Cathode's instance lock while copying (no flock(1) on macOS: skipped).
-if command -v flock >/dev/null; then exec 9>>{q(lock)}; flock -n 9; fi
-rm -rf {q(tmp)}; mkdir -p {q(tmp)}
+        if archive.lower().endswith(".appimage"):
+            # Next to the old one first, so the swap itself is a rename.
+            body = f"""chmod +x {q(archive)}
+cp {q(archive)} {q(dest + ".new")}
+mv -f {q(dest + ".new")} {q(dest)}
+rm -f {q(archive)} "$0" {q(log)}
+"""
+        else:
+            body = f"""rm -rf {q(tmp)}; mkdir -p {q(tmp)}
 {py} -m zipfile -e {q(archive)} {q(tmp)}
 src={q(tmp)}; [ -d {q(tmp)}/Cathode ] && src={q(tmp)}/Cathode
 cp -R "$src/." {q(dest)}/
@@ -284,6 +308,15 @@ if [ -d "$src/cathode" ] && [ -d {q(dest)}/cathode ]; then
 fi
 rm -rf {q(tmp)} {q(archive)} "$0" {q(log)}
 """
+        script = f"""#!/bin/sh
+exec >>{q(log)} 2>&1
+trap '[ $? -eq 0 ] || echo "$(date) update not applied"' EXIT
+set -e
+i=0
+while kill -0 {int(pid)} 2>/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
+# Hold Cathode's instance lock while copying (no flock(1) on macOS: skipped).
+if command -v flock >/dev/null; then exec 9>>{q(lock)}; flock -n 9; fi
+""" + body
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(script)
     if os.name != "nt":

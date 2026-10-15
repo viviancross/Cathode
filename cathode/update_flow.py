@@ -53,6 +53,10 @@ def open_check(app):
         if not latest or not updater.is_newer(latest["tag"], __version__):
             app.post(done, f"You're on the latest version ({__version__}).")
             return
+        if not updater.self_installs():
+            app.post(done, f"{latest['tag']} is available. Get it from",
+                     f"github.com/{updater.REPO}/releases")
+            return
         asset = updater.pick_asset(latest["assets"])
         if not asset:
             app.post(done, f"{latest['tag']} is out, but there's no build for this computer.")
