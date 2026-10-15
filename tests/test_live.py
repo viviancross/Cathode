@@ -67,6 +67,63 @@ class FakeApp:
     def invalidate(self):
         pass
 
+    # A screen stack, for screens that push and pop.
+    screens = None
+
+    def push(self, s):
+        self.screens = (self.screens or []) + [s]
+
+    def pop(self, s=None):
+        self.screens.remove(s or self.screens[-1])
+
+    @property
+    def live(self):
+        return self._live
+
+
+class TestBrowse(unittest.TestCase):
+    def setUp(self):
+        from cathode.screens.browse import Browse
+        self.app = FakeApp()
+        self.app._live = LiveTV(self.app)
+        self.app._live.channels_loaded()
+        self.app.screens = [self.app._live]
+        self.b = Browse(self.app)
+        self.app.push(self.b)
+
+    def test_browsing_does_not_tune(self):
+        played = list(self.app.video.played)
+        self.b.handle(R.UP)
+        self.b.handle(R.UP)
+        self.assertEqual(self.b.idx, 3)
+        self.assertEqual(self.app.video.played, played)
+
+    def test_ok_tunes_to_what_is_on_screen(self):
+        self.b.handle(R.UP)
+        self.b.handle(R.SELECT)
+        self.assertEqual(self.app.live.idx, 2)
+        self.assertNotIn(self.b, self.app.screens)
+
+    def test_left_at_now_closes_it(self):
+        self.b.handle(R.LEFT)
+        self.assertNotIn(self.b, self.app.screens)
+
+    def test_it_closes_itself_when_left_alone(self):
+        self.app.fire(lambda t: t[0] == self.b.IDLE)
+        self.assertNotIn(self.b, self.app.screens)
+
+
+class TestBoot(unittest.TestCase):
+    def test_any_button_skips_it(self):
+        from cathode.screens.boot import Boot
+        app = FakeApp()
+        app._live = LiveTV(app)
+        app.screens = [app._live]
+        boot = Boot(app)
+        app.push(boot)
+        boot.handle(R.UP)
+        self.assertNotIn(boot, app.screens)
+
 
 class TestTuning(unittest.TestCase):
     def setUp(self):

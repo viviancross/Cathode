@@ -63,7 +63,8 @@ class Classic(Skin):
             self.text.draw(c, str(live.channel.number), self.f(96), p["CHANNEL_GREEN"],
                            48, 40, outline=(0, 0, 0))
         if live.banner_visible() and live.channel:
-            self._banner(c, live)
+            cur, nxt = live.programs()
+            self._banner(c, live.channel, cur, nxt, full=live.banner_full)
         if live.digits:
             self.text.draw(c, live.digits + "-" * (3 - len(live.digits)), self.f(72),
                            p["CHANNEL_GREEN"], W - 48, 40, align="right", outline=(0, 0, 0))
@@ -90,17 +91,15 @@ class Classic(Skin):
             pygame.draw.rect(c, p["CYAN"], (bar.x, bar.y, x - bar.x, bar.h))
             pygame.draw.rect(c, p["WHITE"], (x - 2, bar.y - 6, 4, bar.h + 12))
 
-    def _banner(self, c, live):
+    def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         W, H = self.canvas
         p, t = self.p, self.text
-        ch = live.channel
-        cur, nxt = live.programs()
         bh = int(H * 0.155)
         bx, bw = int(W * 0.02), int(W * 0.96)
         by = H - bh - int(H * 0.025)
         f_huge, f_large, f_med, f_small = (self.f(int(bh * k)) for k in (0.55, 0.32, 0.24, 0.18))
 
-        if live.banner_full and cur and cur.description:
+        if full and cur and cur.description:
             # INFO again: the description opens above the bar.
             lines = t.wrap(f_med, cur.description, bw - 40, 3)
             dh = 24 + len(lines) * (t.ink(f_med)[1] + 10)
@@ -111,8 +110,13 @@ class Classic(Skin):
                 t.draw(c, line, f_med, p["WHITE"], bx + 20, y)
                 y += t.ink(f_med)[1] + 10
 
+        edge = p["ORANGE"] if tag else p["OSD_BORDER"]
         pygame.draw.rect(c, p["OSD_BG"], (bx, by, bw, bh), border_radius=8)
-        pygame.draw.rect(c, p["OSD_BORDER"], (bx, by, bw, 3))
+        pygame.draw.rect(c, edge, (bx, by, bw, 3))
+        if tag:
+            tw = t.width(f_small, tag) + 20
+            pygame.draw.rect(c, p["ORANGE"], (bx + 16, by - 26, tw, 26))
+            t.draw(c, tag, f_small, (0, 0, 0), bx + 26, by - 20)
 
         # Logo box, or the number big in it when there's no logo.
         nb = pygame.Rect(bx + 8, by + 8, int(bh * 1.1), bh - 16)
@@ -196,6 +200,63 @@ class Classic(Skin):
         pygame.draw.rect(c, self.p["OSD_BORDER"], card, 3)
         self.text.draw(c, "PLEASE STAND BY", self.f(56), self.p["WHITE"], card.centerx,
                        card.centery - 20, align="center")
+
+    # ── Browse ────────────────────────────────────────────────────────────
+
+    def draw_browse(self, c, b):
+        if not b.channel:
+            return
+        cur, nxt = b.program()
+        tag = "BROWSE  -  OK: WATCH" if not b.ahead else f"BROWSE  +{b.ahead}  -  OK: WATCH"
+        self._banner(c, b.channel, cur, nxt, tag=tag)
+
+    # ── Boot ──────────────────────────────────────────────────────────────
+
+    def draw_boot(self, c, boot):
+        W, H = self.canvas
+        p, t = self.p, self.text
+        c.fill((0, 0, 0, 255))
+        stage = boot.stage()
+        age = time.monotonic() - boot.start
+        if stage == "starting":
+            # The tube warming up: a line that opens into the picture.
+            k = min(1.0, age / 0.6)
+            h = max(2, int(H * k * k))
+            pygame.draw.rect(c, p["WHITE"][:3] + (int(255 * (1 - k * 0.7)),),
+                             (int(W * (0.5 - 0.5 * min(1, k * 3))), (H - h) // 2,
+                              int(W * min(1, k * 3)), h))
+            return
+        c.fill(p["SCREEN_BG"])
+        logo = self._boot_logo()
+        y = int(H * 0.22)
+        if logo:
+            c.blit(logo, logo.get_rect(midtop=(W // 2, y)))
+            y += logo.get_height() + 24
+        f_word, f_stage = self.f(64), self.f(26)
+        t.draw(c, "CATHODE", f_word, p["CYAN"], W // 2, y, align="center")
+        caption = {"signal": "Acquiring signal...", "guide": "Downloading program guide...",
+                   "done": "Ready"}[stage]
+        t.draw(c, caption, f_stage, p["WHITE"], W // 2, y + 110, align="center")
+        bar = pygame.Rect(W // 2 - 260, y + 160, 520, 12)
+        pygame.draw.rect(c, p["TRACK"], bar)
+        if stage == "done":
+            pygame.draw.rect(c, p["GREEN"], bar)
+        else:
+            x = bar.x + int((age * 260) % (bar.w + 120)) - 120     # sweeping block
+            seg = pygame.Rect(x, bar.y, 120, bar.h).clip(bar)
+            pygame.draw.rect(c, p["CYAN"], seg)
+        t.draw(c, "Press any button to skip", self.f(16), p["INK_MUTED"], W // 2, H - 52,
+               align="center")
+
+    def _boot_logo(self):
+        if not hasattr(self, "_logo_img"):
+            from .. import paths
+            try:
+                img = pygame.image.load(paths.asset("cathode.png"))
+                self._logo_img = pygame.transform.smoothscale(img, (160, 160))
+            except (pygame.error, FileNotFoundError):
+                self._logo_img = None
+        return self._logo_img
 
     # ── Menus ─────────────────────────────────────────────────────────────
 

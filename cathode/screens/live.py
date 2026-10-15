@@ -189,6 +189,10 @@ class LiveTV(Screen):
             self.app.push(g)
         elif a == R.FAV:
             self.app.toggle_favorite(self.channel)
+        elif a == R.BROWSE or (a == R.RIGHT and self.app.skin.right_is_browse):
+            from .browse import Browse
+            self.hide_banner()
+            self.app.push(Browse(self.app))
         elif a in (R.INFO, R.SELECT):
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full

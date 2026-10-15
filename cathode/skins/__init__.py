@@ -90,6 +90,7 @@ class Skin:
     canvas = (1280, 720)
     nearest = False             # pixel-art upscale (SD skins) vs smooth
     tune_cover = "static"       # what covers a channel change: static | black
+    right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume
 
     def __init__(self, app):
         self.app = app

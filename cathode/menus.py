@@ -23,6 +23,22 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
+def open_welcome(app):
+    """First run: nothing to watch yet."""
+    def setup():
+        def added(entry):
+            app.config.setup_done = True
+            app.config.save()
+            from .screens.boot import Boot
+            app.push(Boot(app))
+        add_playlist(app, on_added=added)
+    app.push(Menu(app, "WELCOME TO CATHODE", [
+        Item("Set up your channels", setup),
+        Item("Picture & Style", submenu=lambda: style_items(app)),
+        Item("Exit Cathode", app.quit, close=True),
+    ]))
+
+
 def main_items(app):
     from .screens.guide import Guide
 

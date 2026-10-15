@@ -367,6 +367,12 @@ class App:
             self.after(t, partial(self.press, button))
         if self.config.playlist_url:
             self.load_playlist(self.config.playlist_url, self.config.epg_url)
+            if self.config.boot_sequence:
+                from .screens.boot import Boot
+                self.push(Boot(self))
+        else:
+            from . import menus
+            menus.open_welcome(self)
 
         canvas = pygame.Surface(self.skin.canvas, pygame.SRCALPHA)
         self.running = True
