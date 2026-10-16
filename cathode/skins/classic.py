@@ -268,10 +268,13 @@ class Classic(Skin):
         if not b.channel:
             return
         cur, nxt = b.program()
-        tag = "BROWSE  -  OK: WATCH" if not b.ahead else f"BROWSE  +{b.ahead}  -  OK: WATCH"
+        ok = self.k("SELECT")
+        tag = f"BROWSE  -  {ok}: WATCH" if not b.ahead else f"BROWSE  +{b.ahead}  -  {ok}: WATCH"
         self._banner(c, b.channel, cur, nxt, tag=tag)
 
     # ── Boot ──────────────────────────────────────────────────────────────
+
+    KEY_WORDS = {"SELECT": "OK"}
 
     def draw_boot(self, c, boot):
         W, H = self.canvas
@@ -366,7 +369,9 @@ class Classic(Skin):
             if top + self.MENU_ROWS < n:
                 self._arrow(c, panel.centerx, y + 2, up=False)
         pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.bottom - foot, pw - 24, 1))
-        hint = "OK: select   </>: change   BACK: return   EXIT: close"
+        hint = f"{self.k('SELECT')}: select   </>: change   {self.k('BACK')}: return   {self.k('EXIT')}: close"
+        if t.width(f_hint, hint) > pw - 40:        # a remote's longer names: tighter, not cut
+            hint = f"{self.k('SELECT')}: select  </>: change  {self.k('BACK')}: back  {self.k('EXIT')}: close"
         t.draw(c, t.fit(f_hint, hint, pw - 40), f_hint, p["INK_MUTED"], panel.centerx,
                panel.bottom - foot + (foot - t.ink(f_hint)[1]) // 2, align="center")
 
@@ -484,7 +489,7 @@ class Classic(Skin):
             t.draw(c, s.auth_link or "plex.tv/link", self.role("title"), p["CYAN"], W // 2, 290, align="center")
             t.draw(c, "and enter this code:", self.role("body"), p["WHITE_DIM"], W // 2, 350, align="center")
             t.draw(c, s.auth_code, self.f(84), p["CHANNEL_GREEN"], W // 2, 400, align="center")
-        t.draw(c, "BACK to return to TV", self.role("hint"), p["INK_MUTED"], W // 2, H - 44, align="center")
+        t.draw(c, f"{self.k('BACK')} to return to TV", self.role("hint"), p["INK_MUTED"], W // 2, H - 44, align="center")
 
     def _od_list(self, c, s):
         W, H = self.canvas
@@ -635,7 +640,7 @@ class Classic(Skin):
             pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), r, border_radius=8)
             pygame.draw.rect(c, p["YELLOW"], r, 2, border_radius=8)
             f_skip = self.role("body")
-            t.draw(c, pb.skip_label + "  (OK)", f_skip, p["YELLOW"], r.centerx,
+            t.draw(c, f"{pb.skip_label}  ({self.k('SELECT')})", f_skip, p["YELLOW"], r.centerx,
                    r.y + (r.h - t.ink(f_skip)[1]) // 2, align="center")
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
@@ -712,7 +717,7 @@ class Classic(Skin):
             t.draw(c, label, f_row, p["CYAN"], 160, y)
             t.draw(c, t.fit(f_row, str(value), W - 640), f_row, p["WHITE"], 480, y)
             y += 42
-        t.draw(c, "BACK: return", f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+        t.draw(c, f"{self.k('BACK')}: return", f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
 
     # ── Toast ─────────────────────────────────────────────────────────────
 
@@ -835,7 +840,7 @@ class Classic(Skin):
 
         # The key hints, in the band under the grid.
         band = grid_y + g["row_h"] * guide.rows
-        hint = "OK: watch   </>: earlier/later   CH+/-: page   REW/FF: a day   EXIT: close"
+        hint = f"{self.k('SELECT')}: watch   </>: earlier/later   CH+/-: page   REW/FF: a day   {self.k('EXIT')}: close"
         t.draw(c, t.fit(f_small, hint, W - 2 * pad), f_small, p["INK_MUTED"], W // 2,
                band + (H - band - t.ink(f_small)[1]) // 2 + 4, align="center")
 

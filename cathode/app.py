@@ -345,7 +345,10 @@ class App:
         return "" if k == "-" else k.upper()
 
     def press_hint(self, action: str) -> str:
-        """'MENU (C)': the remote button and, for keyboards, its key."""
+        """'MENU (C)': the remote button and, for keyboards, its key; with a
+        remote chosen in Settings, that remote's name for the button."""
+        if R.REMOTES.get(self.config.remote, R.REMOTES[""])[1]:
+            return R.button_name(self.config.remote, action)
         k = self.key_name(action)
         return f"{action} ({k})" if k else action
 

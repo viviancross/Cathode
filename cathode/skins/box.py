@@ -62,6 +62,7 @@ class BoxSkin(Classic):
     `roles(base)`, their extra colours, and redraw the screens that make a
     box recognisable: banner, guide, menu, browse, boot, signal loss."""
     tune_cover = "black"            # digital boxes cut to black, not snow
+    KEY_WORDS = {}                  # not Classic's OK
     default_font = "sans"
     NATIVE = palette.base_colors("blue")
 

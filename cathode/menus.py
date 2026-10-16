@@ -311,7 +311,7 @@ _PRETTY = {R.CH_UP: "Channel up", R.CH_DOWN: "Channel down", R.PAGE_UP: "Page up
            R.PAGE_DOWN: "Page down", R.PREV: "Previous channel", R.FAV: "Favorite",
            R.VOL_UP: "Volume up", R.VOL_DOWN: "Volume down", R.REW: "Rewind",
            R.FF: "Fast forward", R.SKIP: "Back to live", R.FULLSCREEN: "Full screen",
-           R.THEMES: "Themes (genres)", R.FORMAT: "Picture format", R.SUBTITLE: "Subtitles"}
+           R.THEMES: "Themes (genres)", R.LIST: "My Recordings", R.FORMAT: "Picture format", R.SUBTITLE: "Subtitles"}
 
 
 def _format_label(key):
@@ -329,7 +329,14 @@ def remote_items(app):
         app.config.save()
         app.reload_remote()
         app.toast("Remote buttons reset")
+    remotes = [(k, v[0]) for k, v in R.REMOTES.items()]
+
+    def set_remote(d):
+        app.config.remote = _cycle(remotes, app.config.remote, d)
+        app.config.save()
+        app.invalidate()
     return [
+        Item("Remote", value=lambda: _label(remotes, app.config.remote), adjust=set_remote),
         Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
         Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),
         Item("Reset to defaults", reset),

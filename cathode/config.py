@@ -148,6 +148,7 @@ class Config:
     # Remappable hotkeys (action -> key / gamepad button). Empty = defaults.
     key_bindings: dict = field(default_factory=dict)
     gamepad_bindings: dict = field(default_factory=dict)
+    remote: str = ""               # a remote in remote.REMOTES: hints use its button names
 
     # Network
     user_agent: str = "Cathode/1.0 IPTV"

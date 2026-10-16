@@ -225,7 +225,7 @@ class OnDemandScreen(Screen):
         if self not in self.app.screens or self.mode != "auth":
             return
         if time.monotonic() > self._deadline:
-            self.error("The code expired. Press OK for a new one.")
+            self.error(f"The code expired. Press {self.app.skin.k('SELECT')} for a new one.")
             return
 
         def done(token):

@@ -221,7 +221,7 @@ class InDirectHD(BoxSkin):
         # named as on Cathode's remote (it has no colour buttons).
         fc = self.fb(Y(12))
         x = bar.right - X(16)
-        for key, label in (("BROWSE", "Mini Guide"), ("MENU", "Menu")):
+        for key, label in ((self.k("BROWSE"), "Mini Guide"), (self.k("MENU"), "Menu")):
             x -= t.width(fk, label)
             t.draw(c, label, fk, b["text"], x, ky)
             chip = pygame.Rect(0, bar.y + Y(2), t.width(fc, key) + X(14), bar.h - Y(4))
@@ -496,14 +496,14 @@ class InDirectHD(BoxSkin):
             fbg = self.fb(Y(26))
             t.draw(c, t.fit(fbg, it.label, pn.w - X(40)), fbg, b["text"], pn.x + X(20), pn.y + Y(20))
             if it.preview:
-                hint = "Press SELECT to choose this."
+                hint = f"Press {self.k('SELECT')} to choose this."
             elif it.value:
                 hint = "Press LEFT or RIGHT to change this setting." if it.adjust else \
-                    "Press SELECT to change this setting."
+                    f"Press {self.k('SELECT')} to change this setting."
             elif it.submenu:
-                hint = "Press SELECT to open this page."
+                hint = f"Press {self.k('SELECT')} to open this page."
             else:
-                hint = "Press SELECT to choose." if it.enabled else "Not available right now."
+                hint = f"Press {self.k('SELECT')} to choose." if it.enabled else "Not available right now."
             t.draw(c, hint, self.f(Y(22)), b["soft"], pn.x + X(20), pn.y + Y(64))
             box = self.R(912, 560, 256, 110)
             pygame.draw.rect(c, b["deep"], box)
@@ -519,7 +519,7 @@ class InDirectHD(BoxSkin):
                 fv = self.f(Y(22))
                 t.draw(c, "Open" if it.submenu else "Choose", fv, b["text"], box.x + X(16),
                        box.y + Y(44))
-        t.draw(c, "SELECT: choose    BACK: up a level    EXIT: close", self.f(Y(20)), b["soft"], X(96), Y(690))
+        t.draw(c, f"{self.k('SELECT')}: choose    {self.k('BACK')}: up a level    {self.k('EXIT')}: close", self.f(Y(20)), b["soft"], X(96), Y(690))
 
     # ── Mini guide ────────────────────────────────────────────────────────
 
@@ -633,8 +633,8 @@ class InDirectHD(BoxSkin):
         bar = self.R(356, 634, 880, 40)
         pygame.draw.rect(c, b["od_bar"], bar, border_radius=Y(6))
         hy = bar.y + (bar.h - t.ink(self.f(Y(21)))[1]) // 2
-        x = self._hint(c, bar.x + X(64), hy, "MENU", "Options", b["text"], b["navy"])
-        x = self._hint(c, x, hy, "LIST", "My Recordings", b["text"], b["navy"])
+        x = self._hint(c, bar.x + X(64), hy, self.k("MENU"), "Options", b["text"], b["navy"])
+        x = self._hint(c, x, hy, self.k("LIST"), "My Recordings", b["text"], b["navy"])
         if s.status:
             t.draw(c, s.status.title(), self.fb(Y(21)), b["text"], bar.right - X(20), hy, align="right")
 
@@ -776,7 +776,7 @@ class InDirectHD(BoxSkin):
         t.draw(c, f"{len(rows)} Recording" + ("" if len(rows) == 1 else "s"), fs, b["strip_ink"], X(300),
                Y(146) + (Y(46) - t.ink(fs)[1]) // 2)
         fi = self.fb(Y(25))
-        lead, tip = "Press SELECT to open this recording.", "Tip: Press MENU to sort it or change the view."
+        lead, tip = f"Press {self.k('SELECT')} to open this recording.", f"Tip: Press {self.k('MENU')} to sort it or change the view."
         x, y = X(95), Y(200)
         for word in (lead + " " + tip).split(" "):
             w = t.width(fi, word + " ")
@@ -826,7 +826,7 @@ class InDirectHD(BoxSkin):
         fl = self.f(Y(23))
         ly = foot.y + (foot.h - t.ink(fl)[1]) // 2
         t.draw(c, f"{int(free * 100)}% Free", fl, b["label"], X(432), ly)
-        self._hint(c, X(860), ly, "MENU", "Options", b["text"], b["row_head"])
+        self._hint(c, X(860), ly, self.k("MENU"), "Options", b["text"], b["row_head"])
 
     # Info: the left column of things to do (orange on the chosen one), the
     # facts and the synopsis in the navy panel.
@@ -896,7 +896,7 @@ class InDirectHD(BoxSkin):
         pn = self.R(300, 222, 880, 498)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
         fi = self.f(Y(25))
-        hint = kb.hint or "Press SELECT on the characters to enter the text. Select Done when finished."
+        hint = kb.hint or f"Press {self.k('SELECT')} on the characters to enter the text. Select Done when finished."
         for k, line in enumerate(t.wrap(fi, hint, pn.w - X(80), 2)):
             t.draw(c, line, fi, b["text"], pn.x + X(40), Y(252) + k * Y(38))
         grid = kb.grid()
@@ -989,7 +989,7 @@ class InDirectHD(BoxSkin):
             pygame.draw.rect(c, b["pop_body"], sk)
             pygame.draw.rect(c, b["orange"], sk, Y(3))
             f = self.fb(Y(22))
-            t.draw(c, f"{pb.skip_label.title()}: SELECT", f, b["text"], sk.centerx, sk.y + (sk.h - t.ink(f)[1]) // 2,
+            t.draw(c, f"{pb.skip_label.title()}: {self.k('SELECT')}", f, b["text"], sk.centerx, sk.y + (sk.h - t.ink(f)[1]) // 2,
                    align="center")
             self.hit(sk, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
@@ -1238,14 +1238,17 @@ class InDirect(InDirectHD):
         self.mark(c, X(24), Y(8), X(22))
         self._shadowed(c, digits + "-" * (3 - len(digits)), self.fb(Y(18)), b["text"], b["shadow"], X(57), Y(8))
 
-    def _notice(self, c, lines, y_bottom=None, min_w=0):
+    def _notice(self, c, lines, y_bottom=None, min_w=0, centre=False):
         """The DSS's purple notice box with its light bevel, bottom left (the
-        'This showing is no longer available' card); returns its rect."""
+        'This showing is no longer available' card), or centred; returns its
+        rect."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f = self.fb(Y(12))
         w = max(max(t.width(f, s) for s in lines) + X(24), min_w)
         r = pygame.Rect(X(52), 0, min(w, X(262)), Y(8) + len(lines) * Y(13))
         r.bottom = y_bottom if y_bottom is not None else Y(227)
+        if centre:
+            r.centerx = self.canvas[0] // 2
         pygame.draw.rect(c, b["purple"], r)
         pygame.draw.rect(c, b["rule"], r, 2)
         y = r.y + Y(4)
@@ -1424,7 +1427,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f_row = self.fb(Y(12))
         self._dss_page(c, "DSS Main Menu" if m.title == "MAIN MENU" else m.title.title(),
-                       ["Use arrows to point to an item, then press SELECT.",
+                       [f"Use arrows to point to an item, then press {self.k('SELECT')}.",
                         "Pressing the number also selects the item."])
         n = len(m.items)
         rh = Y(14)
@@ -1455,13 +1458,13 @@ class InDirect(InDirectHD):
             pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
             self._shadowed(c, str((m.cursor + 1) % 10), self.fb(Y(14)), b["text"], b["shadow"], box.x + X(6), box.y + Y(5))
             if it.preview:
-                hint = "SELECT chooses this."
+                hint = f"{self.k('SELECT')} chooses this."
             elif it.value:
-                hint = "LEFT / RIGHT change this setting." if it.adjust else "SELECT changes this setting."
+                hint = "LEFT / RIGHT change this setting." if it.adjust else f"{self.k('SELECT')} changes this setting."
             elif it.submenu:
-                hint = "SELECT opens this menu."
+                hint = f"{self.k('SELECT')} opens this menu."
             else:
-                hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, "SELECT chooses this.")
+                hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, f"{self.k('SELECT')} chooses this.")
             room, fh = int((box.w - X(26)) / self.SQUEEZE), f_row
             for size in (12, 11, 10):
                 fh = self.fb(Y(size))
@@ -1550,7 +1553,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if s.mode == "auth":
             self._dss_page(c, "Link Your Plex Account", ["On Demand comes from your own Plex server.",
-                                                         "Press BACK to return to the program."])
+                                                         f"Press {self.k('BACK')} to return to the program."])
             if s.auth_code:
                 self._dss_lines(c, [("On a phone or computer, go to", False), (s.auth_link or "plex.tv/link", True),
                                     ("and enter this code:", False)], X(57), Y(80), X(230))
@@ -1559,8 +1562,8 @@ class InDirect(InDirectHD):
                 self._dss_lines(c, [(s.status.title(), True)], X(57), Y(80), X(230))
             return
         title = (s.level["title"] if s.level else "On Demand").title()
-        self._dss_page(c, title, ["Use arrows to point to an item, then press SELECT.",
-                                  "Press MENU for options, BACK to go back."])
+        self._dss_page(c, title, [f"Use arrows to point to an item, then press {self.k('SELECT')}.",
+                                  f"Press {self.k('MENU')} for options, {self.k('BACK')} to go back."])
         rows, n_vis = s.rows, self.ondemand_page(s)
         top = max(0, min(s.sel - n_vis + 1, len(rows) - n_vis)) if len(rows) > n_vis else 0
         f_row = self.fb(Y(12))
@@ -1589,7 +1592,7 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
         pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
         cur = s.current() or {}
-        hint = s.status.title() if s.status else ("SELECT plays this." if cur.get("playable") else "SELECT opens this.")
+        hint = s.status.title() if s.status else (f"{self.k('SELECT')} plays this." if cur.get("playable") else f"{self.k('SELECT')} opens this.")
         self._shadowed(c, t.fit(f_row, hint, int((box.w - X(16)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
                        box.x + X(8), box.y + Y(6))
 
@@ -1601,7 +1604,7 @@ class InDirect(InDirectHD):
         d = info.detail
         offer = info.kind != "download"
         if offer:
-            self._dss_page(c, "Purchase Offer", ["To purchase, point to Buy and press SELECT.",
+            self._dss_page(c, "Purchase Offer", [f"To purchase, point to Buy and press {self.k('SELECT')}.",
                                                  "Choose Exit to return to the list."])
         else:
             self._dss_page(c, "Program Information", ["Choose Play to watch this program.",
@@ -1634,12 +1637,13 @@ class InDirect(InDirectHD):
         from ..screens.iteminfo import hms
         b, X, Y = self.b, self.X, self.Y
         if pb.skip_label:
-            self._notice(c, [f"{pb.skip_label.title()}: press SELECT"], y_bottom=Y(160) if pb.bar_visible() else Y(227))
+            self._notice(c, [f"{pb.skip_label.title()}: press {self.k('SELECT')}"], y_bottom=Y(160) if pb.bar_visible() else Y(227),
+                         centre=True)
         if not pb.bar_visible():
             return
         state = "Paused" if self.app.video.paused else "Playing"
         r = self._notice(c, [pb.title, f"{state}    {hms(pb.pos)} of {hms(pb.dur) if pb.dur else '--:--'}", "", ""],
-                         min_w=X(262))
+                         min_w=X(262), centre=True)
         bar = pygame.Rect(r.x + X(12), r.y + Y(32), r.w - X(24), Y(4))
         pygame.draw.rect(c, b["gap"], bar)
         frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
@@ -1668,7 +1672,7 @@ class InDirect(InDirectHD):
 
     def draw_keyboard(self, c, kb):
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._dss_page(c, kb.prompt, [kb.hint or "Use arrows to point to a letter, then press SELECT.",
+        self._dss_page(c, kb.prompt, [kb.hint or f"Use arrows to point to a letter, then press {self.k('SELECT')}.",
                                       "Choose Done when finished."])
         field = self.R(52, 75, 220, 15)
         pygame.draw.rect(c, b["shadow"], field.move(2, 2))
@@ -1701,7 +1705,7 @@ class InDirect(InDirectHD):
     def draw_diagnostics(self, c, d):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._dss_page(c, "System Test", ["Signal and picture details for this channel.",
-                                          "Press EXIT to return to the program."])
+                                          f"Press {self.k('EXIT')} to return to the program."])
         f, fb_ = self.f(Y(11)), self.fb(Y(11))
         y = Y(76)
         for label, value, bar in [("Signal strength", d.signal(), True), ("Signal quality", d.quality(), True)] + \

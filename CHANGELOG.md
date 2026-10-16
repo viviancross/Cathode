@@ -21,6 +21,11 @@ a retro-themed player.
   tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss screen for dead channels, PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus. On Demand playback bars carry on-screen
   transport buttons in every skin, each box's in its own style.
+- **Remotes.** Every remote button now has a plain keyboard key (CH+/CH- are
+  `]`/`[`, STOP is X), so an IR receiver like a FLIRC can send them all.
+  Settings > Remote control > Remote picks a remote whose own button names
+  the hints then use. The first is the **Sony RM-Y195**; setup is in
+  docs/remotes/sony-rm-y195.md.
 - **FORMAT key** (A, or Settings > Picture & Style): Original, Zoom, Stretch
   or 4:3, over any screen, remembered. **Guide refreshes show their real
   progress** in each box's own notice, and the start-up screen's bar follows

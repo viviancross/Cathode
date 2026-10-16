@@ -21,11 +21,29 @@ DIGITS = [f"DIGIT{i}" for i in range(10)]
 
 # Buttons a user can rebind, in the order the remap menu lists them.
 BINDABLE = [GUIDE, INFO, MENU, EXIT, BACK, SELECT, UP, DOWN, LEFT, RIGHT, CH_UP, CH_DOWN,
-            PAGE_UP, PAGE_DOWN, PREV, FAV, BROWSE, THEMES, PAUSE, REW, FF, SKIP,
+            PAGE_UP, PAGE_DOWN, PREV, FAV, BROWSE, THEMES, LIST, PAUSE, STOP, REW, FF, SKIP,
             VOL_UP, VOL_DOWN, MUTE, FORMAT, SUBTITLE, FULLSCREEN, QUIT]
 
 # Held, these repeat (menus and the guide scroll; channels don't race away).
 REPEATABLE = {UP, DOWN, LEFT, RIGHT, PAGE_UP, PAGE_DOWN, VOL_UP, VOL_DOWN, BACK}
+
+
+# Remotes Cathode knows by name: an IR receiver (a FLIRC) is set to send
+# the keys above, and the hints on screen use the remote's own names for its
+# buttons. Setup for each is in docs/remotes/.
+REMOTES = {
+    "": ("Standard", {}),
+    "sony_rm_y195": ("Sony RM-Y195", {
+        SELECT: "ENTER", INFO: "DISPLAY", PREV: "JUMP", BACK: "RESET", EXIT: "TV/VIDEO",
+        FAV: "SLEEP", BROWSE: "TV/SAT", LIST: "REC", FORMAT: "PICTURE MODE", SUBTITLE: "MTS/SAP",
+        CH_UP: "CH+", CH_DOWN: "CH-", VOL_UP: "VOL+", VOL_DOWN: "VOL-", MUTE: "MUTING"}),
+}
+
+
+def button_name(remote: str, action: str, default: str = "") -> str:
+    """What `remote` calls the button for `action`; else `default`, else
+    the action's own name."""
+    return REMOTES.get(remote, REMOTES[""])[1].get(action) or default or action
 
 
 def _k(name):
@@ -38,11 +56,11 @@ DEFAULT_KEYS = {
     "K_RETURN": SELECT, "K_KP_ENTER": SELECT,
     "K_BACKSPACE": BACK, "K_ESCAPE": EXIT,
     "K_c": MENU, "K_g": GUIDE, "K_i": INFO, "K_TAB": INFO,
-    "K_PAGEUP": PAGE_UP, "K_PAGEDOWN": PAGE_DOWN,
+    "K_PAGEUP": PAGE_UP, "K_PAGEDOWN": PAGE_DOWN, "K_RIGHTBRACKET": CH_UP, "K_LEFTBRACKET": CH_DOWN,
     "K_p": PREV, "K_BACKQUOTE": PREV,
     "K_EQUALS": VOL_UP, "K_PLUS": VOL_UP, "K_KP_PLUS": VOL_UP,
     "K_MINUS": VOL_DOWN, "K_KP_MINUS": VOL_DOWN, "K_m": MUTE,
-    "K_SPACE": PAUSE, "K_COMMA": REW, "K_PERIOD": FF,
+    "K_SPACE": PAUSE, "K_x": STOP, "K_COMMA": REW, "K_PERIOD": FF,
     "K_f": FAV, "K_t": THEMES, "K_b": BROWSE, "K_l": LIST,
     "K_w": FULLSCREEN, "K_F11": FULLSCREEN, "K_q": QUIT, "K_a": FORMAT, "K_s": SUBTITLE,
     # Media keys: IR receivers and media remotes send these.

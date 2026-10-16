@@ -162,6 +162,8 @@ class PlateHD(BoxSkin):
 
     # ── Live: the grey banner, digits, volume, trick ──────────────────────
 
+    KEY_WORDS = {"BACK": "CANCEL", "EXIT": "VIEW TV"}     # the Dish remote's words
+
     def _box(self, c, r, alpha=232):
         box = pygame.Surface(r.size, pygame.SRCALPHA)
         pygame.draw.rect(box, (*self.b["banner"], alpha), box.get_rect(), border_radius=self.Y(8))
@@ -199,7 +201,7 @@ class PlateHD(BoxSkin):
         if nxt:
             fn = self.fb(Y(17))
             self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(78), align="center")
-        label = tag or ("INFO FOR DETAILS" if not full else "")
+        label = tag or (f"{self.k('INFO')} FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
             fp = self.fb(Y(28))
@@ -222,7 +224,7 @@ class PlateHD(BoxSkin):
     def draw_browse(self, c, br):
         if br.channel:
             cur, nxt = br.program()
-            tag = "BROWSE  -  SELECT TO WATCH" + (f"  (+{br.ahead})" if br.ahead else "")
+            tag = f"BROWSE  -  {self.k('SELECT')} TO WATCH" + (f"  (+{br.ahead})" if br.ahead else "")
             self._banner(c, br.channel, cur, nxt, tag=tag, bottom=True)
 
     def _digits(self, c, digits):
@@ -482,7 +484,7 @@ class PlateHD(BoxSkin):
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
             self.cb(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.fb(Y(18)), b["ink"], lp.x + X(32), lp.bottom - Y(28))
-        self.cb(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.fb(Y(18)), b["muted"], X(51), Y(690))
+        self.cb(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.fb(Y(18)), b["muted"], X(51), Y(690))
 
     def menu_video_box(self, menu):
         r = self.R(609, 181, 569, 354)
@@ -791,7 +793,7 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if pb.skip_label:
             r = self.R(880, 424 if pb.bar_visible() else 600, 350, 52)
-            self._vip_button(c, r, f"{pb.skip_label.title()}  (SELECT)", True)
+            self._vip_button(c, r, f"{pb.skip_label.title()}  ({self.k('SELECT')})", True)
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
@@ -1444,7 +1446,7 @@ class Plate(PlateHD):
                 self._lens_text(c, ">", f_row, end, ty, sel, align="right")
             self.hit(row, lambda i=i: m.activate(i))
         f_foot = self.f(Y(11))
-        t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", f_foot, b["m_ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", f_foot, b["m_ink"], X(40), Y(456))
         if n > n_vis:
             t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", f_foot, b["m_ink"], X(600), Y(456), align="right")
 
@@ -1535,7 +1537,7 @@ class Plate(PlateHD):
         self._sd_side(c, ["Options", "Recordings" if not rec else "Sort", "Done"], -1,
                       hits=[lambda: s.handle("MENU"), (lambda: s.handle("LIST")) if not rec else (lambda: s.handle("MENU")),
                             s.back])
-        t.draw(c, "SELECT: choose   CANCEL: back   VIEW TV: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["ink"], X(40), Y(456))
 
     def draw_iteminfo(self, c, info):
         from ..screens.iteminfo import hms
@@ -1645,7 +1647,7 @@ class Plate(PlateHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if pb.skip_label:
             r = self.R(370, 262 if pb.bar_visible() else 400, 230, 32)
-            self._sd_pill(c, r, f"{pb.skip_label.title()}: SELECT", True)
+            self._sd_pill(c, r, f"{pb.skip_label.title()}: {self.k('SELECT')}", True)
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
