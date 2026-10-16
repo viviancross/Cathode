@@ -672,7 +672,9 @@ def _external_subs(meta: dict, server: str) -> list:
                 if s.get("streamType") == 3 and s.get("key"):
                     out.append({"url": f"{server}{s['key']}",
                                 "title": s.get("displayTitle") or s.get("title", ""),
-                                "lang": s.get("languageTag") or s.get("languageCode", "")})
+                                "lang": s.get("languageTag") or s.get("languageCode", ""),
+                                # Plex Pass + voice analysis: the server can shift it to the dialogue
+                                "sync": bool(s.get("canAutoSync"))})
     return out
 
 

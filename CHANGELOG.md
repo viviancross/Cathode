@@ -25,7 +25,16 @@ a retro-themed player.
   now load with it. During playback, MENU > Subtitles > **Find subtitles**
   searches through the Plex server's own OpenSubtitles link in the chosen
   **Search language**; picking a result has the server fetch it and keep it
-  with the title, and Cathode switches it on.
+  with the title, and Cathode switches it on. **Auto-sync** (on by default)
+  asks the Plex server to align subtitles to the dialogue wherever it can
+  (Plex Pass and the server's voice analysis).
+- **Posters.** Every skin's title info shows the poster, and every skin
+  offers the **poster wall** (On Demand > MENU > View), each in its box's
+  style. Classic's info buttons are centred.
+- **Gamepads.** Hints name the pad's own buttons once one is used (Xbox,
+  PlayStation symbols, Nintendo), and go back to the remote's or keyboard's
+  when those are pressed. The pad's View / Share / - button now opens
+  Browse (the mini guide on InDirecTV) instead of repeating Start.
 - **Remotes.** Every remote button now has a plain keyboard key (CH+/CH- are
   `]`/`[`, STOP is X), so an IR receiver like a FLIRC can send them all.
   Settings > Remote control > Remote picks a remote whose own button names

@@ -496,18 +496,19 @@ class PlateHD(BoxSkin):
     # pale frame with its channel above it; lists in a pale rounded panel,
     # white capsule buttons in a column at the right, amber on the chosen.
 
-    poster_wall = False             # the ViP listed titles; it had no poster wall
+    poster_wall = True              # posters in the list panel, framed as the picture
     keyboard_layer = "ABC"
+    WALL = (5, 2)                   # posters across, down
 
     def page_video_box(self, screen):
         r = self.R(800, 100, 440, 248)
         return (r.x, r.y, r.w, r.h)
 
     def ondemand_cols(self, screen):
-        return 1
+        return self.WALL[0] if screen.view == "wall" else 1
 
     def ondemand_page(self, screen):
-        return 8
+        return self.WALL[0] * self.WALL[1] if screen.view == "wall" else 8
 
     def _vip_page(self, c, title, sub="", picture=True):
         """The page every ViP screen shares; returns the picture's rect."""
@@ -635,7 +636,10 @@ class PlateHD(BoxSkin):
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
         top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
-        self._vip_rows(c, s, panel, rows, s.sel, top, n_vis, green=rec)
+        if s.view == "wall":
+            self._vip_wall(c, s, panel)
+        else:
+            self._vip_rows(c, s, panel, rows, s.sel, top, n_vis, green=rec)
         fc = self.fb(Y(20))
         fc.italic = True
         try:
@@ -651,6 +655,26 @@ class PlateHD(BoxSkin):
             fs = self.fb(Y(22))
             self.cb(c, s.status.title(), fs, b["text"], X(1240), Y(668), align="right")
         self._vip_about(c, s.current() or {})
+
+    def _vip_wall(self, c, s, panel):
+        """Posters in the list panel, each in the picture's pale frame; the
+        chosen one ringed amber and gold like a chosen button. Its title is
+        in the lines above the panel."""
+        b, X, Y = self.b, self.X, self.Y
+        cols, tw, th, gap = self.WALL[0], X(112), Y(168), X(24)
+        x0 = panel.x + (panel.w - (cols * tw + (cols - 1) * gap)) // 2
+        for i, slot in self.wall_cells(s, cols):
+            row = s.rows[i]
+            r = pygame.Rect(x0 + (slot % cols) * (tw + gap), panel.y + Y(48) + (slot // cols) * (th + Y(18)), tw, th)
+            if i == s.sel:
+                pygame.draw.rect(c, (250, 230, 60), r.inflate(Y(16), Y(16)), border_radius=Y(8))
+                pygame.draw.rect(c, b["vp_amber"], r.inflate(Y(10), Y(10)), border_radius=Y(6))
+            pygame.draw.rect(c, b["pip_edge"], r.inflate(Y(4), Y(4)))
+            pygame.draw.rect(c, b["vp_row"], r)
+            art = self.app.ondemand.poster(row.get("thumb", ""), r.w, r.h) if row.get("thumb") else None
+            if art:
+                c.blit(art, art.get_rect(center=r.center))
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
 
     def _vip_about(self, c, row):
         """The chosen row's title and details, top-left above the list."""
@@ -672,14 +696,23 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         d = info.detail
         self._vip_page(c, "Event Info")
+        # The poster top left in the picture's pale frame; the title block
+        # centred in the room beside it.
+        art_r = self.R(48, 98, 128, 192)
+        pygame.draw.rect(c, b["pip_edge"], art_r.inflate(Y(6), Y(6)))
+        pygame.draw.rect(c, b["vp_row"], art_r)
+        art = self.logo(d.get("poster", ""), art_r.w, art_r.h, headers=d.get("poster_headers") or None)
+        if art:
+            c.blit(art, art.get_rect(center=art_r.center))
+        cx, room = X(490), X(560)
         f = self.fb(Y(28))
-        self.cb(c, self.fit_cb(f, d.get("title", ""), X(740)), f, b["text"], X(430), Y(118), align="center")
+        self.cb(c, self.fit_cb(f, d.get("title", ""), room), f, b["text"], cx, Y(118), align="center")
         fm = self.fb(Y(23))
         meta = d.get("subtitle") or d.get("meta", "")
         if meta:
-            self.cb(c, self.fit_cb(fm, meta, X(740)), fm, b["text"], X(430), Y(162), align="center")
+            self.cb(c, self.fit_cb(fm, meta, room), fm, b["text"], cx, Y(162), align="center")
         if d.get("duration"):
-            self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], X(430), Y(200), align="center")
+            self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], cx, Y(200), align="center")
         panel = self.R(40, 300, 740, 360)
         self._vip_panel(c, panel)
         pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
@@ -1456,17 +1489,18 @@ class Plate(PlateHD):
     # the chosen one), grey dialogs with a blue title pill. On Demand, My
     # Recordings, info and the keyboard are drawn in that vocabulary.
 
-    poster_wall = False
+    poster_wall = True              # posters on the band, the chosen one's pill under them
     keyboard_layer = "ABC"
+    WALL = (4, 2)                   # posters across, down
 
     def page_video_box(self, screen):
         return None
 
     def ondemand_cols(self, screen):
-        return 1
+        return self.WALL[0] if screen.view == "wall" else 1
 
     def ondemand_page(self, screen):
-        return 6
+        return self.WALL[0] * self.WALL[1] if screen.view == "wall" else 6
 
     def _sd_page(self, c, title):
         """The grey page with the mark and the title pill (the Theme
@@ -1525,7 +1559,9 @@ class Plate(PlateHD):
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
         top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
-        for k, i in enumerate(range(top, min(len(rows), top + n_vis))):
+        if s.view == "wall":
+            self._sd_wall(c, s, band)
+        for k, i in enumerate(range(top, min(len(rows), top + n_vis)) if s.view != "wall" else ()):
             row = rows[i]
             r = pygame.Rect(X(20), band.y + Y(10) + k * Y(42), X(390), Y(34))
             self._sd_pill(c, r, row.get("title", "").title(), i == s.sel, right=row.get("meta", "").split("   ")[0])
@@ -1539,6 +1575,26 @@ class Plate(PlateHD):
                             s.back])
         t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["ink"], X(40), Y(456))
 
+    def _sd_wall(self, c, s, band):
+        """Posters on the band, four across and two down, the chosen one
+        ringed in the pills' white; its title on a pill beneath them."""
+        b, X, Y = self.b, self.X, self.Y
+        cols, tw, th, gap = self.WALL[0], X(66), Y(99), X(20)
+        x0 = X(20) + (X(390) - (cols * tw + (cols - 1) * gap)) // 2
+        for i, slot in self.wall_cells(s, cols):
+            row = s.rows[i]
+            r = pygame.Rect(x0 + (slot % cols) * (tw + gap), band.y + Y(10) + (slot // cols) * (th + Y(10)), tw, th)
+            if i == s.sel:
+                pygame.draw.rect(c, b["m_sel"], r.inflate(X(10), Y(10)), border_radius=Y(6))
+            pygame.draw.rect(c, b["m_lip"], r.inflate(X(2), Y(2)))
+            art = self.app.ondemand.poster(row.get("thumb", ""), r.w, r.h) if row.get("thumb") else None
+            if art:
+                c.blit(art, art.get_rect(center=r.center))
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+        cur = s.current() or {}
+        pill = pygame.Rect(X(20), band.y + Y(10) + 2 * (th + Y(10)) + Y(2), X(390), Y(34))
+        self._sd_pill(c, pill, cur.get("title", "").title(), True, right=cur.get("meta", "").split("   ")[0])
+
     def draw_iteminfo(self, c, info):
         from ..screens.iteminfo import hms
         b, t, X, Y = self.b, self.text, self.X, self.Y
@@ -1551,17 +1607,26 @@ class Plate(PlateHD):
         f = self.fb(Y(17))
         t.draw(c, t.fit(f, d.get("title", ""), pill.w - X(20)), f, b["pill_ink"], pill.centerx,
                pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        # The poster at the left under the pill, white-edged like the panel;
+        # the facts beside it, the summary under both.
+        art_r = pygame.Rect(r.x + X(18), pill.bottom + Y(10), X(76), Y(114))
+        pygame.draw.rect(c, (255, 255, 255), art_r.inflate(X(4), Y(4)), border_radius=Y(3))
+        pygame.draw.rect(c, b["panel_bot"], art_r)
+        art = self.logo(d.get("poster", ""), art_r.w, art_r.h, headers=d.get("poster_headers") or None)
+        if art:
+            c.blit(art, art.get_rect(center=art_r.center))
         fl = self.fb(Y(14))
-        y = pill.bottom + Y(12)
+        y = pill.bottom + Y(14)
+        lx = art_r.right + X(66)
         for label, value in (("info:", d.get("subtitle") or d.get("meta", "")),
                              ("length:", hms(d["duration"]) if d.get("duration") else ""),
                              ("resume:", hms(d["offset"]) if d.get("offset", 0) > 5 else "")):
             if value:
-                t.draw(c, label, fl, b["ink"], r.x + X(80), y, align="right")
-                t.draw(c, t.fit(fl, value, r.w - X(100)), fl, b["ink"], r.x + X(88), y)
+                t.draw(c, label, fl, b["ink"], lx, y, align="right")
+                t.draw(c, t.fit(fl, value, r.right - X(12) - (lx + X(8))), fl, b["ink"], lx + X(8), y)
                 y += Y(20)
         fd = self.f(Y(14))
-        y += Y(6)
+        y = art_r.bottom + Y(6)
         for line in t.wrap(fd, d.get("summary", ""), r.w - X(36), max(1, (r.bottom - Y(12) - y) // Y(18))):
             t.draw(c, line, fd, b["ink"], r.centerx, y, align="center")
             y += Y(18)

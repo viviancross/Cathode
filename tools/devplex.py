@@ -18,15 +18,49 @@ MOVIES = ["The Long Signal", "Static Hour: The Movie", "Return of the Test Card"
           "Prime Time", "Rerun Theater"]
 
 
+FONT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts",
+                    "LiberationSans-Bold.ttf")
+
+
+def _poster(key, title, hue):
+    """A made-up 2:3 poster (a file in the temp folder), so the On Demand
+    screens show art."""
+    path = os.path.join(tempfile.gettempdir(), f"cathode-devplex-poster-{key}.png")
+    if not os.path.exists(path):
+        import colorsys
+        from PIL import Image, ImageDraw, ImageFont
+        im = Image.new("RGB", (300, 450))
+        d = ImageDraw.Draw(im)
+        for y in range(450):
+            r, g, b = colorsys.hsv_to_rgb(hue % 1, 0.7, 0.9 - 0.65 * y / 450)
+            d.line([(0, y), (300, y)], fill=(int(r * 255), int(g * 255), int(b * 255)))
+        d.ellipse((60, 70, 240, 250), outline=(255, 255, 255), width=6)
+        small, big = ImageFont.truetype(FONT, 16), ImageFont.truetype(FONT, 36)
+        d.text((150, 30), "A CATHODE PICTURE", font=small, fill=(255, 255, 255), anchor="mm")
+        lines, line = [], ""
+        for word in title.upper().split():
+            if line and d.textlength(f"{line} {word}", font=big) > 260:
+                lines.append(line)
+                line = word
+            else:
+                line = f"{line} {word}".strip()
+        lines.append(line)
+        for k, ln in enumerate(lines):
+            d.text((150, 300 + k * 42), ln, font=big, fill=(255, 255, 255), anchor="mm")
+        im.save(path)
+    return path
+
+
 def _movie(i, title):
     return {"type": "movie", "rating_key": f"m{i}", "title": title.upper(),
             "meta": f"{1980 + i}   PG   {6 + i % 4}.{i % 10}", "playable": True,
-            "thumb": "", "duration": 600, "offset": 120 if i % 4 == 1 else 0}
+            "thumb": _poster(f"m{i}", title, i * 0.083), "duration": 600, "offset": 120 if i % 4 == 1 else 0}
 
 
 def _episode(n):
     return {"type": "episode", "rating_key": f"e{n}", "title": f"S1E{n}  Episode {n}",
-            "meta": "", "playable": True, "thumb": "", "duration": 300, "offset": 0}
+            "meta": "", "playable": True, "thumb": _poster("s1", "Test Patterns", 0.55), "duration": 300,
+            "offset": 0}
 
 
 SRT = "1\n00:00:01,000 --> 00:10:00,000\nSubtitles fetched for {title} ({lang}).\n"
@@ -70,7 +104,8 @@ class FakePlex(plex.PlexClient):
     def section_filter(self, key, genre_id="", sort="", **kw):
         if key == "2":
             return [{"type": "show", "rating_key": "s1", "title": "TEST PATTERNS",
-                     "meta": "8 eps", "playable": False, "thumb": "", "duration": 0, "offset": 0}]
+                     "meta": "8 eps", "playable": False, "thumb": _poster("s1", "Test Patterns", 0.55), "duration": 0,
+                     "offset": 0}]
         rows = [_movie(i, t) for i, t in enumerate(MOVIES)]
         return sorted(rows, key=lambda r: r["title"], reverse=sort.endswith("desc"))
 
@@ -99,7 +134,8 @@ class FakePlex(plex.PlexClient):
                 "summary": "A fake title for working on the On Demand screens. It plays one of "
                            "mpv's test patterns, with an intro marker from 0:02 to 0:20 so the "
                            "Skip Intro button shows.",
-                "duration": 600, "offset": 120 if rk == "m1" else 0, "poster": "",
+                "duration": 600, "offset": 120 if rk == "m1" else 0,
+                "poster": _poster(rk, title, int(rk[1:]) * 0.083) if movie else _poster("s1", "Test Patterns", 0.55),
                 "poster_headers": {}, "guid": f"plex://fake/{rk}",
                 "type": "movie" if movie else ("show" if rk == "s1" else "episode"),
                 "grandparent_key": "s1" if rk.startswith("e") else ""}
@@ -123,7 +159,7 @@ class FakePlex(plex.PlexClient):
         return True
 
     def photo_url(self, path, w, h):
-        return ""
+        return path                 # the made-up posters are files
 
 
 if __name__ == "__main__":

@@ -286,8 +286,13 @@ def subtitle_items(app):
     from .screens.playback import Playback
     pb = app.find(Playback)
     if pb:                  # On Demand: the Plex server can look more up
+        def sync(d):
+            cfg.sub_auto_sync = not cfg.sub_auto_sync
+            cfg.save()
+            pb.reload_subs()
         rows[2:2] = [Item("Find subtitles", submenu=lambda: find_subtitle_items(app, pb)),
-                     style("Search language", "sub_search_lang", SUB_LANGS, lambda _: None)]
+                     style("Search language", "sub_search_lang", SUB_LANGS, lambda _: None),
+                     Item("Auto-sync", value=lambda: "On" if cfg.sub_auto_sync else "Off", adjust=sync)]
     return rows
 
 
@@ -325,7 +330,7 @@ def find_subtitle_items(app, pb):
         def done(sub):
             if app.find(Playback) is pb and pb.rk == rk:
                 pb.subs.append(sub)
-                app.video.add_subtitle(sub["url"], sub["title"], sub["lang"], select=True)
+                app.video.add_subtitle(pb.sub_url(sub), sub["title"], sub["lang"], select=True)
                 cfg.subtitles = True
                 cfg.save()
             app.toast(f"Subtitles added: {sub['title'] or lang}")

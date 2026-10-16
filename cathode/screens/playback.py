@@ -49,6 +49,29 @@ class Playback(Screen):
     def video_box(self):
         return "full"
 
+    # ── Subtitle files ────────────────────────────────────────────────────
+
+    def sub_url(self, s: dict) -> str:
+        """A subtitle file's address; with auto-sync on and the server able
+        to (Plex Pass, the title's voice analysed), the server shifts it to
+        the dialogue as it hands it over."""
+        url = s["url"]
+        sync = self.app.config.sub_auto_sync and s.get("sync") and url.startswith("http")
+        print(f"[ondemand] subtitle {s.get('title') or '?'}: auto-sync "
+              f"{'requested' if sync else 'off' if s.get('sync') else 'not offered by the server'}")
+        return url + ("&" if "?" in url else "?") + "autoAdjustSubtitle=1" if sync else url
+
+    def reload_subs(self):
+        """Hand mpv the subtitle files again (auto-sync was switched),
+        keeping the one that was showing."""
+        v = self.app.video
+        files = [t for t in v.tracks("sub") if t["external"]]
+        shown = next((k for k, t in enumerate(files) if t["selected"]), None)
+        for t in files:
+            v.remove_subtitle(t["id"])
+        for k, s in enumerate(self.subs):
+            v.add_subtitle(self.sub_url(s), s["title"], s["lang"], select=k == shown)
+
     # ── Position ──────────────────────────────────────────────────────────
 
     def _monitor(self):
@@ -132,7 +155,7 @@ class Playback(Screen):
         if kind == "video_started" and not self._subs_added:
             self._subs_added = True                 # (it fires again after every seek)
             for s in self.subs:
-                self.app.video.add_subtitle(s["url"], s["title"], s["lang"])
+                self.app.video.add_subtitle(self.sub_url(s), s["title"], s["lang"])
         if kind == "video_ended":
             if data.get("reason") == "eof":
                 self.finished()

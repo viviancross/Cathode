@@ -74,7 +74,7 @@ for _i in range(10):
 
 DEFAULT_PAD = {
     "A": SELECT, "B": BACK, "X": GUIDE, "Y": INFO,
-    "BACK": MENU, "START": MENU, "GUIDE": EXIT,
+    "BACK": BROWSE, "START": MENU, "GUIDE": EXIT,
     "LEFTSHOULDER": CH_DOWN, "RIGHTSHOULDER": CH_UP,
     "LEFTSTICK": MUTE, "RIGHTSTICK": PREV,
     "DPAD_UP": UP, "DPAD_DOWN": DOWN, "DPAD_LEFT": LEFT, "DPAD_RIGHT": RIGHT,
@@ -88,6 +88,35 @@ _STICK_DIR = {(pygame.CONTROLLER_AXIS_LEFTX, -1): LEFT, (pygame.CONTROLLER_AXIS_
 _TRIGGERS = {pygame.CONTROLLER_AXIS_TRIGGERLEFT: "TRIGGERLEFT",
              pygame.CONTROLLER_AXIS_TRIGGERRIGHT: "TRIGGERRIGHT"}
 _AXIS_ON, _AXIS_OFF = 20000, 12000   # hysteresis, so a resting stick can't chatter
+
+
+# What each pad family prints on the buttons SDL names after an Xbox pad,
+# for hints. SDL keeps Nintendo's own letters (A is the right-hand button).
+PAD_LABELS = {
+    "xbox": {"LEFTSHOULDER": "LB", "RIGHTSHOULDER": "RB", "TRIGGERLEFT": "LT", "TRIGGERRIGHT": "RT",
+             "BACK": "VIEW", "START": "MENU", "GUIDE": "XBOX", "LEFTSTICK": "LS", "RIGHTSTICK": "RS"},
+    "playstation": {"A": "✕", "B": "○", "X": "□", "Y": "△", "LEFTSHOULDER": "L1",
+                    "RIGHTSHOULDER": "R1", "TRIGGERLEFT": "L2", "TRIGGERRIGHT": "R2", "BACK": "SHARE",
+                    "START": "OPTIONS", "GUIDE": "PS", "LEFTSTICK": "L3", "RIGHTSTICK": "R3"},
+    "nintendo": {"LEFTSHOULDER": "L", "RIGHTSHOULDER": "R", "TRIGGERLEFT": "ZL", "TRIGGERRIGHT": "ZR",
+                 "BACK": "−", "START": "+", "GUIDE": "HOME", "LEFTSTICK": "L STICK", "RIGHTSTICK": "R STICK"},
+}
+# When an action has more than one button, the hint names the first of these.
+PAD_ORDER = ["A", "B", "X", "Y", "START", "BACK", "LEFTSHOULDER", "RIGHTSHOULDER", "TRIGGERLEFT",
+             "TRIGGERRIGHT", "LEFTSTICK", "RIGHTSTICK", "GUIDE"]
+
+
+def pad_family(name: str, guid: str = "") -> str:
+    """'playstation', 'nintendo' or 'xbox' for a pad, from its USB vendor (in
+    SDL's GUID, little-endian at hex 8..12) or its name. Xbox is the default:
+    SDL names buttons after one, and most pads copy its letters."""
+    vendor = (guid[10:12] + guid[8:10]).lower() if len(guid) >= 12 else ""
+    n = name.lower()
+    if vendor == "054c" or any(k in n for k in ("playstation", "dualshock", "dualsense", "ps3", "ps4", "ps5")):
+        return "playstation"
+    if vendor == "057e" or any(k in n for k in ("nintendo", "switch", "joy-con")):
+        return "nintendo"
+    return "xbox"
 
 
 def pad_button_name(code: int) -> str:
@@ -125,6 +154,9 @@ class Remote:
         self._axis_down = set()     # (instance, axis, sign) currently past threshold
         self.held_action = None     # controller direction/button now held, for repeat
         self.controllers = {}
+        self.families = {}          # controller instance id -> pad_family()
+        self.last_device = "keys"   # "pad" once a pad is used: hints then name its buttons
+        self.pad_family = "xbox"
 
     def key_for(self, action: str) -> str:
         """Display name of the keys bound to an action (the remap menu)."""
@@ -134,13 +166,29 @@ class Remote:
     def pad_for(self, action: str) -> str:
         return ", ".join(sorted(b for b, a in self.pad_names.items() if a == action)) or "-"
 
+    def pad_label(self, action: str) -> str:
+        """The last-used pad's name for the button bound to `action`; '' when
+        no button is (the hint then names the remote's)."""
+        buttons = [b for b, a in self.pad_names.items() if a == action]
+        if not buttons:
+            return ""
+        b = next((b for b in PAD_ORDER if b in buttons), buttons[0])
+        return PAD_LABELS.get(self.pad_family, {}).get(b, b)
+
+    def _used_pad(self, instance_id):
+        self.last_device = "pad"
+        self.pad_family = self.families.get(instance_id, self.pad_family)
+
     def translate(self, e) -> list:
         """Remote buttons this event presses (usually zero or one)."""
         t = e.type
         if t == pygame.KEYDOWN:
             a = self.keys.get(e.key)
+            if a:
+                self.last_device = "keys"
             return [a] if a else []
         if t == pygame.CONTROLLERBUTTONDOWN:
+            self._used_pad(e.instance_id)
             a = self.pad.get(e.button)
             if a:
                 self.held_action = a
@@ -150,14 +198,22 @@ class Remote:
                 self.held_action = None
             return []
         if t == pygame.CONTROLLERAXISMOTION:
-            return self._axis(e)
+            out = self._axis(e)
+            if out:
+                self._used_pad(e.instance_id)
+            return out
         if t == pygame.MOUSEWHEEL:
             return [UP] if e.y > 0 else [DOWN] if e.y < 0 else []
         if t == pygame.CONTROLLERDEVICEADDED:
             try:
                 c = sdl_controller.Controller(e.device_index)
                 self.controllers[c.id] = c
-                print(f"[remote] controller connected: {c.name}")
+                try:
+                    guid = pygame.joystick.Joystick(e.device_index).get_guid()
+                except (pygame.error, AttributeError):
+                    guid = ""
+                self.families[c.id] = pad_family(c.name or "", guid)
+                print(f"[remote] controller connected: {c.name} ({self.families[c.id]})")
             except pygame.error:
                 pass
         elif t == pygame.CONTROLLERDEVICEREMOVED:

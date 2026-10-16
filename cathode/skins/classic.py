@@ -613,7 +613,7 @@ class Classic(Skin):
         bs = info.buttons()
         f_btn = self.role("body")
         bw = min(200, (W - 120 - (len(bs) - 1) * 16) // len(bs))
-        bx = 60
+        bx = (W - (len(bs) * bw + (len(bs) - 1) * 16)) // 2
         for i, b in enumerate(bs):
             r = pygame.Rect(bx, H - 140, bw, 56)
             sel = i == info.focus

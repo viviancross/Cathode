@@ -296,9 +296,10 @@ class App:
             self.press(R.INFO)          # a click on plain live TV shows the banner
 
     def reload_remote(self):
-        controllers = self.remote.controllers
+        old = self.remote
         self.remote = R.Remote(self.config.key_bindings, self.config.gamepad_bindings)
-        self.remote.controllers = controllers
+        for keep in ("controllers", "families", "last_device", "pad_family"):
+            setattr(self.remote, keep, getattr(old, keep))
 
     def set_skin(self, name: str):
         from .skins import load_skin
@@ -347,6 +348,8 @@ class App:
     def press_hint(self, action: str) -> str:
         """'MENU (C)': the remote button and, for keyboards, its key; with a
         remote chosen in Settings, that remote's name for the button."""
+        if self.remote and self.remote.last_device == "pad" and self.remote.pad_label(action):
+            return self.remote.pad_label(action)
         if R.REMOTES.get(self.config.remote, R.REMOTES[""])[1]:
             return R.button_name(self.config.remote, action)
         k = self.key_name(action)

@@ -469,9 +469,10 @@ class TestSubtitles(unittest.TestCase):
         meta = {"Media": [{"Part": [{"key": "/p/1/f.mkv", "Stream": [
             {"streamType": 1}, {"streamType": 3, "index": 2, "displayTitle": "English (embedded)"},
             {"streamType": 3, "key": "/library/streams/7", "displayTitle": "English (SRT)",
-             "languageTag": "en"}]}]}]}
+             "languageTag": "en", "canAutoSync": True}]}]}]}
         self.assertEqual(plex._external_subs(meta, "http://s"),
-                         [{"url": "http://s/library/streams/7", "title": "English (SRT)", "lang": "en"}])
+                         [{"url": "http://s/library/streams/7", "title": "English (SRT)", "lang": "en",
+                           "sync": True}])
 
     def test_search_results_and_old_servers(self):
         found = {"MediaContainer": {"Stream": [

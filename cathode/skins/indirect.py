@@ -857,7 +857,15 @@ class InDirectHD(BoxSkin):
             self._shadowed(c, t.fit(f, self.button_words(info.label(name)), r.w - X(40)), f, b["text"],
                            b["sel_shadow"] if on else None, r.x + X(34), r.y + (r.h - t.ink(f)[1]) // 2)
             self.hit(r, lambda k=k, name=name: (setattr(info, "focus", k), info.press(name)))
-        x, y, w = pn.x + X(40), pn.y + Y(26), pn.w - X(80)
+        # The poster top right in the panel, framed as on the Top Picks wall.
+        art_r = pygame.Rect(0, pn.y + Y(26), X(200), Y(300))
+        art_r.right = pn.right - X(40)
+        pygame.draw.rect(c, b["od_col"], art_r)
+        art = self.logo(d.get("poster", ""), art_r.w, art_r.h, headers=d.get("poster_headers") or None)
+        if art:
+            c.blit(art, art.get_rect(center=art_r.center))
+        pygame.draw.rect(c, b["od_bar"], art_r, 1)
+        x, y, w = pn.x + X(40), pn.y + Y(26), art_r.x - X(30) - (pn.x + X(40))
         lh = t.ink(fb_)[1] + Y(20)
         facts = [d.get("meta", "") if d.get("subtitle") else ""]
         if d.get("duration"):
@@ -1506,17 +1514,18 @@ class InDirect(InDirectHD):
     # the purple band with two lines of instructions, the teal rule, plain
     # shadowed lines on the lavender page, the square buttons at the right.
 
-    poster_wall = False             # nothing but lists on a DSS
+    poster_wall = True              # posters as the page's bevelled cells
     keyboard_layer = "ABC"
+    WALL = (5, 2)                   # posters across, down
 
     def page_video_box(self, screen):
         return None                 # full pages, as the DSS drew them
 
     def ondemand_cols(self, screen):
-        return 1
+        return self.WALL[0] if screen.view == "wall" else 1
 
     def ondemand_page(self, screen):
-        return 8
+        return self.WALL[0] * self.WALL[1] if screen.view == "wall" else 8
 
     def _dss_button(self, c, r, label, icon, on):
         """A square button with its small icon, light when chosen, its drop
@@ -1564,6 +1573,43 @@ class InDirect(InDirectHD):
         title = (s.level["title"] if s.level else "On Demand").title()
         self._dss_page(c, title, [f"Use arrows to point to an item, then press {self.k('SELECT')}.",
                                   f"Press {self.k('MENU')} for options, {self.k('BACK')} to go back."])
+        if s.view == "wall":
+            self._dss_wall(c, s)
+        else:
+            self._dss_list(c, s)
+        f_row = self.fb(Y(12))
+        box = self.R(51, 196, 224, 28)
+        pygame.draw.rect(c, b["teal"], box)
+        pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
+        pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
+        cur = s.current() or {}
+        hint = s.status.title() if s.status else (f"{self.k('SELECT')} plays this." if cur.get("playable") else f"{self.k('SELECT')} opens this.")
+        if s.view == "wall" and not s.status and cur.get("title"):
+            hint = f"{cur['title'].title()}: {hint}"      # the wall has no captions
+        self._shadowed(c, t.fit(f_row, hint, int((box.w - X(16)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
+                       box.x + X(8), box.y + Y(6))
+
+    def _dss_wall(self, c, s):
+        """Posters as the page's bevelled cells, five across and two down, the
+        chosen one light and shadowed like a chosen guide cell."""
+        b, X, Y = self.b, self.X, self.Y
+        cols, tw, th, gap = self.WALL[0], X(36), Y(54), X(10)
+        for i, slot in self.wall_cells(s, cols):
+            row = s.rows[i]
+            r = pygame.Rect(X(52) + (slot % cols) * (tw + gap), Y(73) + (slot // cols) * (th + Y(6)), tw, th)
+            self._dss_cell(c, r.inflate(X(3), Y(3)), i == s.sel)
+            art = self.app.ondemand.poster(row.get("thumb", ""), r.w, r.h) if row.get("thumb") else None
+            if art:
+                c.blit(art, art.get_rect(center=r.center))
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+        per = cols * self.WALL[1]
+        n = len(s.rows) - s.wall_offset
+        page = max(0, s.sel - s.wall_offset) // per
+        self._shadowed(c, f"{page + 1}/{max(1, (n + per - 1) // per)}", self.fb(Y(11)), b["soft"], b["shadow"],
+                       X(24), Y(73))
+
+    def _dss_list(self, c, s):
+        b, t, X, Y = self.b, self.text, self.X, self.Y
         rows, n_vis = s.rows, self.ondemand_page(s)
         top = max(0, min(s.sel - n_vis + 1, len(rows) - n_vis)) if len(rows) > n_vis else 0
         f_row = self.fb(Y(12))
@@ -1587,14 +1633,6 @@ class InDirect(InDirectHD):
         pages = max(1, (len(rows) + n_vis - 1) // n_vis)
         fs = self.fb(Y(11))
         self._shadowed(c, f"{top // n_vis + 1}/{pages}", fs, b["soft"], b["shadow"], X(24), Y(73))
-        box = self.R(51, 196, 224, 28)
-        pygame.draw.rect(c, b["teal"], box)
-        pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
-        pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
-        cur = s.current() or {}
-        hint = s.status.title() if s.status else (f"{self.k('SELECT')} plays this." if cur.get("playable") else f"{self.k('SELECT')} opens this.")
-        self._shadowed(c, t.fit(f_row, hint, int((box.w - X(16)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
-                       box.x + X(8), box.y + Y(6))
 
     ICONS = {"play": "play", "playall": "play", "shuffle": "play", "back": "exit"}
 
@@ -1617,12 +1655,20 @@ class InDirect(InDirectHD):
             lines.append((f"Length: {max(1, d['duration'] // 60)} min.", False))
         if d.get("offset", 0) > 5:
             lines.append((f"Resume at: {hms(d['offset'])}", False))
-        y = self._dss_lines(c, lines, X(57), Y(76), X(158))
+        # The poster top left in a bevelled cell; the facts beside it, the
+        # summary under both.
+        art_r = pygame.Rect(X(58), Y(77), X(56), Y(84))
+        self._bevel(c, art_r.inflate(X(3), Y(3)), b["gap"])
+        art = self.logo(d.get("poster", ""), art_r.w, art_r.h, headers=d.get("poster_headers") or None)
+        if art:
+            c.blit(art, art.get_rect(center=art_r.center))
+        tx = art_r.right + X(8)
+        y = self._dss_lines(c, lines, tx, Y(76), X(215) - tx)
         if offer:
             fc = self.fb(Y(13))
-            w = self._shadowed(c, "Cost to view:", self.fb(Y(12)), b["text"], b["shadow"], X(57), y + Y(4))
-            self._shadowed(c, "$0.00", fc, b["text"], b["shadow"], X(57) + w + X(6), y + Y(3))
-            y += Y(20)
+            w = self._shadowed(c, "Cost to view:", self.fb(Y(12)), b["text"], b["shadow"], tx, y + Y(4))
+            self._shadowed(c, "$0.00", fc, b["text"], b["shadow"], tx + w + X(6), y + Y(3))
+        y = art_r.bottom + Y(2)
         f = self.f(Y(11))
         for line in t.wrap(f, d.get("summary", ""), int(X(158) / self.SQUEEZE), max(0, (Y(232) - y - Y(6)) // Y(12))):
             self._shadowed(c, line, f, b["soft"], b["shadow"], X(57), y + Y(6))

@@ -23,5 +23,34 @@ class TestRemoteProfiles(unittest.TestCase):
         self.assertEqual(R.button_name("no-such-remote", R.SELECT), "SELECT")
 
 
+class TestPadPrompts(unittest.TestCase):
+    def test_family_from_vendor_or_name(self):
+        self.assertEqual(R.pad_family("Wireless Controller", "030000004c050000cc09000000006800"), "playstation")
+        self.assertEqual(R.pad_family("Nintendo Switch Pro Controller"), "nintendo")
+        self.assertEqual(R.pad_family("Steam Deck"), "xbox")
+
+    def test_label_follows_the_pad_and_its_bindings(self):
+        r = R.Remote()
+        r.pad_family = "playstation"
+        self.assertEqual(r.pad_label(R.SELECT), "✕")
+        self.assertEqual(r.pad_label(R.MENU), "OPTIONS")      # START before BACK
+        self.assertEqual(r.pad_label(R.FAV), "")              # unbound: the hint names the remote's
+        r.pad_family = "xbox"
+        self.assertEqual(r.pad_label(R.CH_UP), "RB")
+
+
+class TestAutoSyncURL(unittest.TestCase):
+    def test_only_where_the_server_offers_it(self):
+        from types import SimpleNamespace
+        from cathode.screens.playback import Playback
+        pb = Playback.__new__(Playback)
+        pb.app = SimpleNamespace(config=SimpleNamespace(sub_auto_sync=True))
+        on = {"url": "http://s/library/streams/7", "sync": True}
+        self.assertTrue(pb.sub_url(on).endswith("/7?autoAdjustSubtitle=1"))
+        self.assertEqual(pb.sub_url({"url": "http://s/library/streams/8", "sync": False}), "http://s/library/streams/8")
+        pb.app.config.sub_auto_sync = False
+        self.assertEqual(pb.sub_url(on), "http://s/library/streams/7")
+
+
 if __name__ == "__main__":
     unittest.main()

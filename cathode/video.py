@@ -218,7 +218,8 @@ class Video:
                 name = t.get("title") or (f"{t['lang'].upper()}" if t.get("lang") else "") or \
                     ("Closed captions" if cc else f"Track {t.get('id')}")
                 out.append({"id": t.get("id"), "lang": t.get("lang", ""), "title": t.get("title", ""),
-                            "selected": bool(t.get("selected")), "name": name})
+                            "selected": bool(t.get("selected")), "name": name,
+                            "external": bool(t.get("external"))})
         return out
 
     def apply_subtitles(self, on: bool):
@@ -252,6 +253,9 @@ class Video:
         """A subtitle file for the playing video, fetched with its headers;
         select shows it straight away."""
         self.player.command("sub-add", url, "select" if select else "auto", title, lang)
+
+    def remove_subtitle(self, tid):
+        self.player.command("sub-remove", tid)
 
     def sub_style(self, font=None, size=None, color=None, back=None):
         if font:

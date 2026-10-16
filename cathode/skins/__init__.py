@@ -321,6 +321,9 @@ class Skin:
         """What a hint calls a remote button: the chosen remote's name for
         it, else this skin's word, else Cathode's."""
         from ..remote import button_name
+        pad = getattr(self.app, "remote", None)
+        if pad is not None and getattr(pad, "last_device", "") == "pad" and pad.pad_label(action):
+            return pad.pad_label(action)        # a pad in hand: its own buttons
         remote = getattr(getattr(self.app, "config", None), "remote", "")
         return button_name(remote, action, self.KEY_WORDS.get(action, ""))
 

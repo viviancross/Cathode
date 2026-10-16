@@ -102,6 +102,7 @@ class Config:
     sub_color: str = "#FFFFFFFF"   # mpv sub-color (#AARRGGBB)
     sub_back: str = ""             # mpv sub-back-color (#AARRGGBB; blank = no box)
     sub_search_lang: str = "en"    # Find subtitles' language (ISO 639-1)
+    sub_auto_sync: bool = True     # Plex's auto-sync, where the server can do it
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance

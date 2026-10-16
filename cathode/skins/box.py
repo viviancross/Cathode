@@ -112,6 +112,14 @@ class BoxSkin(Classic):
             return f"Recording {label[4:]}"
         return self.BUTTON_WORDS.get(label, label.title())
 
+    def wall_cells(self, s, cols, rows=2):
+        """[(index into s.rows, slot)] for the posters a wall shows: the
+        cursor's row last (the first rows at the top). Slot is left to right,
+        top to bottom; a level's Sort row is never a poster."""
+        off = s.wall_offset
+        first = max(0, max(0, s.sel - off) // cols - (rows - 1))
+        return [(i + off, i - first * cols) for i in range(first * cols, min(len(s.rows) - off, (first + rows) * cols))]
+
     # On Demand's transport buttons wear the remote's symbols, drawn (no one
     # font has them all), with the seconds on the two seek buttons.
     ICON_W = {"play": 8, "pause": 8, "stop": 8, "back": 11, "fwd": 11, "prev": 9, "next": 9}
