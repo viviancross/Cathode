@@ -104,3 +104,31 @@ class TestEditor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBoxSkinThemes(unittest.TestCase):
+    def test_every_cathode_theme_reads_on_every_box(self):
+        # A Cathode 3 theme on a box skin is translated into the box's own
+        # colour slots, then moved apart until each text pair reads at 4.5:1.
+        # The box's own look ("native") is the real thing and isn't touched.
+        import os
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import pygame
+        pygame.font.init()
+        from test_skins import FakeApp
+        from cathode.skins import skin_classes
+        for name in ("indirect_hd", "indirect", "plate_hd", "plate"):
+            app = FakeApp()
+            app.config.skin = name
+            skin = skin_classes()[name](app)
+            app.skin = skin
+            for key, _ in skin.theme_choices():
+                if key in ("native", "custom"):
+                    continue
+                skin.set_theme_key(key)
+                skin.reload()
+                for ink, grounds, _ in skin.LEGIBLE:
+                    for g in grounds:
+                        ratio = theme.contrast(skin.b[ink], skin.b[g])
+                        self.assertGreaterEqual(ratio, 4.5, f"{name}/{key}: {ink} on {g} is {ratio:.2f}:1")

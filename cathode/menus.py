@@ -2,7 +2,7 @@
 are saved straight away."""
 
 from . import autostart, remote as R
-from .screens.menu import Item, Keyboard, Menu
+from .screens.menu import DESCRIPTIONS, Item, Keyboard, Menu
 
 
 def _cycle(options, current, delta):
@@ -19,9 +19,75 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
-# Beside each box's name on the wizard's first page.
+# Beside each box's name on the wizard's first page, and what it is.
 LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
               "plate": "2005, 4:3", "plate_hd": "2007, HD"}
+LOOK_HELP = {"classic": "Cathode's own look: a retro CRT, every theme.",
+             "indirect": "A 1997 satellite box: purple pages, 4:3.",
+             "indirect_hd": "A 2007 HD satellite box: the blue guide.",
+             "plate": "A 2005 dish box: grey pages, blue pills, 4:3.",
+             "plate_hd": "A 2007 HD dish box: teal pages, gold cursor."}
+
+DESCRIPTIONS.update({
+    # Main Menu
+    "Program Guide": "Show the on-screen programming schedule.",
+    "Themes & Genres": "Channels grouped by what they show.",
+    "Favorites": "The guide with just your favorite channels.",
+    "On Demand": "Movies and shows from your Plex server.",
+    "My Recordings": "What you've downloaded to watch here.",
+    "Button Guide": "What every button does, on this box.",
+    "Settings": "Picture, channels, subtitles, buttons and more.",
+    "Exit Cathode": "Close Cathode.",
+    # Settings
+    "Picture & Style": "The box, its colors and lettering, screen effects.",
+    "Channels": "Your playlists and their guides.",
+    "Display": "Full screen, and which screen to use.",
+    "Remote control": "Your remote, and which button does what.",
+    "System": "Diagnostics, sound, weather, updates.",
+    # Picture & Style
+    "Skin": "The box Cathode looks and works like.",
+    "Color theme": "Original is the box's own colors.",
+    "Font": "The lettering on every screen.",
+    "Scanlines": "A tube's lines over the picture and menus.",
+    "Vignette": "Darker corners, like a tube TV.",
+    "Picture format": "How the video fills the screen.",
+    "Wide screen": "Pillarbox keeps 4:3; Stretch fills the screen.",
+    "Motion": "Slides and fades. Off makes changes instant.",
+    "Edit colors": "Your own version of this theme.",
+    # Display
+    "Full screen": "Fill the whole screen with Cathode.",
+    "Start full screen": "Open in full screen next time.",
+    "Screen": "Which screen Cathode shows on.",
+    "Start with the computer": "Open Cathode when you sign in.",
+    # Remote control
+    "Remote": "Name the buttons as your remote prints them.",
+    "Keyboard keys": "Change which key does what.",
+    "Controller buttons": "Change which pad button does what.",
+    "Reset to defaults": "Put every button back as it came.",
+    # System
+    "Diagnostics": "Signal, stream and picture details.",
+    "Audio output": "Which speakers or HDMI the sound uses.",
+    "Weather": "Local weather in the guide's header.",
+    "Check for updates": "See if there's a newer Cathode.",
+    "Check at start-up": "Look for a newer Cathode each time it opens.",
+    "Start-up screen": "The box's start-up screen when Cathode opens.",
+    "Screensaver": "A moving logo when nothing's on screen for a while.",
+    # Subtitles
+    "Track": "Which subtitles to show.",
+    "Size": "How big subtitles are.",
+    "Find subtitles": "Search for subtitles through your Plex server.",
+    "Search language": "The language Find subtitles looks for.",
+    "Auto-sync": "Plex lines subtitles up with the speech.",
+    # On Demand
+    "View": "A list, or a wall of posters.",
+    "Quality": "How much Plex sends: lower if it stutters.",
+    "Libraries": "Which Plex libraries On Demand shows.",
+    "Who's watching": "Switch to another Plex Home user.",
+    "Unlink Plex account": "Sign this Cathode out of Plex.",
+    # The welcome
+    "Set up your channels": "Add your IPTV playlist: its web address.",
+    "Change the look": "Pick the box and its colors again.",
+})
 
 
 def open_welcome(app):
@@ -60,7 +126,9 @@ def open_welcome(app):
             app.config.save()
             m.pages.append(channels("3/3 YOUR CHANNELS"))
         keys = [k for k, _ in choices]
-        m.open("2/3 CHOOSE COLORS", [Item(label, lambda k=k: chosen(k), preview=lambda k=k: show(k))
+        m.open("2/3 CHOOSE COLORS", [Item(label, lambda k=k: chosen(k), preview=lambda k=k: show(k),
+                                          help="The box's own colors, as it looked. Recommended." if k == "native"
+                                          else "Cathode 3's colors, kept readable on this box.")
                                      for k, label in choices])
         m.cursor = keys.index(skin.theme_key()) if skin.theme_key() in keys else 0
 
@@ -74,7 +142,8 @@ def open_welcome(app):
     else:
         names = list(skin_classes())
         boxes = [Item(cls.label, lambda k=k: (app.set_skin(k), colours()), value=lambda k=k: LOOK_NOTES.get(k, ""),
-                      preview=lambda k=k: app.set_skin(k)) for k, cls in skin_classes().items()]
+                      preview=lambda k=k: app.set_skin(k), help=LOOK_HELP.get(k, ""))
+                 for k, cls in skin_classes().items()]
         m.pages = [["1/3 CHOOSE YOUR BOX", boxes, names.index(app.config.skin) if app.config.skin in names else 0]]
     app.push(m)
 
@@ -96,6 +165,7 @@ def main_items(app):
         Item("On Demand", lambda: open_ondemand(app), close=True),
         Item("My Recordings", lambda: open_ondemand(app, recordings=True), close=True),
         Item("Settings", submenu=lambda: settings_items(app)),
+        Item("Button Guide", submenu=lambda: button_guide_items(app)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
     ]
 
@@ -112,8 +182,8 @@ def settings_items(app):
         Item("Picture & Style", submenu=lambda: style_items(app)),
         Item("Channels", submenu=lambda: channel_items(app)),
         Item("Display", submenu=lambda: display_items(app)),
-        Item("Subtitles", submenu=lambda: subtitle_items(app)),
-        Item("On Demand", submenu=lambda: ondemand_settings(app)),
+        Item("Subtitles", submenu=lambda: subtitle_items(app), help="Subtitle language, size and look."),
+        Item("On Demand", submenu=lambda: ondemand_settings(app), help="Plex quality, libraries and your account."),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("System", submenu=lambda: system_items(app)),
     ]
@@ -284,7 +354,8 @@ def subtitle_items(app):
         return Item(label, value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
     fonts = [("", "Default")] + [(f, f) for f in _subtitle_fonts()]
     rows = [
-        Item("Subtitles", value=lambda: "On" if cfg.subtitles else "Off", adjust=toggle),
+        Item("Subtitles", value=lambda: "On" if cfg.subtitles else "Off", adjust=toggle,
+             help="Show subtitles when there are any."),
         Item("Track", submenu=lambda: track_items(app, "sub")),
         style("Size", "sub_size", SUB_SIZES, lambda s: v.sub_style(size=s)),
         style("Color", "sub_color", SUB_COLORS, lambda c: v.sub_style(color=c)),
@@ -371,7 +442,8 @@ def open_options(app):
         Item("Remove from Favorites" if fav else "Add to Favorites", lambda: app.toggle_favorite(ch), close=True),
         Item("Picture format", lambda: app.cycle_format(1), value=lambda: format_label(cfg.picture_format),
              adjust=app.cycle_format),
-        Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles()),
+        Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles(),
+             help="Step through this channel's subtitles."),
         Item("On Demand", lambda: open_ondemand(app), close=True),
     ]))
 
@@ -432,7 +504,7 @@ def remote_items(app):
         app.config.save()
         app.invalidate()
     return [
-        Item("Button guide", submenu=lambda: button_guide_items(app)),
+        Item("Button guide", submenu=lambda: button_guide_items(app), help="What every button does, on this box."),
         Item("Remote", value=lambda: _label(remotes, app.config.remote), adjust=set_remote),
         Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
         Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),

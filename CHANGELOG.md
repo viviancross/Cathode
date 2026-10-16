@@ -36,6 +36,14 @@ a retro-themed player.
   wider screens as before, or stretched to fill with Settings > Picture &
   Style > **Wide screen**. Picture boxes now keep the video's shape at
   every window shape; they used to squash it.
+- **Readable in every theme, and says what things do.** Cathode 3's colour
+  themes are translated into each box's own colours and kept at 4.5:1 or
+  better; the box's own look (Original) is marked Recommended. Every menu
+  row says what it does, in each box's own place for it; the Button Guide
+  is on the Main Menu; the Plate guides name their keys the first time.
+  A channel with no listings says so plainly in every skin. Dead-channel
+  cards say what to do next, toasts are no longer cut short, small type is
+  up to 17 px, and focus is only ever lit where the cursor is.
 - **Posters.** Every skin's title info shows the poster, and every skin
   offers the **poster wall** (On Demand > MENU > View), each in its box's
   style. Classic's info buttons are centred.

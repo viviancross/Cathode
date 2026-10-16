@@ -242,6 +242,10 @@ class LiveTV(Screen):
         elif a == R.INFO:
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full
+            cur = self.programs()[0] if full else None
+            if full and not (cur and cur.description):      # nothing more to show: say so
+                self.app.note("No description for this program." if cur else "No listings. Add a guide in Settings.",
+                              4.0)
             self.show_banner(self.app.config.osd_timeout_info * (2 if full else 1), full=full)
         elif a in (R.EXIT, R.BACK):
             return self.hide_banner()

@@ -52,6 +52,16 @@ class PlateHD(BoxSkin):
     # gold of the selection frame.
     NATIVE = {"bg": [0, 51, 66], "accent": [0, 62, 61], "accent2": [0, 17, 55],
               "text": [255, 255, 255], "chnum": [230, 235, 134]}
+    LEGIBLE = [("text", ["page", "page_lo", "page_hi", "vp_top", "vp_mid", "vp_bot", "now", "later", "row",
+                         "vp_row", "vp_green", "vp_green2", "vp_info"], "ground"),
+               ("soft", ["page", "page_lo"], "ink"), ("muted", ["page", "page_lo"], "ink"),
+               ("vp_dim", ["page", "vp_bot"], "ink"), ("cursor_ink", ["cursor"], "ink")]
+
+    def theme_base(self, base):
+        bg, acc = base["bg"], base["accent"]
+        # On-now and later cells as darks of the accent; the gold cursor is
+        # the theme's own highlight.
+        return dict(base, accent=mix(acc, bg, 0.7), accent2=mix(acc, bg, 0.85), chnum=base["accent2"])
 
     def roles(self, b):
         page, now_, later, text, gold = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
@@ -147,7 +157,7 @@ class PlateHD(BoxSkin):
         c.blit(swirl, rect.topleft)
 
     def guide_video_box(self):
-        r = self.R(786, 8, 494, 276)
+        r = self.R(774, 16, 480, 270)       # inside the area a TV shows
         return (r.x, r.y, r.w, r.h)
 
     def _picture(self, c):
@@ -425,6 +435,13 @@ class PlateHD(BoxSkin):
     def menu_cols(self, menu):
         return 1
 
+    def guide_tip(self) -> str:
+        def k(action, plain):           # the remote's name for it, else the button's own
+            name = self.k(action)
+            return plain if name == action else name
+        return (f"{k('CH_UP', 'CH+')}/{k('CH_DOWN', 'CH-')}: page   {k('REW', 'REW')}/{k('FF', 'FF')}: a day   "
+                f"{k('THEMES', 'THEMES')}: other lists")
+
     def _menu_top(self, c, title):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
@@ -461,6 +478,11 @@ class PlateHD(BoxSkin):
             if on:
                 self.cb(c, "Today", fc, b["text"], X(597), Y(560))
                 self.cb(c, self.fit_cb(fc, f"{ampm(on.start)} - {ampm(on.stop)}  {on.title}", X(580)), fc, b["text"], X(597), Y(588))
+        it = m.items[m.cursor] if 0 <= m.cursor < len(m.items) else None
+        if it and it.help:
+            fa = self.fb(Y(20))
+            for k, line in enumerate(t.wrap(fa, it.help, int(X(570) / 0.86), 2)):
+                self.cb(c, line, fa, b["soft"], X(597), Y(622) + k * Y(26))
         lp = self.R(51, 127, 493, 545)
         pygame.draw.rect(c, b["list_panel"], lp, border_radius=Y(14))
         pygame.draw.rect(c, b["pip_edge"], lp, Y(3), border_radius=Y(14))
@@ -682,7 +704,15 @@ class PlateHD(BoxSkin):
         b, X, Y = self.b, self.X, self.Y
         cols, tw, th, gap = self.WALL[0], X(112), Y(168), X(24)
         x0 = panel.x + (panel.w - (cols * tw + (cols - 1) * gap)) // 2
-        for i, slot in self.wall_cells(s, cols, self.ondemand_page(s) // cols):
+        cells = self.wall_cells(s, cols, self.ondemand_page(s) // cols)
+        cx = panel.centerx
+        if cells and cells[-1][0] < len(s.rows) - 1:
+            pygame.draw.polygon(c, b["vp_ink"], [(cx - X(14), panel.bottom - Y(28)), (cx + X(14), panel.bottom - Y(28)),
+                                                 (cx, panel.bottom - Y(14))])
+        if cells and cells[0][1] == 0 and cells[0][0] > s.wall_offset:
+            pygame.draw.polygon(c, b["vp_ink"], [(cx - X(14), panel.y + Y(40)), (cx + X(14), panel.y + Y(40)),
+                                                 (cx, panel.y + Y(28))])
+        for i, slot in cells:
             row = s.rows[i]
             r = pygame.Rect(x0 + (slot % cols) * (tw + gap), panel.y + Y(48) + (slot // cols) * (th + Y(18)), tw, th)
             if i == s.sel:
@@ -869,10 +899,13 @@ class PlateHD(BoxSkin):
         self.cb(c, hms(pb.dur) if pb.dur else "--:--", fs, b["banner_ink"], line.right + X(18), line.y - Y(4))
         self.hit(line.inflate(0, Y(24)), lambda: pb.seek_to(self._click_frac(line)))
         # The transport buttons: the white capsules of the box's dialogs.
+        rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = self.R(140 + k * 170, 618, 150, 42)
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
+            rects.append(br)
+        self.idle_row(c, pb, rects, Y(21))
 
     def draw_options(self, c, m):
         """Options as the ViP's pale dialog: the title in the blue capsule,
@@ -972,7 +1005,7 @@ class PlateHD(BoxSkin):
         self.cb(c, self.fit_cb(self.fb(Y(19)), caption, r.w - X(40)), self.fb(Y(19)), b["ink"], r.centerx, pill.bottom + Y(14),
                 align="center")
         if stage != "starting":
-            self.cb(c, "Please wait, or press any button to skip.", self.fb(Y(16)), b["soft"], W // 2, Y(600), align="center")
+            self.cb(c, "Please wait, or press any button to skip.", self.fb(Y(17)), b["soft"], W // 2, Y(600), align="center")
 
 
 class Plate(PlateHD):
@@ -992,6 +1025,16 @@ class Plate(PlateHD):
     # blue of the menus.
     NATIVE = {"bg": [43, 72, 157], "accent": [183, 183, 184], "accent2": [173, 200, 208],
               "text": [255, 255, 255], "chnum": [34, 46, 113]}
+    LEGIBLE = [("text", ["pill", "row", "blue", "blue_lo"], "ground"),
+               ("ink", ["pillfill", "list_panel", "chan_fill", "grey_hi", "sel"], "ink"),
+               ("m_ink", ["m_page_top", "m_page_bot"], "ground")]
+
+    def theme_base(self, base):
+        bg, acc, text = base["bg"], base["accent"], base["text"]
+        # The blue tab from the accent, the light grey ground and the pale
+        # cursor from the text colour, the pills a deep accent.
+        return dict(base, bg=mix(acc, bg, 0.6), accent=mix(text, bg, 0.3), accent2=mix(text, acc, 0.4),
+                    chnum=mix(acc, bg, 0.8))
 
     def roles(self, b):
         r = super().roles(b)
@@ -1281,7 +1324,7 @@ class Plate(PlateHD):
         for r in (left, mid, right):
             self._band(c, r)
         if tag:
-            f_tag = self.fb(Y(11))
+            f_tag = self.fb(Y(12))
             th = t.ink(f_tag)[1] + 16                   # chip() pads 8 all round
             self.chip(c, mid.x, mid.y - th - Y(4) if bottom else mid.bottom + Y(4), tag, f_tag,
                       rgba(b["sel"]), b["ink"])
@@ -1495,6 +1538,11 @@ class Plate(PlateHD):
         self._menu_page(c, "Main Menu" if m.title == "MAIN MENU" else m.title.title())
         n = len(m.items)
         cols = self.menu_cols(m)
+        about = m.items[m.cursor].help if 0 <= m.cursor < n else ""
+        if about:                       # what the chosen row does, under the title
+            fa = self.f(Y(12))
+            for k, line in enumerate(t.wrap(fa, about, X(300), 2)):
+                t.draw(c, line, fa, b["m_ink"], X(330), Y(108) + k * Y(16))
         # The 2005 page's rhythm: rows 36 tall on a 45 pitch from y 163, the
         # band 6 above the first and 6 below the last; five rows a column in
         # the two-column grid, six in a list (the footer needs the rest).
@@ -1543,10 +1591,17 @@ class Plate(PlateHD):
             elif it.submenu:
                 self._lens_text(c, ">", f_row, end, ty, sel, align="right")
             self.hit(row, lambda i=i: m.activate(i))
-        f_foot = self.f(Y(11))
+        f_foot = self.f(Y(12))
         t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", f_foot, b["m_ink"], X(40), Y(456))
         if n > n_vis:
-            t.draw(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", f_foot, b["m_ink"], X(600), Y(456), align="right")
+            count = f"{first + 1}-{min(n, first + n_vis)} of {n}"
+            t.draw(c, count, f_foot, b["m_ink"], X(600), Y(456), align="right")
+            ax, ay = X(600) - t.width(f_foot, count) - X(16), Y(456) + t.ink(f_foot)[1] // 2
+            if first + n_vis < n:           # more below
+                pygame.draw.polygon(c, b["m_ink"], [(ax - X(6), ay - Y(3)), (ax + X(6), ay - Y(3)), (ax, ay + Y(4))])
+            if first:                       # more above
+                ax -= X(18)
+                pygame.draw.polygon(c, b["m_ink"], [(ax - X(6), ay + Y(3)), (ax + X(6), ay + Y(3)), (ax, ay - Y(4))])
 
     # ── Pages: the 2005 box's grey pages ──────────────────────────────────
     # The 322/522 drew everything on the grey swirl page: the mark top-left,
@@ -1637,14 +1692,14 @@ class Plate(PlateHD):
             t.draw(c, s.status, self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
         side = self.od_side(s)
         self._sd_side(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
-        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["m_ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(12)), b["m_ink"], X(40), Y(456))
 
     def od_side(self, s):
         if s.mode != "browse":
             return []
         rec = bool(s.level) and s.level.get("key") == "recordings"
         return [("Options", lambda: s.handle("MENU")),
-                ("Sort", lambda: s.handle("MENU")) if rec else ("Recordings", lambda: s.handle("LIST")),
+                ("Sort", lambda: s.handle("MENU")) if rec else ("My Recordings", lambda: s.handle("LIST")),
                 ("Done", s.back)]
 
     def _sd_wall(self, c, s, band):
@@ -1704,7 +1759,7 @@ class Plate(PlateHD):
             t.draw(c, line, fd, b["ink"], r.centerx, y, align="center")
             y += Y(18)
         names = info.buttons()
-        self._sd_side(c, [self.button_words(info.label(n), back="Cancel") for n in names], info.focus, y0=150,
+        self._sd_side(c, [self.button_words(info.label(n), back="Done") for n in names], info.focus, y0=150,
                       hits=[lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)])
 
     def keyboard_rows(self, layer):
@@ -1810,10 +1865,13 @@ class Plate(PlateHD):
         t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
         self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
         # The transport buttons: small capsules like the banner's.
+        rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(X(55) + k * X(89), top + h + Y(8), X(80), Y(34))
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
+            rects.append(br)
+        self.idle_row(c, pb, rects, Y(17))
 
     def _note(self, c, text, frac=None):
         """A dark capsule like the banner's, bottom left."""
@@ -1911,7 +1969,7 @@ class Plate(PlateHD):
         t.draw(c, t.fit(self.f(Y(13)), caption, r.w - X(30)), self.f(Y(13)), b["ink"], r.centerx, pill.bottom + Y(10),
                align="center")
         if stage != "starting":
-            t.draw(c, "Please wait, or press any button to skip.", self.f(Y(11)), b["ink"], r.centerx, r.bottom - Y(22),
+            t.draw(c, "Please wait, or press any button to skip.", self.f(Y(12)), b["ink"], r.centerx, r.bottom - Y(22),
                    align="center")
 
 

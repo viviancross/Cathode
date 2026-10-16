@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, mix, nice, rgba, vgrad
+from .box import BoxSkin, call_sign, mix, nice, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -49,6 +49,17 @@ class InDirectHD(BoxSkin):
     # Measured: the header navy, the program-cell teal, the amber, the logo blue.
     NATIVE = {"bg": [8, 36, 75], "accent": [10, 70, 112], "accent2": [240, 165, 22],
               "text": [255, 255, 255], "chnum": [15, 154, 209]}
+    LEGIBLE = [("text", ["page_top", "page_mid", "page_bot", "teal", "teal_dark", "cell", "navy", "panel",
+                         "pnl", "pnl_bot", "od_panel", "od_row2"], "ground"),
+               ("ink", ["paper_top", "paper_bot"], "ink"), ("strip_ink", ["strip"], "ink"),
+               ("soft", ["cell", "navy", "teal", "teal_dark", "panel", "page_mid", "page_bot"], "ink"),
+               ("label", ["page_mid", "page_bot", "row_head"], "ink"), ("dim", ["cell", "navy"], "ink"),
+               ("od_ink", ["od_tile"], "ink")]
+
+    def theme_base(self, base):
+        bg, acc = base["bg"], base["accent"]
+        # The navy and its cells, the sky page, from the theme's own accent.
+        return dict(base, accent=mix(acc, bg, 0.7), chnum=mix(acc, bg, 0.4))
 
     def roles(self, b):
         navy, cell, sel, text, sky = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
@@ -231,7 +242,7 @@ class InDirectHD(BoxSkin):
         t.draw(c, f"Favorites List:  {g_list(self)}", fk, b["text"], X(112), ky)
         # Where the HR20 showed its colour buttons, the keys that work here,
         # named as on Cathode's remote (it has no colour buttons).
-        fc = self.fb(Y(12))
+        fc = self.fb(Y(17))
         x = bar.right - X(16)
         for key, label in ((self.k("BROWSE"), "Mini Guide"), (self.k("MENU"), "Menu")):
             x -= t.width(fk, label)
@@ -242,7 +253,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, key, fc, b["paper_ink"], chip.centerx, chip.y + (chip.h - t.ink(fc)[1]) // 2, align="center")
             x = chip.x - X(30)
         if tag:
-            self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(16)), rgba(b["sel"]), b["sel_ink"])
+            self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(17)), rgba(b["sel"]), b["sel_ink"])
         if full and cur and cur.description:
             f = self.f(Y(22))
             lines = t.wrap(f, cur.description, X(1088), 3)
@@ -374,6 +385,8 @@ class InDirectHD(BoxSkin):
             t.draw(c, hours(cur), fs, b["strip_ink"], X(300), sy)
             if cur.rating:
                 t.draw(c, cur.rating, fs, b["strip_ink"], X(760), sy)
+        elif sel:
+            t.draw(c, "No information", fs, b["strip_ink"], X(300), sy)
         # The synopsis, white on the page.
         if cur and cur.description:
             fd = self.f(Y(28))
@@ -538,7 +551,13 @@ class InDirectHD(BoxSkin):
                 hint = f"Press {self.k('SELECT')} to open this page."
             else:
                 hint = f"Press {self.k('SELECT')} to choose." if it.enabled else "Not available right now."
-            t.draw(c, hint, self.f(Y(22)), b["soft"], pn.x + X(20), pn.y + Y(64))
+            fh, y = self.f(Y(22)), pn.y + Y(64)
+            if it.help:
+                for line in t.wrap(fh, it.help, pn.w - X(40), 2):
+                    t.draw(c, line, fh, b["text"], pn.x + X(20), y)
+                    y += Y(30)
+                y += Y(6)
+            t.draw(c, hint, fh, b["soft"], pn.x + X(20), y)
             box = self.R(912, 560, 256, 110)
             pygame.draw.rect(c, b["deep"], box)
             pygame.draw.rect(c, b["navy"], box, Y(2))
@@ -599,6 +618,12 @@ class InDirectHD(BoxSkin):
     def page_video_box(self, screen):
         return self.guide_video_box()
 
+    def draw(self, canvas, screen):
+        super().draw(canvas, screen)
+        if screen.name in ("ondemand", "iteminfo", "keyboard", "diagnostics") and \
+                isinstance(self.page_video_box(screen), tuple):
+            self._picture(canvas)       # the picture window over the panels it meets, its frame whole
+
     def ondemand_cols(self, screen):
         return self.OD_COLS
 
@@ -633,7 +658,7 @@ class InDirectHD(BoxSkin):
         """A remote button named in a footer: the button in a small chip,
         what it does beside it. Returns the x after it."""
         t, X, Y = self.text, self.X, self.Y
-        fk, fl = self.fb(Y(15)), self.f(Y(21))
+        fk, fl = self.fb(Y(17)), self.f(Y(21))
         w = t.width(fk, key) + X(14)
         r = pygame.Rect(x, y - Y(3), w, t.ink(fl)[1] + Y(6))
         pygame.draw.rect(c, chip, r, border_radius=Y(5))
@@ -703,9 +728,11 @@ class InDirectHD(BoxSkin):
         for k, i in enumerate(range(first, min(len(col_rows), first + n_col))):
             r = pygame.Rect(X(32), Y(218) + k * Y(42), X(312), Y(40))
             on = i == col_sel
-            pygame.draw.rect(c, b["od_sel"] if on else b["od_col"], r)
-            self._shadowed(c, t.fit(fr, nice(col_rows[i].get("title", "")), r.w - X(36)), fr, b["text"],
-                           b["sel_shadow"] if on else None, r.x + X(20), r.y + (r.h - t.ink(fr)[1]) // 2)
+            here = on and parent            # where you are, not where the cursor is
+            pygame.draw.rect(c, b["bar"] if here else b["od_sel"] if on else b["od_col"], r)
+            self._shadowed(c, t.fit(fr, nice(col_rows[i].get("title", "")), r.w - X(36)), fr,
+                           b["panel"] if here else b["text"], b["sel_shadow"] if on and not here else None,
+                           r.x + X(20), r.y + (r.h - t.ink(fr)[1]) // 2)
             if parent:
                 self.hit(r, lambda: s.back())
             else:
@@ -781,7 +808,7 @@ class InDirectHD(BoxSkin):
         tw, th, gap = X(112), Y(168), X(28)
         x0 = main.x + (main.w - (cols * tw + (cols - 1) * gap)) // 2
         y0 = main.y + Y(44 if off else 18)
-        fcap = self.fb(Y(15))
+        fcap = self.fb(Y(17))
         for i, slot in self.wall_cells(s, cols, self.ondemand_page(s) // cols):
             row = s.rows[i]
             r = pygame.Rect(x0 + (slot % cols) * (tw + gap), y0 + (slot // cols) * (th + Y(16)), tw, th)
@@ -1076,10 +1103,13 @@ class InDirectHD(BoxSkin):
             pygame.draw.polygon(c, b["text"], [(cx - X(10), cy - Y(17)), (cx - X(10), cy + Y(17)), (cx + X(14), cy)])
         self.hit(st, pb.toggle_pause)
         # The transport buttons under the band: navy tiles like the state one.
+        rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             r = self.R(372 + k * 124, 636, 116, 38)
             self._tbtn(c, r, kind, k == getattr(pb, "tfocus", None))
             self.hit(r, fn)
+            rects.append(r)
+        self.idle_row(c, pb, rects)
 
     # The pop-ups: the grey title, the blue body, the logo in the grey foot.
 
@@ -1216,6 +1246,13 @@ class InDirect(InDirectHD):
     # bar, the light selection; the amber was the box's own highlight colour.
     NATIVE = {"bg": [56, 51, 86], "accent": [112, 106, 142], "accent2": [168, 168, 170],
               "text": [255, 255, 255], "chnum": [100, 136, 138]}
+    LEGIBLE = [("text", ["page", "purple", "teal", "box"], "ground"), ("soft", ["page", "purple"], "ink"),
+               ("sel_ink", ["sel"], "ink")]
+
+    def theme_base(self, base):
+        bg, acc, text = base["bg"], base["accent"], base["text"]
+        # The page from the accent, the band a shade of it, the bar near the text.
+        return dict(base, accent=mix(acc, bg, 0.55), chnum=mix(acc, bg, 0.35), accent2=mix(text, bg, 0.3))
 
     def roles(self, b):
         purple, page, sel, text, teal = b["bg"], b["accent"], b["accent2"], b["text"], b["chnum"]
@@ -1283,10 +1320,11 @@ class InDirect(InDirectHD):
         fs = self.fb(Y(11))
         local = datetime.now()
         cat = g_cat(self)
-        rows = [("Start", ampm(cur.start) + "m" if cur else "", (cur.rating or "NR") if cur else "",
-                 ampm(local) + "m"),
-                ("End", ampm(cur.stop) + "m" if cur else "", "Normal List" if cat == "All" else cat,
-                 f"{local:%a} {local.month}/{local.day}/{local:%y}")]
+        rows = [("Start", ampm(cur.start) + "m", cur.rating or "NR") if cur else ("No Information", "", ""),
+                ("End", ampm(cur.stop) + "m", "Normal List" if cat == "All" else cat) if cur
+                else ("", "", "Normal List" if cat == "All" else cat)]
+        rows = [(lab, when_, mid, right) for (lab, when_, mid), right
+                in zip(rows, (ampm(local) + "m", f"{local:%a} {local.month}/{local.day}/{local:%y}"))]
         for k, (lab, when_, mid, right) in enumerate(rows):
             y = Y(32 + 13 * k)
             self._shadowed(c, lab, fs, b["text"], b["shadow"], X(57), y)
@@ -1379,7 +1417,7 @@ class InDirect(InDirectHD):
         """The DSS's card on black, as the box showed a showing it couldn't
         play (the frame at 0:09)."""
         c.fill((0, 0, 0, 255))
-        self._notice(c, ["This showing is no longer available.", "Check Program Guide for other showtimes."])
+        self._notice(c, ["This channel isn't sending a picture.", "Trying again. Pick another in the Guide."])
 
     # ── Guide: the DSS Program Guide ──────────────────────────────────────
 
@@ -1402,7 +1440,7 @@ class InDirect(InDirectHD):
         start, end = g.window()
         rows_all = g.filtered()
         page, pages = g.top // g.rows + 1, max(1, (len(rows_all) + g.rows - 1) // g.rows)
-        self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(34))
+        self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(30))
         slots = int(g.hours * 2)
         col_w = 240 / slots
         for i in range(slots):
@@ -1414,16 +1452,22 @@ class InDirect(InDirectHD):
         epg = self.app.epg
         mins = g.hours * 60
         grid_x, grid_w = X(55), X(242)
+        room = X(27) - X(4)                     # the call signs: one size for the page, the box's five letters
+        f_call = self.fb(Y(9))
+        for size in (12, 11, 10, 9):
+            f_call = self.fb(Y(size))
+            if all(t.width(f_call, call_sign(ch)) * self.SQUEEZE <= room for ch in rows):
+                break
         for i, ch in enumerate(rows):
             y = Y(42) + i * Y(28)
             rh = Y(26)
             row_sel = g.focus == "grid" and g.top + i == g.cursor
             tile = pygame.Rect(X(24), y, X(27), rh)
             self._bevel(c, tile, b["page"])
-            name = ch.name.upper()
-            while len(name) > 1 and t.width(f_cell, name) * self.SQUEEZE > tile.w - X(4):   # clip, no ellipsis
+            name, fcs = call_sign(ch), f_call
+            while len(name) > 1 and t.width(fcs, name) * self.SQUEEZE > tile.w - X(4):   # clip, no ellipsis
                 name = name[:-1]
-            self._shadowed(c, name, f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
+            self._shadowed(c, name, fcs, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
             self._shadowed(c, str(ch.number), f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(15))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
@@ -1528,12 +1572,14 @@ class InDirect(InDirectHD):
                 pygame.draw.rect(c, b["shadow"], (row.x + 3, row.bottom, row.w, 3))
                 pygame.draw.rect(c, b["shadow"], (row.right, row.y + 3, 3, row.h))
             num = str((i + 1) % 10) if i < 10 else " "
-            label = f"{num} {it.label}"
-            if it.value:
-                label += f"   {it.value()}"
+            v = it.value() if it.value else ""
+            vw = int(t.width(f_row, v) * self.SQUEEZE) + X(8) if v else 0
             ink = (b["sel_ink"] if sel else b["text"]) if it.enabled else b["soft"]
-            self._shadowed(c, t.fit(f_row, label, row.w - X(8)), f_row, ink, None if sel else b["shadow"],
-                           row.x + X(3), y)
+            self._shadowed(c, t.fit(f_row, f"{num} {it.label}", int((row.w - X(8) - vw) / self.SQUEEZE)), f_row, ink,
+                           None if sel else b["shadow"], row.x + X(3), y)
+            if v:
+                self._shadowed(c, t.fit(f_row, v, int((row.w - X(16)) / self.SQUEEZE / 2)), f_row, ink,
+                               None if sel else b["shadow"], row.right - X(4), y, align="right")
             self.hit(row, lambda i=i: m.activate(i))
         it = m.items[m.cursor] if 0 <= m.cursor < n else None
         if it:
@@ -1551,7 +1597,9 @@ class InDirect(InDirectHD):
             elif it.submenu:
                 hint = f"{self.k('SELECT')} opens this menu."
             else:
-                hint = {"Program Guide": "Show the on-screen programming schedule."}.get(it.label, f"{self.k('SELECT')} chooses this.")
+                hint = f"{self.k('SELECT')} chooses this."
+            if it.help and not (it.value and not (it.action or it.adjust or it.submenu)):
+                hint = it.help                  # what it does, as the box's own band said
             room, fh = int((box.w - X(26)) / self.SQUEEZE), f_row
             for size in (12, 11, 10):
                 fh = self.fb(Y(size))
@@ -1779,10 +1827,13 @@ class InDirect(InDirectHD):
         self.hit(bar.inflate(0, Y(8)), lambda: pb.seek_to(self._click_frac(bar)))
         # The transport buttons: the DSS's teal buttons with their shadow.
         bw = (bar.w - 5 * X(4)) // 6
+        rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(bar.x + k * (bw + X(4)), r.y + Y(41), bw, Y(13))
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
+            rects.append(br)
+        self.idle_row(c, pb, rects)
 
     def keyboard_rows(self, layer):
         if layer == "sym":

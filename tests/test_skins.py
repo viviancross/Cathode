@@ -57,6 +57,9 @@ class FakeApp:
     def invalidate(self):
         pass
 
+    def note(self, text, seconds=2.5):
+        pass
+
     def categories(self):
         return ["All", "Favorites", "News"]
 

@@ -214,10 +214,10 @@ class Classic(Skin):
             t.draw(c, t.fit(f_med, nxt.title, next_w), f_med, p["WHITE_DIM"], next_x, y_prog)
             t.draw(c, span(nxt), f_small, p["INK_MUTED"], next_x, y_time)
 
-        t.draw(c, clock(datetime.now()), self.f(int(bh * 0.40)), p["YELLOW"], right, y_name, align="right",
-               outline=(0, 0, 0))
-        if group:
-            t.draw(c, group, f_small, p["CYAN"], right, y_prog, align="right")
+        f_clock = self.f(int(bh * 0.40))
+        t.draw(c, clock(datetime.now()), f_clock, p["YELLOW"], right, y_name, align="right", outline=(0, 0, 0))
+        if group:               # under the clock, clear of it
+            t.draw(c, group, f_small, p["CYAN"], right, max(y_prog, y_name + t.ink(f_clock)[1] + 6), align="right")
         # The clock on the banner advances while it's up: one tick pending at a time.
         if self._tick is None or self._tick[0] <= time.monotonic():
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
@@ -267,12 +267,14 @@ class Classic(Skin):
             pygame.draw.rect(c, (*col, 255), (round(i * bw), 0, round((i + 1) * bw) - round(i * bw),
                                               int(H * 0.67)))
         pygame.draw.rect(c, (16, 16, 16, 255), (0, int(H * 0.67), W, H - int(H * 0.67)))
-        card = pygame.Rect(0, 0, int(W * 0.56), int(type(self).canvas[1] * 0.18))
+        card = pygame.Rect(0, 0, int(W * 0.62), int(type(self).canvas[1] * 0.18) + 34)    # the title, a line under it
         card.center = (W // 2, int(H * 0.45))
         pygame.draw.rect(c, (0, 0, 0, 255), card)
         pygame.draw.rect(c, self.p["OSD_BORDER"], card, 3)
         self.text.draw(c, "PLEASE STAND BY", self.f(56), self.p["WHITE"], card.centerx,
-                       card.centery - 20, align="center")
+                       card.centery - 38, align="center")
+        self.text.draw(c, f"Still trying. {self.k('GUIDE')} or a channel number to change.", self.role("body"),
+                       self.p["WHITE_DIM"], card.centerx, card.centery + 30, align="center")
 
     # ── Browse ────────────────────────────────────────────────────────────
 
@@ -348,8 +350,9 @@ class Classic(Skin):
         scrim = pygame.Surface((W, H), pygame.SRCALPHA)
         scrim.fill(p["SCRIM"])
         c.blit(scrim, (0, 0))
-        rh, pw, foot = 46, 620, 46
         n = len(m.items)
+        about = m.items[m.cursor].help if 0 <= m.cursor < n else ""
+        rh, pw, foot = 46, 620, 46 + (30 if about else 0)
         top = max(0, min(m.cursor - self.MENU_ROWS + 1, n - self.MENU_ROWS)) if n > self.MENU_ROWS else 0
         shown = m.items[top: top + self.MENU_ROWS]
         ph = 64 + len(shown) * rh + 10 + foot
@@ -382,11 +385,15 @@ class Classic(Skin):
             if top + self.MENU_ROWS < n:
                 self._arrow(c, panel.centerx, y + 2, up=False)
         pygame.draw.rect(c, p["OSD_BORDER"], (panel.x + 12, panel.bottom - foot, pw - 24, 1))
-        hint = f"{self.k('SELECT')}: select   </>: change   {self.k('BACK')}: return   {self.k('EXIT')}: close"
+        if about:
+            t.draw(c, t.fit(f_hint, about, pw - 40), f_hint, p["WHITE_DIM"], panel.centerx,
+                   panel.bottom - foot + 12, align="center")
+        change = "   </>: change" if any(it.adjust for it in m.items) else ""
+        hint = f"{self.k('SELECT')}: select{change}   {self.k('BACK')}: return   {self.k('EXIT')}: close"
         if t.width(f_hint, hint) > pw - 40:        # a remote's longer names: tighter, not cut
-            hint = f"{self.k('SELECT')}: select  </>: change  {self.k('BACK')}: back  {self.k('EXIT')}: close"
+            hint = f"{self.k('SELECT')}: select{change.replace('   ', '  ')}  {self.k('BACK')}: back  {self.k('EXIT')}: close"
         t.draw(c, t.fit(f_hint, hint, pw - 40), f_hint, p["INK_MUTED"], panel.centerx,
-               panel.bottom - foot + (foot - t.ink(f_hint)[1]) // 2, align="center")
+               panel.bottom - 46 + (46 - t.ink(f_hint)[1]) // 2, align="center")
 
     # ── On-screen keyboard ────────────────────────────────────────────────
 
@@ -475,7 +482,8 @@ class Classic(Skin):
         pygame.draw.rect(c, p["OSD_BORDER"], (0, 74, W, 2))
         title = s.level["title"] if s.level and s.mode == "browse" else "ON DEMAND"
         t.draw(c, t.fit(f_title, title, W - 420), f_title, p["YELLOW"], 30, 16)
-        t.draw(c, t.fit(f_crumb, s.crumb(), W - 420), f_crumb, p["INK_MUTED"], 30, 52)
+        if len(s.stack) > 1:
+            t.draw(c, t.fit(f_crumb, s.crumb(), W - 420), f_crumb, p["INK_MUTED"], 30, 52)
         x = W - 30
         for label, fn in (("MENU", lambda: s.handle("MENU")), ("BACK", s.back)):
             w = t.width(f_btn, label) + 28
@@ -689,8 +697,10 @@ class Classic(Skin):
         buttons = pb.transport()
         bw = 104
         x = bar.centerx - (len(buttons) * bw + (len(buttons) - 1) * 10) // 2
+        rects = []
         for k, (_, label, fn) in enumerate(buttons):
             r = pygame.Rect(x, bar.y + 104, bw, 34)
+            rects.append(r)
             on = k == getattr(pb, "tfocus", None)
             pygame.draw.rect(c, (p["GUIDE_SELECTED"] if on else p["OSD_BG"])[:3] + (255,), r, border_radius=6)
             pygame.draw.rect(c, p["CYAN"] if on else p["OSD_BORDER"], r, 2 if on else 1, border_radius=6)
@@ -698,6 +708,7 @@ class Classic(Skin):
                    align="center")
             self.hit(r, fn)
             x += bw + 10
+        self.idle_row(c, pb, rects, 6)
 
     def _click_frac(self, rect) -> float:
         """Where the last click landed across `rect`, 0..1."""
@@ -1006,11 +1017,13 @@ class Classic(Skin):
         # Programme cells.
         pygame.draw.rect(c, bg, (grid_x, y, grid_w, rh))
         pygame.draw.line(c, p["GUIDE_BORDER"], (pad, y + rh - 1), (grid_x + grid_w, y + rh - 1))
-        if not cid:
-            t.draw(c, ch.name, f_prog, p["INK_MUTED"], grid_x + 8, y + (rh - t.ink(f_prog)[1]) // 2)
+        progs = epg.programs_in_window(cid, start, end) if cid else []
+        if not progs:           # no listings: the channel's own name, readable on the cursor too
+            t.draw(c, t.fit(f_prog, ch.name, grid_w - 16), f_prog, p["SEL_TEXT_DIM"] if selected else p["INK_MUTED"],
+                   grid_x + 8, y + (rh - t.ink(f_prog)[1]) // 2)
             return
         mins = guide.hours * 60
-        for prog in epg.programs_in_window(cid, start, end):
+        for prog in progs:
             a = max(0.0, (prog.start - start).total_seconds() / 60)
             b = min(float(mins), (prog.stop - start).total_seconds() / 60)
             if b <= a:

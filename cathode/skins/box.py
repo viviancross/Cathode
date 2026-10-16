@@ -20,6 +20,26 @@ def call_sign(ch, n=5) -> str:
     return "".join(ch.name.upper().split())[:n]
 
 
+def legible(b, pairs, floor=4.5):
+    """Move colours apart until each text pair reads at floor:1. `pairs` is
+    [(ink, [grounds], give)]: `give` "ground" moves the grounds away from the
+    ink (the pages under a box's main lettering), "ink" moves the ink toward
+    white or black (secondary text). Changes `b` in place."""
+    from ..palette import _lum, contrast
+    for ink, grounds, give in pairs:
+        for _ in range(16):
+            if min(contrast(b[ink], b[g]) for g in grounds) >= floor:
+                break
+            if give == "ground":
+                away = (0, 0, 0) if _lum(b[ink]) > 0.18 else (255, 255, 255)
+                for g in grounds:
+                    if contrast(b[ink], b[g]) < floor:
+                        b[g] = mix(b[g], away, 0.2)
+            else:
+                dark = sum(_lum(b[g]) for g in grounds) / len(grounds) > 0.18
+                b[ink] = mix(b[ink], (0, 0, 0) if dark else (255, 255, 255), 0.25)
+
+
 def readable(bg, ink, floor=4.5):
     """`ink` on `bg` if it reads (WCAG ratio >= floor), else near-black or
     white, whichever reads better: a theme can't make text vanish."""
@@ -99,6 +119,12 @@ class BoxSkin(Classic):
             vgrad(c, rect, top, bottom)
     default_font = "sans"
     NATIVE = palette.base_colors("blue")
+    LEGIBLE = []        # [(ink role, [ground roles], "ink" | "ground")]: see legible()
+
+    def theme_base(self, base):
+        """A Cathode 3 theme's base colours in this box's own slots. Its
+        chnum is Classic's channel-number green, which no box paints with."""
+        return base
 
     def reload(self):
         key = self.theme_key()
@@ -108,12 +134,15 @@ class BoxSkin(Classic):
             base = self.custom_base()
         else:
             base = palette.base_colors(key)
+            base = self.theme_base({k: tuple(v) for k, v in base.items()})
         try:
             self.p = palette.custom(**base)
         except (TypeError, KeyError, IndexError):
             base = dict(self.NATIVE)
             self.p = palette.custom(**base)
         self.b = self.roles({k: tuple(v) for k, v in base.items()})
+        if key != "native":         # the box as it was stays as it was
+            legible(self.b, self.LEGIBLE)
         # Screens drawn by the shared code select with the box's own colour
         # and title in its text colour, not Classic's derived ones.
         b = self.b

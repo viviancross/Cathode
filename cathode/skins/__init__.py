@@ -294,6 +294,22 @@ class Skin:
     def tall(self, name: str) -> bool:
         return name in self.TALL
 
+    def idle_row(self, c, pb, rects, radius=0):
+        """On Demand's transport buttons while the cursor isn't in them
+        (DOWN brings it): dimmed, a legend until then, so a lit button
+        always means the one SELECT presses."""
+        if getattr(pb, "tfocus", None) is not None:
+            return
+        for r in rects:
+            veil = pygame.Surface(r.size, pygame.SRCALPHA)
+            pygame.draw.rect(veil, (0, 0, 0, 120), veil.get_rect(), border_radius=radius)
+            c.blit(veil, r.topleft)
+
+    def guide_tip(self) -> str:
+        """Keys a guide with no legend of its own names the first time it
+        opens (the Plate guides); "" when it shows them already."""
+        return ""
+
     def paint(self, canvas, name: str, draw, owner=None):
         """draw(surface) one screen onto the canvas. On a grown canvas a
         screen that isn't tall() is drawn at its design height and opened up

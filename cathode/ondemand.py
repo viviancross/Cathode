@@ -217,8 +217,8 @@ class OnDemand:
             self.downloads.add(info["detail"], info["url"], info["headers"],
                                size=info["size"], container=info["container"])
             return title or info["detail"].get("title", "")
-        self.run(work, lambda name: self.app.toast(f"Recording: {name}"[:48]),
-                 lambda msg: self.app.toast(msg[:48], 3.5))
+        self.run(work, lambda name: self.app.toast(f"Recording: {name}"),
+                 lambda msg: self.app.toast(msg, 5.0))
 
     # ── Reporting ─────────────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ class OnDemand:
                 pb.load(rk, info, title, subtitle)
             else:
                 self.app.push(Playback(self.app, rk, info, title, subtitle))
-        self.run(work, done, lambda msg: self.app.toast(msg[:48], 3.5))
+        self.run(work, done, lambda msg: self.app.toast(msg, 5.0))
 
     def play_queue_at(self, i: int, resume: bool = False):
         if 0 <= i < len(self.queue.items):
@@ -315,16 +315,16 @@ class OnDemand:
                 return
             self.queue.replace([queue_entry(e) for e in eps])
             self.play_queue_at(0)
-        self.run(work, done, lambda msg: self.app.toast(msg[:48], 3.5))
+        self.run(work, done, lambda msg: self.app.toast(msg, 5.0))
 
     def enqueue(self, detail: dict):
         """+ QUEUE: one item, or every episode of a series."""
         def added(entries):
             n = self.queue.add(entries)
             self.app.toast(f"Queued {n} episodes" if n > 1 else
-                           f"Queued: {entries[0]['title']}"[:48] if n else "Nothing to queue")
+                           f"Queued: {entries[0]['title']}" if n else "Nothing to queue")
         if detail.get("type") == "show":
             self.run(lambda: [queue_entry(e) for e in self.client().all_episodes(detail["rating_key"])],
-                     added, lambda msg: self.app.toast(msg[:48], 3.5))
+                     added, lambda msg: self.app.toast(msg, 5.0))
         else:
             added([queue_entry(detail)])

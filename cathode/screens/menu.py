@@ -9,6 +9,11 @@ from .. import remote as R
 from ..app import Screen
 
 
+# Label -> one line of what a row does (menus.py fills it in). A row's
+# own help, when it has one, wins: the same label can mean different things.
+DESCRIPTIONS = {}
+
+
 class Item:
     """A menu row. Exactly one of `action` (run it) or `submenu` (a function
     returning the next page's items) is usual; `value` shows a setting on the
@@ -19,11 +24,17 @@ class Item:
                  value: Optional[Callable[[], str]] = None,
                  adjust: Optional[Callable[[int], None]] = None,
                  enabled: bool = True, close: bool = False,
-                 preview: Optional[Callable[[], None]] = None):
+                 preview: Optional[Callable[[], None]] = None, help: Optional[str] = None):
         self.label, self.action, self.submenu = label, action, submenu
+        self._help = help
         self.value, self.adjust, self.enabled = value, adjust, enabled
         self.close = close          # close the whole menu after the action
         self.preview = preview      # run when the cursor lands here (live previews)
+
+    @property
+    def help(self) -> str:
+        """What the row does, in a line; "" when there's nothing to add."""
+        return self._help if self._help is not None else DESCRIPTIONS.get(self.label, "")
 
 
 class Menu(Screen):

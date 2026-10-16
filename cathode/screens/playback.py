@@ -161,7 +161,7 @@ class Playback(Screen):
             if data.get("reason") == "eof":
                 self.finished()
             else:
-                self.app.toast("Playback failed")
+                self.app.toast("Playback stopped: the server stopped sending this title. Try again.", 5.0)
                 self._close(int(self.pos))
 
     # ── Remote ────────────────────────────────────────────────────────────
