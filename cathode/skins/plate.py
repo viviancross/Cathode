@@ -495,7 +495,7 @@ class PlateHD(BoxSkin):
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
             self.cb(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.fb(Y(18)), b["ink"], lp.x + X(32), lp.bottom - Y(28))
-        self.cb(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.fb(Y(18)), b["muted"], X(51), Y(690))
+        self.cb(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.fb(Y(18)), mix(b["muted"], b["text"], 0.4), X(51), Y(690))
 
     def menu_video_box(self, menu):
         r = self.R(609, 181, 569, 354)
@@ -1607,10 +1607,10 @@ class Plate(PlateHD):
             fl = self.fb(Y(17))
             y = band.y + Y(24)
             for line in ("On a phone or computer, go to", s.auth_link or "plex.tv/link", "and enter this code:"):
-                t.draw(c, line, fl, b["ink"], X(240), y, align="center")
+                t.draw(c, line, fl, b["m_ink"], X(240), y, align="center")
                 y += Y(30)
             if s.auth_code:
-                t.draw(c, s.auth_code, self.fb(Y(44)), b["ink"], X(240), y + Y(4), align="center")
+                t.draw(c, s.auth_code, self.fb(Y(44)), b["m_ink"], X(240), y + Y(4), align="center")
             self._sd_side(c, ["Cancel"], 0, hits=[s.back])
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
@@ -1623,12 +1623,12 @@ class Plate(PlateHD):
             self._sd_pill(c, r, row.get("title", "").title(), i == s.sel, right=row.get("meta", "").split("   ")[0])
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         fs = self.f(Y(12))
-        t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(40), band.bottom + Y(6))
+        t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["m_ink"], X(40), band.bottom + Y(6))
         if s.status:
-            t.draw(c, s.status.title(), self.fb(Y(13)), b["ink"], X(600), band.bottom + Y(6), align="right")
+            t.draw(c, s.status.title(), self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
         side = self.od_side(s)
         self._sd_side(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
-        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["m_ink"], X(40), Y(456))
 
     def od_side(self, s):
         if s.mode != "browse":
@@ -1711,10 +1711,10 @@ class Plate(PlateHD):
         self._sd_page(c, "Search" if kb.prompt.lower().startswith("search") else "Text Entry")
         band = self._sd_band(c, Y(150), Y(296))
         f = self.fb(Y(15))
-        pw = t.draw(c, t.fit(f, kb.prompt, X(560)), f, b["ink"], X(40), band.y + Y(8))
+        pw = t.draw(c, t.fit(f, kb.prompt, X(560)), f, b["m_ink"], X(40), band.y + Y(8))
         if kb.hint:
             fh = self.f(Y(12))
-            t.draw(c, t.fit(fh, kb.hint, X(540) - pw), fh, b["ink"], X(600), band.y + Y(10), align="right")
+            t.draw(c, t.fit(fh, kb.hint, X(540) - pw), fh, b["m_ink"], X(600), band.y + Y(10), align="right")
         field = self.R(40, 178, 560, 26)
         pygame.draw.rect(c, b["pillfill"], field, border_radius=Y(6))
         pygame.draw.rect(c, b["ink"], field, 1, border_radius=Y(6))

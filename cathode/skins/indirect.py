@@ -155,6 +155,10 @@ class InDirectHD(BoxSkin):
         return (r.x, r.y, r.w, r.h)
 
     def _shadowed(self, c, s, f, ink, shadow, x, y, align="left"):
+        if shadow and shadow == self.b.get("sel_shadow"):
+            # On the amber cursor white needs a full dark edge to read at
+            # couch distance; a one-pixel drop shadow left it at ~2:1.
+            return self.text.draw(c, s, f, ink, x, y, align=align, outline=shadow)
         if shadow:
             self.text.draw(c, s, f, shadow, x + 1, y + 1, align=align)
         return self.text.draw(c, s, f, ink, x, y, align=align)
@@ -443,7 +447,7 @@ class InDirectHD(BoxSkin):
         if g.focus == "category":           # the amber cursor, as on a chosen cell
             cat = f"<  {cat}  >"
             self._amber(c, pygame.Rect(X(96), bar.y, t.width(fl, cat) + X(28), bar.h))
-            t.draw(c, cat, fl, b["text"], X(110), ly)
+            self._shadowed(c, cat, fl, b["text"], b["sel_shadow"], X(110), ly)
         else:
             t.draw(c, cat, fl, b["soft"], X(110), ly)
         self.hit((X(96), bar.y, X(400), bar.h), lambda: g.handle("THEMES"))
