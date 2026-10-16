@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, call_sign, mix, panel, readable, rgba, vgrad
+from .box import BoxSkin, call_sign, mix, nice, panel, readable, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -126,16 +126,6 @@ class PlateHD(BoxSkin):
         t.draw(c, "N E T W O R K", fs, ink, tx + w, y + h + size // 12, align="right")
         return tx + w - x
 
-    def _tvguide(self, c, x, y, w, h):
-        """The red TV-guide tag the box carried under its mark."""
-        b, t = self.b, self.text
-        r = pygame.Rect(x, y, w, h)
-        pygame.draw.rect(c, b["tag"], r, border_radius=h // 8)
-        pygame.draw.rect(c, mix(b["tag"], (255, 255, 255), 0.5), r, 2, border_radius=h // 8)
-        f1, f2 = self.fb(int(h * 0.42)), self.fb(int(h * 0.26))
-        t.draw(c, "TV", f1, b["text"], r.centerx, r.y + int(h * 0.08), align="center")
-        t.draw(c, "GUIDE", f2, b["text"], r.centerx, r.y + int(h * 0.56), align="center")
-
     # ── Pages ─────────────────────────────────────────────────────────────
 
     def _page(self, c, rect):
@@ -161,8 +151,6 @@ class PlateHD(BoxSkin):
         return pygame.Rect(vx, vy, vw, vh)
 
     # ── Live: the grey banner, digits, volume, trick ──────────────────────
-
-    REMOTE_WORDS = {"BACK": "CANCEL", "EXIT": "VIEW TV"}  # the Dish remote's words
 
     def _box(self, c, r, alpha=232):
         box = pygame.Surface(r.size, pygame.SRCALPHA)
@@ -329,7 +317,6 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._page(c, (0, 0, W, Y(300)))
         self.wordmark(c, X(42), Y(52), Y(44), b["text"], b["dish"])
-        self._tvguide(c, X(46), Y(150), X(109), Y(65))
         pic = self._picture(c)
         sel = g.selected()
         cur = self.app.live.programs(sel)[0] if sel else None
@@ -622,7 +609,7 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
         title = "My Recordings" if rec else "On Demand"
-        sub = "" if rec or not s.level or len(s.stack) < 2 else s.level["title"].title()
+        sub = "" if rec or not s.level or len(s.stack) < 2 else nice(s.level["title"])
         self._vip_page(c, title, sub)
         panel = self.R(40, 236, 740, 460)
         self._vip_panel(c, panel)
@@ -662,7 +649,7 @@ class PlateHD(BoxSkin):
         self._vip_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
         if s.status:
             fs = self.fb(Y(22))
-            self.cb(c, s.status.title(), fs, b["text"], X(1240), Y(668), align="right")
+            self.cb(c, s.status, fs, b["text"], X(1240), Y(668), align="right")
         self._vip_about(c, s.current() or {})
 
     def od_side(self, s):
@@ -729,6 +716,8 @@ class PlateHD(BoxSkin):
             self.cb(c, self.fit_cb(fm, meta, room), fm, b["text"], cx, Y(162), align="center")
         if d.get("duration"):
             self.cb(c, f"Length: {hms(d['duration'])}", fm, b["text"], cx, Y(200), align="center")
+        if info.kind != "download":
+            self.cb(c, "Cost: Free", fm, b["text"], cx, Y(238), align="center")
         panel = self.R(40, 300, 740, 360)
         self._vip_panel(c, panel)
         pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
@@ -954,8 +943,7 @@ class PlateHD(BoxSkin):
         self._page(c, (0, 0, W, H))
         size = Y(72)
         mw = self.measure(self.wordmark, size, b["text"], b["dish"])
-        self.wordmark(c, (W - mw) // 2, Y(150), size, b["text"], b["dish"])
-        self._tvguide(c, W // 2 - X(40), Y(290), X(80), Y(66))
+        self.wordmark(c, (W - mw) // 2, Y(200), size, b["text"], b["dish"])
         caption = {"starting": "Starting up...", "signal": "Acquiring satellite signal.",
                    "guide": "Retrieving program information from satellite." + self.guide_pct(),
                    "done": "Ready"}[stage]
@@ -1600,7 +1588,7 @@ class Plate(PlateHD):
     def draw_ondemand(self, c, s):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
-        self._sd_page(c, "My Recordings" if rec else (s.level["title"].title() if s.level and len(s.stack) > 1
+        self._sd_page(c, "My Recordings" if rec else (nice(s.level["title"]) if s.level and len(s.stack) > 1
                                                       else "Pay-Per-View"))
         band = self._sd_band(c, Y(160), Y(270))
         if s.mode == "auth":
@@ -1620,12 +1608,12 @@ class Plate(PlateHD):
         for k, i in enumerate(range(top, min(len(rows), top + n_vis)) if s.view != "wall" else ()):
             row = rows[i]
             r = pygame.Rect(X(20), band.y + Y(10) + k * Y(42), X(390), Y(34))
-            self._sd_pill(c, r, row.get("title", "").title(), i == s.sel, right=row.get("meta", "").split("   ")[0])
+            self._sd_pill(c, r, nice(row.get("title", "")), i == s.sel, right=row.get("meta", "").split("   ")[0])
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         fs = self.f(Y(12))
         t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["m_ink"], X(40), band.bottom + Y(6))
         if s.status:
-            t.draw(c, s.status.title(), self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
+            t.draw(c, s.status, self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
         side = self.od_side(s)
         self._sd_side(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
         t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["m_ink"], X(40), Y(456))
@@ -1656,7 +1644,7 @@ class Plate(PlateHD):
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         cur = s.current() or {}
         pill = pygame.Rect(X(20), band.y + Y(10) + 2 * (th + Y(10)) + Y(2), X(390), Y(34))
-        self._sd_pill(c, pill, cur.get("title", "").title(), True, right=cur.get("meta", "").split("   ")[0])
+        self._sd_pill(c, pill, nice(cur.get("title", "")), True, right=cur.get("meta", "").split("   ")[0])
 
     def draw_iteminfo(self, c, info):
         from ..screens.iteminfo import hms
@@ -1683,7 +1671,8 @@ class Plate(PlateHD):
         lx = art_r.right + X(66)
         for label, value in (("info:", d.get("subtitle") or d.get("meta", "")),
                              ("length:", hms(d["duration"]) if d.get("duration") else ""),
-                             ("resume:", hms(d["offset"]) if d.get("offset", 0) > 5 else "")):
+                             ("resume:", hms(d["offset"]) if d.get("offset", 0) > 5 else ""),
+                             ("cost:", "Free" if info.kind != "download" else "")):
             if value:
                 t.draw(c, label, fl, b["ink"], lx, y, align="right")
                 t.draw(c, t.fit(fl, value, r.right - X(12) - (lx + X(8))), fl, b["ink"], lx + X(8), y)

@@ -611,6 +611,9 @@ class Classic(Skin):
         if meta:
             t.draw(c, t.fit(f_meta, meta, w), f_meta, p["CYAN"], x, y + 6)
             y += t.ink(f_meta)[1] + 22
+        if info.kind != "download":
+            t.draw(c, "Cost: Free", f_meta, p["CYAN"], x, y)
+            y += t.ink(f_meta)[1] + 18
         if d.get("offset", 0) > 5:
             t.draw(c, f"Resume at {hms(d['offset'])}", f_meta, p["ORANGE"], x, y)
             y += t.ink(f_meta)[1] + 18

@@ -136,7 +136,7 @@ class OnDemandScreen(Screen):
         self.od.run(lambda: lvl["loader"](lvl["sort"]), done, fail)
 
     def error(self, msg):
-        self.status = msg[:60].upper()
+        self.status = msg               # a sentence; each skin fits it to its line
         self.app.invalidate()
 
     def open(self, loader, title, sort=None, volatile=False, sortable=True, key=""):

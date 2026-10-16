@@ -44,6 +44,8 @@ class ItemInfo(Screen):
         return BUTTONS.get(self.kind, BUTTONS["default"])
 
     def label(self, b: str) -> str:
+        if b == "play" and self.kind != "download":
+            return "WATCH"              # an offer is free to watch; a recording plays
         if b == "dvr":
             return self.od.dvr_label(self.rk)
         if b == "watchlist":

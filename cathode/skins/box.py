@@ -29,6 +29,27 @@ def readable(bg, ink, floor=4.5):
     return max(((16, 16, 24), (255, 255, 255)), key=lambda k: contrast(k, bg))
 
 
+_SMALL = {"a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "the", "to", "vs", "with"}
+_UPPER = {"tv", "hd", "sd", "dvr", "ppv", "uk", "us", "4k"}
+
+
+def nice(s: str) -> str:
+    """Display casing for a title from a server or a list: as written when
+    it's already in mixed case ("TV Shows"); title case from capitals, small
+    words low and initialisms up ("Return of the Test Card")."""
+    if not s or (any(ch.islower() for ch in s) and any(ch.isupper() for ch in s)):
+        return s
+    out = []
+    for i, w in enumerate(s.lower().split(" ")):
+        bare = w.strip(":,.()")
+        if bare in _UPPER:
+            w = w.replace(bare, bare.upper())
+        elif not (i and bare in _SMALL and not out[-1].endswith(":")):
+            w = "-".join(part[:1].upper() + part[1:] for part in w.split("-"))
+        out.append(w)
+    return " ".join(out)
+
+
 def rgba(c, a=255):
     return (c[0], c[1], c[2], a)
 
@@ -100,7 +121,7 @@ class BoxSkin(Classic):
         return {}
 
     # The On Demand info buttons, in the boxes' own words.
-    BUTTON_WORDS = {"PLAY": "Play", "PLAY ALL": "Play All", "SEASONS": "Seasons", "SHUFFLE": "Shuffle",
+    BUTTON_WORDS = {"PLAY": "Play", "WATCH": "Watch", "PLAY ALL": "Play All", "SEASONS": "Seasons", "SHUFFLE": "Shuffle",
                     "+ QUEUE": "Add to Queue", "+ WATCHLIST": "Add to Watchlist",
                     "- WATCHLIST": "Remove from Watchlist", "RECORD": "Record", "RECORDED": "Recorded",
                     "REC WAIT": "Recording Soon", "RESUME": "Resume Recording", "RETRY": "Retry Recording"}

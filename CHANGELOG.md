@@ -47,6 +47,11 @@ a retro-themed player.
   http:// already typed, and : and / are on the first layer in every skin.
   BACK on an empty field leaves it. First run numbers its channel steps
   3a, 3b and 3c.
+- **Clearer words.** On Demand titles read **Watch** and **Cost: Free** on
+  every skin's info page (recordings keep Play); titles keep the server's
+  own casing ("TV Shows"); errors read as sentences. Plate's hints name
+  Cathode's buttons (BACK, EXIT). Marks: no TV GUIDE tag, and the DSS menu
+  is "Main Menu".
 - **Safer by remote.** Exit Cathode, Unlink Plex account, Delete playlist
   and Reset buttons each ask first, with the safe choice on top. A channel
   number that doesn't exist says "No channel 99"; channel keys during a film

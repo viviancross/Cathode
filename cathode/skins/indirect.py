@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
-from .box import BoxSkin, mix, rgba, vgrad
+from .box import BoxSkin, mix, nice, rgba, vgrad
 
 
 def ampm(dt) -> str:
@@ -656,7 +656,7 @@ class InDirectHD(BoxSkin):
         x = self._hint(c, bar.x + X(64), hy, self.k("MENU"), "Options", b["text"], b["navy"])
         x = self._hint(c, x, hy, self.k("LIST"), "My Recordings", b["text"], b["navy"])
         if s.status:
-            t.draw(c, s.status.title(), self.fb(Y(21)), b["text"], bar.right - X(20), hy, align="right")
+            t.draw(c, s.status, self.fb(Y(21)), b["text"], bar.right - X(20), hy, align="right")
 
         fh, fd = self.fb(Y(28)), self.f(Y(22))
         if s.mode == "auth":
@@ -685,7 +685,7 @@ class InDirectHD(BoxSkin):
             r = pygame.Rect(X(32), Y(218) + k * Y(42), X(312), Y(40))
             on = i == col_sel
             pygame.draw.rect(c, b["od_sel"] if on else b["od_col"], r)
-            self._shadowed(c, t.fit(fr, col_rows[i].get("title", "").title(), r.w - X(36)), fr, b["text"],
+            self._shadowed(c, t.fit(fr, nice(col_rows[i].get("title", "")), r.w - X(36)), fr, b["text"],
                            b["sel_shadow"] if on else None, r.x + X(20), r.y + (r.h - t.ink(fr)[1]) // 2)
             if parent:
                 self.hit(r, lambda: s.back())
@@ -694,7 +694,7 @@ class InDirectHD(BoxSkin):
 
         cur = s.current() or {}
         title = cur.get("title") or (s.level["title"] if s.level else "On Demand")
-        t.draw(c, t.fit(fh, (title or "On Demand").title(), head.w - X(40)), fh, b["text"], head.x + X(20), head.y + Y(18))
+        t.draw(c, t.fit(fh, nice(title or "On Demand"), head.w - X(40)), fh, b["text"], head.x + X(20), head.y + Y(18))
         about = cur.get("meta") or s.crumb()
         for k, line in enumerate(t.wrap(fd, about, head.w - X(40), 4)):
             t.draw(c, line, fd, b["text"], head.x + X(20), head.y + Y(62) + k * Y(28))
@@ -748,7 +748,7 @@ class InDirectHD(BoxSkin):
         tab = pygame.Rect(main.x + X(10), main.y - Y(30), X(220), Y(32))
         pygame.draw.rect(c, b["od_panel"], tab, border_top_left_radius=Y(6), border_top_right_radius=Y(6))
         ftab = self.fb(Y(22))
-        t.draw(c, t.fit(ftab, (s.level["title"] if s.level else "Top Picks").title(), tab.w - X(20)), ftab, b["text"],
+        t.draw(c, t.fit(ftab, nice(s.level["title"] if s.level else "Top Picks"), tab.w - X(20)), ftab, b["text"],
                tab.x + X(12), tab.y + (tab.h - t.ink(ftab)[1]) // 2)
         if off:
             sort = pygame.Rect(main.x + X(8), main.y + Y(6), main.w - X(16), Y(30))
@@ -778,7 +778,7 @@ class InDirectHD(BoxSkin):
             strip = pygame.Surface(cap.size, pygame.SRCALPHA)
             strip.fill((*b["od_tile"], 225))
             c.blit(strip, cap.topleft)
-            t.draw(c, t.fit(fcap, row.get("title", "").title(), cap.w - X(10)), fcap, b["od_ink"], cap.x + X(5),
+            t.draw(c, t.fit(fcap, nice(row.get("title", "")), cap.w - X(10)), fcap, b["od_ink"], cap.x + X(5),
                    cap.y + (cap.h - t.ink(fcap)[1]) // 2)
             pygame.draw.rect(c, b["od_sel"] if on else b["od_bar"], r.inflate(X(8), Y(8)) if on else r, Y(4) if on else 1)
             self.hit(r, lambda i=i + off: (setattr(s, "sel", i), s.select()))
@@ -890,6 +890,8 @@ class InDirectHD(BoxSkin):
         facts = [d.get("meta", "") if d.get("subtitle") else ""]
         if d.get("duration"):
             facts.append(f"Length: {hms(d['duration'])}")
+        if info.kind != "download":
+            facts.append("Cost: Free")
         for line in [f for f in facts if f]:
             t.draw(c, t.fit(fb_, line, w), fb_, b["text"], x, y)
             y += lh
@@ -1491,7 +1493,7 @@ class InDirect(InDirectHD):
     def draw_menu(self, c, m):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         f_row = self.fb(Y(12))
-        self._dss_page(c, "DSS Main Menu" if m.title == "MAIN MENU" else m.title.title(),
+        self._dss_page(c, "Main Menu" if m.title == "MAIN MENU" else m.title.title(),
                        [f"Use arrows to point to an item, then press {self.k('SELECT')}.",
                         "Pressing the number also selects the item."])
         n = len(m.items)
@@ -1625,9 +1627,9 @@ class InDirect(InDirectHD):
                                     ("and enter this code:", False)], X(57), Y(80), X(230))
                 self._shadowed(c, s.auth_code, self.fb(Y(30)), b["text"], b["shadow"], X(57), Y(128))
             elif s.status:
-                self._dss_lines(c, [(s.status.title(), True)], X(57), Y(80), X(230))
+                self._dss_lines(c, [(s.status, True)], X(57), Y(80), X(230))
             return
-        title = (s.level["title"] if s.level else "On Demand").title()
+        title = nice(s.level["title"] if s.level else "On Demand")
         self._dss_page(c, title, [f"Use arrows to point to an item, then press {self.k('SELECT')}.",
                                   f"Press {self.k('MENU')} for options, {self.k('BACK')} to go back."])
         if s.view == "wall":
@@ -1640,9 +1642,9 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["shadow"], (box.x, box.bottom, box.w, 2))
         pygame.draw.rect(c, b["shadow"], (box.right, box.y, 2, box.h))
         cur = s.current() or {}
-        hint = s.status.title() if s.status else (f"{self.k('SELECT')} plays this." if cur.get("playable") else f"{self.k('SELECT')} opens this.")
+        hint = s.status if s.status else (f"{self.k('SELECT')} plays this." if cur.get("playable") else f"{self.k('SELECT')} opens this.")
         if s.view == "wall" and not s.status and cur.get("title"):
-            hint = f"{cur['title'].title()}: {hint}"      # the wall has no captions
+            hint = f"{nice(cur['title'])}: {hint}"      # the wall has no captions
         self._shadowed(c, t.fit(f_row, hint, int((box.w - X(16)) / self.SQUEEZE)), f_row, b["text"], b["shadow"],
                        box.x + X(8), box.y + Y(6))
 
@@ -1699,7 +1701,7 @@ class InDirect(InDirectHD):
         d = info.detail
         offer = info.kind != "download"
         if offer:
-            self._dss_page(c, "Purchase Offer", [f"To purchase, point to Buy and press {self.k('SELECT')}.",
+            self._dss_page(c, "Purchase Offer", [f"To watch, point to Watch and press {self.k('SELECT')}.",
                                                  "Choose Exit to return to the list."])
         else:
             self._dss_page(c, "Program Information", ["Choose Play to watch this program.",
@@ -1724,7 +1726,7 @@ class InDirect(InDirectHD):
         if offer:
             fc = self.fb(Y(13))
             w = self._shadowed(c, "Cost to view:", self.fb(Y(12)), b["text"], b["shadow"], tx, y + Y(4))
-            self._shadowed(c, "$0.00", fc, b["text"], b["shadow"], tx + w + X(6), y + Y(3))
+            self._shadowed(c, "Free", fc, b["text"], b["shadow"], tx + w + X(6), y + Y(3))
         y = art_r.bottom + Y(2)
         f = self.f(Y(11))
         for line in t.wrap(f, d.get("summary", ""), int(X(158) / self.SQUEEZE), max(0, (Y(232) - y - Y(6)) // Y(12))):
@@ -1732,7 +1734,7 @@ class InDirect(InDirectHD):
             y += Y(12)
         for k, name in enumerate(info.buttons()):
             r = pygame.Rect(X(220), Y(83) + k * Y(19), X(92), Y(13))
-            word = "Buy" if offer and name == "play" else self.button_words(info.label(name), back="Exit")
+            word = self.button_words(info.label(name), back="Exit")
             self._dss_button(c, r, word, self.ICONS.get(name, "info"), k == info.focus)
             self.hit(r, lambda k=k, name=name: (setattr(info, "focus", k), info.press(name)))
 

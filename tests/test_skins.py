@@ -282,3 +282,12 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDisplayCasing(unittest.TestCase):
+    def test_titles_keep_mixed_case_and_fix_capitals(self):
+        from cathode.skins.box import nice
+        self.assertEqual(nice("TV Shows"), "TV Shows")
+        self.assertEqual(nice("TV SHOWS"), "TV Shows")
+        self.assertEqual(nice("RETURN OF THE TEST CARD"), "Return of the Test Card")
+        self.assertEqual(nice("STATIC HOUR: THE MOVIE"), "Static Hour: The Movie")
