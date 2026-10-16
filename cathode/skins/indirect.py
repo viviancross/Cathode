@@ -267,9 +267,20 @@ class InDirectHD(BoxSkin):
             for i in range(int(round(v.volume / 5))):
                 pygame.draw.rect(c, b["sky"], (bar.x + i * seg, bar.y, seg - X(2), bar.h))
 
+    def _tbtn(self, c, r, kind, on, num=None):
+        """A playback button: a navy tile like the play/pause one, the amber
+        cursor when chosen."""
+        b = self.b
+        if on:
+            self._amber(c, r)
+        else:
+            pygame.draw.rect(c, b["tk_state"], r)
+        self.transport_face(c, kind, r, b["text"], self.fb(self.Y(17)), num=num)
+
     def _trick(self, c, s):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         r = self.R(96, 600, 1088, 70)
+        self.live_buttons(c, s, r.x, r.y - Y(46), X(116), Y(38), X(8))
         self._band(c, r)
         behind = s["behind"]
         mm, ss = divmod(int(behind), 60)
@@ -1036,11 +1047,9 @@ class InDirectHD(BoxSkin):
             pygame.draw.polygon(c, b["text"], [(cx - X(10), cy - Y(17)), (cx - X(10), cy + Y(17)), (cx + X(14), cy)])
         self.hit(st, pb.toggle_pause)
         # The transport buttons under the band: navy tiles like the state one.
-        fb = self.fb(Y(17))
         for k, (kind, _, fn) in enumerate(pb.transport()):
             r = self.R(372 + k * 124, 636, 116, 38)
-            pygame.draw.rect(c, b["tk_state"], r)
-            self.transport_face(c, kind, r, b["text"], fb)
+            self._tbtn(c, r, kind, False)
             self.hit(r, fn)
 
     # The pop-ups: the grey title, the blue body, the logo in the grey foot.
@@ -1058,6 +1067,34 @@ class InDirectHD(BoxSkin):
             for part in t.wrap(f, line, body.w - X(48), 3):
                 t.draw(c, part, f, ink, body.x + X(24), y)
                 y += Y(36)
+        self.tile(c, (r.centerx - X(24), body.bottom + Y(12), X(48), Y(40)), b["sky"])
+
+    def draw_options(self, c, m):
+        """TV Options as the HR20's pop-up: the grey title, the blue body with
+        its rows (the amber cursor on the chosen one), the logo in the foot."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        r = pygame.Rect(0, 0, X(560), Y(42) + Y(24) + len(m.items) * Y(46) + Y(72))
+        r.center = (W // 2, H // 2)
+        pygame.draw.rect(c, b["pop_head"], r, border_radius=Y(12))
+        body = pygame.Rect(r.x, r.y + Y(42), r.w, r.h - Y(42) - Y(72))
+        pygame.draw.rect(c, b["pop_body"], body)
+        fh = self.fb(Y(26))
+        t.draw(c, "TV OPTIONS", fh, b["ink"], r.centerx, r.y + (Y(42) - t.ink(fh)[1]) // 2, align="center")
+        f = self.fb(Y(24))
+        for k, it in enumerate(m.items):
+            row = pygame.Rect(body.x + X(20), body.y + Y(12) + k * Y(46), body.w - X(40), Y(42))
+            on = k == m.cursor
+            if on:
+                self._amber(c, row)
+            ty = row.y + (row.h - t.ink(f)[1]) // 2
+            shadow = b["sel_shadow"] if on else None
+            self._shadowed(c, it.label, f, b["text"], shadow, row.x + X(16), ty)
+            if it.value:
+                v = it.value()
+                self._shadowed(c, f"< {v} >" if on and it.adjust else v, f, b["text"], shadow, row.right - X(16), ty,
+                               align="right")
+            self.hit(row, lambda k=k: m.activate(k))
         self.tile(c, (r.centerx - X(24), body.bottom + Y(12), X(48), Y(40)), b["sky"])
 
     def draw_capture(self, c, cap):
@@ -1280,14 +1317,25 @@ class InDirect(InDirectHD):
         mm, ss = divmod(int(behind), 60)
         tag = "Paused" if s["paused"] else ("Live" if behind < 2 else "Playing")
         when_ = f"-{mm}:{ss:02d}" if behind >= 1 else "Live"
-        r = self._notice(c, [f"{tag}        {when_}"], min_w=X(190))
-        bar = pygame.Rect(r.x + X(12), r.bottom - Y(6), r.w - X(24), Y(3))
+        r = self._notice(c, [f"{tag}        {when_}", "", ""], min_w=X(220))
+        bar = pygame.Rect(r.x + X(12), r.y + Y(19), r.w - X(24), Y(3))
+        bw = (r.w - X(24) - 3 * X(4)) // 4
+        self.live_buttons(c, s, r.x + X(12), r.y + Y(28), bw, Y(13), X(4))
         pygame.draw.rect(c, b["gap"], bar)
         span = s["buffer"] + behind
         if span >= 2:
             x = bar.x + int(bar.w * s["buffer"] / span)
             pygame.draw.rect(c, b["teal"], (bar.x, bar.y, x - bar.x, bar.h))
             pygame.draw.rect(c, b["text"], (x - 1, bar.y - 2, 3, bar.h + 4))
+
+    def _tbtn(self, c, r, kind, on, num=None):
+        """A playback button: the page's teal button with its drop shadow,
+        light when chosen."""
+        b = self.b
+        pygame.draw.rect(c, b["shadow"], r.move(2, 2))
+        pygame.draw.rect(c, b["sel"] if on else b["teal"], r)
+        self.transport_face(c, kind, r, b["sel_ink"] if on else b["text"], self.fb(self.Y(8)),
+                            shadow=None if on else b["shadow"], num=num)
 
     def _note(self, c, text, frac=None):
         b, X, Y = self.b, self.X, self.Y
@@ -1696,13 +1744,10 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["teal"], (bar.x, bar.y, int(bar.w * frac), bar.h))
         self.hit(bar.inflate(0, Y(8)), lambda: pb.seek_to(self._click_frac(bar)))
         # The transport buttons: the DSS's teal buttons with their shadow.
-        f = self.fb(Y(8))
         bw = (bar.w - 5 * X(4)) // 6
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(bar.x + k * (bw + X(4)), r.y + Y(41), bw, Y(13))
-            pygame.draw.rect(c, b["shadow"], br.move(2, 2))
-            pygame.draw.rect(c, b["teal"], br)
-            self.transport_face(c, kind, br, b["text"], f, shadow=b["shadow"])
+            self._tbtn(c, br, kind, False)
             self.hit(br, fn)
 
     def keyboard_rows(self, layer):
@@ -1766,6 +1811,26 @@ class InDirect(InDirectHD):
         r = pygame.Rect(X(236), Y(200), X(52), Y(13))
         self._dss_button(c, r, "Exit", "exit", True)
         self.hit(r, lambda: d.handle("BACK"))
+
+    def draw_options(self, c, m):
+        """Options as a DSS notice: the purple box with its light rule, the
+        title, the choices as the page's teal buttons."""
+        W, H = self.canvas
+        b, X, Y = self.b, self.X, self.Y
+        r = pygame.Rect(0, 0, X(196), Y(26) + len(m.items) * Y(18) + Y(6))
+        r.center = (W // 2, H // 2)
+        pygame.draw.rect(c, b["purple"], r)
+        pygame.draw.rect(c, b["rule"], r, 2)
+        self._shadowed(c, "Options", self.fb(Y(13)), b["text"], b["shadow"], r.x + X(10), r.y + Y(6))
+        for k, it in enumerate(m.items):
+            br = pygame.Rect(r.x + X(10), r.y + Y(24) + k * Y(18), r.w - X(20), Y(14))
+            on = k == m.cursor
+            label = it.label
+            if it.value:
+                v = it.value()
+                label += f": < {v} >" if on and it.adjust else f": {v}"
+            self._dss_button(c, br, label, "info" if it.value else "play", on)
+            self.hit(br, lambda k=k: m.activate(k))
 
     def draw_capture(self, c, cap):
         f = self.fb(self.Y(12))

@@ -112,6 +112,14 @@ class BoxSkin(Classic):
             return f"Recording {label[4:]}"
         return self.BUTTON_WORDS.get(label, label.title())
 
+    def live_buttons(self, c, s, x, y, w, h, gap):
+        """Live TV's playback buttons in a row from (x, y), each drawn by the
+        skin's _tbtn; the chosen one lit while LEFT/RIGHT point at it."""
+        for i, (kind, num, _) in enumerate(s["buttons"]):
+            r = pygame.Rect(x + i * (w + gap), y, w, h)
+            self._tbtn(c, r, kind, i == s["focus"], num)
+            self.hit(r, lambda i=i: s["press"](i))
+
     def wall_cells(self, s, cols, rows=2):
         """[(index into s.rows, slot)] for the posters a wall shows: the
         cursor's row last (the first rows at the top). Slot is left to right,
@@ -159,12 +167,13 @@ class BoxSkin(Classic):
             tri(0, 7)
             bar(7, 2)
 
-    def transport_face(self, c, kind, r, ink, f, shadow=None):
+    def transport_face(self, c, kind, r, ink, f, shadow=None, num=None):
         """A transport button's face centred in `r`: the symbol, and the
-        seconds after the arrows going back, before them going forward."""
+        seconds (or a word) after the arrows going back, before them going
+        forward."""
         t = self.text
         h = max(7, r.h * 9 // 20)
-        num = self.SEEK_SECONDS.get(kind, "")
+        num = self.SEEK_SECONDS.get(kind, "") if num is None else num
         iw = round(self.ICON_W[kind] * h / 10)
         nw = t.width(f, num) if num else 0
         gap = h // 2 if num else 0

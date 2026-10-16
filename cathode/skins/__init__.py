@@ -330,6 +330,9 @@ class Skin:
     def empty_guide(self, g) -> str:
         """What a guide list with no channels says (only Favorites can be)."""
         if g.category == "Favorites":
+            pad = getattr(self.app, "remote", None)
+            if pad is not None and getattr(pad, "last_device", "") == "pad" and not pad.pad_label("FAV"):
+                return f"No favorites yet. On a channel, press {self.k('OPTIONS')} and choose Add to Favorites."
             hint = getattr(self.app, "press_hint", None)
             return f"No favorites yet. Press {hint('FAV') if hint else 'FAV'} on a channel to add it."
         return "No channels in this list."
@@ -337,6 +340,11 @@ class Skin:
     def guide_pct(self) -> str:
         """The app's guide load, as pct() puts it."""
         return self.pct(getattr(self.app, "guide_progress", None))
+
+    def draw_options(self, c, m):
+        """Live TV's Options pop-up; a skin whose menus already sit over the
+        picture draws it as a menu."""
+        self.draw_menu(c, m)
 
     def draw_note(self, c, text: str):
         """A key's notice (the picture format, subtitles) in this skin's style."""

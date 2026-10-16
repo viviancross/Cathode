@@ -346,6 +346,28 @@ def find_subtitle_items(app, pb):
     return rows
 
 
+def open_options(app):
+    """Live TV's Options pop-up (the OPTIONS key): the favourite, the picture
+    format, subtitles and On Demand, the things a remote or a pad may have no
+    button for."""
+    from .screens.menu import Options
+    from .video import format_label
+    live, v, cfg = app.live, app.video, app.config
+    ch = live.channel
+    fav = ch is not None and ch.number in cfg.favorites
+
+    def subs():
+        tracks = v.tracks("sub")
+        return next((t["name"] for t in tracks if t["selected"]), "Off" if tracks else "None")
+    app.push(Options(app, "Options", [
+        Item("Remove from Favorites" if fav else "Add to Favorites", lambda: app.toggle_favorite(ch), close=True),
+        Item("Picture format", lambda: app.cycle_format(1), value=lambda: format_label(cfg.picture_format),
+             adjust=app.cycle_format),
+        Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles()),
+        Item("On Demand", lambda: open_ondemand(app), close=True),
+    ]))
+
+
 def playback_menu(app, pb):
     app.push(Menu(app, "PLAYING", [
         Item("Audio track", submenu=lambda: track_items(app, "audio")),

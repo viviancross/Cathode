@@ -148,6 +148,15 @@ class Menu(Screen):
         return True
 
 
+class Options(Menu):
+    """Live TV's Options (the OPTIONS key): what a remote or pad may have no
+    button for, as a pop-up over the picture in the skin's own style."""
+    name = "options"
+
+    def video_box(self):
+        return None             # the picture stays full behind it
+
+
 class Keyboard(Screen):
     """Text entry for remote, controller, mouse, or a real keyboard (typing
     and paste go straight in). Calls on_done(text) on DONE, on_done(None) on

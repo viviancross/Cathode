@@ -30,6 +30,8 @@ class LiveTV(Screen):
         self.volume_until = 0.0
         self.digits = ""
         self.trick_until = 0.0
+        self.trick_focus = None     # the playback button LEFT/RIGHT point at, while they're up
+        self.select_armed = False   # SELECT showed the banner: SELECT again brings the buttons
         self.suspended = False                      # On Demand has the picture
         self.behind, self._paused_at = 0.0, 0.0     # pause-live bookkeeping
         self._reveal_start = 0.0
@@ -159,6 +161,7 @@ class LiveTV(Screen):
         self.app.after(max(0.0, until - time.monotonic()) + 0.01, self.app.invalidate)
 
     def show_banner(self, seconds=None, full=False):
+        self.select_armed = False
         seconds = seconds or self.app.config.osd_timeout
         self.banner_until = time.monotonic() + seconds
         self.banner_full = full
@@ -190,6 +193,8 @@ class LiveTV(Screen):
             return True
         if not self.channels and a not in (R.VOL_UP, R.VOL_DOWN, R.MUTE):
             return False
+        if self._trick_keys(a):
+            return True
         if a in (R.UP, R.CH_UP):
             self.tune(self.idx + 1)
         elif a in (R.DOWN, R.CH_DOWN):
@@ -221,7 +226,20 @@ class LiveTV(Screen):
             else:
                 from .browse import Browse
                 self.app.push(Browse(self.app))
-        elif a in (R.INFO, R.SELECT):
+        elif a == R.SELECT:
+            if self.banner_visible() and self.select_armed:     # twice: the playback buttons
+                self.hide_banner()
+                self.trick_focus = 1
+                self.trick_until = time.monotonic() + self.TRICK_IDLE
+                self._trick_tick()
+            else:
+                self.show_banner(self.app.config.osd_timeout_info)
+                self.select_armed = True
+        elif a == R.OPTIONS:
+            from ..menus import open_options
+            self.hide_banner()
+            open_options(self.app)
+        elif a == R.INFO:
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full
             self.show_banner(self.app.config.osd_timeout_info * (2 if full else 1), full=full)
@@ -238,12 +256,46 @@ class LiveTV(Screen):
             self.app.video.muted = not self.app.video.muted
             self.show_volume()
         elif a in (R.PAUSE, R.PLAY, R.REW, R.FF, R.REPLAY, R.SKIP, R.STOP):
+            self.trick_focus = {R.REW: 0, R.REPLAY: 0, R.FF: 2, R.SKIP: 3, R.STOP: 3}.get(a, 1)
             self._trick(a)
         else:
             return False
         return True
 
     # ── Pause live TV ─────────────────────────────────────────────────────
+
+    TRICK_IDLE = 6.0                # seconds the buttons stay up untouched (always, while paused)
+
+    def trick_buttons(self) -> list:
+        """The playback buttons on the pause bar: (kind, number, label)."""
+        paused = self.app.video.paused
+        return [("back", "10", "<< 10"), ("play" if paused else "pause", None, "PLAY" if paused else "PAUSE"),
+                ("fwd", "10", "10 >>"), ("next", "LIVE", "LIVE >>|")]
+
+    def press_trick(self, i: int):
+        """A playback button, pressed by SELECT on it or a click."""
+        self.trick_focus = i
+        self._trick([R.REW, R.PLAY if self.app.video.paused else R.PAUSE, R.FF, R.SKIP][i])
+
+    def _trick_keys(self, a) -> bool:
+        """While the playback buttons are up: LEFT/RIGHT move between them,
+        SELECT presses one, BACK puts them away."""
+        if self.trick_focus is not None and not self.trick_visible():
+            self.trick_focus = None
+        if self.trick_focus is None:
+            return False
+        if a in (R.LEFT, R.RIGHT):
+            self.trick_focus = (self.trick_focus + (1 if a == R.RIGHT else -1)) % 4
+            self.trick_until = time.monotonic() + self.TRICK_IDLE
+            self.app.invalidate()
+        elif a == R.SELECT:
+            self.press_trick(self.trick_focus)
+        elif a in (R.BACK, R.EXIT):
+            self.trick_focus, self.trick_until = None, 0.0
+            self.app.invalidate()
+        else:
+            return False
+        return True
 
     def _trick(self, a):
         """Pause, rewind and fast-forward within the buffered past of a live
@@ -270,10 +322,11 @@ class LiveTV(Screen):
                 self.behind = max(0.0, self.behind - step)
         elif a in (R.SKIP, R.STOP):
             if self.behind_now() > 1:
+                self.trick_focus = None
                 self.tune(self.idx)            # back to live
                 self.app.toast("LIVE")
                 return
-        self.trick_until = now + 4.0
+        self.trick_until = now + self.TRICK_IDLE
         self._trick_tick()
 
     def behind_now(self) -> float:
@@ -297,7 +350,8 @@ class LiveTV(Screen):
 
     def trick_state(self) -> dict:
         v = self.app.video
-        return {"paused": v.paused, "behind": self.behind_now(), "buffer": v.buffered_behind()}
+        return {"paused": v.paused, "behind": self.behind_now(), "buffer": v.buffered_behind(),
+                "buttons": self.trick_buttons(), "focus": self.trick_focus, "press": self.press_trick}
 
     def _digit(self, d: str) -> bool:
         if not self.channels:

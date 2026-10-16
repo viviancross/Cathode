@@ -245,9 +245,16 @@ class PlateHD(BoxSkin):
         if not v.muted:
             pygame.draw.rect(c, b["gold"], (bar.x, bar.y, int(bar.w * v.volume / 100), bar.h))
 
+    def _tbtn(self, c, r, kind, on, num=None):
+        """A playback button: the dialogs' white capsule, amber when chosen."""
+        b = self.b
+        self._vip_button(c, r, "", on)
+        self.transport_face(c, kind, r, b["sel_ink"] if on else b["vp_ink"], self.fb(self.Y(20)), num=num)
+
     def _trick(self, c, s):
         b, X, Y = self.b, self.X, self.Y
         r = self.R(40, 620, 1200, 56)
+        self.live_buttons(c, s, r.x + X(10), r.y - Y(58), X(150), Y(42), X(20))
         self._box(c, r)
         behind = s["behind"]
         mm, ss = divmod(int(behind), 60)
@@ -847,12 +854,33 @@ class PlateHD(BoxSkin):
         self.cb(c, hms(pb.dur) if pb.dur else "--:--", fs, b["banner_ink"], line.right + X(18), line.y - Y(4))
         self.hit(line.inflate(0, Y(24)), lambda: pb.seek_to(self._click_frac(line)))
         # The transport buttons: the white capsules of the box's dialogs.
-        fb = self.fb(Y(20))
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = self.R(140 + k * 170, 618, 150, 42)
-            self._vip_button(c, br, "", False)
-            self.transport_face(c, kind, br, b["vp_ink"], fb)
+            self._tbtn(c, br, kind, False)
             self.hit(br, fn)
+
+    def draw_options(self, c, m):
+        """Options as the ViP's pale dialog: the title in the blue capsule,
+        the choices as its white capsule buttons, amber on the chosen one."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        r = pygame.Rect(0, 0, X(600), Y(96) + len(m.items) * Y(58))
+        r.center = (W // 2, H // 2)
+        pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(8), Y(8)), border_radius=Y(24))
+        vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=Y(22))
+        cap = pygame.Rect(r.x + X(30), r.y + Y(18), r.w - X(60), Y(44))
+        vgrad(c, cap, rgba(b["vp_hdr"]), rgba(b["vp_mid"]), radius=Y(22))
+        fh = self.fb(Y(26))
+        self.cb(c, "Options", fh, b["text"], cap.centerx, cap.y + (cap.h - t.ink(fh)[1]) // 2, align="center")
+        for k, it in enumerate(m.items):
+            br = pygame.Rect(r.x + X(60), cap.bottom + Y(18) + k * Y(58), r.w - X(120), Y(44))
+            on = k == m.cursor
+            label = it.label
+            if it.value:
+                v = it.value()
+                label += f":  < {v} >" if on and it.adjust else f":  {v}"
+            self._vip_button(c, br, label, on)
+            self.hit(br, lambda k=k: m.activate(k))
 
     def _vip_dialog(self, c, title, lines, buttons=()):
         """The ViP's pale dialog: the title in a blue capsule, the lines
@@ -1281,9 +1309,20 @@ class Plate(PlateHD):
         if not v.muted:
             pygame.draw.rect(c, b["sel"], (bar.x, bar.y, int(bar.w * v.volume / 100), bar.h))
 
+    def _tbtn(self, c, r, kind, on, num=None):
+        """A playback button: a small capsule like the banner's, the pills'
+        light lens when chosen."""
+        b = self.b
+        if on:
+            self._lens(c, r, on=True)
+        else:
+            self._band(c, r)
+        self.transport_face(c, kind, r, b["m_sel_ink"] if on else b["band_ink"], self.fb(self.Y(15)), num=num)
+
     def _trick(self, c, s):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         r = self.R(40, 404, 560, 36)
+        self.live_buttons(c, s, r.x, r.y - Y(42), X(110), Y(34), X(10))
         self._band(c, r)
         behind = s["behind"]
         mm, ss = divmod(int(behind), 60)
@@ -1737,11 +1776,9 @@ class Plate(PlateHD):
         t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
         self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
         # The transport buttons: small capsules like the banner's.
-        fb = self.fb(Y(15))
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(X(55) + k * X(89), top + h + Y(8), X(80), Y(34))
-            self._band(c, br)
-            self.transport_face(c, kind, br, ink, fb)
+            self._tbtn(c, br, kind, False)
             self.hit(br, fn)
 
     def _note(self, c, text, frac=None):
@@ -1758,6 +1795,25 @@ class Plate(PlateHD):
             pygame.draw.rect(c, b["band_soft"], track, border_radius=Y(3))
             pygame.draw.rect(c, b["warn"], (track.x, track.y, max(track.h, int(track.w * frac)), track.h),
                              border_radius=Y(3))
+
+    def draw_options(self, c, m):
+        """Options as the grey ATTENTION-style dialog: the blue title pill,
+        the choices as the menu's lens pills, light on the chosen one."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        r = pygame.Rect(X(110), 0, X(420), Y(56) + len(m.items) * Y(40))
+        r.centery = H // 2
+        panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(10), edge=rgba((255, 255, 255)), edge_w=Y(2))
+        pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
+        vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
+        fh = self.fb(Y(15))
+        t.draw(c, "OPTIONS", fh, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(fh)[1]) // 2, align="center")
+        for k, it in enumerate(m.items):
+            br = pygame.Rect(r.x + X(20), pill.bottom + Y(10) + k * Y(40), r.w - X(40), Y(32))
+            on = k == m.cursor
+            v = it.value() if it.value else ""
+            self._sd_pill(c, br, it.label, on, right=f"< {v} >" if v and on and it.adjust else v)
+            self.hit(br, lambda k=k: m.activate(k))
 
     def _sd_dialog(self, c, title, lines):
         """The grey ATTENTION-style dialog."""

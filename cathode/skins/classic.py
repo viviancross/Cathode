@@ -108,6 +108,15 @@ class Classic(Skin):
         span = s["buffer"] + behind
         if span >= 2:
             self._blocks(c, (48, 104, 360, 14), s["buffer"] / span, p["CYAN"], p["TRACK"])
+        f_btn = self.role("meta")
+        for i, (_, _, label) in enumerate(s.get("buttons", ())):
+            r = pygame.Rect(48 + i * 124, 136, 114, 36)
+            on = i == s.get("focus")
+            pygame.draw.rect(c, (p["GUIDE_SELECTED"] if on else p["OSD_BG"])[:3] + (255,), r, border_radius=6)
+            pygame.draw.rect(c, p["CYAN"] if on else p["OSD_BORDER"], r, 2 if on else 1, border_radius=6)
+            t.draw(c, label, f_btn, p["SEL_TEXT"] if on else p["WHITE"], r.centerx,
+                   r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
+            self.hit(r, lambda i=i: s["press"](i))
 
     @staticmethod
     def _blocks(c, rect, frac, fill, track, block=12, gap=3):

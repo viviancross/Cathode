@@ -186,6 +186,27 @@ class TestTuning(unittest.TestCase):
         self.live.handle(R.INFO)
         self.assertTrue(self.live.banner_full)
 
+    def test_select_banner_then_buttons_and_options_has_its_own_key(self):
+        from cathode.screens.menu import Options
+        self.app._live, self.app.toast = self.live, lambda *a, **k: None
+        self.app.video.tracks = lambda kind: []
+        self.app.cycle_format = self.app.cycle_subtitles = lambda *a: None
+        self.live.hide_banner()
+        self.live.handle(R.SELECT)                      # once: the banner
+        self.assertTrue(self.live.banner_visible())
+        self.assertIsNone(self.live.trick_focus)
+        self.live.handle(R.SELECT)                      # twice: the playback buttons, on Play/Pause
+        self.assertEqual(self.live.trick_focus, 1)
+        self.live.handle(R.SELECT)                      # on them: pause
+        self.assertTrue(self.app.video.paused)
+        self.live.handle(R.LEFT)                        # LEFT moves along the buttons, not the volume
+        self.assertEqual((self.live.trick_focus, self.app.video.volume), (0, 50))
+        self.live.handle(R.OPTIONS)
+        opts = self.app.screens[-1]
+        self.assertIsInstance(opts, Options)
+        self.assertEqual([it.label for it in opts.items],
+                         ["Add to Favorites", "Picture format", "Subtitles", "On Demand"])
+
 
 class TestPauseLive(unittest.TestCase):
     def setUp(self):

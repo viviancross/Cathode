@@ -31,6 +31,13 @@ a retro-themed player.
 - **Posters.** Every skin's title info shows the poster, and every skin
   offers the **poster wall** (On Demand > MENU > View), each in its box's
   style. Classic's info buttons are centred.
+- **Live TV playback buttons and Options.** SELECT shows the banner; SELECT
+  again (or PAUSE, REW, FF) brings the playback buttons onto the pause bar:
+  Rewind 10 s, Play/Pause, Forward 10 s, Jump to Live, in each box's style.
+  LEFT/RIGHT move between them, SELECT presses, BACK puts them away. The
+  **Options** pop-up (O, or the pad's left-stick click) holds Add to
+  Favorites, Picture format, Subtitles and On Demand, so a pad reaches
+  them all.
 - **Gamepads.** Hints name the pad's own buttons once one is used (Xbox,
   PlayStation symbols, Nintendo), and go back to the remote's or keyboard's
   when those are pressed. The pad's View / Share / - button now opens
