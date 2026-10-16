@@ -42,7 +42,8 @@ def open_welcome(app):
 
     def channels(title, extra=()):
         return [title, [Item("Set up your channels", setup), *extra,
-                        Item("Exit Cathode", app.quit, close=True)], 0]
+                        Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit,
+                                                                       "Keep going", close=True))], 0]
 
     def colours():
         skin = app.skin
@@ -95,8 +96,15 @@ def main_items(app):
         Item("On Demand", lambda: open_ondemand(app), close=True),
         Item("My Recordings", lambda: open_ondemand(app, recordings=True), close=True),
         Item("Settings", submenu=lambda: settings_items(app)),
-        Item("Exit Cathode", app.quit, close=True),
+        Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
     ]
+
+
+def _confirm(app, yes: str, do, keep: str = "Keep it", close: bool = False):
+    """The page before something that can't be undone, as the recording
+    delete has: the safe choice first, so SELECT twice doesn't do it."""
+    act = do if close else (lambda: (app.top().back(), do()))
+    return [Item(keep, lambda: app.top().back()), Item(yes, act, close=close)]
 
 
 def settings_items(app):
@@ -167,7 +175,7 @@ def ondemand_settings(app):
             for s in cfg.plex_servers]))
     items += [
         Item("Who's watching", change_user, value=lambda: cfg.plex_user_name or "Account"),
-        Item("Unlink Plex account", unlink, close=True),
+        Item("Unlink Plex account", submenu=lambda: _confirm(app, "Unlink it", unlink, "Keep it linked", close=True)),
     ]
     return items
 
@@ -428,7 +436,7 @@ def remote_items(app):
         Item("Remote", value=lambda: _label(remotes, app.config.remote), adjust=set_remote),
         Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
         Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),
-        Item("Reset to defaults", reset),
+        Item("Reset to defaults", submenu=lambda: _confirm(app, "Reset every button", reset, "Keep my buttons")),
     ]
 
 
@@ -588,7 +596,7 @@ def playlist_items(app, pl):
     return [
         Item("Watch this playlist", lambda: app.switch_playlist(pl), close=True),
         Item("Rename it", rename),
-        Item("Delete it", delete),
+        Item("Delete it", submenu=lambda: _confirm(app, "Delete it", delete)),
     ]
 
 

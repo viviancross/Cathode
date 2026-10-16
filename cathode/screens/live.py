@@ -368,4 +368,4 @@ class LiveTV(Screen):
             if ch.number == number:
                 self.tune(i)
                 return
-        self.app.invalidate()       # no such channel: the digits just clear
+        self.app.note(f"No channel {number}")

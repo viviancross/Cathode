@@ -67,6 +67,9 @@ class FakeApp:
     def invalidate(self):
         pass
 
+    def note(self, text, seconds=2.5):
+        self.notes = getattr(self, "notes", []) + [text]
+
     # A screen stack, for screens that push and pop.
     screens = None
 
@@ -168,11 +171,12 @@ class TestTuning(unittest.TestCase):
             self.live.handle(a)
         self.assertEqual(self.live.channel.number, 6)
 
-    def test_an_unknown_number_just_clears(self):
+    def test_an_unknown_number_clears_and_says_so(self):
         for a in (R.DIGITS[9], R.DIGITS[9], R.SELECT):
             self.live.handle(a)
         self.assertEqual(self.live.idx, 0)
         self.assertEqual(self.live.digits, "")
+        self.assertEqual(self.app.notes, ["No channel 99"])
 
     def test_digits_tune_on_their_own_after_a_pause(self):
         self.live.handle(R.DIGITS[4])

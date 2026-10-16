@@ -251,7 +251,9 @@ class Playback(Screen):
             from ..menus import playback_menu
             playback_menu(self.app, self)
         elif a in R.DIGITS or a in (R.GUIDE, R.PREV, R.BROWSE, R.FAV, R.THEMES):
-            return True                     # no channels to change during a movie
+            # No channels to change during a movie: say how to get back to them.
+            self.app.note(f"Stop the movie first: press {self.app.press_hint(R.BACK)}")
+            return True
         else:
             return False                    # volume and the rest: live TV handles them
         return True

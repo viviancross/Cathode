@@ -27,9 +27,10 @@ class Diagnostics(Screen):
         self._timer = self.app.after(1.0, self._tick)
 
     def signal(self) -> int:
-        """0-100: how far ahead the stream is buffered (10s or more is full)."""
+        """0-100: how far ahead the stream is buffered. A live stream keeps a
+        few seconds, so 3 s or more is full."""
         ahead = self.stats.get("demuxer-cache-duration") or 0
-        return max(0, min(100, int(ahead * 10)))
+        return max(0, min(100, int(ahead * 100 / 3)))
 
     def quality(self) -> int:
         """0-100: falls as frames are dropped."""
@@ -50,7 +51,7 @@ class Diagnostics(Screen):
             ("Bitrate", f"{rate / 1e6:.1f} Mbps" if rate else "-"),
             ("Buffered", f"{(s.get('demuxer-cache-duration') or 0):.1f} s"),
             ("Dropped frames", str((s.get("frame-drop-count") or 0) + (s.get("decoder-frame-drop-count") or 0))),
-            ("Decoder", s.get("hwdec-current") or "software"),
+            ("Decoder", "Software" if s.get("hwdec-current") in (None, "", "no") else s["hwdec-current"]),
         ]
 
     def handle(self, a: str) -> bool:

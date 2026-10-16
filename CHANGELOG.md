@@ -43,6 +43,11 @@ a retro-themed player.
   playback buttons, RIGHT into Plate's side buttons, and the mini guide
   moves with the arrows. **Settings > Remote control > Button guide** lists
   what each button does, named for the remote, pad or keyboard in use.
+- **Safer by remote.** Exit Cathode, Unlink Plex account, Delete playlist
+  and Reset buttons each ask first, with the safe choice on top. A channel
+  number that doesn't exist says "No channel 99"; channel keys during a film
+  say how to stop it. Diagnostics read a live stream's buffer fairly and
+  name a software decoder.
 - **Gamepads.** Hints name the pad's own buttons once one is used (Xbox,
   PlayStation symbols, Nintendo), and go back to the remote's or keyboard's
   when those are pressed. The pad's View / Share / - button now opens
