@@ -76,7 +76,9 @@ class Classic(Skin):
         W, H = self.canvas
         p = self.p
         if live.message:
-            self._message(c, live.message)
+            # Under a menu (the first-run wizard) it would peek out around it.
+            if getattr(self.app, "top", lambda: live)() is live:
+                self._message(c, live.message)
             return
         if live.standby and live.phase != "cover":
             self._standby(c)

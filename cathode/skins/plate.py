@@ -442,6 +442,10 @@ class PlateHD(BoxSkin):
         pygame.draw.rect(c, b["pip_edge"], frame, Y(3), border_radius=Y(8))
         vx, vy, vw, vh = self.menu_video_box(m)
         pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        if not getattr(self.app, "channels", None):     # nothing playing yet: the mark, not black
+            size = Y(64)
+            mw = self.measure(self.wordmark, size, b["text"], b["dish"])
+            self.wordmark(c, vx + (vw - mw) // 2, vy + vh // 2 - size, size, b["text"], b["dish"])
         live = self.app.live
         if live.channel:
             fc = self.fb(Y(22))

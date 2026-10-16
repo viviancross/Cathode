@@ -148,6 +148,8 @@ class InDirectHD(BoxSkin):
         vx, vy, vw, vh = self.guide_video_box()
         pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
         pygame.draw.rect(c, rgba(self.b["text"]), (vx - 3, vy - 3, vw + 6, vh + 6), 3)
+        if not getattr(self.app, "channels", None):     # nothing playing yet: the mark, not black
+            self.mark_stacked(c, vx + vw // 2 - self.X(62), vy + vh // 2 - self.Y(42), self.b["text"])
         return pygame.Rect(vx, vy, vw, vh)
 
     def guide_video_box(self):
@@ -520,6 +522,8 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(fbg, it.label, pn.w - X(40)), fbg, b["text"], pn.x + X(20), pn.y + Y(20))
             if it.preview:
                 hint = f"Press {self.k('SELECT')} to choose this."
+            elif it.value and not (it.action or it.adjust or it.submenu):
+                hint = f"Press {it.value()}."
             elif it.value and (it.adjust or not it.action):
                 hint = "Press LEFT or RIGHT to change this setting." if it.adjust else \
                     f"Press {self.k('SELECT')} to change this setting."
@@ -1529,6 +1533,8 @@ class InDirect(InDirectHD):
             self._shadowed(c, str((m.cursor + 1) % 10), self.fb(Y(14)), b["text"], b["shadow"], box.x + X(6), box.y + Y(5))
             if it.preview:
                 hint = f"{self.k('SELECT')} chooses this."
+            elif it.value and not (it.action or it.adjust or it.submenu):
+                hint = f"Press {it.value()}."
             elif it.value and (it.adjust or not it.action):
                 hint = "LEFT / RIGHT change this setting." if it.adjust else f"{self.k('SELECT')} changes this setting."
             elif it.submenu:
