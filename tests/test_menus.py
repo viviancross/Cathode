@@ -240,9 +240,17 @@ class TestFirstRun(unittest.TestCase):
         kb._press("DONE")
         return kb.prompt
 
+    def _checked(self, n=5, err=""):
+        from cathode import menus
+        patcher = mock.patch.object(menus, "_check_playlist", lambda app, url, done: done(n, err))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_setup_asks_for_the_addresses_then_the_name(self):
         from cathode import menus
+        self._checked()
         app = SetupApp()
+        app.toast = lambda *a: None
         menus.add_playlist(app)
         prompts = [self._type(app, "http://provider/list.m3u"), self._type(app, ""), self._type(app, "")]
         self.assertIn("Playlist address", prompts[0])
@@ -290,9 +298,35 @@ class TestFirstRun(unittest.TestCase):
         menus.open_welcome(app2)
         self.assertEqual(app2.top().title, "WELCOME TO CATHODE")
 
+    def test_a_bad_address_is_asked_for_again_with_what_was_typed(self):
+        from cathode import menus
+        self._checked(0, "the server said no")
+        app = SetupApp()
+        said = []
+        app.toast = lambda text, *a: said.append(text)
+        menus.add_playlist(app)
+        prompt = self._type(app, "http://provider/typo.m3u")
+        self.assertIn("Playlist address", prompt)
+        self.assertEqual(app.top().value, "http://provider/typo.m3u")     # back, to fix it
+        self.assertIn("the server said no", said[-1])
+
+    def test_a_playlists_addresses_can_be_changed(self):
+        from cathode import menus
+        pl = {"name": "Mine", "playlist_url": "http://old/list.m3u", "epg_url": ""}
+        app = SetupApp(playlists=[pl], url="http://old/list.m3u")
+        app.toast = lambda *a: None
+        items = menus.playlist_items(app, pl)
+        self.assertEqual(next(it for it in items if it.label == "Guide address").value(), "None")
+        next(it for it in items if it.label == "Guide address").action()
+        self._type(app, "http://old/guide.xml")
+        self.assertEqual(pl["epg_url"], "http://old/guide.xml")
+        self.assertEqual(app.switched[-1], pl)          # in use: loaded again
+
     def test_adding_another_playlist_asks_for_its_name_last(self):
         from cathode import menus
+        self._checked()
         app = SetupApp(playlists=[{"name": "Old", "playlist_url": "a"}], url="a")
+        app.toast = lambda *a: None
         menus.add_playlist(app)
         prompts = [self._type(app, "b.m3u"), self._type(app, "g.xml"), self._type(app, "Sports")]
         self.assertIn("Name", prompts[2])

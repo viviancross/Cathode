@@ -70,6 +70,9 @@ class FakeApp:
     def note(self, text, seconds=2.5):
         self.notes = getattr(self, "notes", []) + [text]
 
+    def toast(self, text, seconds=2.5):
+        self.toasts = getattr(self, "toasts", []) + [text]
+
     # A screen stack, for screens that push and pop.
     screens = None
 

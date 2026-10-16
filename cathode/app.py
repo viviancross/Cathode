@@ -76,6 +76,8 @@ class App:
         self._seq = itertools.count()
         self._frame_pending = False
         self._epg_gen = 0
+        self._epg_checked = None    # the guide address last checked against the channels
+        self.epg_failed = False     # the last guide load failed (vs loaded and empty)
         self._repeat = None
         self.shot = None            # (path, seconds): save a frame and exit (tests, CI)
         self.script = []            # [(seconds, button)]: scripted presses (tests, CI)
@@ -427,10 +429,19 @@ class App:
         if gen != self._epg_gen or url != self.config.epg_url:
             return                      # the playlist changed under it
         self.guide_progress = None
+        self.epg_failed = epg is None
         if epg is not None:
             self.epg = epg
             self._cats = None           # genres come from the guide
             print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
+            if url != self._epg_checked:        # once per guide: one that matches nothing says so
+                self._epg_checked = url
+                if not epg.channel_ids:
+                    self.toast("The guide loaded, but there's nothing in it. Check its address in "
+                               "Settings > Channels.", 8.0)
+                elif self.channels and not any(epg.resolve_channel_id(ch.epg_id, ch.name) for ch in self.channels):
+                    self.toast("The guide loaded, but it lists none of these channels. Is it the guide "
+                               "for this playlist?", 8.0)
             self.invalidate()
         elif not self.epg.channel_ids:     # nothing to show: say why (a reload keeps the old guide quietly)
             self.toast(f"Couldn't load the guide: {err or 'it failed'}. Trying again in "

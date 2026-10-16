@@ -445,8 +445,10 @@ class Classic(Skin):
                                                                 kb._press(cell)))
                 x += widths[col] + gap
             y += kh + gap
-        t.draw(c, "Type on a keyboard or pick keys.  Ctrl+V pastes.  LB/RB move the cursor.",
-               f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+        pad = getattr(getattr(self.app, "remote", None), "last_device", "keys") == "pad"
+        tip = ("Pick keys with the D-pad.  LB/RB move the cursor." if pad else
+               f"Pick keys with the arrows and {self.k('SELECT')}, or type.  Ctrl+V pastes.")
+        t.draw(c, tip, f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
 
     # ── On Demand: browse ─────────────────────────────────────────────────
 

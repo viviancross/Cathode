@@ -40,7 +40,8 @@ class TestGuideRefresh(unittest.TestCase):
         with mock.patch.object(app_mod.threading, "Thread", SyncThread), \
                 mock.patch.object(EPG, "load", lambda self, url, **k: None):
             a.load_epg()
-        self.assertEqual([s for s, _ in a.scheduled], [App.EPG_REFRESH])
+        # (an empty guide also says so once, in a toast: its redraw timer isn't a reload)
+        self.assertEqual([s for s, _ in a.scheduled if s > 60], [App.EPG_REFRESH])
 
     def test_a_failed_reload_keeps_the_guide_and_retries_sooner(self):
         a = make_app()

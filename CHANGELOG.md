@@ -41,9 +41,12 @@ a retro-themed player.
   better; the box's own look (Original) is marked Recommended. Every menu
   row says what it does, in each box's own place for it; the Button Guide
   is on the Main Menu; the Plate guides name their keys the first time.
-  A channel with no listings says so plainly in every skin. Dead-channel
-  cards say what to do next, toasts are no longer cut short, small type is
-  up to 17 px, and focus is only ever lit where the cursor is.
+  A channel with no listings says why (no guide, guide failed or empty,
+  channel not in the guide), and each playlist's page shows and edits its
+  playlist and guide addresses. Setup checks the playlist address as it's
+  entered ("Found N channels"); a playlist file on the computer works too.
+  Dead-channel cards say what to do next, toasts are no longer cut short,
+  small type is up to 17 px, and focus is only ever lit where the cursor is.
 - **Posters.** Every skin's title info shows the poster, and every skin
   offers the **poster wall** (On Demand > MENU > View), each in its box's
   style. Classic's info buttons are centred.

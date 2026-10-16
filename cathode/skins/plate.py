@@ -963,7 +963,7 @@ class PlateHD(BoxSkin):
         lines = t.wrap(f, msg, int(X(1040) / 0.86), 3)
         lh = Y(32)
         w = max(int(t.width(f, ln) * 0.86) for ln in lines) + X(64)
-        r = pygame.Rect((self.canvas[0] - w) // 2, Y(110), w, Y(18) + lh * len(lines))
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(150), w, Y(18) + lh * len(lines))     # clear of the banner
         radius = r.h // 2 if len(lines) == 1 else Y(18)
         pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=radius)
         vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=radius)

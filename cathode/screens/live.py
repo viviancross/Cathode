@@ -143,6 +143,21 @@ class LiveTV(Screen):
     def volume_visible(self) -> bool:
         return time.monotonic() < self.volume_until
 
+    def _why_no_listing(self, cur) -> str:
+        """Why INFO has nothing more to show, and where to fix it."""
+        if cur:
+            return "No description for this program."
+        app = self.app
+        if not app.config.epg_url:
+            return "This playlist has no guide. Add its address in Settings > Channels."
+        if not app.epg.channel_ids:
+            return ("The guide didn't load. Check its address in Settings > Channels." if app.epg_failed
+                    else "The guide has nothing in it. Check its address in Settings > Channels.")
+        ch = self.channel
+        if ch and not app.epg.resolve_channel_id(ch.epg_id, ch.name):
+            return "The guide doesn't list this channel."
+        return "No listings for this channel right now."
+
     def programs(self, ch=None):
         """(current, next) programme for a channel, either may be None."""
         ch = ch or self.channel
@@ -243,9 +258,8 @@ class LiveTV(Screen):
             # INFO once shows the banner; again expands it to the description.
             full = self.banner_visible() and not self.banner_full
             cur = self.programs()[0] if full else None
-            if full and not (cur and cur.description):      # nothing more to show: say so
-                self.app.note("No description for this program." if cur else "No listings. Add a guide in Settings.",
-                              4.0)
+            if full and not (cur and cur.description):      # nothing more to show: say why
+                self.app.toast(self._why_no_listing(cur), 5.0)
             self.show_banner(self.app.config.osd_timeout_info * (2 if full else 1), full=full)
         elif a in (R.EXIT, R.BACK):
             return self.hide_banner()

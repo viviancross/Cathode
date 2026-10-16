@@ -86,6 +86,8 @@ DESCRIPTIONS.update({
     "Unlink Plex account": "Sign this Cathode out of Plex.",
     # The welcome
     "Set up your channels": "Add your IPTV playlist: its web address.",
+    "Playlist address": "Where the channels come from: an M3U address or file.",
+    "Guide address": "Where the listings come from: an XMLTV address. Optional.",
     "Change the look": "Pick the box and its colors again.",
 })
 
@@ -660,7 +662,49 @@ def channel_items(app):
     return items
 
 
+def _bare(url):
+    """Just the http:// the keyboard starts with: nothing typed."""
+    return "" if (url or "").strip().lower() in ("http://", "https://") else (url or "")
+
+
+def _short(url):
+    """An address short enough for a menu value."""
+    s = (url or "").split("://", 1)[-1]
+    return "None" if not s else s if len(s) <= 26 else f"{s[:13]}...{s[-10:]}"
+
+
+def _check_playlist(app, url, done):
+    """Fetch the playlist off the UI thread; done(channel count, error text)."""
+    import threading
+    from . import playlist as m3u
+    from .app import load_error_text
+
+    def work():
+        try:
+            n, err = len(m3u.load(url, user_agent=app.config.user_agent)), ""
+        except Exception as e:
+            n, err = 0, load_error_text(e)
+        app.post(done, n, err)
+    threading.Thread(target=work, daemon=True).start()
+
+
+PLAYLIST_HINT = "Your IPTV provider's M3U address, or a playlist file on this computer."
+GUIDE_HINT = "The XMLTV address for the guide. Done as it is skips."
+
+
 def playlist_items(app, pl):
+    def edit(key, prompt, hint):
+        def got(url):
+            if url is None or (key == "playlist_url" and not _bare(url)):
+                return
+            active = pl.get("playlist_url") == app.config.playlist_url
+            pl[key] = _bare(url)
+            app.config.save()
+            if active:                  # in use: load it again from the new address
+                app.switch_playlist(pl)
+            app.toast("Saved.")
+        app.push(Keyboard(app, prompt, got, initial=pl.get(key, ""), url=True, hint=hint))
+
     def delete():
         app.config.playlists.remove(pl)
         app.config.save()
@@ -676,6 +720,10 @@ def playlist_items(app, pl):
         app.push(Keyboard(app, "Rename this playlist", got, initial=pl.get("name", "")))
     return [
         Item("Watch this playlist", lambda: app.switch_playlist(pl), close=True),
+        Item("Playlist address", lambda: edit("playlist_url", "Playlist address", PLAYLIST_HINT),
+             value=lambda: _short(pl.get("playlist_url", ""))),
+        Item("Guide address", lambda: edit("epg_url", "Guide address", GUIDE_HINT),
+             value=lambda: _short(pl.get("epg_url", ""))),
         Item("Rename it", rename),
         Item("Delete it", submenu=lambda: _confirm(app, "Delete it", delete)),
     ]
@@ -695,21 +743,31 @@ def add_playlist(app, on_added=None, first_run=False):
     entry = {"name": "My Channels"}
     step = (lambda n, s: f"3{n}  {s}") if first_run else (lambda n, s: s)
 
-    def bare(url):
-        """Just the http:// the keyboard starts with: nothing typed."""
-        return "" if url.strip().lower() in ("http://", "https://") else url
+    def ask_url(initial=""):
+        app.push(Keyboard(app, step("a", "Playlist address"), got_url, initial=initial, url=True,
+                          hint=PLAYLIST_HINT))
 
     def got_url(url):
-        if not url or not bare(url):
+        if not url or not _bare(url):
             return
-        entry["playlist_url"] = url
-        app.push(Keyboard(app, step("b", "Guide address (optional)"), got_epg, url=True,
-                          hint="The XMLTV address for the guide. Done as it is skips."))
+        app.toast("Checking the address...", 30.0)
+
+        def checked(n, err):
+            if not n:                   # say why, then let them fix what they typed
+                app.toast(f"Couldn't use that address: {err or 'there are no channels in it'}. "
+                          "Check it and try again.", 8.0)
+                ask_url(url)
+                return
+            app.toast(f"Found {n} channel{'' if n == 1 else 's'}.", 4.0)
+            entry["playlist_url"] = url
+            app.push(Keyboard(app, step("b", "Guide address (optional)"), got_epg, url=True,
+                              hint=GUIDE_HINT + " Without one, the guide has no listings."))
+        _check_playlist(app, url, checked)
 
     def got_epg(epg):
         if epg is None:
             return
-        entry["epg_url"] = bare(epg)
+        entry["epg_url"] = _bare(epg)
         app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
                           hint="How it's listed under Settings > Channels."))
 
@@ -727,8 +785,7 @@ def add_playlist(app, on_added=None, first_run=False):
         app.switch_playlist(entry)
         if on_added:
             on_added(entry)
-    app.push(Keyboard(app, step("a", "Playlist address"), got_url, url=True,
-                      hint="Your IPTV provider's M3U address. Ctrl+V pastes."))
+    ask_url()
 
 
 # ── Display ───────────────────────────────────────────────────────────────

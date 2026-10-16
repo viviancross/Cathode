@@ -7,7 +7,7 @@ program guide, a channel banner on every tune, browse, pause-live-TV, and a
 remote-control way of doing everything, in the style of a mid-2000s set-top
 box. Your Plex library is On Demand, and downloaded titles are My Recordings.
 
-**Version 4.0** · Windows, macOS, Linux
+**Version 4.0 (alpha)** · Windows, macOS, Linux
 
 <br clear="left">
 
