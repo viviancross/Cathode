@@ -351,6 +351,9 @@ class InDirectHD(BoxSkin):
         cur = self.app.live.programs(sel)[0] if sel else None
         self._page(c, self.R(0, 192, 1280, 528))
         self._top(c, cur.title if cur else (sel.name if sel else ""), "guide")
+        logo = self.channel_logo(sel, X(150), Y(52))
+        if logo:                            # the chosen channel's logo over its title
+            c.blit(logo, logo.get_rect(midleft=(X(300), Y(70))))
 
         # The strip: when, the programme's hours, its rating, light rules between.
         fs = self.f(Y(22))

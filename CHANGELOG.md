@@ -47,6 +47,9 @@ a retro-themed player.
   http:// already typed, and : and / are on the first layer in every skin.
   BACK on an empty field leaves it. First run numbers its channel steps
   3a, 3b and 3c.
+- **Channel logos in the guide.** InDirecTV HD shows the chosen channel's
+  logo over its title, Plate Network HD under the plate network mark, Plate
+  Network on the channel pill (from the guide data or the playlist).
 - **Clearer words.** On Demand titles read **Watch** and **Cost: Free** on
   every skin's info page (recordings keep Play); titles keep the server's
   own casing ("TV Shows"); errors read as sentences. Plate's hints name

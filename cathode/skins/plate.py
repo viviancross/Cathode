@@ -324,6 +324,9 @@ class PlateHD(BoxSkin):
         title = cur.title if cur else (sel.name if sel else "")
         cx = X(470)
         self.cb(c, self.fit_cb(f_title, title, X(600)), f_title, b["text"], cx, Y(62), align="center")
+        logo = self.channel_logo(sel, X(150), Y(74))
+        if logo:                            # where the box carried its guide tag
+            c.blit(logo, logo.get_rect(midleft=(X(46), Y(182))))
         if cur:
             blurb = (f"{cur.category}. " if cur.category else "") + (cur.description or "")
             y = Y(168)
@@ -1113,6 +1116,9 @@ class Plate(PlateHD):
         self.hit(tab, lambda: g.handle("THEMES"))
         sel = g.selected()
         self._pill(c, 160, [f"<  {sel.number if sel else '---'}  >"], vx, 205)
+        logo = self.channel_logo(sel, X(56), Y(30))
+        if logo:
+            c.blit(logo, logo.get_rect(center=(X(282), Y(181))))
 
         # The header: day, a play arrow, the half hours between dividers.
         hdr = self.R(0, 233, 640, 26)

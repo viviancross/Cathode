@@ -141,6 +141,15 @@ class BoxSkin(Classic):
             self._tbtn(c, r, kind, i == s["focus"], num)
             self.hit(r, lambda i=i: s["press"](i))
 
+    def channel_logo(self, ch, w: int, h: int):
+        """The channel's logo (the guide data's, else the playlist's) fitted
+        to w x h; None when it has none or it's still loading."""
+        if not ch:
+            return None
+        epg = getattr(self.app, "epg", None)
+        url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
+        return self.logo(url or ch.logo, w, h)
+
     def wall_cells(self, s, cols, rows=2):
         """[(index into s.rows, slot)] for the posters a wall shows: the
         cursor's row last (the first rows at the top). Slot is left to right,
