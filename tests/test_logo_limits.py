@@ -157,5 +157,24 @@ class TestFetchRefusals(unittest.TestCase):
         self.assertEqual(len(os.listdir(self.dir)), 1)
 
 
+
+class TestAnimatedLogos(unittest.TestCase):
+    def test_a_gif_keeps_its_frames_and_timing(self):
+        from cathode.logos import Animation
+        frames = [Image.new("RGB", (40, 20), c) for c in ((255, 0, 0), (0, 0, 255), (0, 255, 0))]
+        buf = io.BytesIO()
+        frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:], duration=[100, 200, 20], loop=0)
+        store = LogoStore.__new__(LogoStore)
+        anim = store._decode(Image.open(io.BytesIO(buf.getvalue())))
+        self.assertIsInstance(anim, Animation)
+        self.assertEqual(len(anim.frames), 3)
+        self.assertEqual(anim.at(0.15)[0], 1)                 # into the second frame
+        self.assertAlmostEqual(anim.durations[2], 0.02)       # the file's own rate, 50 fps
+        self.assertAlmostEqual(Animation(frames, [0.0]).durations[0], 0.1)    # 0 ms plays as browsers do
+        fitted = LogoStore._fit(anim, 20, 20)
+        self.assertEqual(fitted.size, (20, 10))
+        self.assertEqual(len(fitted.frames), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

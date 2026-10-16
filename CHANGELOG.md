@@ -50,6 +50,8 @@ a retro-themed player.
 - **Channel logos in the guide.** InDirecTV HD shows the chosen channel's
   logo over its title, Plate Network HD under the plate network mark, Plate
   Network on the channel pill (from the guide data or the playlist).
+- **Animated logos.** Animated GIF, PNG and WebP channel logos play at their
+  own frame rate wherever they show, and only cost redraws while on screen.
 - **Clearer words.** On Demand titles read **Watch** and **Cost: Free** on
   every skin's info page (recordings keep Play); titles keep the server's
   own casing ("TV Shows"); errors read as sentences. Plate's hints name

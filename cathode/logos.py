@@ -38,6 +38,30 @@ def _read_capped(resp, limit: int) -> Optional[bytes]:
     return b"".join(chunks)
 
 
+class Animation:
+    """An animated logo: its frames (RGBA) and how long each shows, in
+    seconds, played at the file's own rate. A delay of 10 ms or less reads
+    as 100 ms, as browsers play it (such files are made for that)."""
+
+    def __init__(self, frames, durations):
+        self.frames = frames
+        self.durations = [d if d > 0.01 else 0.1 for d in durations]
+        self.total = sum(self.durations)
+
+    @property
+    def size(self):
+        return self.frames[0].size
+
+    def at(self, t: float) -> Tuple[int, float]:
+        """(the frame showing at time t, seconds until the next one)."""
+        t %= self.total
+        for i, d in enumerate(self.durations):
+            if t < d:
+                return i, d - t
+            t -= d
+        return 0, self.durations[0]
+
+
 class LogoStore:
     _ORIG_MAX = 256      # full-size images kept in RAM (posters add up fast)
     _RESIZED_MAX = 1024  # fitted variants; cleared wholesale when exceeded
@@ -49,6 +73,7 @@ class LogoStore:
     # file can decode to an enormous bitmap (a "decompression bomb"), and
     # Pillow's own default only warns. 40 MP is ~160 MB as RGBA.
     _MAX_PIXELS = 40_000_000
+    _MAX_FRAMES = 1000       # an animated logo's frames kept (the pixel budget usually binds first)
 
     def __init__(self, cache_dir: str, on_loaded: Optional[Callable] = None,
                  user_agent: str = "Cathode/1.0"):
@@ -59,7 +84,7 @@ class LogoStore:
             pass
         self._on_loaded = on_loaded
         self._ua = user_agent
-        self._orig: Dict[str, Optional[Image.Image]] = {}   # url -> RGBA (None = failed)
+        self._orig: Dict[str, Optional[Image.Image]] = {}   # url -> RGBA or Animation (None = failed)
         self._resized: Dict[Tuple[str, int, int], Optional[Image.Image]] = {}
         self._inflight = set()
         self._auth: Dict[str, dict] = {}    # url -> extra request headers (e.g. Plex token)
@@ -113,7 +138,9 @@ class LogoStore:
         return fitted
 
     @staticmethod
-    def _fit(im: Image.Image, max_w: int, max_h: int) -> Image.Image:
+    def _fit(im, max_w: int, max_h: int):
+        if isinstance(im, Animation):
+            return Animation([LogoStore._fit(f, max_w, max_h) for f in im.frames], im.durations)
         w, h = im.size
         scale = min(max_w / w, max_h / h)
         nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
@@ -139,6 +166,17 @@ class LogoStore:
         w, h = im.size
         if w <= 0 or h <= 0 or w * h > self._MAX_PIXELS:
             return None
+        n = getattr(im, "n_frames", 1)
+        if n > 1:
+            # Animated: every frame, within the frame cap and the same pixel
+            # budget a still image gets (frames x size).
+            n = min(n, self._MAX_FRAMES, max(1, self._MAX_PIXELS // (w * h)))
+            frames, durations = [], []
+            for i in range(n):
+                im.seek(i)
+                frames.append(im.convert("RGBA"))
+                durations.append((im.info.get("duration") or 100) / 1000)
+            return Animation(frames, durations) if len(frames) > 1 else frames[0]
         return im.convert("RGBA")
 
     def _fetch(self, url: str):

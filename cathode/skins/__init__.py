@@ -3,6 +3,7 @@ scaled to the window by the GPU), its fonts and colours, and one draw_<name>
 method per screen it knows. Screens it doesn't know fall back to Classic."""
 
 import os
+import time
 from typing import Optional
 
 import pygame
@@ -258,6 +259,7 @@ class Skin:
         self.app = app
         self.text = Text()
         self._logo_surfaces = {}
+        self._anim_due = 0.0        # when the next animated-logo frame is wanted
         self.hits = []          # [(Rect, fn)] clickable this frame, in canvas pixels
 
     def reload(self):
@@ -394,17 +396,38 @@ class Skin:
         go with the fetch but never into the URL or the cache name."""
         if not url or not self.app.logos:
             return None
+        from ..logos import Animation
         key = (url, max_w, max_h)
         surf = self._logo_surfaces.get(key)
         if surf is None:
             im = self.app.logos.get(url, max_w, max_h, headers=headers)
             if im is None:
                 return None
-            surf = pygame.image.frombytes(im.convert("RGBA").tobytes(), im.size, "RGBA")
+            if isinstance(im, Animation):
+                surf = (im, [self._surface(f) for f in im.frames])
+            else:
+                surf = self._surface(im)
             if len(self._logo_surfaces) > 512:
                 self._logo_surfaces.clear()
             self._logo_surfaces[key] = surf
+        if isinstance(surf, tuple):             # animated: the frame for now
+            anim, frames = surf
+            i, wait = anim.at(time.monotonic())
+            self._next_frame(wait)
+            return frames[i]
         return surf
+
+    @staticmethod
+    def _surface(im):
+        return pygame.image.frombytes(im.convert("RGBA").tobytes(), im.size, "RGBA")
+
+    def _next_frame(self, wait: float):
+        """An animated logo is on screen: draw again when its next frame is
+        due (one timer for all of them; none once they're off screen)."""
+        now = time.monotonic()
+        if self._anim_due <= now or now + wait < self._anim_due - 0.01:
+            self._anim_due = now + wait
+            self.app.after(wait, self.app.invalidate)
 
 
 def skin_classes() -> dict:
