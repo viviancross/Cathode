@@ -457,5 +457,35 @@ class TestUsersAndServers(unittest.TestCase):
         self.assertEqual(url, "http://owned")
 
 
+# ── Subtitles: files beside the video, and the server's search ──────────────
+
+class TestSubtitles(unittest.TestCase):
+    def setUp(self):
+        self.c = plex.PlexClient("cid", token="acct")
+        self.c.server = "http://server:32400"
+        self.c._server_token = "srvtok"
+
+    def test_only_files_beside_the_video_are_handed_over(self):
+        meta = {"Media": [{"Part": [{"key": "/p/1/f.mkv", "Stream": [
+            {"streamType": 1}, {"streamType": 3, "index": 2, "displayTitle": "English (embedded)"},
+            {"streamType": 3, "key": "/library/streams/7", "displayTitle": "English (SRT)",
+             "languageTag": "en"}]}]}]}
+        self.assertEqual(plex._external_subs(meta, "http://s"),
+                         [{"url": "http://s/library/streams/7", "title": "English (SRT)", "lang": "en"}])
+
+    def test_search_results_and_old_servers(self):
+        found = {"MediaContainer": {"Stream": [
+            {"key": "/os/1", "title": "Film.2001.srt", "languageTag": "en", "perfectMatch": True},
+            {"title": "no key, skipped"}]}}
+        with mock.patch.object(self.c, "_get", return_value=found):
+            rows = self.c.search_subtitles("9", "en")
+        self.assertEqual([(r["key"], r["title"], r["exact"]) for r in rows], [("/os/1", "Film.2001.srt", True)])
+        import urllib.error
+        old = urllib.error.HTTPError("u", 404, "nf", {}, None)
+        with mock.patch.object(self.c, "_get", side_effect=old):
+            with self.assertRaises(plex.PlexError):
+                self.c.search_subtitles("9")
+
+
 if __name__ == "__main__":
     unittest.main()

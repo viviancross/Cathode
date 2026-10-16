@@ -230,6 +230,11 @@ SUB_SIZES = [(28, "Small"), (38, "Medium"), (52, "Large"), (68, "Extra large")]
 SUB_COLORS = [("#FFFFFFFF", "White"), ("#FFFFFF00", "Yellow"), ("#FF00FFFF", "Cyan"),
               ("#FF00FF00", "Green")]
 SUB_BACKS = [("", "None"), ("#96000000", "Shaded"), ("#FF000000", "Black")]
+SUB_LANGS = [("en", "English"), ("es", "Spanish"), ("fr", "French"), ("de", "German"), ("it", "Italian"),
+             ("pt", "Portuguese"), ("nl", "Dutch"), ("sv", "Swedish"), ("da", "Danish"), ("no", "Norwegian"),
+             ("fi", "Finnish"), ("pl", "Polish"), ("ru", "Russian"), ("el", "Greek"), ("tr", "Turkish"),
+             ("ar", "Arabic"), ("he", "Hebrew"), ("hi", "Hindi"), ("ja", "Japanese"), ("ko", "Korean"),
+             ("zh", "Chinese")]
 
 
 def track_items(app, kind):
@@ -270,7 +275,7 @@ def subtitle_items(app):
             apply(getattr(cfg, attr))
         return Item(label, value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
     fonts = [("", "Default")] + [(f, f) for f in _subtitle_fonts()]
-    return [
+    rows = [
         Item("Subtitles", value=lambda: "On" if cfg.subtitles else "Off", adjust=toggle),
         Item("Track", submenu=lambda: track_items(app, "sub")),
         style("Size", "sub_size", SUB_SIZES, lambda s: v.sub_style(size=s)),
@@ -278,6 +283,62 @@ def subtitle_items(app):
         style("Background", "sub_back", SUB_BACKS, lambda b: v.sub_style(back=b)),
         style("Font", "sub_font", fonts, lambda f: v.sub_style(font=f or "sans-serif")),
     ]
+    from .screens.playback import Playback
+    pb = app.find(Playback)
+    if pb:                  # On Demand: the Plex server can look more up
+        rows[2:2] = [Item("Find subtitles", submenu=lambda: find_subtitle_items(app, pb)),
+                     style("Search language", "sub_search_lang", SUB_LANGS, lambda _: None)]
+    return rows
+
+
+def find_subtitle_items(app, pb):
+    """What the Plex server can fetch for the title playing (its own
+    OpenSubtitles link), in the search language. Picking one has the server
+    fetch it and keep it with the title, then shows it."""
+    import time
+    from .plex import PlexError
+    from .screens.playback import Playback
+    od, cfg = app.ondemand, app.config
+    lang = _label(SUB_LANGS, cfg.sub_search_lang)
+    rows = [Item(f"Searching for {lang} subtitles...", enabled=False)]
+
+    def show(items):
+        m = app.top()
+        if isinstance(m, Menu) and m.items is rows:
+            m.refresh(items)
+            app.invalidate()
+
+    def fetch(r, rk=pb.rk):
+        app.toast("Fetching subtitles...")
+
+        def work():
+            c = od.client()
+            had = {s["url"] for s in c.subtitle_files(rk)}
+            c.download_subtitle(rk, r["key"])
+            for _ in range(30):             # the server fetches in the background
+                time.sleep(1)
+                new = [s for s in c.subtitle_files(rk) if s["url"] not in had]
+                if new:
+                    return new[0]
+            raise PlexError("The server hasn't finished fetching them. Try again in a moment.")
+
+        def done(sub):
+            if app.find(Playback) is pb and pb.rk == rk:
+                pb.subs.append(sub)
+                app.video.add_subtitle(sub["url"], sub["title"], sub["lang"], select=True)
+                cfg.subtitles = True
+                cfg.save()
+            app.toast(f"Subtitles added: {sub['title'] or lang}")
+        od.run(work, done, lambda msg: app.toast(f"Couldn't get subtitles. {msg}"))
+
+    def found(results):
+        show([Item(r["title"] + ("  (SDH)" if r["hi"] else ""), (lambda r=r: fetch(r)), close=True,
+                   value=(lambda: "Exact") if r["exact"] else None) for r in results]
+             or [Item(f"No {lang} subtitles found", enabled=False)])
+
+    od.run(lambda: od.client().search_subtitles(pb.rk, cfg.sub_search_lang), found,
+           lambda msg: show([Item(f"Couldn't search. {msg}", enabled=False)]))
+    return rows
 
 
 def playback_menu(app, pb):

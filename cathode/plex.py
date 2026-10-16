@@ -73,8 +73,8 @@ class PlexClient:
         with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
             return json.loads(r.read() or b"{}")
 
-    def _post(self, url: str, token: Optional[str] = None) -> dict:
-        req = urllib.request.Request(url, data=b"", method="POST",
+    def _post(self, url: str, token: Optional[str] = None, method: str = "POST") -> dict:
+        req = urllib.request.Request(url, data=b"", method=method,
                                      headers=self._headers(token))
         with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL) as r:
             return json.loads(r.read() or b"{}")
@@ -499,7 +499,40 @@ class PlexClient:
                 # The server knows the length; a transcode's own clock only
                 # knows what it has made so far.
                 "duration": int(m.get("duration", 0)) // 1000,
+                "subs": _external_subs(m, self.server),
                 "headers": {"X-Plex-Token": self._server_token}}
+
+    # ── Subtitles: the server's own search (its OpenSubtitles link) ───────
+
+    def search_subtitles(self, rating_key: str, language: str = "en") -> List[dict]:
+        """Subtitles the server can fetch for an item, best first:
+        [{key, title, lang, provider, exact, hi, forced}]."""
+        q = urllib.parse.urlencode({"language": language, "hearingImpaired": 0, "forced": 0})
+        try:
+            data = self._get(f"{self.server}/library/metadata/{rating_key}/subtitles?{q}",
+                             token=self._server_token, timeout=30)
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 404):
+                raise PlexError("This Plex server can't search for subtitles. Updating it may help.")
+            raise
+        return [{"key": s["key"], "title": s.get("title") or s.get("displayTitle", ""),
+                 "lang": s.get("languageTag") or s.get("languageCode", ""),
+                 "provider": s.get("providerTitle", ""), "exact": bool(s.get("perfectMatch")),
+                 "hi": bool(s.get("hearingImpaired")), "forced": bool(s.get("forced"))}
+                for s in _container(data, "Stream") if s.get("key")]
+
+    def download_subtitle(self, rating_key: str, key: str):
+        """Have the server fetch a search result and keep it with the item.
+        It fetches in the background: subtitle_files() shows it when done."""
+        q = urllib.parse.urlencode({"key": key})
+        self._post(f"{self.server}/library/metadata/{rating_key}/subtitles?{q}",
+                   token=self._server_token, method="PUT")
+
+    def subtitle_files(self, rating_key: str) -> List[dict]:
+        """The item's subtitle files kept beside it (not inside the video)."""
+        data = self._get(f"{self.server}/library/metadata/{rating_key}", token=self._server_token)
+        items = _container(data, "Metadata")
+        return _external_subs(items[0], self.server) if items else []
 
     def on_deck(self) -> List[dict]:
         """The server's "Continue Watching" — in-progress items + next-up
@@ -626,6 +659,21 @@ def _first_part(meta: dict) -> Optional[dict]:
             if part.get("key"):
                 return part
     return None
+
+
+def _external_subs(meta: dict, server: str) -> list:
+    """An item's subtitle files beside the video, which mpv has to be handed
+    (the video file can't carry them): [{url, title, lang}]. Only these have
+    a stream `key`; subtitles inside the file have none."""
+    out = []
+    for media in meta.get("Media", []) or []:
+        for part in media.get("Part", []) or []:
+            for s in part.get("Stream", []) or []:
+                if s.get("streamType") == 3 and s.get("key"):
+                    out.append({"url": f"{server}{s['key']}",
+                                "title": s.get("displayTitle") or s.get("title", ""),
+                                "lang": s.get("languageTag") or s.get("languageCode", "")})
+    return out
 
 
 def _display_title(m: dict) -> tuple:

@@ -497,7 +497,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(fbg, it.label, pn.w - X(40)), fbg, b["text"], pn.x + X(20), pn.y + Y(20))
             if it.preview:
                 hint = f"Press {self.k('SELECT')} to choose this."
-            elif it.value:
+            elif it.value and (it.adjust or not it.action):
                 hint = "Press LEFT or RIGHT to change this setting." if it.adjust else \
                     f"Press {self.k('SELECT')} to change this setting."
             elif it.submenu:
@@ -1459,7 +1459,7 @@ class InDirect(InDirectHD):
             self._shadowed(c, str((m.cursor + 1) % 10), self.fb(Y(14)), b["text"], b["shadow"], box.x + X(6), box.y + Y(5))
             if it.preview:
                 hint = f"{self.k('SELECT')} chooses this."
-            elif it.value:
+            elif it.value and (it.adjust or not it.action):
                 hint = "LEFT / RIGHT change this setting." if it.adjust else f"{self.k('SELECT')} changes this setting."
             elif it.submenu:
                 hint = f"{self.k('SELECT')} opens this menu."

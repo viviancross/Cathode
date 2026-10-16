@@ -355,11 +355,12 @@ class Classic(Skin):
             ink = (p["SEL_TEXT"] if sel else p["WHITE"]) if it.enabled else p["INK_MUTED"]
             ty = row.y + (row.h - t.ink(f_row)[1]) // 2
             label = it.label + (" >" if it.submenu else "")
-            t.draw(c, label, f_row, ink, row.x + 14, ty)
-            if it.value:
-                v = it.value()
-                if sel and it.adjust:
-                    v = f"< {v} >"
+            v = it.value() if it.value else ""
+            if v and sel and it.adjust:
+                v = f"< {v} >"
+            room = row.w - 28 - (t.width(f_row, v) + 16 if v else 0)
+            t.draw(c, t.fit(f_row, label, room), f_row, ink, row.x + 14, ty)
+            if v:
                 t.draw(c, v, f_row, p["SEL_TEXT"] if sel else p["CYAN"], row.right - 14, ty, align="right")
             self.hit(row, lambda i=i: m.activate(i))
             y += rh

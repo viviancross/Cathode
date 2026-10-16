@@ -21,6 +21,11 @@ a retro-themed player.
   tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss screen for dead channels, PREV, a THEMES button for genres, guide paging
   and day jumps, numbered menus. On Demand playback bars carry on-screen
   transport buttons in every skin, each box's in its own style.
+- **On Demand subtitles.** Subtitle files Plex keeps beside a title (.srt)
+  now load with it. During playback, MENU > Subtitles > **Find subtitles**
+  searches through the Plex server's own OpenSubtitles link in the chosen
+  **Search language**; picking a result has the server fetch it and keep it
+  with the title, and Cathode switches it on.
 - **Remotes.** Every remote button now has a plain keyboard key (CH+/CH- are
   `]`/`[`, STOP is X), so an IR receiver like a FLIRC can send them all.
   Settings > Remote control > Remote picks a remote whose own button names

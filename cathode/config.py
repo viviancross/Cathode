@@ -101,6 +101,7 @@ class Config:
     sub_size: int = 38             # mpv sub-font-size
     sub_color: str = "#FFFFFFFF"   # mpv sub-color (#AARRGGBB)
     sub_back: str = ""             # mpv sub-back-color (#AARRGGBB; blank = no box)
+    sub_search_lang: str = "en"    # Find subtitles' language (ISO 639-1)
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance

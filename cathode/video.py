@@ -120,7 +120,7 @@ class Video:
 
     # ── Playback ──────────────────────────────────────────────────────────
 
-    def play(self, url: str, headers: Optional[dict] = None, start: float = 0):
+    def play(self, url: str, headers: Optional[dict] = None, start: float = 0, sub_delay: float = 0.0):
         """Load `url`, replacing whatever plays. Events about any earlier file
         are ignored from here on: only this load's start can reveal it."""
         # Always set (empty clears), so a Plex token can't ride along onto the
@@ -128,6 +128,7 @@ class Video:
         self.player["http-header-fields"] = (
             [f"{k}: {v}" for k, v in headers.items()] if headers else [])
         self.player["start"] = str(start) if start > 0 else "none"
+        self.player["sub-delay"] = sub_delay     # a transcode's clock starts mid-file
         self.player.pause = False
         rv = self.player.command("loadfile", url, "replace")
         self._want = rv.get("playlist_entry_id") if isinstance(rv, dict) else None
@@ -246,6 +247,11 @@ class Video:
 
     def set_track(self, kind: str, tid):
         self.player["aid" if kind == "audio" else "sid"] = tid if tid is not None else "no"
+
+    def add_subtitle(self, url: str, title: str = "", lang: str = "", select: bool = False):
+        """A subtitle file for the playing video, fetched with its headers;
+        select shows it straight away."""
+        self.player.command("sub-add", url, "select" if select else "auto", title, lang)
 
     def sub_style(self, font=None, size=None, color=None, back=None):
         if font:

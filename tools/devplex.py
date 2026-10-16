@@ -7,6 +7,7 @@ on the On Demand screens without a Plex account.
 
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,7 +29,27 @@ def _episode(n):
             "meta": "", "playable": True, "thumb": "", "duration": 300, "offset": 0}
 
 
+SRT = "1\n00:00:01,000 --> 00:10:00,000\nSubtitles fetched for {title} ({lang}).\n"
+
+
 class FakePlex(plex.PlexClient):
+    fetched = {}                    # rating key -> subtitle files 'downloaded'
+
+    def search_subtitles(self, rk, language="en"):
+        stem = self.item_detail(rk)["title"].replace(" ", ".").replace(":", "")
+        return [{"key": f"/fake/{rk}/{n}", "title": f"{stem}.{tag}.srt", "lang": language,
+                 "provider": "OpenSubtitles", "exact": n == 0, "hi": n == 2, "forced": False}
+                for n, tag in enumerate(["1984.1080p.BluRay.x264-CATHODE", "1984.DVDRip.XviD", "1984.SDH"])]
+
+    def download_subtitle(self, rk, key):
+        path = os.path.join(tempfile.gettempdir(), f"cathode-devplex-{rk}-{key.rsplit('/', 1)[-1]}.srt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SRT.format(title=self.item_detail(rk)["title"], lang="English"))
+        self.fetched.setdefault(rk, []).append({"url": path, "title": "English (SRT)", "lang": "en"})
+
+    def subtitle_files(self, rk):
+        return list(self.fetched.get(rk, []))
+
     def discover_server(self, prefer=""):
         self.server = "http://fake-plex"
         return self.server
@@ -89,7 +110,8 @@ class FakePlex(plex.PlexClient):
         return {"url": f"av://lavfi:{src}=size=1280x720:rate=30:duration=600",
                 "offset": d["offset"] if resume else 0, "time_base": 0, "duration": 600,
                 "title": d["title"], "subtitle": d["subtitle"],
-                "markers": [{"type": "intro", "start": 2, "end": 20}], "headers": {}}
+                "markers": [{"type": "intro", "start": 2, "end": 20}], "headers": {},
+                "subs": self.subtitle_files(rk)}
 
     def report_timeline(self, *a, **k):
         pass

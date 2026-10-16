@@ -29,13 +29,16 @@ class Playback(Screen):
         self.subtitle = info.get("subtitle") or subtitle
         self.time_base = float(info.get("time_base") or 0)
         self.markers = info.get("markers") or []
+        self.subs = list(info.get("subs") or [])      # files beside the video
+        self._subs_added = False
         self.pos = float(info.get("offset") or 0)
         self.dur = float(info.get("duration") or 0)     # mpv's is the fallback
         self.skip_label, self.skip_to = "", 0.0
         self._last_report = time.monotonic()
         cfg = self.app.config
         v = self.app.video
-        v.play(info["url"], headers=info.get("headers"), start=info.get("offset", 0))
+        v.play(info["url"], headers=info.get("headers"), start=info.get("offset", 0),
+               sub_delay=-self.time_base)
         v.sub_style(font=cfg.sub_font or None, size=cfg.sub_size, color=cfg.sub_color,
                     back=cfg.sub_back)
         self.flash = ("PLAY >", time.monotonic() + 1.5)
@@ -126,6 +129,10 @@ class Playback(Screen):
             self.show_bar()
 
     def on_video(self, kind, **data):
+        if kind == "video_started" and not self._subs_added:
+            self._subs_added = True                 # (it fires again after every seek)
+            for s in self.subs:
+                self.app.video.add_subtitle(s["url"], s["title"], s["lang"])
         if kind == "video_ended":
             if data.get("reason") == "eof":
                 self.finished()
