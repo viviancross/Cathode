@@ -1,5 +1,6 @@
 """Menus and the on-screen keyboard."""
 
+import time
 from typing import Callable, List, Optional
 
 import pygame
@@ -172,13 +173,18 @@ class Keyboard(Screen):
     }
     ACTIONS = ["SHIFT", "SYM", "SPACE", "DEL", "CLEAR", "CANCEL", "DONE"]
 
+    URL_START = "http://"
+
     def __init__(self, app, prompt: str, on_done: Callable[[Optional[str]], None],
-                 initial: str = "", hint: str = ""):
+                 initial: str = "", hint: str = "", url: bool = False):
         super().__init__(app)
         self.prompt, self.hint, self.on_done = prompt, hint, on_done
+        self.url = url              # an address: lowercase, http:// typed, : and / to hand
+        initial = initial or (self.URL_START if url else "")
         self.value = initial
         self.caret = len(initial)
-        self.layer = getattr(getattr(app, "skin", None), "keyboard_layer", "abc")
+        self._back_at = 0.0         # the last BACK: a held one that empties the field mustn't cancel too
+        self.layer = "abc" if url else getattr(getattr(app, "skin", None), "keyboard_layer", "abc")
         # Start on the first letter: past the digits, never on an action.
         self.row, self.col = next(((r, c) for r, row in enumerate(self.grid()) for c, k in enumerate(row)
                                    if len(k) == 1 and k.isalpha()), (0, 0))
@@ -192,9 +198,20 @@ class Keyboard(Screen):
     def grid(self) -> List[List[str]]:
         skin = getattr(self.app, "skin", None)
         rows = skin.keyboard_rows(self.layer) if skin else None
-        if rows:
-            return [list(r) for r in rows]
-        return [list(r) for r in self.LAYERS[self.layer]] + [self.ACTIONS]
+        rows = [list(r) for r in rows] if rows else [list(r) for r in self.LAYERS[self.layer]] + [self.ACTIONS]
+        if self.url and self.layer != "sym":
+            rows = self._url_keys(rows)
+        return rows
+
+    def _url_keys(self, rows):
+        """An address needs : and / on the first layer: they take the place
+        of ' and & where a box had those, or come as a row of their own."""
+        keys = [r for r in rows if all(len(k) == 1 for k in r)]
+        rows = [[{"'": ":", "&": "/"}.get(k, k) for k in r] if r in keys else r for r in rows]
+        if keys and not any(":" in r for r in rows):
+            width = len(keys[0])
+            rows.insert(rows.index(keys[-1]) + 1, list("./:-_?~=&"[:width]))
+        return rows
 
     def _press(self, cell: str):
         if cell == "SHIFT":
@@ -261,7 +278,14 @@ class Keyboard(Screen):
         elif a == R.SELECT:
             self._press(self.grid()[self.row][self.col])
         elif a == R.BACK:
-            self.backspace()
+            # Empty: BACK leaves, as everywhere else. Emptied by this same
+            # held BACK a moment ago: it only stops erasing.
+            now = time.monotonic()
+            if not self.value and now - self._back_at > 0.6:
+                self._finish(None)
+            else:
+                self.backspace()
+            self._back_at = now
         elif a == R.EXIT:
             self._finish(None)
         elif a == R.CH_DOWN:            # bumpers move the caret

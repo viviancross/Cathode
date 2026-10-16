@@ -162,7 +162,7 @@ class PlateHD(BoxSkin):
 
     # ── Live: the grey banner, digits, volume, trick ──────────────────────
 
-    KEY_WORDS = {"BACK": "CANCEL", "EXIT": "VIEW TV"}     # the Dish remote's words
+    REMOTE_WORDS = {"BACK": "CANCEL", "EXIT": "VIEW TV"}  # the Dish remote's words
 
     def _box(self, c, r, alpha=232):
         box = pygame.Surface(r.size, pygame.SRCALPHA)

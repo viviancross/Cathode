@@ -283,7 +283,7 @@ class Classic(Skin):
 
     # ── Boot ──────────────────────────────────────────────────────────────
 
-    KEY_WORDS = {"SELECT": "OK"}
+    REMOTE_WORDS = {"SELECT": "OK"}
 
     def draw_boot(self, c, boot):
         W, H = self.canvas

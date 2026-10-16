@@ -315,7 +315,7 @@ class Skin:
         """' 40%' for a known fraction, '' otherwise."""
         return f" {int(frac * 100)}%" if frac is not None and frac >= 0 else ""
 
-    KEY_WORDS = {}          # this skin's own words for remote buttons in hints
+    REMOTE_WORDS = {}       # this skin's own words for remote buttons in hints
 
     def k(self, action: str) -> str:
         """What a hint calls a remote button: the chosen remote's name for
@@ -325,7 +325,7 @@ class Skin:
         if pad is not None and getattr(pad, "last_device", "") == "pad" and pad.pad_label(action):
             return pad.pad_label(action)        # a pad in hand: its own buttons
         remote = getattr(getattr(self.app, "config", None), "remote", "")
-        return button_name(remote, action, self.KEY_WORDS.get(action, ""))
+        return button_name(remote, action, self.REMOTE_WORDS.get(action, ""))
 
     def empty_guide(self, g) -> str:
         """What a guide list with no channels says (only Favorites can be)."""

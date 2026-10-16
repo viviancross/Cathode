@@ -38,7 +38,7 @@ def open_welcome(app):
             app.config.save()
             from .screens.boot import Boot
             app.push(Boot(app))
-        add_playlist(app, on_added=added)
+        add_playlist(app, on_added=added, first_run=True)
 
     def channels(title, extra=()):
         return [title, [Item("Set up your channels", setup), *extra,
@@ -608,22 +608,28 @@ def _reopen(app, items):
         m.refresh(items)
 
 
-def add_playlist(app, on_added=None):
-    """The playlist's address, an optional guide address, then its name."""
+def add_playlist(app, on_added=None, first_run=False):
+    """The playlist's address, an optional guide address, then its name. On
+    first run they're the wizard's step 3, numbered 3a to 3c."""
     entry = {"name": "My Channels"}
+    step = (lambda n, s: f"3{n}  {s}") if first_run else (lambda n, s: s)
+
+    def bare(url):
+        """Just the http:// the keyboard starts with: nothing typed."""
+        return "" if url.strip().lower() in ("http://", "https://") else url
 
     def got_url(url):
-        if not url:
+        if not url or not bare(url):
             return
         entry["playlist_url"] = url
-        app.push(Keyboard(app, "Guide address (XMLTV, optional)", got_epg,
-                          hint="Fills the guide. Leave empty and choose Done to skip."))
+        app.push(Keyboard(app, step("b", "Guide address (optional)"), got_epg, url=True,
+                          hint="The XMLTV address for the guide. Done as it is skips."))
 
     def got_epg(epg):
         if epg is None:
             return
-        entry["epg_url"] = epg
-        app.push(Keyboard(app, "Name this playlist", got_name, initial="My Channels",
+        entry["epg_url"] = bare(epg)
+        app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
                           hint="How it's listed under Settings > Channels."))
 
     def got_name(name):
@@ -640,8 +646,8 @@ def add_playlist(app, on_added=None):
         app.switch_playlist(entry)
         if on_added:
             on_added(entry)
-    app.push(Keyboard(app, "Playlist address (M3U URL or file)", got_url,
-                      hint="From your IPTV provider. Ctrl+V pastes."))
+    app.push(Keyboard(app, step("a", "Playlist address"), got_url, url=True,
+                      hint="Your IPTV provider's M3U address. Ctrl+V pastes."))
 
 
 # ── Display ───────────────────────────────────────────────────────────────

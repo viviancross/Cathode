@@ -43,6 +43,10 @@ a retro-themed player.
   playback buttons, RIGHT into Plate's side buttons, and the mini guide
   moves with the arrows. **Settings > Remote control > Button guide** lists
   what each button does, named for the remote, pad or keyboard in use.
+- **Easier channel setup by remote.** Address keyboards start lowercase with
+  http:// already typed, and : and / are on the first layer in every skin.
+  BACK on an empty field leaves it. First run numbers its channel steps
+  3a, 3b and 3c.
 - **Safer by remote.** Exit Cathode, Unlink Plex account, Delete playlist
   and Reset buttons each ask first, with the safe choice on top. A channel
   number that doesn't exist says "No channel 99"; channel keys during a film
