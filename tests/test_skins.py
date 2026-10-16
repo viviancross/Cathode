@@ -134,6 +134,7 @@ def page_screens():
             flash=("", 0))
     pb.bar_visible = lambda: True
     pb.seek_to = pb.toggle_pause = pb.stop = pb.skip = pb.seek = lambda *a: None
+    pb.transport = lambda: [(k, k, lambda: None) for k in ("prev", "back", "pause", "stop", "fwd", "next")]
     pb.handle = lambda a: True
     cap = NS(name="capture", prompt="Press the key for Guide  (Esc cancels)")
     rec = NS(**{**vars(info), "kind": "download"})       # a recording: Program Information, not an offer

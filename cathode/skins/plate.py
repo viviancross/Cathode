@@ -790,12 +790,12 @@ class PlateHD(BoxSkin):
         from ..screens.iteminfo import hms
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if pb.skip_label:
-            r = self.R(880, 480 if pb.bar_visible() else 600, 350, 52)
+            r = self.R(880, 424 if pb.bar_visible() else 600, 350, 52)
             self._vip_button(c, r, f"{pb.skip_label.title()}  (SELECT)", True)
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
-        r = self.R(40, 560, 1200, 120)
+        r = self.R(40, 500, 1200, 180)
         self._box(c, r)
         f = self.fb(Y(28))
         q = self.app.ondemand.queue
@@ -811,6 +811,13 @@ class PlateHD(BoxSkin):
         self.cb(c, hms(pb.pos), fs, b["banner_ink"], line.x - X(18), line.y - Y(4), align="right")
         self.cb(c, hms(pb.dur) if pb.dur else "--:--", fs, b["banner_ink"], line.right + X(18), line.y - Y(4))
         self.hit(line.inflate(0, Y(24)), lambda: pb.seek_to(self._click_frac(line)))
+        # The transport buttons: the white capsules of the box's dialogs.
+        fb = self.fb(Y(20))
+        for k, (kind, _, fn) in enumerate(pb.transport()):
+            br = self.R(140 + k * 170, 618, 150, 42)
+            self._vip_button(c, br, "", False)
+            self.transport_face(c, kind, br, b["vp_ink"], fb)
+            self.hit(br, fn)
 
     def _vip_dialog(self, c, title, lines, buttons=()):
         """The ViP's pale dialog: the title in a blue capsule, the lines
@@ -1637,12 +1644,12 @@ class Plate(PlateHD):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         if pb.skip_label:
-            r = self.R(370, 300 if pb.bar_visible() else 400, 230, 32)
+            r = self.R(370, 262 if pb.bar_visible() else 400, 230, 32)
             self._sd_pill(c, r, f"{pb.skip_label.title()}: SELECT", True)
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
-        top, h = H - Y(46) - Y(87), Y(87)
+        top, h = H - Y(46) - Y(42) - Y(87), Y(87)
         left = pygame.Rect(X(55), top, X(88), h)
         mid = pygame.Rect(X(147), top, X(333), h)
         right = pygame.Rect(X(484), top, X(96), h)
@@ -1662,6 +1669,13 @@ class Plate(PlateHD):
         pygame.draw.rect(c, b["warn"], (line.x, line.y, max(Y(10), int(line.w * frac)), line.h), border_radius=Y(5))
         t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
         self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
+        # The transport buttons: small capsules like the banner's.
+        fb = self.fb(Y(15))
+        for k, (kind, _, fn) in enumerate(pb.transport()):
+            br = pygame.Rect(X(55) + k * X(89), top + h + Y(8), X(80), Y(34))
+            self._band(c, br)
+            self.transport_face(c, kind, br, ink, fb)
+            self.hit(br, fn)
 
     def _note(self, c, text, frac=None):
         """A dark capsule like the banner's, bottom left."""
@@ -1723,11 +1737,11 @@ class Plate(PlateHD):
         stage = boot.stage()
         self._grey_page(c, (0, 0, W, H))
         tab = pygame.Surface((W, Y(236)), pygame.SRCALPHA)
-        pygame.draw.ellipse(tab, b["blue"], (X(58), Y(17), X(420), Y(197)))
+        pygame.draw.ellipse(tab, b["blue"], ((W - X(420)) // 2, Y(17), X(420), Y(197)))
         c.blit(tab, (0, 0))
         size = Y(44)
         mw = self.measure(self.wordmark, size, b["text"], b["dish"])
-        self.wordmark(c, (W - mw) // 2, Y(80), size, b["text"], b["dish"])
+        self.wordmark(c, (W - mw) // 2, Y(91), size, b["text"], b["dish"])
         caption = {"starting": "Starting up...", "signal": "Acquiring Satellite Signal",
                    "guide": "Retrieving program information from satellite." + self.guide_pct(),
                    "done": "Ready"}[stage]

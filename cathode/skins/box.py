@@ -4,6 +4,7 @@ colours so the screens a box skin doesn't redraw itself (On Demand, the
 keyboard, diagnostics) still wear its colours."""
 
 import pygame
+from pygame import gfxdraw
 
 from .. import palette
 from .classic import Classic
@@ -109,6 +110,62 @@ class BoxSkin(Classic):
         if label.startswith("REC "):
             return f"Recording {label[4:]}"
         return self.BUTTON_WORDS.get(label, label.title())
+
+    # On Demand's transport buttons wear the remote's symbols, drawn (no one
+    # font has them all), with the seconds on the two seek buttons.
+    ICON_W = {"play": 8, "pause": 8, "stop": 8, "back": 11, "fwd": 11, "prev": 9, "next": 9}
+    SEEK_SECONDS = {"back": "10", "fwd": "30"}
+
+    def transport_icon(self, c, kind, x, cy, h, ink):
+        """The symbol for `kind`, `h` tall, its left edge at x; ICON_W gives
+        its width in tenths of h."""
+        u, top = h / 10, cy - h / 2
+
+        def tri(base, tip):
+            pts = [(round(x + base * u), round(top)), (round(x + base * u), round(top + h)),
+                   (round(x + tip * u), round(cy))]
+            gfxdraw.aapolygon(c, pts, ink)
+            gfxdraw.filled_polygon(c, pts, ink)
+
+        def bar(x0, w, y0=0.0, bh=10.0):
+            pygame.draw.rect(c, ink, (round(x + x0 * u), round(top + y0 * u), max(1, round(w * u)), round(bh * u)))
+
+        if kind == "play":
+            tri(0, 8)
+        elif kind == "pause":
+            bar(0, 3)
+            bar(5, 3)
+        elif kind == "stop":
+            bar(0, 8, 1, 8)
+        elif kind == "back":
+            tri(5.5, 0)
+            tri(11, 5.5)
+        elif kind == "fwd":
+            tri(0, 5.5)
+            tri(5.5, 11)
+        elif kind == "prev":
+            bar(0, 2)
+            tri(9, 2)
+        elif kind == "next":
+            tri(0, 7)
+            bar(7, 2)
+
+    def transport_face(self, c, kind, r, ink, f, shadow=None):
+        """A transport button's face centred in `r`: the symbol, and the
+        seconds after the arrows going back, before them going forward."""
+        t = self.text
+        h = max(7, r.h * 9 // 20)
+        num = self.SEEK_SECONDS.get(kind, "")
+        iw = round(self.ICON_W[kind] * h / 10)
+        nw = t.width(f, num) if num else 0
+        gap = h // 2 if num else 0
+        x = r.centerx - (iw + gap + nw) // 2
+        ix, nx = (x + nw + gap, x) if kind == "fwd" else (x, x + iw + gap)
+        ny = r.y + (r.h - t.ink(f)[1]) // 2
+        for d, ink_ in ([(2, shadow)] if shadow else []) + [(0, ink)]:
+            self.transport_icon(c, kind, ix + d, r.centery + d, h, ink_)
+            if num:
+                t.draw(c, num, f, ink_, nx + d, ny + d)
 
     # Box skins keep their look in skin_fonts / skin_themes (the base class).
     def font_key(self):

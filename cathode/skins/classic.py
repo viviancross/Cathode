@@ -660,12 +660,10 @@ class Classic(Skin):
         t.draw(c, hms(pb.dur) if pb.dur else "--:--", f_sub, p["WHITE"], tl.right + 14, tl.y - 4)
         self.hit(tl.inflate(0, 24), lambda: pb.seek_to(self._click_frac(tl)))
         # Transport buttons, for the mouse (the remote acts on its own keys).
-        buttons = [("|<<", lambda: pb.skip(-1)), ("<< 10", lambda: pb.seek(-10)),
-                   ("PLAY" if paused else "PAUSE", pb.toggle_pause), ("STOP", pb.stop),
-                   ("30 >>", lambda: pb.seek(30)), (">>|", lambda: pb.skip(1))]
+        buttons = pb.transport()
         bw = 104
         x = bar.centerx - (len(buttons) * bw + (len(buttons) - 1) * 10) // 2
-        for label, fn in buttons:
+        for _, label, fn in buttons:
             r = pygame.Rect(x, bar.y + 104, bw, 34)
             pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r, border_radius=6)
             pygame.draw.rect(c, p["OSD_BORDER"], r, 1, border_radius=6)

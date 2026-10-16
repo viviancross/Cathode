@@ -19,7 +19,8 @@ a retro-themed player.
 - **Box behaviour.** A start-up screen that follows the real loading, a
   banner on every tune (INFO again for the description), browse without
   tuning (Plate Network: RIGHT, as on Dish), a mini guide (InDirecTV), a signal-loss screen for dead channels, PREV, a THEMES button for genres, guide paging
-  and day jumps, numbered menus.
+  and day jumps, numbered menus. On Demand playback bars carry on-screen
+  transport buttons in every skin, each box's in its own style.
 - **FORMAT key** (A, or Settings > Picture & Style): Original, Zoom, Stretch
   or 4:3, over any screen, remembered. **Guide refreshes show their real
   progress** in each box's own notice, and the start-up screen's bar follows

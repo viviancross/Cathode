@@ -63,8 +63,7 @@ class InDirectHD(BoxSkin):
             "ink": mix(navy, (60, 40, 110), 0.4), "strip_ink": mix(cell, (80, 120, 140), 0.5),
             "watermark": mix(text, navy, 0.3),
             "band": (33, 132, 193), "band_edge": (0, 68, 126), "paper": (244, 238, 253),
-            "paper_ink": (23, 85, 129), "keybar": (55, 100, 142), "key_yellow": (224, 208, 49),
-            "key_blue": (1, 78, 167),
+            "paper_ink": (23, 85, 129), "keybar": (55, 100, 142),
             "teal": mix(cell, sky, 0.45), "teal_dark": mix(cell, sky, 0.2), "panel": mix(cell, navy, 0.15),
             "margin": mix(cell, sky, 0.7), "bar": mix(sky, text, 0.55), "deep": mix(navy, (0, 0, 0), 0.4),
             # The pages wear the guide's colours (the user's call): navy
@@ -197,7 +196,7 @@ class InDirectHD(BoxSkin):
         t.draw(c, t.fit(f_title, cur.title if cur else ch.name, room), f_title, b["text"], X(385), Y(97))
         if group:
             t.draw(c, group, f_call, b["text"], X(1105), Y(99), align="right")
-        strip = self.R(0, 134, 1280, 52)
+        strip = self.R(0, 131, 1280, 55)
         paper = pygame.Surface(strip.size, pygame.SRCALPHA)
         paper.fill((*b["paper"], 240))
         c.blit(paper, strip.topleft)
@@ -218,9 +217,18 @@ class InDirectHD(BoxSkin):
         fk = self.fb(Y(18))
         ky = bar.y + (bar.h - t.ink(fk)[1]) // 2
         t.draw(c, f"Favorites List:  {g_list(self)}", fk, b["text"], X(112), ky)
-        for dot, label, dx in ((b["key_yellow"], "TV Options", 820), (b["key_blue"], "Mini Guide", 1005)):
-            pygame.draw.circle(c, dot, (X(dx), bar.centery), Y(11))
-            t.draw(c, label, fk, b["text"], X(dx + 20), ky)
+        # Where the HR20 showed its colour buttons, the keys that work here,
+        # named as on Cathode's remote (it has no colour buttons).
+        fc = self.fb(Y(12))
+        x = bar.right - X(16)
+        for key, label in (("BROWSE", "Mini Guide"), ("MENU", "Menu")):
+            x -= t.width(fk, label)
+            t.draw(c, label, fk, b["text"], x, ky)
+            chip = pygame.Rect(0, bar.y + Y(2), t.width(fc, key) + X(14), bar.h - Y(4))
+            chip.right = x - X(8)
+            pygame.draw.rect(c, b["paper"], chip, border_radius=Y(4))
+            t.draw(c, key, fc, b["paper_ink"], chip.centerx, chip.y + (chip.h - t.ink(fc)[1]) // 2, align="center")
+            x = chip.x - X(30)
         if tag:
             self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(16)), rgba(b["sel"]), b["sel_ink"])
         if full and cur and cur.description:
@@ -977,7 +985,7 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         paused = self.app.video.paused
         if pb.skip_label:
-            sk = self.R(880, 520 if pb.bar_visible() else 600, 320, 50)
+            sk = self.R(880, 476 if pb.bar_visible() else 600, 320, 50)
             pygame.draw.rect(c, b["pop_body"], sk)
             pygame.draw.rect(c, b["orange"], sk, Y(3))
             f = self.fb(Y(22))
@@ -986,13 +994,13 @@ class InDirectHD(BoxSkin):
             self.hit(sk, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
-        tile = self.R(80, 590, 292, 84)
+        tile = self.R(80, 546, 292, 84)
         vgrad(c, tile, rgba(b["tk_tile"]), rgba(mix(b["tk_tile"], b["od_bar"], 0.7)))
         self.tile(c, (tile.centerx - X(26), tile.y + Y(9), X(52), Y(42)), b["sky"])
         fw = self.fb(Y(15))
         w = sum(t.width(fw, ch) for ch in "InDirecTV") + X(2) * 8
         self._spaced(c, "InDirecTV", fw, b["ink"], tile.centerx - w // 2, tile.y + Y(58), X(2))
-        band = self.R(372, 590, 736, 84)
+        band = self.R(372, 546, 736, 84)
         pygame.draw.rect(c, b["tk_band"], band)
         f = self.fb(Y(22))
         q = self.app.ondemand.queue
@@ -1010,7 +1018,7 @@ class InDirectHD(BoxSkin):
         pygame.draw.rect(c, b["tk_tile"], tab, border_radius=Y(10))
         ft = self.fb(Y(19))
         t.draw(c, hms(pb.pos), ft, b["ink"], tab.centerx, tab.y + (tab.h - t.ink(ft)[1]) // 2, align="center")
-        st = self.R(1108, 590, 92, 84)
+        st = self.R(1108, 546, 92, 84)
         pygame.draw.rect(c, b["tk_state"], st)
         cx, cy = st.center
         if paused:
@@ -1019,6 +1027,13 @@ class InDirectHD(BoxSkin):
         else:
             pygame.draw.polygon(c, b["text"], [(cx - X(10), cy - Y(17)), (cx - X(10), cy + Y(17)), (cx + X(14), cy)])
         self.hit(st, pb.toggle_pause)
+        # The transport buttons under the band: navy tiles like the state one.
+        fb = self.fb(Y(17))
+        for k, (kind, _, fn) in enumerate(pb.transport()):
+            r = self.R(372 + k * 124, 636, 116, 38)
+            pygame.draw.rect(c, b["tk_state"], r)
+            self.transport_face(c, kind, r, b["text"], fb)
+            self.hit(r, fn)
 
     # The pop-ups: the grey title, the blue body, the logo in the grey foot.
 
@@ -1619,17 +1634,26 @@ class InDirect(InDirectHD):
         from ..screens.iteminfo import hms
         b, X, Y = self.b, self.X, self.Y
         if pb.skip_label:
-            self._notice(c, [f"{pb.skip_label.title()}: press SELECT"], y_bottom=Y(180) if pb.bar_visible() else Y(227))
+            self._notice(c, [f"{pb.skip_label.title()}: press SELECT"], y_bottom=Y(160) if pb.bar_visible() else Y(227))
         if not pb.bar_visible():
             return
         state = "Paused" if self.app.video.paused else "Playing"
-        r = self._notice(c, [pb.title, f"{state}    {hms(pb.pos)} of {hms(pb.dur) if pb.dur else '--:--'}", ""],
+        r = self._notice(c, [pb.title, f"{state}    {hms(pb.pos)} of {hms(pb.dur) if pb.dur else '--:--'}", "", ""],
                          min_w=X(262))
-        bar = pygame.Rect(r.x + X(12), r.bottom - Y(9), r.w - X(24), Y(4))
+        bar = pygame.Rect(r.x + X(12), r.y + Y(32), r.w - X(24), Y(4))
         pygame.draw.rect(c, b["gap"], bar)
         frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
         pygame.draw.rect(c, b["teal"], (bar.x, bar.y, int(bar.w * frac), bar.h))
         self.hit(bar.inflate(0, Y(8)), lambda: pb.seek_to(self._click_frac(bar)))
+        # The transport buttons: the DSS's teal buttons with their shadow.
+        f = self.fb(Y(8))
+        bw = (bar.w - 5 * X(4)) // 6
+        for k, (kind, _, fn) in enumerate(pb.transport()):
+            br = pygame.Rect(bar.x + k * (bw + X(4)), r.y + Y(41), bw, Y(13))
+            pygame.draw.rect(c, b["shadow"], br.move(2, 2))
+            pygame.draw.rect(c, b["teal"], br)
+            self.transport_face(c, kind, br, b["text"], f, shadow=b["shadow"])
+            self.hit(br, fn)
 
     def keyboard_rows(self, layer):
         if layer == "sym":

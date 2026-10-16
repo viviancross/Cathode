@@ -152,6 +152,15 @@ class Playback(Screen):
             self.flash = ("PLAY >", time.monotonic() + 1.5)
         self.show_bar()
 
+    def transport(self):
+        """The on-screen buttons, for the mouse (the remote acts on its own
+        keys): (kind, label, action), left to right."""
+        paused = self.app.video.paused
+        return [("prev", "|<<", lambda: self.skip(-1)), ("back", "<< 10", lambda: self.seek(-10)),
+                ("play", "PLAY", self.toggle_pause) if paused else ("pause", "PAUSE", self.toggle_pause),
+                ("stop", "STOP", self.stop), ("fwd", "30 >>", lambda: self.seek(30)),
+                ("next", ">>|", lambda: self.skip(1))]
+
     def handle(self, a: str) -> bool:
         if a == R.SELECT:
             if self.skip_label:
