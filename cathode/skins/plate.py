@@ -214,7 +214,7 @@ class PlateHD(BoxSkin):
             self.cb(c, label, fp, b["pill_ink"], pr.x + X(18), pr.y + Y(5))
         if full and cur and cur.description:
             f = self.fb(Y(18))
-            lines = t.wrap(f, cur.description, int(r.w * 0.86) - X(40), 3)
+            lines = t.wrap(f, cur.description, int((r.w - X(40)) / 0.86), 3)
             d = pygame.Rect(r.x, 0, r.w, Y(16) + len(lines) * Y(26))
             d.y = r.y - d.h - Y(8) if bottom else r.bottom + Y(8)
             self._box(c, d)
@@ -336,17 +336,20 @@ class PlateHD(BoxSkin):
         pic = self._picture(c)
         sel = g.selected()
         cur = self.app.live.programs(sel)[0] if sel else None
-        f_title, f_small = self.fb(Y(37)), self.fb(Y(24))
+        f_title, f_info, f_small = self.fb(Y(37)), self.fb(Y(22)), self.fb(Y(24))
         title = cur.title if cur else (sel.name if sel else "")
         cx = X(470)
-        self.cb(c, self.fit_cb(f_title, title, X(600)), f_title, b["text"], cx, Y(62), align="center")
+        # The title, a line of when / rating / genre under it, then the
+        # synopsis in even lines: one block, clear of the logo at the left.
+        self.cb(c, self.fit_cb(f_title, title, X(600)), f_title, b["text"], cx, Y(44), align="center")
         logo = self.channel_logo(sel, X(150), Y(74))
         if logo:                            # where the box carried its guide tag
             c.blit(logo, logo.get_rect(midleft=(X(46), Y(182))))
         if cur:
-            blurb = (f"{cur.category}. " if cur.category else "") + (cur.description or "")
-            y = Y(168)
-            for line in t.wrap(f_small, blurb, int(X(600) / 0.86), 3):
+            info = "   ".join(s for s in (f"{ampm(cur.start)} - {ampm(cur.stop)}", cur.rating, cur.category) if s)
+            self.cb(c, self.fit_cb(f_info, info, X(560)), f_info, b["soft"], cx, Y(92), align="center")
+            y = Y(132)
+            for line in t.wrap_even(f_small, cur.description or "", int(X(520) / 0.86), 3):
                 self.cb(c, line, f_small, b["text"], cx, y, align="center")
                 y += Y(30)
         f_list = self.fb(Y(30))
@@ -963,7 +966,8 @@ class PlateHD(BoxSkin):
         lines = t.wrap(f, msg, int(X(1040) / 0.86), 3)
         lh = Y(32)
         w = max(int(t.width(f, ln) * 0.86) for ln in lines) + X(64)
-        r = pygame.Rect((self.canvas[0] - w) // 2, Y(150), w, Y(18) + lh * len(lines))     # clear of the banner
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(150) if self.over_picture() else Y(70), w,
+                        Y(18) + lh * len(lines))       # under the banner; on a page, between title and panels
         radius = r.h // 2 if len(lines) == 1 else Y(18)
         pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=radius)
         vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=radius)

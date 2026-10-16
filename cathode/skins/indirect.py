@@ -1165,8 +1165,9 @@ class InDirectHD(BoxSkin):
         f = self.fb(Y(24))
         lines = t.wrap(f, msg, X(1040), 3)
         lh = Y(34)
-        # Under the banner and the pages' title area, so it never covers either.
-        r = pygame.Rect(X(96), Y(226), max(t.width(f, ln) for ln in lines) + X(48), Y(16) + lh * len(lines))
+        # Over the picture, under the banner; on a page, on its date strip (clear of title and list).
+        r = pygame.Rect(X(96), Y(226) if self.over_picture() else Y(143), max(t.width(f, ln) for ln in lines) + X(48),
+                        Y(16) + lh * len(lines))
         pygame.draw.rect(c, b["pop_body"], r)
         pygame.draw.rect(c, b["sky"], (r.x, r.y, r.w, Y(3)))
         pygame.draw.rect(c, b["sky"], (r.x, r.bottom - Y(3), r.w, Y(3)))

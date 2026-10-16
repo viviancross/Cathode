@@ -213,6 +213,23 @@ class Text:
             lines.append(line)
         return lines
 
+    def wrap_even(self, font, s: str, max_w: int, max_lines: int) -> list:
+        """wrap(), with the lines made as even as the words allow: the
+        narrowest width that keeps the same number of lines (for centred
+        text, where a long line over a short one looks ragged)."""
+        lines = self.wrap(font, s, max_w, max_lines)
+        if len(lines) < 2 or lines[-1].endswith("..."):
+            return lines
+        lo, hi = max_w // 2, max_w
+        while lo < hi:
+            mid = (lo + hi) // 2
+            trial = self.wrap(font, s, mid, max_lines)
+            if len(trial) == len(lines) and not trial[-1].endswith("..."):
+                hi = mid
+            else:
+                lo = mid + 1
+        return self.wrap(font, s, hi, max_lines)
+
     def draw(self, surface, s: str, font, color, x, y, align="left", outline=None):
         """Draw with the ink's top at y. align: left | right | center (on x)."""
         if not s:
@@ -304,6 +321,12 @@ class Skin:
             veil = pygame.Surface(r.size, pygame.SRCALPHA)
             pygame.draw.rect(veil, (0, 0, 0, 120), veil.get_rect(), border_radius=radius)
             c.blit(veil, r.topleft)
+
+    def over_picture(self) -> bool:
+        """Whether the top screen is the picture (live TV, playback) rather
+        than a full page: a toast then keeps clear of the banner instead."""
+        top = getattr(self.app, "top", None)
+        return bool(top) and getattr(top(), "name", "") in ("live", "playback", "browse", "miniguide")
 
     def guide_tip(self) -> str:
         """Keys a guide with no legend of its own names the first time it
