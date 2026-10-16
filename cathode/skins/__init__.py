@@ -271,6 +271,7 @@ class Skin:
         self.grow = 0               # canvas rows past the design height (16:9 on a squarer window)
         self._seams = weakref.WeakKeyDictionary()   # screen -> how paint opened it up
         self._held = None           # backdrops held back while drawing for a seam
+        self._holes = []            # the picture boxes cleared while drawing for a seam
 
     # ── The canvas for the window ─────────────────────────────────────────
 
@@ -300,7 +301,8 @@ class Skin:
         between a top banner and a foot one, the empty page under a list):
         what's above stays at the top, what's below moves to the foot, and
         that stretch's own row fills between (see seams). Page backdrops
-        reaching the foot are held back and drawn at the full height under it."""
+        reaching the foot are held back and drawn at the full height under
+        it, the screen's picture boxes (hole) cleared through them."""
         if not self.grow or self.tall(name):
             draw(canvas)
             return
@@ -308,7 +310,7 @@ class Skin:
         g, dh = self.grow, H - self.grow
         design = pygame.Surface((W, dh), pygame.SRCALPHA)
         n = len(self.hits)
-        self.canvas, self.grow, self._held = (W, dh), 0, []
+        self.canvas, self.grow, self._held, self._holes = (W, dh), 0, [], []
         try:
             draw(design)
         finally:
@@ -316,12 +318,10 @@ class Skin:
         fit = seams(design, g)
         if owner is not None:
             self._seams[owner] = fit
-        if held:
-            for fn, r in held:
-                fn(canvas, pygame.Rect(r.x, r.y, r.w, r.h + g))
-            box = owner.video_box() if owner is not None else None
-            if isinstance(box, tuple):          # the picture shows through the page
-                canvas.fill((0, 0, 0, 0), _moved(pygame.Rect(box), fit))
+        for fn, r in held:
+            fn(canvas, pygame.Rect(r.x, r.y, r.w, r.h + g))
+        for r in self._holes:                   # the picture shows through the page
+            canvas.fill((0, 0, 0, 0), _moved(r, fit))
         src = dst = 0
         for y, add in fit:
             canvas.blit(design, (0, dst), (0, src, W, y - src))
@@ -339,6 +339,13 @@ class Skin:
             return box
         r = _moved(pygame.Rect(box), fit)
         return (r.x, r.y, r.w, r.h)
+
+    def hole(self, c, rect):
+        """Clear a picture box down to the video. Drawing for a seam, it's
+        kept too, to clear it through the backdrops paint draws later."""
+        pygame.draw.rect(c, (0, 0, 0, 0), rect)
+        if self._held is not None:
+            self._holes.append(pygame.Rect(rect))
 
     def hold_backdrop(self, rect, fn) -> bool:
         """A page's backdrop reaching the foot of the canvas, while paint

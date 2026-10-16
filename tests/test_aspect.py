@@ -50,6 +50,18 @@ class TestFit(unittest.TestCase):
             skin.fit_window((1024, 768))
             self.assertEqual(skin.guide_rows, rows, name)
 
+    def test_a_taller_on_demand_lists_more(self):
+        from test_skins import page_screens
+        for name in ("indirect_hd", "plate_hd"):
+            skin = make(name)
+            s = page_screens()[0]
+            for view in ("list", "wall"):
+                s.view = view
+                skin.fit_window((1280, 720))
+                short = skin.ondemand_page(s)
+                skin.fit_window((1024, 768))
+                self.assertGreater(skin.ondemand_page(s), short, (name, view))
+
 
 class TestSeam(unittest.TestCase):
     @classmethod
@@ -106,22 +118,29 @@ class TestSeam(unittest.TestCase):
 
         def draw(c):
             skin._page(c, (0, 0, 1280, 720))
-            c.fill((0, 0, 0, 0), (600, 200, 400, 225))
+            skin.hole(c, (600, 200, 400, 225))
         skin.paint(canvas, "menu", draw, owner)
         self.assertEqual(canvas.get_at((800, 300))[3], 0)
         self.assertEqual(canvas.get_at((300, 900))[3], 255)
+        # A page that names a picture box but draws none keeps it covered.
+        canvas.fill((0, 0, 0, 0))
+        skin.paint(canvas, "keyboard", lambda c: skin._page(c, (0, 0, 1280, 720)), owner)
+        self.assertEqual(canvas.get_at((800, 300))[3], 255)
 
     def test_every_screen_draws_on_a_grown_canvas(self):
+        from test_skins import FakeOnDemand, page_screens
         for name in ("classic", "indirect_hd", "plate_hd"):
             skin = make(name)
+            skin.app.ondemand = FakeOnDemand()
             for window in ((1024, 768), (1280, 800)):
                 skin.fit_window(window)
                 canvas = pygame.Surface(skin.canvas, pygame.SRCALPHA)
-                for s in screens(skin.app):
+                for s in screens(skin.app) + page_screens():
                     with self.subTest(skin=name, window=window, screen=s.name):
                         canvas.fill((0, 0, 0, 0))
                         skin.hits = []
-                        skin.paint(canvas, s.name, lambda c, s=s: skin.draw(c, s), s)
+                        owner = None if type(s).__name__ == "SimpleNamespace" else s    # the made-up pages
+                        skin.paint(canvas, s.name, lambda c, s=s: skin.draw(c, s), owner)
                         for r, _ in skin.hits:
                             self.assertTrue(canvas.get_rect().contains(r) or r.w == 0, (r, canvas.get_rect()))
 

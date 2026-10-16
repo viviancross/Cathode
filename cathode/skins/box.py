@@ -87,6 +87,16 @@ class BoxSkin(Classic):
 
     def tall(self, name: str) -> bool:
         return name in self.TALL    # the box's own screens keep their 720 rows; see Skin.paint
+
+    def more(self, pitch: int) -> int:
+        """The height a grown canvas adds, in whole rows of `pitch`."""
+        return self.grow // pitch * pitch
+
+    def _grad(self, c, rect, top, bottom):
+        """A page's plain gradient (held to the full height on a grown
+        canvas, see Skin.paint)."""
+        if not self.hold_backdrop(rect, lambda cc, r: vgrad(cc, r, top, bottom)):
+            vgrad(c, rect, top, bottom)
     default_font = "sans"
     NATIVE = palette.base_colors("blue")
 

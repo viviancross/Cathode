@@ -43,6 +43,7 @@ class InDirectHD(BoxSkin):
     browse_style = "mini"           # BROWSE opens the mini guide
     guide_hours = 1.5               # three half-hour columns, as the box showed
     guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
+    TALL = ("guide", "screensaver", "ondemand")
     default_font = "barlow"         # the HR20's DIN-like screen face: Barlow matches its letterforms
     SD = False
     # Measured: the header navy, the program-cell teal, the amber, the logo blue.
@@ -128,12 +129,6 @@ class InDirectHD(BoxSkin):
 
     # ── Pieces ────────────────────────────────────────────────────────────
 
-    def _grad(self, c, rect, top, bottom):
-        """A page's plain gradient (held to the full height on a grown
-        canvas, see Skin.paint)."""
-        if not self.hold_backdrop(rect, lambda cc, r: vgrad(cc, r, top, bottom)):
-            vgrad(c, rect, top, bottom)
-
     def _page(self, c, rect):
         """The cyan page: lightest a third of the way down, darker at the foot."""
         if self.hold_backdrop(rect, self._page):
@@ -157,7 +152,7 @@ class InDirectHD(BoxSkin):
 
     def _picture(self, c):
         vx, vy, vw, vh = self.guide_video_box()
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         pygame.draw.rect(c, rgba(self.b["text"]), (vx - 3, vy - 3, vw + 6, vh + 6), 3)
         if not getattr(self.app, "channels", None):     # nothing playing yet: the mark, not black
             self.mark_stacked(c, vx + vw // 2 - self.X(62), vy + vh // 2 - self.Y(42), self.b["text"])
@@ -608,9 +603,12 @@ class InDirectHD(BoxSkin):
         return self.OD_COLS
 
     def ondemand_page(self, screen):
+        Y = self.Y
         if screen.view == "wall":
-            return self.OD_COLS * 2
-        return 6 if self._is_playlist(screen) else 9      # 9 x 44 inside the 408 panel
+            return self.OD_COLS * (2 + self.more(Y(44)) // Y(184))
+        if self._is_playlist(screen):
+            return 6 + self.grow // Y(48)
+        return 9 + self.grow // Y(44)       # 9 x 44 inside the 408 panel, and a taller screen's rows
 
     @staticmethod
     def _is_playlist(s):
@@ -627,8 +625,9 @@ class InDirectHD(BoxSkin):
             f.italic = False
 
     def _blue(self, c):
-        """The blue page under the title area."""
-        self._page(c, self.R(0, 192, 1280, 528))
+        """The blue page under the title area, to the foot of the canvas."""
+        W, H = self.canvas
+        self._page(c, (0, self.Y(192), W, H - self.Y(192)))
 
     def _hint(self, c, x, y, key, label, ink, chip):
         """A remote button named in a footer: the button in a small chip,
@@ -666,10 +665,11 @@ class InDirectHD(BoxSkin):
 
         head = self.R(364, 35, 472, 183)
         pygame.draw.rect(c, b["od_panel"], head, border_radius=Y(6))
-        main = self.R(356, 218, 880, 408)
+        more = self.more(Y(44))             # a taller screen's rows
+        main = self.R(356, 218, 880, 408 + more)
         pygame.draw.rect(c, b["od_panel"], main)
         pygame.draw.rect(c, b["od_bar"], main, Y(2))
-        bar = self.R(356, 634, 880, 40)
+        bar = self.R(356, 634, 880, 40).move(0, more)
         pygame.draw.rect(c, b["od_bar"], bar, border_radius=Y(6))
         hy = bar.y + (bar.h - t.ink(self.f(Y(21)))[1]) // 2
         x = self._hint(c, bar.x + X(64), hy, self.k("MENU"), "Options", b["text"], b["navy"])
@@ -698,7 +698,7 @@ class InDirectHD(BoxSkin):
         parent = s.stack[-2] if len(s.stack) > 1 else None
         col_rows, col_sel = (parent["rows"], parent["sel"]) if parent else (s.rows, s.sel)
         fr = self.f(Y(25))
-        n_col = 9
+        n_col = 9 + more // Y(42)
         first = max(0, min(col_sel - n_col + 1, len(col_rows) - n_col)) if len(col_rows) > n_col else 0
         for k, i in enumerate(range(first, min(len(col_rows), first + n_col))):
             r = pygame.Rect(X(32), Y(218) + k * Y(42), X(312), Y(40))
@@ -753,7 +753,7 @@ class InDirectHD(BoxSkin):
             if off and dur:
                 pygame.draw.rect(c, b["tk_bar"], (r.x + X(16), r.bottom - Y(5), int((r.w - X(32)) * min(1, off / dur)), Y(3)))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
-        ax, ay = X(374), Y(654)                 # the key bar's arrow slot
+        ax, ay = X(374), Y(654) + more          # the key bar's arrow slot
         if top + n_vis < len(rows):
             pygame.draw.polygon(c, b["text"], [(ax, ay - Y(6)), (ax + X(16), ay - Y(6)), (ax + X(8), ay + Y(6))])
         if top:
@@ -777,18 +777,15 @@ class InDirectHD(BoxSkin):
             self._shadowed(c, s.rows[0]["title"], fs, b["text"], b["sel_shadow"] if on else None, sort.x + X(12),
                            sort.y + (sort.h - t.ink(fs)[1]) // 2)
             self.hit(sort, lambda: (setattr(s, "sel", 0), s.select()))
-        rows = s.rows[off:]
         cols = self.OD_COLS
         tw, th, gap = X(112), Y(168), X(28)
         x0 = main.x + (main.w - (cols * tw + (cols - 1) * gap)) // 2
         y0 = main.y + Y(44 if off else 18)
-        cur = max(0, s.sel - off)
-        first = max(0, cur // cols - 1) if cur // cols >= 1 else 0
         fcap = self.fb(Y(15))
-        for i in range(first * cols, min(len(rows), (first + 2) * cols)):
-            row = rows[i]
-            r = pygame.Rect(x0 + (i % cols) * (tw + gap), y0 + (i // cols - first) * (th + Y(16)), tw, th)
-            on = i + off == s.sel
+        for i, slot in self.wall_cells(s, cols, self.ondemand_page(s) // cols):
+            row = s.rows[i]
+            r = pygame.Rect(x0 + (slot % cols) * (tw + gap), y0 + (slot // cols) * (th + Y(16)), tw, th)
+            on = i == s.sel
             pygame.draw.rect(c, b["od_col"], r)
             art = self.app.ondemand.poster(row.get("thumb", ""), tw, th) if row.get("thumb") else None
             if art:
@@ -800,7 +797,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(fcap, nice(row.get("title", "")), cap.w - X(10)), fcap, b["od_ink"], cap.x + X(5),
                    cap.y + (cap.h - t.ink(fcap)[1]) // 2)
             pygame.draw.rect(c, b["od_sel"] if on else b["od_bar"], r.inflate(X(8), Y(8)) if on else r, Y(4) if on else 1)
-            self.hit(r, lambda i=i + off: (setattr(s, "sel", i), s.select()))
+            self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
 
     def _playlist(self, c, s):
         """My Recordings as the HR20's playlist: the group's title over its
@@ -850,9 +847,11 @@ class InDirectHD(BoxSkin):
             if meta:
                 self._ital(c, t.fit(fr, meta, X(440)), fr, ink, r.x + X(605), ty, shadow=sh)
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
-        foot = self.R(95, 645, 1085, 38)
+        more = self.more(Y(48))
+        foot = self.R(95, 645, 1085, 38).move(0, more)
         if top + n_vis < len(rows):
-            pygame.draw.polygon(c, b["text"], [(X(110), Y(655)), (X(140), Y(655)), (X(125), Y(672))])
+            pygame.draw.polygon(c, b["text"], [(X(110), Y(655) + more), (X(140), Y(655) + more),
+                                               (X(125), Y(672) + more)])
         free = 1.0
         try:
             du = shutil.disk_usage(self.app.ondemand.downloads.root)

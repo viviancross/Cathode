@@ -43,6 +43,7 @@ class PlateHD(BoxSkin):
     right_is_browse = True
     guide_hours = 1.5               # three half-hour columns, as the box showed
     SD = False
+    TALL = ("guide", "screensaver", "ondemand")
 
     @property
     def guide_rows(self):
@@ -151,7 +152,7 @@ class PlateHD(BoxSkin):
 
     def _picture(self, c):
         vx, vy, vw, vh = self.guide_video_box()
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         pygame.draw.rect(c, rgba(self.b["pip_edge"]), (vx - 3, vy - 3, vw + 6, vh + 6), 3)
         return pygame.Rect(vx, vy, vw, vh)
 
@@ -446,7 +447,7 @@ class PlateHD(BoxSkin):
         pygame.draw.rect(c, b["pip"], frame, border_radius=Y(8))
         pygame.draw.rect(c, b["pip_edge"], frame, Y(3), border_radius=Y(8))
         vx, vy, vw, vh = self.menu_video_box(m)
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         if not getattr(self.app, "channels", None):     # nothing playing yet: the mark, not black
             size = Y(64)
             mw = self.measure(self.wordmark, size, b["text"], b["dish"])
@@ -518,7 +519,10 @@ class PlateHD(BoxSkin):
         return self.WALL[0] if screen.view == "wall" else 1
 
     def ondemand_page(self, screen):
-        return self.WALL[0] * self.WALL[1] if screen.view == "wall" else 8
+        Y = self.Y
+        if screen.view == "wall":
+            return self.WALL[0] * (self.WALL[1] + self.more(Y(48)) // Y(186))
+        return 8 + self.grow // Y(48)       # and a taller screen's rows
 
     def _vip_page(self, c, title, sub="", picture=True):
         """The page every ViP screen shares; returns the picture's rect."""
@@ -526,7 +530,7 @@ class PlateHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         knee = Y(150)
         vgrad(c, (0, 0, W, knee), rgba(b["vp_top"]), rgba(b["vp_mid"]))
-        vgrad(c, (0, knee, W, H - knee), rgba(b["vp_mid"]), rgba(b["vp_bot"]))
+        self._grad(c, (0, knee, W, H - knee), rgba(b["vp_mid"]), rgba(b["vp_bot"]))
         hdr = pygame.Surface((W, Y(90)), pygame.SRCALPHA)
         pygame.draw.ellipse(hdr, (*b["vp_hdr"], 70), (-X(200), -Y(160), W + X(400), Y(240)))
         c.blit(hdr, (0, 0))
@@ -552,7 +556,7 @@ class PlateHD(BoxSkin):
         frame = pygame.Rect(vx - X(8), vy - Y(8), vw + X(16), vh + Y(48))
         pygame.draw.rect(c, b["vp_panel_edge"], frame.inflate(X(6), Y(6)), border_radius=Y(12))
         pygame.draw.rect(c, b["vp_row"], frame, border_radius=Y(10))
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         live = self.app.live
         fc = self.fb(Y(22))
         if live and live.channel:
@@ -623,7 +627,7 @@ class PlateHD(BoxSkin):
         title = "My Recordings" if rec else "On Demand"
         sub = "" if rec or not s.level or len(s.stack) < 2 else nice(s.level["title"])
         self._vip_page(c, title, sub)
-        panel = self.R(40, 236, 740, 460)
+        panel = self.R(40, 236, 740, 460 + self.more(Y(48)))      # a taller screen's rows
         self._vip_panel(c, panel)
         fh = self.fb(Y(22))
         fh.italic = True
@@ -661,7 +665,7 @@ class PlateHD(BoxSkin):
         self._vip_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
         if s.status:
             fs = self.fb(Y(22))
-            self.cb(c, s.status, fs, b["text"], X(1240), Y(668), align="right")
+            self.cb(c, s.status, fs, b["text"], X(1240), Y(668) + self.grow, align="right")
         self._vip_about(c, s.current() or {})
 
     def od_side(self, s):
@@ -678,7 +682,7 @@ class PlateHD(BoxSkin):
         b, X, Y = self.b, self.X, self.Y
         cols, tw, th, gap = self.WALL[0], X(112), Y(168), X(24)
         x0 = panel.x + (panel.w - (cols * tw + (cols - 1) * gap)) // 2
-        for i, slot in self.wall_cells(s, cols):
+        for i, slot in self.wall_cells(s, cols, self.ondemand_page(s) // cols):
             row = s.rows[i]
             r = pygame.Rect(x0 + (slot % cols) * (tw + gap), panel.y + Y(48) + (slot // cols) * (th + Y(18)), tw, th)
             if i == s.sel:
@@ -1115,7 +1119,7 @@ class Plate(PlateHD):
         self._grey_page(c, (0, 0, W, Y(236)))
         vx, vy, vw, vh = self.guide_video_box()
         self._tab(c, vx)
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         local = datetime.now()
         self._pill(c, 37, [f"{local:%a} {local.month}/{local.day}", ampm(local).replace("am", " am").replace("pm", " pm")],
                    vx, 268)

@@ -553,6 +553,8 @@ class Classic(Skin):
         row_h = th + label_h + gap
         x0 = (W - (cols * tw + (cols - 1) * gap)) // 2
         y = self.OD_TOP + 8
+        # A taller screen than two rows need: the wall sits mid-way down it.
+        y += max(0, H - y - 2 * row_h - (40 if off else 0) - 30) // 2
         if off:     # the Sort row: a bar above the posters, not a poster
             bar = pygame.Rect(x0, y - 4, W - 2 * x0, 32)
             on = s.sel == 0
@@ -803,7 +805,7 @@ class Classic(Skin):
 
         # Preview: a hole the compositor fills with live video.
         vx, vy, vw, vh = self.guide_video_box()
-        pygame.draw.rect(c, (0, 0, 0, 0), (vx, vy, vw, vh))
+        self.hole(c, (vx, vy, vw, vh))
         pygame.draw.rect(c, p["OSD_BORDER"], (vx - 2, vy - 2, vw + 4, vh + 4), 2)
         if live.channel:
             lbl = f"NOW: {live.channel.number} {live.channel.name}"
