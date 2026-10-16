@@ -133,10 +133,11 @@ class Classic(Skin):
 
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         W, H = self.canvas
+        D = type(self).canvas[1]            # sized to the design: a taller screen moves it, not grows it
         p, t = self.p, self.text
-        bh = int(H * 0.155)
+        bh = int(D * 0.155)
         bx, bw = int(W * 0.02), int(W * 0.96)
-        by = H - bh - int(H * 0.025)
+        by = H - bh - int(D * 0.025)
         f_huge, f_large, f_med, f_small = (self.f(int(bh * k)) for k in (0.55, 0.32, 0.24, 0.18))
 
         if full and cur and cur.description:
@@ -266,7 +267,7 @@ class Classic(Skin):
             pygame.draw.rect(c, (*col, 255), (round(i * bw), 0, round((i + 1) * bw) - round(i * bw),
                                               int(H * 0.67)))
         pygame.draw.rect(c, (16, 16, 16, 255), (0, int(H * 0.67), W, H - int(H * 0.67)))
-        card = pygame.Rect(0, 0, int(W * 0.56), int(H * 0.18))
+        card = pygame.Rect(0, 0, int(W * 0.56), int(type(self).canvas[1] * 0.18))
         card.center = (W // 2, int(H * 0.45))
         pygame.draw.rect(c, (0, 0, 0, 255), card)
         pygame.draw.rect(c, self.p["OSD_BORDER"], card, 3)
@@ -451,6 +452,9 @@ class Classic(Skin):
         """The size these screens are laid out at (a 4:3 box skin draws them
         larger and scales down)."""
         return self.canvas
+
+    def tall(self, name: str) -> bool:
+        return True         # Classic lays every screen out against the canvas height
 
     def ondemand_cols(self, screen) -> int:
         W = self.layout_canvas()[0]
@@ -755,8 +759,11 @@ class Classic(Skin):
     # Fixed geometry on the 1280x720 canvas (3.x's fractions at 720p).
 
     guide_hours = 3
-    guide_rows = 6
     _G = dict(pad=25, header_h=50, panel_h=259, ruler_h=32, ch_w=179, row_h=54, cat_h=32)
+
+    @property
+    def guide_rows(self):
+        return 6 + self.grow // self._G["row_h"]       # a taller screen lists more channels
 
     def guide_video_box(self):
         g = self._G

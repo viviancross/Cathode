@@ -42,8 +42,11 @@ class PlateHD(BoxSkin):
     canvas = (1280, 720)
     right_is_browse = True
     guide_hours = 1.5               # three half-hour columns, as the box showed
-    guide_rows = 7
     SD = False
+
+    @property
+    def guide_rows(self):
+        return 7 + self.grow // self.Y(53)          # a taller screen lists more channels
     # Measured: the page teal, the on-now cell teal, the later-cell navy, the
     # gold of the selection frame.
     NATIVE = {"bg": [0, 51, 66], "accent": [0, 62, 61], "accent2": [0, 17, 55],
@@ -79,7 +82,7 @@ class PlateHD(BoxSkin):
         return int(round(v * self.canvas[0] / 1280))
 
     def Y(self, v) -> int:
-        return int(round(v * self.canvas[1] / 720))
+        return int(round(v * type(self).canvas[1] / 720))     # design rows: a grown canvas adds rows, not size
 
     def R(self, x, y, w, h) -> pygame.Rect:
         return pygame.Rect(self.X(x), self.Y(y), self.X(w), self.Y(h))
@@ -130,6 +133,8 @@ class PlateHD(BoxSkin):
 
     def _page(self, c, rect):
         """The teal page, lighter at the top, with the box's faint swirls."""
+        if self.hold_backdrop(rect, self._page):
+            return
         rect = pygame.Rect(rect)
         b = self.b
         vgrad(c, rect, rgba(b["page_hi"]), rgba(b["page_lo"]))

@@ -42,7 +42,6 @@ class InDirectHD(BoxSkin):
     canvas = (1280, 720)
     browse_style = "mini"           # BROWSE opens the mini guide
     guide_hours = 1.5               # three half-hour columns, as the box showed
-    guide_rows = 6
     guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
     default_font = "barlow"         # the HR20's DIN-like screen face: Barlow matches its letterforms
     SD = False
@@ -82,11 +81,15 @@ class InDirectHD(BoxSkin):
 
     # ── Geometry: the box's own pixels, scaled to the canvas ──────────────
 
+    @property
+    def guide_rows(self):
+        return 6 + self.grow // self.Y(48)          # a taller screen lists more channels
+
     def X(self, v) -> int:
         return int(round(v * self.canvas[0] / 1280))
 
     def Y(self, v) -> int:
-        return int(round(v * self.canvas[1] / 720))
+        return int(round(v * type(self).canvas[1] / 720))     # design rows: a grown canvas adds rows, not size
 
     def R(self, x, y, w, h) -> pygame.Rect:
         return pygame.Rect(self.X(x), self.Y(y), self.X(w), self.Y(h))
@@ -125,8 +128,16 @@ class InDirectHD(BoxSkin):
 
     # ── Pieces ────────────────────────────────────────────────────────────
 
+    def _grad(self, c, rect, top, bottom):
+        """A page's plain gradient (held to the full height on a grown
+        canvas, see Skin.paint)."""
+        if not self.hold_backdrop(rect, lambda cc, r: vgrad(cc, r, top, bottom)):
+            vgrad(c, rect, top, bottom)
+
     def _page(self, c, rect):
         """The cyan page: lightest a third of the way down, darker at the foot."""
+        if self.hold_backdrop(rect, self._page):
+            return
         rect = pygame.Rect(rect)
         knee = rect.y + int(rect.h * 0.26)
         vgrad(c, (rect.x, rect.y, rect.w, knee - rect.y), rgba(self.b["page_top"]), rgba(self.b["page_mid"]))
@@ -351,8 +362,9 @@ class InDirectHD(BoxSkin):
         sel = g.selected()
         now = datetime.now(timezone.utc)
         cur = self.app.live.programs(sel)[0] if sel else None
-        self._page(c, self.R(0, 192, 1280, 528))
+        self._page(c, (0, Y(192), W, H - Y(192)))
         self._top(c, cur.title if cur else (sel.name if sel else ""), "guide")
+        more = Y(48) * (g.rows - 6)         # rows a taller screen adds
         logo = self.channel_logo(sel, X(150), Y(52))
         if logo:                            # the chosen channel's logo over its title
             c.blit(logo, logo.get_rect(midleft=(X(300), Y(70))))
@@ -376,7 +388,7 @@ class InDirectHD(BoxSkin):
                 y += Y(36)
 
         # The frame: a navy header, navy channel cells, teal cells, the colour keys.
-        pygame.draw.rect(c, b["gap"], self.R(96, 313, 1182, 359))
+        pygame.draw.rect(c, b["gap"], self.R(96, 313, 1182, 359).inflate(0, more).move(0, more // 2))
         hdr = self.R(96, 313, 1182, 35)
         pygame.draw.rect(c, b["navy"], hdr)
         start, end = g.window()
@@ -444,7 +456,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(f_cell, self.empty_guide(g), cell.w - X(28)), f_cell, b["text"], cell.x + X(14),
                    cell.y + (cell.h - t.ink(f_cell)[1]) // 2)
 
-        bar = self.R(96, 639, 1182, 33)
+        bar = self.R(96, 639, 1182, 33).move(0, more)
         pygame.draw.rect(c, b["cell"], bar)
         fl = self.f(Y(30))
         ly = bar.y + (bar.h - t.ink(fl)[1]) // 2
@@ -483,7 +495,7 @@ class InDirectHD(BoxSkin):
     def draw_menu(self, c, m):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        vgrad(c, self.R(0, 192, 1280, 528), rgba(b["teal"]), rgba(b["teal_dark"]))
+        self._grad(c, self.R(0, 192, 1280, 528), rgba(b["teal"]), rgba(b["teal_dark"]))
         pygame.draw.rect(c, b["margin"], self.R(1180, 192, 100, 528))
         self._top(c, m.title.title(), "menu")
         fs = self.f(Y(22))
@@ -1165,7 +1177,7 @@ class InDirectHD(BoxSkin):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         stage = boot.stage()
-        vgrad(c, (0, 0, W, H), rgba(b["deep"]), rgba(b["cell"]))
+        self._grad(c, (0, 0, W, H), rgba(b["deep"]), rgba(b["cell"]))
         cx, cy = W // 2, Y(250)
         glow = pygame.Surface((W, H), pygame.SRCALPHA)       # the lit-up mark of a box starting
         for k in range(6, 0, -1):

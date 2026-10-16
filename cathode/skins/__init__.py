@@ -1,9 +1,11 @@
-"""Skins draw screens. A skin has a fixed canvas size (its own resolution,
-scaled to the window by the GPU), its fonts and colours, and one draw_<name>
-method per screen it knows. Screens it doesn't know fall back to Classic."""
+"""Skins draw screens. A skin has a canvas size (its own resolution, scaled
+to the window by the GPU; a 16:9 one grows taller on a squarer window), its
+fonts and colours, and one draw_<name> method per screen it knows. Screens it
+doesn't know fall back to Classic."""
 
 import os
 import time
+import weakref
 from typing import Optional
 
 import pygame
@@ -255,12 +257,99 @@ class Skin:
     keyboard_layer = "abc"      # the case the on-screen keyboard opens in
     default_font = "vcr"
 
+    # Screens laid out for any canvas height. The rest are drawn at the
+    # design height and opened up along a seam on a grown canvas (paint).
+    TALL = ("guide", "screensaver")
+
     def __init__(self, app):
         self.app = app
         self.text = Text()
         self._logo_surfaces = {}
         self._anim_due = 0.0        # when the next animated-logo frame is wanted
         self.hits = []          # [(Rect, fn)] clickable this frame, in canvas pixels
+        self.canvas = type(self).canvas
+        self.grow = 0               # canvas rows past the design height (16:9 on a squarer window)
+        self._seams = weakref.WeakKeyDictionary()   # screen -> how paint opened it up
+        self._held = None           # backdrops held back while drawing for a seam
+
+    # ── The canvas for the window ─────────────────────────────────────────
+
+    def fit_window(self, size) -> bool:
+        """A 16:9 skin grows its canvas taller on a squarer window, to 4:3 at
+        most: a 16:10 or 4:3 screen gets more rows, a banner at its real
+        foot, rather than bars and a smaller picture of the 16:9 screen. A
+        4:3 skin keeps its own pixels. True when the canvas changed."""
+        W, H = type(self).canvas
+        ww, wh = size
+        if W * 9 == H * 16 and ww > 0 and wh > 0:
+            tall = min(round(W * wh / ww), W * 3 // 4)
+            if tall >= H + 4:                   # not a window a pixel off 16:9
+                H = tall
+        if (W, H) == self.canvas:
+            return False
+        self.canvas, self.grow = (W, H), H - type(self).canvas[1]
+        return True
+
+    def tall(self, name: str) -> bool:
+        return name in self.TALL
+
+    def paint(self, canvas, name: str, draw, owner=None):
+        """draw(surface) one screen onto the canvas. On a grown canvas a
+        screen that isn't tall() is drawn at its design height and opened up
+        along its longest stretch of identical rows (the clear picture
+        between a top banner and a foot one, the empty page under a list):
+        what's above stays at the top, what's below moves to the foot, and
+        that stretch's own row fills between (see seams). Page backdrops
+        reaching the foot are held back and drawn at the full height under it."""
+        if not self.grow or self.tall(name):
+            draw(canvas)
+            return
+        W, H = self.canvas
+        g, dh = self.grow, H - self.grow
+        design = pygame.Surface((W, dh), pygame.SRCALPHA)
+        n = len(self.hits)
+        self.canvas, self.grow, self._held = (W, dh), 0, []
+        try:
+            draw(design)
+        finally:
+            self.canvas, self.grow, held, self._held = (W, H), g, self._held, None
+        fit = seams(design, g)
+        if owner is not None:
+            self._seams[owner] = fit
+        if held:
+            for fn, r in held:
+                fn(canvas, pygame.Rect(r.x, r.y, r.w, r.h + g))
+            box = owner.video_box() if owner is not None else None
+            if isinstance(box, tuple):          # the picture shows through the page
+                canvas.fill((0, 0, 0, 0), _moved(pygame.Rect(box), fit))
+        src = dst = 0
+        for y, add in fit:
+            canvas.blit(design, (0, dst), (0, src, W, y - src))
+            dst += y - src
+            row = design.subsurface((0, min(y, dh - 1), W, 1))
+            canvas.blit(pygame.transform.scale(row, (W, add)), (0, dst))
+            dst, src = dst + add, y
+        canvas.blit(design, (0, dst), (0, src, W, dh - src))
+        self.hits[n:] = [(_moved(r, fit), f) for r, f in self.hits[n:]]
+
+    def place_box(self, owner, box):
+        """Where paint put a screen's picture box (given in design pixels)."""
+        fit = self._seams.get(owner) if self.grow and not self.tall(owner.name) else None
+        if not fit:
+            return box
+        r = _moved(pygame.Rect(box), fit)
+        return (r.x, r.y, r.w, r.h)
+
+    def hold_backdrop(self, rect, fn) -> bool:
+        """A page's backdrop reaching the foot of the canvas, while paint
+        draws for a seam: kept to draw later at the full height (so its
+        gradient spans the screen and the seam opens through clear rows).
+        fn(surface, rect) draws it. True when held."""
+        rect = pygame.Rect(rect)
+        if self._held is None or rect.bottom != self.canvas[1]:
+            return False
+        self._held.append((fn, rect))
+        return True
 
     def reload(self):
         """Pick up changed settings (theme, font)."""
@@ -441,3 +530,37 @@ def skin_classes() -> dict:
 def load_skin(name: str, app) -> Skin:
     from .classic import Classic
     return skin_classes().get(name, Classic)(app)
+
+
+def seams(surface, grow: int):
+    """Where to open a design-height surface up by `grow` rows: [(row, rows
+    added there)]. Into its longest stretch of identical rows (the nearer
+    the middle on a tie); split between the top and foot stretches when
+    those are its two longest and alike (a notice centred on black stays
+    centred); with no stretch 8 rows long, its top and foot rows extended."""
+    w, h = surface.get_size()
+    raw, stride = surface.get_buffer().raw, surface.get_pitch()     # bytes: slices compare at memcmp speed
+
+    def row(y):
+        return raw[y * stride:y * stride + w * 4]
+    runs, start = [], 0
+    for y in range(1, h + 1):
+        if y == h or row(y) != row(y - 1):
+            runs.append((start, y))
+            start = y
+    size = sorted((b - a for a, b in runs), reverse=True) + [0]
+    if size[0] < 8:
+        return [(0, grow // 2), (h, grow - grow // 2)]
+    first, last = runs[0], runs[-1]
+    if (len(runs) > 2 and min(first[1] - first[0], last[1] - last[0]) >= size[1]
+            and row(0) == row(h - 1)):
+        return [(sum(first) // 2, grow // 2), (sum(last) // 2, grow - grow // 2)]
+    best = max(runs, key=lambda r: (r[1] - r[0], -abs(r[0] + r[1] - h)))
+    return [(sum(best) // 2, grow)]
+
+
+def _moved(r, fit):
+    """A rect's edges after paint opened its screen up (see seams)."""
+    top = r.top + sum(add for y, add in fit if r.top >= y)
+    bottom = r.bottom + sum(add for y, add in fit if r.bottom > y)
+    return pygame.Rect(r.x, top, r.w, bottom - top)

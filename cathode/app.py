@@ -517,37 +517,44 @@ class App:
                 self._run_timers()
 
                 resized = self.gfx.begin()
+                self._fit()
                 # A scripted shot is taken on time even when nothing redraws
                 # (a dead channel, a static page).
                 due = bool(self.shot) and time.monotonic() - t_start >= self.shot[1]
                 changed = resized or self.dirty or due
-                if self._frame_pending or resized:
-                    w, h = self.gfx.size
-                    if self.video.render(self.gfx.video.fbo, w, h):
-                        changed = True
-                    elif resized:
-                        self.video.redraw(self.gfx.video.fbo, w, h)
-                    self._frame_pending = False
                 anim = any(s.animating() for s in self.screens)
                 if self.dirty or anim:
                     self.dirty = False
-                    if canvas.get_size() != self.skin.canvas:     # skin changed
+                    if canvas.get_size() != self.skin.canvas:     # skin or window shape changed
                         canvas = pygame.Surface(self.skin.canvas, pygame.SRCALPHA)
                     canvas.fill((0, 0, 0, 0))
                     self.skin.hits = []
+                    skin = self.skin
                     for s in self._visible():
-                        self.skin.draw(canvas, s)
+                        skin.paint(canvas, s.name, lambda c, s=s: skin.draw(c, s), s)
                     top = self.top()
                     if self.guide_progress is not None and top.name in ("live", "guide"):
-                        self.skin.draw_guide_progress(canvas, self.guide_progress)
+                        skin.paint(canvas, "progress", lambda c: skin.draw_guide_progress(c, self.guide_progress))
                     if time.monotonic() < self.note_until:
-                        self.skin.draw_note(canvas, self.note_text)
+                        skin.paint(canvas, "note", lambda c: skin.draw_note(c, self.note_text))
                     if time.monotonic() < self.toast_until:
-                        self.skin.draw_toast(canvas, self.toast_text)
+                        skin.paint(canvas, "toast", lambda c: skin.draw_toast(c, self.toast_text))
                     self.gfx.upload_ui(canvas, nearest=self.skin.nearest)
                     changed = True
+                # After the UI: a menu just opened may want the picture in a box.
+                box = self._video_box()
+                vfbo, (vw, vh) = self.gfx.video.fbo, self.gfx.video.size
+                if self.gfx.fit_video(self.skin.canvas, box):     # reshaped: draw the frame again
+                    vw, vh = self.gfx.video.size
+                    if not self.video.render(vfbo, vw, vh):
+                        self.video.redraw(vfbo, vw, vh)
+                    changed, self._frame_pending = True, False
+                elif self._frame_pending:
+                    if self.video.render(vfbo, vw, vh):
+                        changed = True
+                    self._frame_pending = False
                 if changed:
-                    self._compose()
+                    self._compose(box)
                     if self.shot and time.monotonic() - t_start >= self.shot[1]:
                         self.gfx.read_pixels().save(self.shot[0])
                         print(f"[cathode] saved {self.shot[0]}")
@@ -564,16 +571,27 @@ class App:
                 start = i
         return self.screens[start:]
 
-    def _compose(self):
-        box = "full"
+    def _fit(self):
+        """The skin's canvas for this window's shape (a 16:9 skin grows
+        taller on a squarer one), and whether a 4:3 skin stretches to fill
+        a wider one instead of sitting between bars."""
+        cw, ch = type(self.skin).canvas
+        self.gfx.stretch = self.config.stretch_43 and cw * 3 == ch * 4
+        if self.skin.fit_window(self.gfx.size):
+            self.dirty = True
+
+    def _video_box(self):
+        """Where the picture goes: "full", "hidden" or a canvas box (moved
+        with its screen on a grown canvas)."""
         for s in reversed(self.screens):
             want = s.video_box()
             if want is not None:
-                box = want
-                break
+                return self.skin.place_box(s, want) if isinstance(want, tuple) else want
             if s.opaque:
-                box = "hidden"
-                break
+                return "hidden"
+        return "full"
+
+    def _compose(self, box):
         from .screens.live import LiveTV
         live = self.find(LiveTV)
         cover = live.cover() if live else None

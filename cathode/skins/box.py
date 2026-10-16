@@ -84,6 +84,9 @@ class BoxSkin(Classic):
     box recognisable: banner, guide, menu, browse, boot, signal loss."""
     tune_cover = "black"            # digital boxes cut to black, not snow
     REMOTE_WORDS = {}               # not Classic's OK
+
+    def tall(self, name: str) -> bool:
+        return name in self.TALL    # the box's own screens keep their 720 rows; see Skin.paint
     default_font = "sans"
     NATIVE = palette.base_colors("blue")
 

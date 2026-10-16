@@ -494,9 +494,17 @@ def style_items(app):
     def skin():
         return app.skin     # changes when the Skin row does
 
+    def set_skin(d):
+        app.set_skin(_cycle(skins, cfg.skin, d))
+        m = app.top()
+        if isinstance(m, Menu):
+            m.refresh(style_items(app))     # the Wide screen row comes and goes with a 4:3 skin
+
+    cw, ch = type(app.skin).canvas
+    wide = [Item("Wide screen", value=lambda: "Stretch" if cfg.stretch_43 else "Pillarbox",
+                 adjust=set_and(lambda d: setattr(cfg, "stretch_43", not cfg.stretch_43)))] if cw * 3 == ch * 4 else []
     return [
-        Item("Skin", value=lambda: _label(skins, cfg.skin),
-             adjust=lambda d: app.set_skin(_cycle(skins, cfg.skin, d))),
+        Item("Skin", value=lambda: _label(skins, cfg.skin), adjust=set_skin),
         Item("Color theme", value=lambda: _label(skin().theme_choices(), skin().theme_key()),
              adjust=set_and(lambda d: skin().set_theme_key(
                  _cycle(skin().theme_choices(), skin().theme_key(), d)))),
@@ -508,6 +516,7 @@ def style_items(app):
              adjust=set_and(lambda d: setattr(cfg, "vignette_enabled", not cfg.vignette_enabled))),
         Item("Picture format", value=lambda: _format_label(cfg.picture_format),
              adjust=lambda d: app.cycle_format(d)),
+        *wide,
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
         Item("Edit colors", submenu=lambda: color_items(app)),

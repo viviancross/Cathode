@@ -149,13 +149,13 @@ class _Target:
         return True
 
 
-def fit(canvas: Tuple[int, int], window: Tuple[int, int]) -> Tuple[int, int, int, int]:
+def fit(canvas: Tuple[int, int], window: Tuple[int, int], stretch: bool = False) -> Tuple[int, int, int, int]:
     """Largest box of the canvas's shape centred in the window, in window
     pixels: (x, y, w, h). Pillarboxed on a wider window, letterboxed on a
-    taller one."""
+    taller one; with `stretch`, the whole window whatever its shape."""
     cw, ch = canvas
     ww, wh = window
-    if not (cw and ch and ww and wh):
+    if stretch or not (cw and ch and ww and wh):
         return 0, 0, max(ww, 0), max(wh, 0)
     scale = min(ww / cw, wh / ch)
     w, h = round(cw * scale), round(ch * scale)
@@ -215,6 +215,7 @@ class Gfx:
         self._ui_size = (0, 0)
         self._ui_nearest = False
         self.size = (0, 0)
+        self.stretch = False        # the UI fills the window out of its shape (a 4:3 skin, stretched)
 
     # ── Window ────────────────────────────────────────────────────────────
 
@@ -243,15 +244,29 @@ class Gfx:
         return w.value, h.value
 
     def begin(self) -> bool:
-        """Size the targets to the drawable. True when that changed (the
-        video must then be redrawn into the new target)."""
+        """Size the scene to the drawable. True when that changed."""
         self.size = self.drawable()
-        resized = self.video.resize(*self.size)
-        self._scene.resize(*self.size)
-        return resized
+        return self._scene.resize(*self.size)
+
+    def fit_video(self, canvas, video_box) -> bool:
+        """Shape the video target like the picture it fills: the window, or
+        a picture box in window pixels. mpv keeps the aspect within the
+        target, so a window-shaped one squeezed into a box of another shape
+        would distort. True when it changed (the frame must be redrawn)."""
+        w, h = self.size
+        if isinstance(video_box, tuple):
+            _, _, w, h = self.canvas_px(canvas, video_box)
+        return self.video.resize(max(1, round(w)), max(1, round(h)))
 
     def ui_box(self, canvas: Tuple[int, int]) -> Tuple[int, int, int, int]:
-        return fit(canvas, self.size)
+        return fit(canvas, self.size, self.stretch)
+
+    def canvas_px(self, canvas, box):
+        """A canvas-pixel (x, y, w, h) in window pixels."""
+        ux, uy, uw, uh = self.ui_box(canvas)
+        cw, ch = canvas
+        bx, by, bw, bh = box
+        return ux + bx * uw / cw, uy + by * uh / ch, bw * uw / cw, bh * uh / ch
 
     def to_canvas(self, canvas, wx, wy) -> Optional[Tuple[int, int]]:
         """Window pixel -> canvas pixel, or None outside the UI box. Pointer
@@ -318,14 +333,8 @@ class Gfx:
 
         w, h = self.size
         ux, uy, uw, uh = self.ui_box(canvas)
-        cw, ch = canvas
-
-        def canvas_px(box):
-            bx, by, bw, bh = box
-            return (ux + bx * uw / cw, uy + by * uh / ch, bw * uw / cw, bh * uh / ch)
-
         boxed = isinstance(video_box, tuple)
-        vrect = self._ndc(canvas_px(video_box)) if boxed else (-1, -1, 1, 1)
+        vrect = self._ndc(self.canvas_px(canvas, video_box)) if boxed else (-1, -1, 1, 1)
 
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, self._scene.fbo)
         GL.glViewport(0, 0, w, h)

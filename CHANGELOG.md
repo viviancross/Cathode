@@ -28,6 +28,14 @@ a retro-themed player.
   with the title, and Cathode switches it on. **Auto-sync** (on by default)
   asks the Plex server to align subtitles to the dialogue wherever it can
   (Plex Pass and the server's voice analysis).
+- **Any screen shape.** The 16:9 skins (Classic, InDirecTV HD, Plate Network
+  HD) fill 16:10 (Steam Deck) and 4:3 screens instead of sitting between
+  bars. Their canvas grows taller, so guides and lists show more rows,
+  banners and bars sit at the screen's real edges, and box pages stretch
+  their panels. Text stays the same size. The 4:3 skins are pillarboxed on
+  wider screens as before, or stretched to fill with Settings > Picture &
+  Style > **Wide screen**. Picture boxes now keep the video's shape at
+  every window shape; they used to squash it.
 - **Posters.** Every skin's title info shows the poster, and every skin
   offers the **poster wall** (On Demand > MENU > View), each in its box's
   style. Classic's info buttons are centred.
