@@ -1214,10 +1214,12 @@ class Plate(PlateHD):
         c.blit(surf, tile.topleft)
         cx = X(102)
         t.draw(c, str(ch.number), f, b["chan_ink"], cx, tile.y + Y(6), align="center")
-        call = dish_call(ch)
-        while len(call) > 1 and t.width(f, call) > X(58):      # call signs clip, no ellipsis
+        # The call sign a size under the number, inside the tile with a margin
+        # (one size for every tile; past that it clips, still no ellipsis).
+        call, room, fc = dish_call(ch), 2 * (tile.right - X(3) - cx), self.fb(Y(14))
+        while len(call) > 1 and t.width(fc, call) > room:
             call = call[:-1]
-        t.draw(c, call, f, b["chan_ink"], cx, tile.y + Y(21), align="center")
+        t.draw(c, call, fc, b["chan_ink"], cx, tile.y + Y(21), align="center")
 
     def _crescent(self, c, cell, ink, left=True):
         """The tall thin '(' or ')' the box drew where a programme runs on

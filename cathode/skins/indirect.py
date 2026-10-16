@@ -1406,7 +1406,7 @@ class InDirect(InDirectHD):
             tile = pygame.Rect(X(24), y, X(27), rh)
             self._bevel(c, tile, b["page"])
             name = ch.name.upper()
-            while len(name) > 1 and t.width(f_cell, name) * self.SQUEEZE > X(26):   # call signs clip, no ellipsis
+            while len(name) > 1 and t.width(f_cell, name) * self.SQUEEZE > tile.w - X(4):   # clip, no ellipsis
                 name = name[:-1]
             self._shadowed(c, name, f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(2))
             self._shadowed(c, str(ch.number), f_cell, b["text"], b["shadow"], tile.x + X(2), y + Y(15))
@@ -1562,11 +1562,14 @@ class InDirect(InDirectHD):
                 pygame.draw.rect(c, b["sel"], row)
             ink, shadow = (b["sel_ink"], None) if sel else (b["text"], b["shadow"])
             ty = row.y + (row.h - t.ink(f)[1]) // 2
-            self._shadowed(c, t.fit(f, f"{ch.number} {ch.name.upper()}", X(70)), f, ink, shadow, row.x + X(2), ty)
-            self._shadowed(c, t.fit(f, cur.title if cur else "No Information", X(108)), f, ink, shadow, row.x + X(76), ty)
+            sq = self.SQUEEZE                   # the fit is in unsqueezed pixels
+            self._shadowed(c, t.fit(f, f"{ch.number} {ch.name.upper()}", int(X(86) / sq)), f, ink, shadow,
+                           row.x + X(2), ty)
+            self._shadowed(c, t.fit(f, cur.title if cur else "No Information", int(X(104) / sq)), f, ink, shadow,
+                           row.x + X(92), ty)
             if nxt:
-                self._shadowed(c, t.fit(f, f"{ampm(nxt.start)}m  {nxt.title}", X(104)), f, ink if sel else b["soft"],
-                               shadow, row.x + X(190), ty)
+                self._shadowed(c, t.fit(f, f"{ampm(nxt.start)}m  {nxt.title}", int(X(96) / sq)), f,
+                               ink if sel else b["soft"], shadow, row.x + X(200), ty)
             self.hit(row, lambda ch=ch: mg.pick(ch))
             y += rh
 
