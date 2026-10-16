@@ -38,6 +38,11 @@ a retro-themed player.
   **Options** pop-up (O, or the pad's left-stick click) holds Add to
   Favorites, Picture format, Subtitles and On Demand, so a pad reaches
   them all.
+- **Remote reach.** Every button on screen can be reached by the remote: the
+  guide's list shows its focus in every skin, DOWN moves into On Demand's
+  playback buttons, RIGHT into Plate's side buttons, and the mini guide
+  moves with the arrows. **Settings > Remote control > Button guide** lists
+  what each button does, named for the remote, pad or keyboard in use.
 - **Gamepads.** Hints name the pad's own buttons once one is used (Xbox,
   PlayStation symbols, Nintendo), and go back to the remote's or keyboard's
   when those are pressed. The pad's View / Share / - button now opens

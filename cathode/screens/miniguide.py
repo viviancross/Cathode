@@ -46,9 +46,9 @@ class MiniGuide(Screen):
             self.app.pop(self)
             return True
         self._arm()
-        if a in (R.UP, R.CH_UP):
+        if a in (R.DOWN, R.CH_UP):          # down the list, as in the guide; CH+ is the next channel
             self.idx = (self.idx + 1) % n
-        elif a in (R.DOWN, R.CH_DOWN):
+        elif a in (R.UP, R.CH_DOWN):
             self.idx = (self.idx - 1) % n
         elif a == R.SELECT:
             self.pick(self.app.channels[self.idx])

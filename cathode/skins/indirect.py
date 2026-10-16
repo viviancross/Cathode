@@ -440,7 +440,12 @@ class InDirectHD(BoxSkin):
         fl = self.f(Y(30))
         ly = bar.y + (bar.h - t.ink(fl)[1]) // 2
         cat = g.category if g.category != "All" else "Channels I Get"
-        t.draw(c, cat, fl, b["sel"] if g.focus == "category" else b["soft"], X(110), ly)
+        if g.focus == "category":           # the amber cursor, as on a chosen cell
+            cat = f"<  {cat}  >"
+            self._amber(c, pygame.Rect(X(96), bar.y, t.width(fl, cat) + X(28), bar.h))
+            t.draw(c, cat, fl, b["text"], X(110), ly)
+        else:
+            t.draw(c, cat, fl, b["soft"], X(110), ly)
         self.hit((X(96), bar.y, X(400), bar.h), lambda: g.handle("THEMES"))
         for dot, label, dx in (("red", "-12hrs", 619), ("green", "+12hrs", 772), ("yellow", "Guide Options", 926)):
             pygame.draw.circle(c, DOTS[dot], (X(dx + 10), bar.centery), Y(10))
@@ -1049,7 +1054,7 @@ class InDirectHD(BoxSkin):
         # The transport buttons under the band: navy tiles like the state one.
         for k, (kind, _, fn) in enumerate(pb.transport()):
             r = self.R(372 + k * 124, 636, 116, 38)
-            self._tbtn(c, r, kind, False)
+            self._tbtn(c, r, kind, k == getattr(pb, "tfocus", None))
             self.hit(r, fn)
 
     # The pop-ups: the grey title, the blue body, the logo in the grey foot.
@@ -1747,7 +1752,7 @@ class InDirect(InDirectHD):
         bw = (bar.w - 5 * X(4)) // 6
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(bar.x + k * (bw + X(4)), r.y + Y(41), bw, Y(13))
-            self._tbtn(c, br, kind, False)
+            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
 
     def keyboard_rows(self, layer):

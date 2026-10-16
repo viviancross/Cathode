@@ -424,11 +424,28 @@ def remote_items(app):
         app.config.save()
         app.invalidate()
     return [
+        Item("Button guide", submenu=lambda: button_guide_items(app)),
         Item("Remote", value=lambda: _label(remotes, app.config.remote), adjust=set_remote),
         Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
         Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),
         Item("Reset to defaults", reset),
     ]
+
+
+GUIDE_ROWS = [(R.GUIDE, "Program guide"), (R.INFO, "Channel banner"), (R.SELECT, "Banner, then play buttons"),
+              (R.OPTIONS, "Options"), (R.MENU, "Menu"), (R.BACK, "Back"), (R.EXIT, "Close"),
+              (R.PREV, "Last channel"), (R.BROWSE, "Browse"), (R.FAV, "Favorite"), (R.LIST, "My Recordings"),
+              (R.FORMAT, "Picture format"), (R.SUBTITLE, "Subtitles")]
+
+
+def button_guide_items(app):
+    """What each button does, named as the remote, pad or keyboard in use
+    names it."""
+    return [Item(what, value=lambda a=a: app.press_hint(a)) for a, what in GUIDE_ROWS]
+
+
+def open_button_guide(app):
+    app.push(Menu(app, "BUTTON GUIDE", button_guide_items(app)))
 
 
 def binding_items(app, kind):

@@ -678,11 +678,13 @@ class Classic(Skin):
         buttons = pb.transport()
         bw = 104
         x = bar.centerx - (len(buttons) * bw + (len(buttons) - 1) * 10) // 2
-        for _, label, fn in buttons:
+        for k, (_, label, fn) in enumerate(buttons):
             r = pygame.Rect(x, bar.y + 104, bw, 34)
-            pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r, border_radius=6)
-            pygame.draw.rect(c, p["OSD_BORDER"], r, 1, border_radius=6)
-            t.draw(c, label, f_btn, p["WHITE"], r.centerx, r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
+            on = k == getattr(pb, "tfocus", None)
+            pygame.draw.rect(c, (p["GUIDE_SELECTED"] if on else p["OSD_BG"])[:3] + (255,), r, border_radius=6)
+            pygame.draw.rect(c, p["CYAN"] if on else p["OSD_BORDER"], r, 2 if on else 1, border_radius=6)
+            t.draw(c, label, f_btn, p["SEL_TEXT"] if on else p["WHITE"], r.centerx, r.y + (r.h - t.ink(f_btn)[1]) // 2,
+                   align="center")
             self.hit(r, fn)
             x += bw + 10
 

@@ -342,7 +342,9 @@ class App:
     def key_name(self, action: str) -> str:
         """The first keyboard key bound to an action, for on-screen hints
         ('C' for MENU); '' when none is."""
-        k = self.remote.key_for(action).split(",")[0].strip() if self.remote else "-"
+        keys = [k.strip() for k in self.remote.key_for(action).split(",")] if self.remote else ["-"]
+        # A letter first ("P", not "`"), then any typed key, then a media one ("AC Back").
+        k = min(keys, key=lambda k: (k.lower().startswith(("ac ", "audio")), not (len(k) == 1 and k.isalnum())))
         return "" if k == "-" else k.upper()
 
     def press_hint(self, action: str) -> str:

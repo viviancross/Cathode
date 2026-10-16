@@ -344,9 +344,13 @@ class PlateHD(BoxSkin):
                 self.cb(c, line, f_small, b["text"], cx, y, align="center")
                 y += Y(30)
         f_list = self.fb(Y(30))
-        tab = pygame.Rect(X(96), Y(262), int(t.width(f_list, g.category) * 0.86) + X(16), Y(30))
-        self.cb(c, g.category if g.category != "All" else "All Sub", f_list, b["gold"] if g.focus == "category" else b["text"],
-                X(96), Y(268))
+        name = g.category if g.category != "All" else "All Sub"
+        if g.focus == "category":           # the guide's gold frame, as on a chosen cell
+            name = f"<  {name}  >"
+        tab = pygame.Rect(X(96), Y(262), int(t.width(f_list, name) * 0.86) + X(16), Y(30))
+        if g.focus == "category":
+            pygame.draw.rect(c, b["gold"], tab.inflate(X(14), Y(10)).move(-X(4), Y(2)), Y(3), border_radius=Y(4))
+        self.cb(c, name, f_list, b["gold"] if g.focus == "category" else b["text"], X(96), Y(268))
         self.hit(tab, lambda: g.handle("THEMES"))
         self.cb(c, when(), f_list, b["text"], X(453), Y(268))
 
@@ -654,14 +658,19 @@ class PlateHD(BoxSkin):
                     panel.bottom - Y(30), align="right")
         finally:
             fc.italic = False
-        labels = (["Sort", "Options", "Done"] if rec else ["Options", "My Recordings", "Done"])
-        acts = ([s.handle and (lambda: s.handle("MENU"))] * 2 + [s.back]) if rec else \
-            [lambda: s.handle("MENU"), lambda: s.handle("LIST"), s.back]
-        self._vip_buttons(c, labels, -1, hits=acts)
+        side = self.od_side(s)
+        self._vip_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
         if s.status:
             fs = self.fb(Y(22))
             self.cb(c, s.status.title(), fs, b["text"], X(1240), Y(668), align="right")
         self._vip_about(c, s.current() or {})
+
+    def od_side(self, s):
+        if s.mode != "browse":
+            return []
+        if s.level and s.level.get("key") == "recordings":
+            return [("Sort", lambda: s.handle("MENU")), ("Options", lambda: s.handle("MENU")), ("Done", s.back)]
+        return [("Options", lambda: s.handle("MENU")), ("My Recordings", lambda: s.handle("LIST")), ("Done", s.back)]
 
     def _vip_wall(self, c, s, panel):
         """Posters in the list panel, each in the picture's pale frame; the
@@ -818,7 +827,8 @@ class PlateHD(BoxSkin):
             self.cb(c, label, f, b["vp_ink"], X(620), y, align="right")
             self.cb(c, self.fit_cb(f, str(value), X(500)), f, b["vp_ink"], X(650), y)
             y += Y(42)
-        for k, (label, fn) in enumerate((("Help", None), ("Done", lambda: d.handle("BACK")),
+        from ..menus import open_button_guide
+        for k, (label, fn) in enumerate((("Help", lambda: open_button_guide(self.app)), ("Done", lambda: d.handle("BACK")),
                                          ("Cancel", lambda: d.handle("BACK")))):
             r = self.R(250 + k * 280, 618, 230, 46)
             self._vip_button(c, r, label, k == 1)
@@ -856,7 +866,7 @@ class PlateHD(BoxSkin):
         # The transport buttons: the white capsules of the box's dialogs.
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = self.R(140 + k * 170, 618, 150, 42)
-            self._tbtn(c, br, kind, False)
+            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
 
     def draw_options(self, c, m):
@@ -1049,26 +1059,32 @@ class Plate(PlateHD):
         self.wordmark(c, X(62) + (X(94) - w) // 2, Y(111) - h // 2, size, b["text"], b["dish"])
         return X(166)
 
-    def _pill(self, c, y, lines, right, cx, icon=None):
+    def _pill(self, c, y, lines, right, cx, icon=None, on=False):
         """A white capsule-ended pill from x=166, running on behind the
-        picture; its lines centred on `cx` as the box set them."""
+        picture; its lines centred on `cx` as the box set them. On: the
+        tab's blue with white lettering, so the chosen pill reads at once."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
         r = pygame.Rect(X(166), Y(y), right - X(166), Y(42))
-        pygame.draw.rect(c, b["pillfill"], r, border_top_left_radius=r.h // 2, border_bottom_left_radius=r.h // 2)
+        pygame.draw.rect(c, b["blue"] if on else b["pillfill"], r, border_top_left_radius=r.h // 2,
+                         border_bottom_left_radius=r.h // 2)
+        if on:                              # its white rim keeps the pill's shape on the blue tab
+            pygame.draw.rect(c, b["pillfill"], r, Y(3), border_top_left_radius=r.h // 2,
+                             border_bottom_left_radius=r.h // 2)
+        ink = b["text"] if on else b["ink"]
         f = self.fb(Y(17))
         pitch = Y(20)
         ty = r.y + (r.h - (len(lines) - 1) * pitch - t.ink(f)[1]) // 2
         for line in lines:
-            t.draw(c, t.fit(f, line, (right - X(cx)) * 2 - X(8)), f, b["ink"], X(cx), ty, align="center")
+            t.draw(c, t.fit(f, line, (right - X(cx)) * 2 - X(8)), f, ink, X(cx), ty, align="center")
             ty += pitch
         if icon == "lock":
             # The favourite list's padlock in a ring.
             ix, iy = X(188), r.centery
-            pygame.draw.circle(c, b["ink"], (ix, iy), Y(13), max(2, Y(3)))
+            pygame.draw.circle(c, ink, (ix, iy), Y(13), max(2, Y(3)))
             body = pygame.Rect(0, 0, X(10), Y(8))
             body.midtop = (ix, iy - Y(1))
-            pygame.draw.rect(c, b["ink"], body, border_radius=1)
-            pygame.draw.arc(c, b["ink"], (ix - X(4), iy - Y(7), X(8), Y(10)), 0, 3.15, max(2, Y(2)))
+            pygame.draw.rect(c, ink, body, border_radius=1)
+            pygame.draw.arc(c, ink, (ix - X(4), iy - Y(7), X(8), Y(10)), 0, 3.15, max(2, Y(2)))
         return r
 
     def guide_video_box(self):
@@ -1103,8 +1119,9 @@ class Plate(PlateHD):
         local = datetime.now()
         self._pill(c, 37, [f"{local:%a} {local.month}/{local.day}", ampm(local).replace("am", " am").replace("pm", " pm")],
                    vx, 268)
-        tab = self._pill(c, 100, ["Favorite List:", g.category if g.category != "All" else "All Sub"], vx, 258,
-                         icon="lock")
+        name = g.category if g.category != "All" else "All Sub"
+        tab = self._pill(c, 100, ["Favorite List:", f"<  {name}  >" if g.focus == "category" else name], vx, 258,
+                         icon="lock", on=g.focus == "category")
         self.hit(tab, lambda: g.handle("THEMES"))
         sel = g.selected()
         self._pill(c, 160, [f"<  {sel.number if sel else '---'}  >"], vx, 205)
@@ -1609,10 +1626,17 @@ class Plate(PlateHD):
         t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(40), band.bottom + Y(6))
         if s.status:
             t.draw(c, s.status.title(), self.fb(Y(13)), b["ink"], X(600), band.bottom + Y(6), align="right")
-        self._sd_side(c, ["Options", "Recordings" if not rec else "Sort", "Done"], -1,
-                      hits=[lambda: s.handle("MENU"), (lambda: s.handle("LIST")) if not rec else (lambda: s.handle("MENU")),
-                            s.back])
+        side = self.od_side(s)
+        self._sd_side(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
         t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(11)), b["ink"], X(40), Y(456))
+
+    def od_side(self, s):
+        if s.mode != "browse":
+            return []
+        rec = bool(s.level) and s.level.get("key") == "recordings"
+        return [("Options", lambda: s.handle("MENU")),
+                ("Sort", lambda: s.handle("MENU")) if rec else ("Recordings", lambda: s.handle("LIST")),
+                ("Done", s.back)]
 
     def _sd_wall(self, c, s, band):
         """Posters on the band, four across and two down, the chosen one
@@ -1778,7 +1802,7 @@ class Plate(PlateHD):
         # The transport buttons: small capsules like the banner's.
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(X(55) + k * X(89), top + h + Y(8), X(80), Y(34))
-            self._tbtn(c, br, kind, False)
+            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
 
     def _note(self, c, text, frac=None):

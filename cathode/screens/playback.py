@@ -30,6 +30,7 @@ class Playback(Screen):
         self.time_base = float(info.get("time_base") or 0)
         self.markers = info.get("markers") or []
         self.subs = list(info.get("subs") or [])      # files beside the video
+        self.tfocus = None                            # the transport button DOWN moved to
         self._subs_added = False
         self.pos = float(info.get("offset") or 0)
         self.dur = float(info.get("duration") or 0)     # mpv's is the fallback
@@ -191,7 +192,33 @@ class Playback(Screen):
                 ("stop", "STOP", self.stop), ("fwd", "30 >>", lambda: self.seek(30)),
                 ("next", ">>|", lambda: self.skip(1))]
 
+    def _row_keys(self, a) -> bool:
+        """The transport row: DOWN moves into it (on Play/Pause), LEFT/RIGHT
+        along it, SELECT presses, UP or BACK leaves it."""
+        if self.tfocus is not None and not self.bar_visible():
+            self.tfocus = None
+        if self.tfocus is None:
+            if a == R.DOWN:
+                self.tfocus = 2
+                self.show_bar()
+                return True
+            return False
+        buttons = self.transport()
+        if a in (R.LEFT, R.RIGHT):
+            self.tfocus = (self.tfocus + (1 if a == R.RIGHT else -1)) % len(buttons)
+        elif a == R.SELECT:
+            buttons[self.tfocus][2]()
+        elif a in (R.UP, R.BACK):
+            self.tfocus = None
+        else:
+            return False
+        if self in self.app.screens:
+            self.show_bar()
+        return True
+
     def handle(self, a: str) -> bool:
+        if self._row_keys(a):
+            return True
         if a == R.SELECT:
             if self.skip_label:
                 self.app.video.seek(self.skip_to - self.time_base, "absolute")

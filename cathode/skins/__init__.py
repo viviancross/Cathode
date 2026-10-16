@@ -341,6 +341,11 @@ class Skin:
         """The app's guide load, as pct() puts it."""
         return self.pct(getattr(self.app, "guide_progress", None))
 
+    def od_side(self, s) -> list:
+        """[(label, action)] for buttons beside On Demand's list that RIGHT
+        moves into; none unless the skin draws some."""
+        return []
+
     def draw_options(self, c, m):
         """Live TV's Options pop-up; a skin whose menus already sit over the
         picture draws it as a menu."""

@@ -30,6 +30,7 @@ class OnDemandScreen(Screen):
         self.stack = []
         self.status = ""
         self.mode = "browse"          # browse | auth
+        self.side = None              # the button beside the list RIGHT moved to (skins that draw some)
         self.auth_code = self.auth_link = ""
         self._pin_id = None
         self._poll = None
@@ -475,7 +476,36 @@ class OnDemandScreen(Screen):
 
     # ── Remote ────────────────────────────────────────────────────────────
 
+    def _side_keys(self, a) -> bool:
+        """The buttons beside the list: RIGHT from the list (or the wall's
+        right edge) moves into them, UP/DOWN along, SELECT presses, LEFT or
+        BACK goes back to the list."""
+        side = self.app.skin.od_side(self) if self.mode == "browse" else []
+        if self.side is not None and not side:
+            self.side = None
+        if self.side is None:
+            at_edge = self.view != "wall" or (self.sel - self.wall_offset) % self.app.skin.ondemand_cols(self) == \
+                self.app.skin.ondemand_cols(self) - 1 or self.sel >= len(self.rows) - 1
+            if a == R.RIGHT and side and at_edge:
+                self.side = 0
+                self.app.invalidate()
+                return True
+            return False
+        if a in (R.UP, R.DOWN):
+            self.side = (self.side + (1 if a == R.DOWN else -1)) % len(side)
+        elif a == R.SELECT:
+            fn, self.side = side[self.side][1], None
+            fn()
+        elif a in (R.LEFT, R.BACK):
+            self.side = None
+        else:
+            return False
+        self.app.invalidate()
+        return True
+
     def handle(self, a: str) -> bool:
+        if self._side_keys(a):
+            return True
         n = len(self.rows)
         step = self.app.skin.ondemand_cols(self) if self.view == "wall" else 1
         if a in (R.EXIT, R.GUIDE):

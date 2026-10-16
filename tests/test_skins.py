@@ -118,7 +118,7 @@ def page_screens():
         parent = dict(title="MOVIES", rows=[dict(title="ALL MOVIES"), dict(title="COMEDY")], sel=0, key="")
         s = NS(name="ondemand", mode=mode, status="", view=view, stack=([parent] if depth > 1 else []) + [level],
                level=level, rows=rws, sel=3, wall_offset=1 if rws is rows else 0, auth_code="AB12",
-               auth_link="plex.tv/link")
+               auth_link="plex.tv/link", side=None)
         s.crumb = lambda: "On Demand / Movies"
         s.current = lambda: rws[3]
         s.select = s.back = lambda: None
