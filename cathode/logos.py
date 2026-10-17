@@ -16,6 +16,8 @@ from typing import Callable, Dict, Optional, Tuple
 
 from PIL import Image
 
+from .net import SSL
+
 
 def _read_capped(resp, limit: int) -> Optional[bytes]:
     """Read at most `limit` bytes; None if the response is bigger than that.
@@ -191,7 +193,7 @@ class LogoStore:
                 with self._lock:
                     hdrs.update(self._auth.get(url) or {})
                 req = urllib.request.Request(url, headers=hdrs)
-                with urllib.request.urlopen(req, timeout=15) as resp:
+                with urllib.request.urlopen(req, timeout=15, context=SSL) as resp:
                     data = _read_capped(resp, self._MAX_BYTES)
                 if data is None:
                     raise ValueError("logo exceeds the size cap")
@@ -206,7 +208,8 @@ class LogoStore:
                         pass
             elif os.path.exists(url):                 # local file path
                 img = self._decode(Image.open(url))
-        except Exception:
+        except Exception as e:
+            print(f"[logos] couldn't load {url.split('?')[0]}: {e!r}")
             img = None
         with self._lock:
             self._orig[url] = img

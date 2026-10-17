@@ -361,5 +361,16 @@ class TestLoadErrors(unittest.TestCase):
                 self.assertIn(words, load_error_text(e))
 
 
+class TestSubtitleFonts(unittest.TestCase):
+    def test_the_closed_caption_font_is_offered_by_name_once(self):
+        import pygame
+        from cathode import menus
+        pygame.font.init()
+        fonts = menus._subtitle_fonts()
+        families = [f for f, _ in fonts]
+        self.assertEqual(len(families), len(set(families)))
+        self.assertIn(("Space Mono", "Closed Caption"), fonts)     # mpv matches the family
+
+
 if __name__ == "__main__":
     unittest.main()

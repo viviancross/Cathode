@@ -156,6 +156,20 @@ class TestFetchRefusals(unittest.TestCase):
         self.assertIsNotNone(self.store._orig[url])
         self.assertEqual(len(os.listdir(self.dir)), 1)
 
+    def test_https_uses_cathodes_certificates(self):
+        # A frozen Linux build's OpenSSL looks for CAs where the Flatpak
+        # runtime has none, so Plex posters (https plex.direct) failed there.
+        import urllib.request
+        from cathode import net
+        seen = {}
+        orig = urllib.request.urlopen
+        urllib.request.urlopen = lambda *a, **k: seen.update(k) or _Resp(b"")
+        try:
+            self.store._fetch("https://example.invalid/poster.jpg")
+        finally:
+            urllib.request.urlopen = orig
+        self.assertIs(seen.get("context"), net.SSL)
+
 
 
 class TestAnimatedLogos(unittest.TestCase):

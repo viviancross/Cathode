@@ -354,7 +354,7 @@ def subtitle_items(app):
             cfg.save()
             apply(getattr(cfg, attr))
         return Item(label, value=lambda: _label(options, getattr(cfg, attr)), adjust=adj)
-    fonts = [("", "Default")] + [(f, f) for f in _subtitle_fonts()]
+    fonts = [("", "Default")] + _subtitle_fonts()
     rows = [
         Item("Subtitles", value=lambda: "On" if cfg.subtitles else "Off", adjust=toggle,
              help="Show subtitles when there are any."),
@@ -459,20 +459,26 @@ def playback_menu(app, pb):
     ]))
 
 
+# Files whose family name isn't what they're called (the CC font is a Space Mono build).
+_FONT_LABELS = {"Closed_Caption.ttf": "Closed Caption"}
+
+
 def _subtitle_fonts():
-    """Family names of the bundled fonts mpv can use for subtitles."""
+    """(family name for mpv, label) for each bundled font, once per family."""
     import os
     import pygame
     from . import paths
     d = paths.asset("fonts")
-    names = []
+    out = {}
     for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
         if f.lower().endswith((".ttf", ".otf")):
             try:
-                names.append(pygame.font.Font(os.path.join(d, f), 12).name)
+                name = pygame.font.Font(os.path.join(d, f), 12).name
             except (pygame.error, AttributeError):
-                pass
-    return [n for n in names if n]
+                continue
+            if name and name not in out:
+                out[name] = _FONT_LABELS.get(f, name)
+    return list(out.items())
 
 
 # ── Remote control ────────────────────────────────────────────────────────
