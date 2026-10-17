@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.20
+
+The 4.0 alpha, updating itself.
+
+- **Updates reach the alpha.** The 4.x updater follows releases marked
+  pre-release on GitHub (tagged with a version, like `v4.20`), so alpha
+  installs update from one to the next, while 3.x installs, which skip
+  pre-releases, stay on 3.x. Windows, the AppImage and source installs
+  update themselves; the Flatpak and the Mac app say when one is out.
+- Versions compare number by number, so after 4.20 comes 4.21 (or 5.0):
+  a "4.3" would read as older than 4.20.
+
 ## 4.0
 
 A rebuild, from the window up, to feel like using a satellite box rather than

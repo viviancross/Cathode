@@ -37,6 +37,9 @@ _TIMEOUT = 15
 # A mainline desktop release: a bare version, optionally v-prefixed. Anything
 # carrying a platform prefix or suffix is another build's release, not ours.
 _MAINLINE_TAG = re.compile(r"^v?\d+(?:\.\d+)*$", re.I)
+# The 4.x line ships as GitHub pre-releases (so 3.x installs, whose updater
+# skips them, stay on 3.x); 4.x follows them. False once 4.x goes stable.
+FOLLOW_PRERELEASES = True
 
 
 def parse_version(s: str) -> Tuple[int, ...]:
@@ -114,9 +117,10 @@ def check_latest() -> Optional[dict]:
     """Return {tag, assets:[{name,url,size}]} for the newest MAINLINE release, or
     None if the repo publishes none. Raises UpdateError on network/parse failure.
 
-    Drafts, prereleases and the port builds' releases are all skipped, and the
-    winner is the highest version rather than the most recently published one —
-    publishing a 2.9 patch after 3.0 must not roll anybody back."""
+    Drafts and the port builds' releases are skipped (pre-releases too unless
+    FOLLOW_PRERELEASES), and the winner is the highest version rather than the
+    most recently published one — publishing a 2.9 patch after 3.0 must not
+    roll anybody back."""
     req = urllib.request.Request(_API, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "Cathode-Updater",
@@ -134,7 +138,7 @@ def check_latest() -> Optional[dict]:
         raise UpdateError("GitHub returned an unexpected response.")
     mainline = [r for r in data
                 if isinstance(r, dict)
-                and not r.get("draft") and not r.get("prerelease")
+                and not r.get("draft") and (FOLLOW_PRERELEASES or not r.get("prerelease"))
                 and is_mainline_tag(r.get("tag_name", ""))]
     if not mainline:
         return None

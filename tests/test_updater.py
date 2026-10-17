@@ -71,12 +71,24 @@ class TestCheckLatest(unittest.TestCase):
             self.assertEqual(updater.check_latest()["tag"], "v3.0")
 
     def test_skips_drafts_and_prereleases(self):
-        with self._releases([
+        with mock.patch.object(updater, "FOLLOW_PRERELEASES", False), self._releases([
             {"tag_name": "v4.0", "prerelease": True, "assets": []},
             {"tag_name": "v3.9", "draft": True, "assets": []},
             {"tag_name": "v3.0", "assets": []},
         ]):
             self.assertEqual(updater.check_latest()["tag"], "v3.0")
+
+    def test_the_4x_line_follows_its_prereleases_but_not_a_bare_word_tag(self):
+        # The alpha line publishes pre-releases; a tag that isn't a version
+        # ("alpha") is still never an update.
+        with self._releases([
+            {"tag_name": "alpha", "prerelease": True, "assets": []},
+            {"tag_name": "v4.20", "prerelease": True, "assets": []},
+            {"tag_name": "v4.21", "draft": True, "assets": []},
+            {"tag_name": "v3.4", "assets": []},
+        ]):
+            self.assertEqual(updater.check_latest()["tag"], "v4.20")
+        self.assertTrue(updater.is_newer("v4.20", "4.0"))
 
     def test_highest_version_wins_not_the_most_recent(self):
         # A 2.9 patch published after 3.0 must not roll a 3.0 user back.
