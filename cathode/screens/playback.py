@@ -31,6 +31,7 @@ class Playback(Screen):
         self.markers = info.get("markers") or []
         self.subs = list(info.get("subs") or [])      # files beside the video
         self.tfocus = None                            # the transport button DOWN moved to
+        self._shown = False                           # the bar (or Skip) was up at the last tick
         self._subs_added = False
         self.pos = float(info.get("offset") or 0)
         self.dur = float(info.get("duration") or 0)     # mpv's is the fallback
@@ -102,8 +103,10 @@ class Playback(Screen):
         if now - self._last_report >= REPORT_EVERY:
             self._last_report = now
             self.od.report(self.rk, self.pos, self.dur, "paused" if v.paused else "playing")
-        if self.bar_visible() or self.skip_label:
+        shown = self.bar_visible() or bool(self.skip_label)
+        if shown or self._shown:            # and once more as it goes, to take it off the screen
             self.app.invalidate()
+        self._shown = shown
         self._tick = self.app.after(0.5, self._monitor)
 
     def bar_visible(self) -> bool:
@@ -111,6 +114,10 @@ class Playback(Screen):
 
     def show_bar(self, seconds=5.0):
         self.bar_until = time.monotonic() + seconds
+        self.app.invalidate()
+
+    def hide_bar(self):
+        self.bar_until = 0.0
         self.app.invalidate()
 
     # ── Ending ────────────────────────────────────────────────────────────
@@ -211,7 +218,11 @@ class Playback(Screen):
             self.tfocus = (self.tfocus + (1 if a == R.RIGHT else -1)) % len(buttons)
         elif a == R.SELECT:
             buttons[self.tfocus][2]()
-        elif a in (R.UP, R.BACK):
+        elif a == R.BACK:                   # out of the row and the bar away; BACK again leaves
+            self.tfocus = None
+            self.hide_bar()
+            return True
+        elif a == R.UP:
             self.tfocus = None
         else:
             return False
@@ -248,6 +259,8 @@ class Playback(Screen):
             self.skip(-1)
         elif a in (R.UP, R.DOWN, R.INFO):
             self.show_bar()
+        elif a == R.BACK and self.bar_visible() and not self.app.video.paused:
+            self.hide_bar()                 # BACK (B on a pad) takes the bar away first
         elif a in (R.STOP, R.BACK, R.EXIT):
             self.stop()
         elif a == R.MENU:

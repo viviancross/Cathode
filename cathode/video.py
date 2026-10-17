@@ -5,6 +5,7 @@ mpv event is forwarded through `post`, which queues it for the UI thread.
 """
 
 import os
+import threading
 from typing import Callable, Optional
 
 from . import paths
@@ -84,10 +85,17 @@ class Video:
         self.ctx = None
         self._want = None        # playlist entry id of the file we asked for
         self._current = None     # entry id of the file mpv says it started
+        # mpv's event thread can report the new file starting before loadfile
+        # returns; it waits on this until play() has recorded what it asked for.
+        self._ids = threading.Lock()
         self.player.register_event_callback(self._on_event)
         # Tracks come and go after a start: broadcast captions (EIA-608/708
         # in the picture) become a track only when caption data turns up.
         self.player.observe_property("track-list", lambda _name, _v: self._post("tracks_changed"))
+        # keep-open holds a file that ends on its last frame, paused, and sends
+        # no END_FILE: its end is eof-reached turning true. Without this a live
+        # stream the server closed sat paused instead of being picked back up.
+        self.player.observe_property("eof-reached", self._on_eof)
 
     # ── GL ────────────────────────────────────────────────────────────────
 
@@ -129,18 +137,33 @@ class Video:
             [f"{k}: {v}" for k, v in headers.items()] if headers else [])
         self.player["start"] = str(start) if start > 0 else "none"
         self.player["sub-delay"] = sub_delay     # a transcode's clock starts mid-file
-        self.player.pause = False
-        rv = self.player.command("loadfile", url, "replace")
-        self._want = rv.get("playlist_entry_id") if isinstance(rv, dict) else None
-        self._current = None
+        with self._ids:
+            self._current = None
+            self.player.pause = False
+            rv = self.player.command("loadfile", url, "replace")
+            # Again after: a file that ended under keep-open re-pauses itself,
+            # and the next one would start paused (a retuned live stream sat still).
+            self.player.pause = False
+            self._want = rv.get("playlist_entry_id") if isinstance(rv, dict) else None
 
     def stop(self):
-        self._want = self._current = None
+        with self._ids:
+            self._want = self._current = None
         self.player.command("stop")
+
+    def _on_eof(self, _name, reached):
+        with self._ids:
+            ours = self._want is None or self._current == self._want
+        if reached and ours:
+            self._post("video_ended", reason="eof")
 
     def _on_event(self, event):
         """mpv's event thread. Translate, filter to the file we asked for,
         and post; never touch app state here."""
+        with self._ids:
+            self._on_event_locked(event)
+
+    def _on_event_locked(self, event):
         eid = event.event_id.value
         if eid == mpv.MpvEventID.START_FILE:
             entry = event.data.playlist_entry_id

@@ -57,5 +57,36 @@ class TestAddressKeyboard(unittest.TestCase):
         self.assertEqual(kb.done, [None])
 
 
+class TestBarGoes(unittest.TestCase):
+    def _pb(self):
+        pb = Playback.__new__(Playback)
+        drawn, stopped = [], []
+        pb.app = SimpleNamespace(screens=[pb], invalidate=lambda: drawn.append(1), after=lambda s, fn: None,
+                                 video=SimpleNamespace(paused=False, prop=lambda k: None))
+        pb.tfocus, pb.skip_label, pb.markers, pb.dur, pb.pos, pb.time_base = None, "", [], 600.0, 0.0, 0.0
+        pb._shown, pb._last_report = False, 1e18
+        pb.stop = lambda: stopped.append(1)
+        return pb, drawn, stopped
+
+    def test_the_bar_is_taken_off_the_screen_when_it_times_out(self):
+        pb, drawn, _ = self._pb()
+        pb.show_bar()
+        pb._monitor()
+        pb.bar_until = 0.0                              # its five seconds are up
+        drawn.clear()
+        pb._monitor()
+        self.assertEqual(len(drawn), 1)                 # one more frame, without it
+        pb._monitor()
+        self.assertEqual(len(drawn), 1)                 # then nothing to draw
+
+    def test_back_hides_the_bar_then_leaves(self):
+        pb, _, stopped = self._pb()
+        pb.show_bar()
+        pb.handle(R.BACK)
+        self.assertFalse(pb.bar_visible())
+        self.assertEqual(stopped, [])
+        pb.handle(R.BACK)
+        self.assertEqual(stopped, [1])
+
 if __name__ == "__main__":
     unittest.main()

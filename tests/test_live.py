@@ -304,6 +304,8 @@ class TestVideoEventFilter(unittest.TestCase):
         v = video.Video.__new__(video.Video)
         v._post = lambda kind, **d: self.posts.append(kind)
         v._want = v._current = None
+        import threading
+        v._ids = threading.Lock()
         self.calls = []
         test = self
 
@@ -338,6 +340,32 @@ class TestVideoEventFilter(unittest.TestCase):
         e.data = Data()
         self.v._on_event(e)
 
+    def test_a_start_reported_inside_loadfile_still_counts(self):
+        # mpv's thread can report the new file (even its first frame) before
+        # loadfile returns; it waits on the lock until play() has recorded
+        # which file it asked for, so a retune's picture isn't taken for the
+        # last channel's and dropped.
+        import threading
+        v, test = self.v, self
+        v.play("http://x/one.ts")
+        self.event("start", v._want)
+        plain = type(v.player).command
+
+        def command(player, *a):
+            rv = plain(player, *a)
+            n = rv["playlist_entry_id"]
+            test.t = threading.Thread(target=lambda: (test.event("start", n), test.event("restart")))
+            test.t.start()
+            test.t.join(0.2)
+            return rv
+        type(v.player).command = command
+        try:
+            v.play("http://x/two.ts")
+        finally:
+            type(v.player).command = plain
+        self.t.join(2)
+        self.assertEqual(self.posts, ["video_started"])
+
     def test_a_late_restart_from_the_last_file_is_not_this_ones(self):
         self.v.play("a")
         self.v.play("b")                 # entry 2 wanted now
@@ -367,6 +395,23 @@ class TestVideoEventFilter(unittest.TestCase):
         sets = [c for c in self.calls if c[:2] == ("set", "http-header-fields")]
         self.assertEqual(sets[-1][2], [])
 
+
+class TestStreamEnd(unittest.TestCase):
+    def test_a_stream_that_ends_is_reported_though_mpv_holds_it_paused(self):
+        # keep-open sends no END_FILE at the end: eof-reached is the only sign.
+        from cathode.video import Video
+        import threading
+        v = Video.__new__(Video)
+        v._ids = threading.Lock()
+        posted = []
+        v._post = lambda kind, **d: posted.append((kind, d))
+        v._want, v._current = 7, 6
+        v._on_eof("eof-reached", True)                  # the file being replaced
+        self.assertEqual(posted, [])
+        v._current = 7
+        v._on_eof("eof-reached", False)
+        v._on_eof("eof-reached", True)
+        self.assertEqual(posted, [("video_ended", {"reason": "eof"})])
 
 if __name__ == "__main__":
     unittest.main()
