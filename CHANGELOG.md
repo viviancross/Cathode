@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.21
+
+- **Plex posters load on Linux.** The Flatpak couldn't check the
+  certificate of a Plex server reached over https, so the poster wall
+  stayed empty. Posters and logos now use the same certificates as the
+  rest of Cathode, and one that fails says why in the log.
+- **Closed Caption is back** in Subtitles > Font, by that name (it was
+  listed as "Space Mono"), and each font appears there once.
+
 ## 4.20
 
 The 4.0 alpha, updating itself.
