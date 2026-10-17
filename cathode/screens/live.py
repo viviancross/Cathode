@@ -38,14 +38,23 @@ class LiveTV(Screen):
         self._timeout = self._digit_timer = self._banner_timer = None
         self._settle = None         # surfing: the stream loads once the presses stop
         self._fails = 0             # a dropped stream's retries in a row
+        self.dropped = False        # the stream ended: reconnecting under its last picture
+        self._handover = False      # its replacement is queued behind the buffered picture
+        self._stall = None          # buffering with nothing to show: the watchdog
 
     # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
     # only once the presses stop: a server that starts a transcode per tune
     # (Tunarr's HLS) isn't asked for every channel skipped past.
     SURF_SETTLE = 0.5
-    # A dropped stream is picked up again, less often each time it fails in a
-    # row, so a slow server isn't restarted from scratch in a loop.
-    RETRY = (2.0, 5.0, 10.0, 20.0)
+    # A dropped stream is picked up again quietly, under its last picture (no
+    # banner, no cover): at once, then less often each time it fails in a
+    # row, so a slow server isn't restarted from scratch in a loop. Only one
+    # that keeps failing gets the stand-by card.
+    RETRY = (0.5, 2.0, 5.0, 10.0, 20.0)
+    STANDBY_AFTER = 3
+    # Stuck buffering this long (two of Tunarr's 4 s segments) is a server
+    # that stopped sending without ending the stream: reconnect as for a drop.
+    STALL_LIMIT = 8.0
 
     # ── Channels ──────────────────────────────────────────────────────────
 
@@ -81,6 +90,9 @@ class LiveTV(Screen):
         self.idx = idx
         if not retry:
             self._fails = 0
+        self.dropped = self._handover = False
+        self.app.cancel(self._stall)
+        self._stall = None
         ch = self.channels[idx]
         self.phase, self.standby = "cover", False
         self.behind = 0.0                   # a fresh tune is live
@@ -139,14 +151,54 @@ class LiveTV(Screen):
             return                      # the channel being surfed past, not the one coming
         if kind == "video_started":
             self.standby, self._fails = False, 0
+            if self.dropped:                # back: the new picture replaces the held one
+                self.dropped = False
+                self.app.cancel(self._timeout)
+            if self._handover:              # the replacement took over: it's live
+                self._handover, self.behind = False, 0.0
             if self.phase == "cover":
                 self._reveal()
+        elif kind == "video_buffering":
+            self.app.cancel(self._stall)
+            self._stall = None
+            if data.get("on") and self.channels and self.phase in ("watch", "reveal") and not self.dropped:
+                self._stall = self.app.after(self.STALL_LIMIT, self._stalled)
+        elif kind == "video_draining" and self.channels and self.phase in ("watch", "reveal")                 and not (self.dropped or self._handover):
+            # The server ended the stream (Tunarr closed its session) but
+            # seconds of it are still buffered: queue the channel again now.
+            # mpv opens it at once and goes straight on to it as the buffer
+            # runs out, with no banner, cover or gap if the server is quick.
+            self._handover = True
+            print("[cathode] stream source ended, handing over to a fresh one")
+            self.app.video.follow(self.channel.url)
         elif kind == "video_ended" and self.channels and self.phase in ("watch", "reveal"):
-            # A live stream that ends has dropped; pick it back up.
+            # Ended outright (or the handover failed): reload it under the
+            # last picture.
+            self._handover = False
+            # A live stream that ends has dropped (Tunarr closed its session,
+            # say): load it again underneath.
             wait = self.RETRY[min(self._fails, len(self.RETRY) - 1)]
             self._fails += 1
-            print(f"[cathode] stream ended ({data.get('reason')}), retuning in {wait:g} s")
-            self.app.after(wait, lambda i=self.idx: self.idx == i and self.tune(i, retry=True))
+            self.dropped = True
+            if self._fails >= self.STANDBY_AFTER:
+                self.standby = True
+            print(f"[cathode] stream ended ({data.get('reason')}), reconnecting in {wait:g} s")
+            self.app.after(wait, lambda i=self.idx: self.idx == i and self.dropped and self._reconnect(i))
+
+    def _stalled(self):
+        self._stall = None
+        if self.channels and self.phase in ("watch", "reveal") and not self.dropped:
+            self.on_video("video_ended", reason="stalled")
+
+    def _reconnect(self, idx: int):
+        """The dropped stream again, without the tune's banner and cover; a
+        load that never answers counts as another drop."""
+        if self.suspended or self.phase not in ("watch", "reveal"):
+            return
+        self.app.cancel(self._timeout)
+        self._timeout = self.app.after(self.app.config.tune_timeout,
+                                       lambda: self.dropped and self.on_video("video_ended", reason="timeout"))
+        self.app.video.play(self.channels[idx].url)
 
     # ── What the compositor and skin read ─────────────────────────────────
 
@@ -395,6 +447,8 @@ class LiveTV(Screen):
     def trick_visible(self) -> bool:
         """The bar stays while paused or behind live, and briefly after a press."""
         v = self.app.video
+        if self.dropped:                    # mpv holds an ended stream paused: not a pause
+            return False
         return bool(v and self.channel) and (v.paused or time.monotonic() < self.trick_until)
 
     def trick_state(self) -> dict:

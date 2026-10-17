@@ -27,6 +27,9 @@ class FakeVideo:
     def seek(self, s, mode="relative"):
         self.seeks.append(s)
 
+    def follow(self, url):
+        self.followed = getattr(self, "followed", []) + [url]
+
     def buffered_behind(self):
         return 60.0
 
@@ -153,17 +156,60 @@ class TestTuning(unittest.TestCase):
 
     def test_a_failing_stream_is_retried_less_often_each_time(self):
         self.live.on_video("video_started")
+        self.live.phase = "watch"
         waits = []
-        for _ in range(5):
-            self.live.phase = "watch"
+        for _ in range(6):
             self.live.on_video("video_ended", reason="error")
             waits.append(self.app.timers[-1][0])
             self.app.timers[-1][2]()                                 # the retry itself
-        self.assertEqual(waits, [2.0, 5.0, 10.0, 20.0, 20.0])
+        self.assertEqual(waits, [0.5, 2.0, 5.0, 10.0, 20.0, 20.0])
         self.live.on_video("video_started")                          # it came back: start over
-        self.live.phase = "watch"
         self.live.on_video("video_ended", reason="error")
-        self.assertEqual(self.app.timers[-1][0], 2.0)
+        self.assertEqual(self.app.timers[-1][0], 0.5)
+
+    def test_a_source_that_ends_hands_over_behind_the_buffered_picture(self):
+        self.live.on_video("video_started")
+        self.live.phase, self.live.banner_until = "watch", 0.0
+        self.live.behind = 30.0                                     # paused-live, behind
+        loads = len(self.app.video.played)
+        self.live.on_video("video_draining")
+        self.live.on_video("video_draining")                        # once
+        self.assertEqual(self.app.video.followed, [self.live.channel.url])
+        self.assertEqual(len(self.app.video.played), loads)         # nothing cut off: it waits its turn
+        self.assertEqual(self.live.phase, "watch")
+        self.assertFalse(self.live.banner_visible())
+        self.live.on_video("video_started")                         # the replacement took over
+        self.assertEqual(self.live.behind, 0.0)                     # and it's live
+
+    def test_a_stream_stuck_buffering_is_reconnected(self):
+        self.live.on_video("video_started")
+        self.live.phase = "watch"
+        loads = len(self.app.video.played)
+        self.live.on_video("video_buffering", on=True)
+        self.live.on_video("video_buffering", on=False)            # a hiccup: it came back
+        self.live.on_video("video_buffering", on=True)
+        self.app.fire(lambda t: t[0] == LiveTV.STALL_LIMIT)
+        self.assertTrue(self.live.dropped)
+        self.app.timers[-1][2]()                                    # the reconnect
+        self.assertEqual(len(self.app.video.played), loads + 1)
+        self.assertEqual(self.live.phase, "watch")
+
+    def test_a_dropped_stream_comes_back_under_its_last_picture(self):
+        self.live.on_video("video_started")
+        self.live.phase, self.live.banner_until = "watch", 0.0
+        loads = len(self.app.video.played)
+        self.live.on_video("video_ended", reason="eof")
+        self.assertFalse(self.live.trick_visible())                 # mpv's hold isn't a pause
+        self.app.timers[-1][2]()
+        self.assertEqual(len(self.app.video.played), loads + 1)    # loaded again...
+        self.assertEqual(self.live.phase, "watch")                  # ...no cover
+        self.assertFalse(self.live.banner_visible())                # ...no banner
+        self.assertFalse(self.live.standby)
+        for _ in range(2):                                          # it keeps failing: say so
+            self.live.on_video("video_ended", reason="error")
+        self.assertTrue(self.live.standby)
+        self.live.on_video("video_started")
+        self.assertFalse(self.live.standby or self.live.dropped)
 
     def test_a_frame_lifts_the_cover(self):
         self.assertEqual(self.live.cover(), ("static", 1.0))
@@ -412,6 +458,23 @@ class TestStreamEnd(unittest.TestCase):
         v._on_eof("eof-reached", False)
         v._on_eof("eof-reached", True)
         self.assertEqual(posted, [("video_ended", {"reason": "eof"})])
+
+    def test_a_source_read_to_its_end_is_reported_once(self):
+        import threading
+        from cathode.video import Video
+        v = Video.__new__(Video)
+        v._ids, v._drained = threading.Lock(), None
+        posted = []
+        v._post = lambda kind, **d: posted.append(kind)
+        v._want, v._current = 7, 7
+        v._on_cache("demuxer-cache-state", {"eof": False})
+        v._on_cache("demuxer-cache-state", {"eof": True})
+        v._on_cache("demuxer-cache-state", {"eof": True})
+        self.assertEqual(posted, ["video_draining"])
+        v._want = 8                                       # its replacement is queued
+        v._current = 8
+        v._on_cache("demuxer-cache-state", {"eof": True})
+        self.assertEqual(posted, ["video_draining"] * 2)
 
 if __name__ == "__main__":
     unittest.main()

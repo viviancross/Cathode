@@ -68,6 +68,10 @@ class Video:
         self._post = post
         opts = dict(
             vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
+            # A file queued behind this one (follow()) is opened as soon as
+            # this one's source has been read to its end, so a live stream's
+            # replacement is ready by the time the buffered picture runs out.
+            prefetch_playlist="yes",
             input_default_bindings=False, input_vo_keyboard=False,
             osc=False, cache="yes", demuxer_max_bytes="64MiB",
             # Pause-live: keep the recent past so REW can reach back into it.
@@ -88,6 +92,7 @@ class Video:
         # mpv's event thread can report the new file starting before loadfile
         # returns; it waits on this until play() has recorded what it asked for.
         self._ids = threading.Lock()
+        self._drained = None     # entry whose source end was reported
         self.player.register_event_callback(self._on_event)
         # Tracks come and go after a start: broadcast captions (EIA-608/708
         # in the picture) become a track only when caption data turns up.
@@ -96,6 +101,11 @@ class Video:
         # no END_FILE: its end is eof-reached turning true. Without this a live
         # stream the server closed sat paused instead of being picked back up.
         self.player.observe_property("eof-reached", self._on_eof)
+        # The source read to its end while picture is still buffered: for a
+        # live stream, the moment to queue its replacement.
+        self.player.observe_property("demuxer-cache-state", self._on_cache)
+        # Waiting on the network with nothing left to show.
+        self.player.observe_property("paused-for-cache", self._on_stall)
 
     # ── GL ────────────────────────────────────────────────────────────────
 
@@ -150,6 +160,29 @@ class Video:
         with self._ids:
             self._want = self._current = None
         self.player.command("stop")
+
+    def follow(self, url: str):
+        """Play `url` straight after the current file, with no gap if it opens
+        in time (mpv prefetches it); it becomes the file we want."""
+        with self._ids:
+            self.player.command("playlist-clear")       # all but the one playing
+            rv = self.player.command("loadfile", url, "append")
+            self._want = rv.get("playlist_entry_id") if isinstance(rv, dict) else None
+
+    def _on_cache(self, _name, state):
+        if not (state and state.get("eof")):
+            return
+        with self._ids:
+            if self._current is None or self._current != self._want or self._drained == self._current:
+                return
+            self._drained = self._current
+        self._post("video_draining")
+
+    def _on_stall(self, _name, stalled):
+        with self._ids:
+            ours = self._current is not None and self._current == self._want
+        if ours:
+            self._post("video_buffering", on=bool(stalled))
 
     def _on_eof(self, _name, reached):
         with self._ids:
