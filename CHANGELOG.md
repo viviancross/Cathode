@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.22
+
+- **Live TV keeps going when a stream drops.** When the server ends a
+  stream (Tunarr closes a session after a bad source file), Cathode now
+  opens the channel again behind the seconds still buffered and goes
+  straight on to it: no banner, no black screen, usually no gap. It used
+  to sit paused until you changed channel. A stream stuck buffering is
+  picked back up the same way, and only one that keeps failing shows the
+  stand-by card.
+- **On Demand plays the next episode** when one ends, and the playback
+  bar goes away after a few seconds (BACK hides it; BACK again leaves).
+  The bar now shows the title's year and rating, or the episode.
+- **The Main Menu from a playing title:** press MENU, then Main Menu.
+  Settings open over the title; the guide stops it (keeping your place)
+  and goes back to TV.
+- **Channel logos:** the InDirecTV banner shows the channel's logo, and
+  very large logos (over 40 megapixels) load instead of being skipped.
+- **Clearer for first-timers and from the couch:** setup says what the
+  playlist and guide links are; Classic's guide lights only the cursor
+  row; key chips name the keyboard key; Plate Network's menus fit on one
+  page, its On Demand page is called On Demand, and its ATTENTION bar
+  moves smoothly; playback says DOWN reaches its buttons; Diagnostics
+  name the codec.
+
 ## 4.21
 
 - **Plex posters load on Linux.** The Flatpak couldn't check the
