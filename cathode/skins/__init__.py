@@ -328,10 +328,6 @@ class Skin:
         top = getattr(self.app, "top", None)
         return bool(top) and getattr(top(), "name", "") in ("live", "playback", "browse", "miniguide")
 
-    def guide_tip(self) -> str:
-        """Keys a guide with no legend of its own names the first time it
-        opens (the Plate guides); "" when it shows them already."""
-        return ""
 
     def paint(self, canvas, name: str, draw, owner=None):
         """draw(surface) one screen onto the canvas. On a grown canvas a

@@ -418,6 +418,10 @@ class PlateHD(BoxSkin):
                     self.cb(c, self.fit_cb(f_cell, p.title, cell.w - X(36)), f_cell, b["text"], cell.centerx, cy, align="center")
             self.hit((0, y, W, rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                 setattr(g, "focus", "grid"), g.handle("SELECT")))
+        foot = Y(328) + g.rows * Y(53)            # the band under the last row: the keys
+        fk = self.fb(Y(17))
+        if H - foot >= t.ink(fk)[1] + Y(4):
+            self.cb(c, self.guide_keys(), fk, b["soft"], W // 2, foot + (H - foot - t.ink(fk)[1]) // 2, align="center")
         if not rows:
             cell = self.R(0, 328, 1272, 50)
             self._cell(c, cell, False, False)
@@ -438,7 +442,8 @@ class PlateHD(BoxSkin):
     def menu_cols(self, menu):
         return 1
 
-    def guide_tip(self) -> str:
+    def guide_keys(self) -> str:
+        """The guide's keys, for the strip at its foot."""
         def k(action, plain):           # the remote's name for it, else the button's own
             name = self.k(action)
             return plain if name == action else name
@@ -1253,7 +1258,11 @@ class Plate(PlateHD):
             self._cell(c, cell, False)
             t.draw(c, t.fit(f_cell, self.empty_guide(g), cell.w - X(20)), f_cell, b["cell_ink"], cell.centerx,
                    cell.y + (cell.h - t.ink(f_cell)[1]) // 2, align="center")
-        pygame.draw.rect(c, b["grey_hi"], self.R(0, 452, 640, 28))
+        strip = self.R(0, 452, 640, 28)
+        pygame.draw.rect(c, b["grey_hi"], strip)
+        fk = self.f(Y(12))
+        t.draw(c, t.fit(fk, self.guide_keys(), strip.w - X(40)), fk, b["ink"], strip.centerx,
+               strip.y + (strip.h - t.ink(fk)[1]) // 2, align="center")
 
     def _chan_tile(self, c, tile, ch, f):
         """A channel tile: light grey, the blue crescent inside its left half

@@ -10,7 +10,6 @@ SLOT = 30                   # minutes per LEFT/RIGHT step
 
 
 class Guide(Screen):
-    _tipped = False
     name = "guide"
     opaque = True
 
@@ -26,10 +25,6 @@ class Guide(Screen):
         if live.channel in self.filtered():
             self.cursor = self.filtered().index(live.channel)
         self._clamp()
-        tip = app.skin.guide_tip()
-        if tip and not Guide._tipped:       # once a session, for a guide with no key legend
-            Guide._tipped = True
-            app.note(tip, 6.0)
 
     # ── Data ──────────────────────────────────────────────────────────────
 

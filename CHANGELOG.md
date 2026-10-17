@@ -40,7 +40,7 @@ a retro-themed player.
   themes are translated into each box's own colours and kept at 4.5:1 or
   better; the box's own look (Original) is marked Recommended. Every menu
   row says what it does, in each box's own place for it; the Button Guide
-  is on the Main Menu; the Plate guides name their keys the first time.
+  is on the Main Menu; the Plate guides show their keys in a strip at the foot.
   A channel with no listings says why (no guide, guide failed or empty,
   channel not in the guide), and each playlist's page shows and edits its
   playlist and guide addresses. Setup checks the playlist address as it's
