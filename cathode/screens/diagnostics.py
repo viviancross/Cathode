@@ -6,6 +6,17 @@ from .. import remote as R
 from ..app import Screen
 
 
+
+# mpv's codec names, as a box's info page would put them.
+CODECS = {"h264": "H.264", "hevc": "HEVC (H.265)", "mpeg2video": "MPEG-2", "mpeg4": "MPEG-4",
+          "av1": "AV1", "vp9": "VP9", "vp8": "VP8", "vc1": "VC-1", "mpeg1video": "MPEG-1",
+          "wrapped_avframe": "Test pattern", "rawvideo": "Uncompressed"}
+
+
+def codec_name(fmt) -> str:
+    return CODECS.get(fmt or "", (fmt or "-").upper())
+
+
 class Diagnostics(Screen):
     name = "diagnostics"
     opaque = True
@@ -46,12 +57,13 @@ class Diagnostics(Screen):
         fps = s.get("container-fps")
         return [
             ("Channel", f"{ch.number} {ch.name}" if ch else "-"),
-            ("Stream", f"{s.get('video-codec') or '-'}"),
+            ("Stream", codec_name(s.get("video-format"))),
             ("Picture", res + (f" @ {fps:.0f} fps" if fps else "")),
             ("Bitrate", f"{rate / 1e6:.1f} Mbps" if rate else "-"),
             ("Buffered", f"{(s.get('demuxer-cache-duration') or 0):.1f} s"),
             ("Dropped frames", str((s.get("frame-drop-count") or 0) + (s.get("decoder-frame-drop-count") or 0))),
-            ("Decoder", "Software" if s.get("hwdec-current") in (None, "", "no") else s["hwdec-current"]),
+            ("Decoder", "Software" if s.get("hwdec-current") in (None, "", "no") else
+             f"Hardware ({s['hwdec-current']})"),
         ]
 
     def handle(self, a: str) -> bool:

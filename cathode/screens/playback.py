@@ -45,6 +45,9 @@ class Playback(Screen):
         self.flash = ("PLAY >", time.monotonic() + 1.5)
         self.show_bar()
         self.app.cancel(self._tick)
+        if not getattr(self.app, "_told_transport", False):    # the buttons stay dim until DOWN
+            self.app._told_transport = True
+            self.app.toast("Press DOWN for the playback buttons.", 4.0)
         self._tick = self.app.after(0.5, self._monitor)
 
     def video_box(self):

@@ -130,7 +130,7 @@ class FakePlex(plex.PlexClient):
     def item_detail(self, rk):
         movie = rk.startswith("m")
         title = MOVIES[int(rk[1:])] if movie else ("Test Patterns" if rk == "s1" else f"Episode {rk[1:]}")
-        return {"rating_key": rk, "title": title, "subtitle": "1984   PG   1h 40m" if movie else "S1",
+        return {"rating_key": rk, "title": title, "subtitle": "1984   PG   7.2" if movie else "S1",
                 "summary": "A fake title for working on the On Demand screens. It plays one of "
                            "mpv's test patterns, with an intro marker from 0:02 to 0:20 so the "
                            "Skip Intro button shows.",

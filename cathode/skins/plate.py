@@ -775,13 +775,14 @@ class PlateHD(BoxSkin):
         panel = self.R(40, 300, 740, 360)
         self._vip_panel(c, panel)
         pygame.draw.rect(c, b["vp_info"], panel.inflate(-X(16), -Y(16)), border_radius=Y(10))
-        fh = self.fb(Y(22))
-        fh.italic = True
-        try:
-            left = f"Time Left: {hms(max(0, (d.get('duration') or 0) - (d.get('offset') or 0)))}"
-            self.cb(c, left, fh, b["vp_ink"], panel.right - X(24), panel.y + Y(18), align="right")
-        finally:
-            fh.italic = False
+        if (d.get("offset") or 0) > 5:      # a title part-watched: what's left of it
+            fh = self.fb(Y(22))
+            fh.italic = True
+            try:
+                left = f"Time Left: {hms(max(0, (d.get('duration') or 0) - d['offset']))}"
+                self.cb(c, left, fh, b["vp_ink"], panel.right - X(24), panel.y + Y(18), align="right")
+            finally:
+                fh.italic = False
         fd = self.fb(Y(22))
         y = panel.y + Y(54)
         for line in t.wrap(fd, d.get("summary", "") or "No description available.", int((panel.w - X(60)) / 0.86), 8):
@@ -1424,7 +1425,11 @@ class Plate(PlateHD):
     # ── Menus: the 2005 Theme Categories page ─────────────────────────────
 
     def menu_cols(self, menu):
-        return 2 if menu.title == "MAIN MENU" and len(menu.pages) == 1 else 1
+        """Two columns, as the Main Menu, when the rows carry no values
+        (LEFT/RIGHT is free to cross) and one would page."""
+        if menu.title == "MAIN MENU":
+            return 2 if len(menu.pages) == 1 else 1
+        return 2 if 6 < len(menu.items) <= 10 and not any(it.value or it.adjust for it in menu.items) else 1
 
     def menu_rows(self, menu):
         return 5 if self.menu_cols(menu) == 2 else super().menu_rows(menu)
@@ -1553,8 +1558,9 @@ class Plate(PlateHD):
         cols = self.menu_cols(m)
         about = m.items[m.cursor].help if 0 <= m.cursor < n else ""
         if about:                       # what the chosen row does, under the title
-            fa = self.f(Y(12))
+            fa = self.fb(Y(13))
             for k, line in enumerate(t.wrap(fa, about, X(300), 2)):
+                t.draw(c, line, fa, b["m_shadow"], X(331), Y(108) + k * Y(16) + 1)
                 t.draw(c, line, fa, b["m_ink"], X(330), Y(108) + k * Y(16))
         # The 2005 page's rhythm: rows 36 tall on a 45 pitch from y 163, the
         # band 6 above the first and 6 below the last; five rows a column in
@@ -1649,14 +1655,16 @@ class Plate(PlateHD):
         pygame.draw.rect(c, mix(b["row"], b["row_hi"], 0.75), g,
                          border_radius=g.h // 2 if radius is None else max(1, radius - Y(2)))
 
-    def _sd_pill(self, c, r, label, on, right=""):
+    def _sd_pill(self, c, r, label, on, right="", centre=False):
         """A blue capsule pill with its light top line, white when chosen."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._lens(c, r, on=on)
         f = self.fb(Y(19))
         ty = r.y + (r.h - t.cap(f)) // 2
         rw = t.width(f, right) + X(16) if right else 0
-        if label:
+        if label and centre:
+            self._lens_text(c, t.fit(f, label, r.w - X(32)), f, r.centerx, ty, on, align="center")
+        elif label:
             self._lens_text(c, t.fit(f, label, r.w - X(48) - rw), f, r.x + X(24), ty, on)
         if right:
             self._lens_text(c, right, f, r.right - X(24), ty, on, align="right")
@@ -1678,7 +1686,7 @@ class Plate(PlateHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
         self._sd_page(c, "My Recordings" if rec else (nice(s.level["title"]) if s.level and len(s.stack) > 1
-                                                      else "Pay-Per-View"))
+                                                      else "On Demand"))
         band = self._sd_band(c, Y(160), Y(270))
         if s.mode == "auth":
             fl = self.fb(Y(17))
@@ -1841,7 +1849,7 @@ class Plate(PlateHD):
             t.draw(c, t.fit(f, str(value), X(280)), f, b["ink"], X(316), y)
             y += Y(24)
         ok = pygame.Rect(X(230), r.bottom - Y(42), X(180), Y(30))
-        self._sd_pill(c, ok, "Done", True)
+        self._sd_pill(c, ok, "Done", True, centre=True)
         self.hit(ok, lambda: d.handle("BACK"))
 
     def draw_playback(self, c, pb):

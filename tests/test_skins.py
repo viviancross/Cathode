@@ -294,3 +294,36 @@ class TestDisplayCasing(unittest.TestCase):
         self.assertEqual(nice("TV SHOWS"), "TV Shows")
         self.assertEqual(nice("RETURN OF THE TEST CARD"), "Return of the Test Card")
         self.assertEqual(nice("STATIC HOUR: THE MOVIE"), "Static Hour: The Movie")
+
+
+class TestPersonaFixes(unittest.TestCase):
+    def test_plate_sd_puts_a_valueless_list_in_two_columns(self):
+        from cathode.screens.menu import Item
+        skin = skin_classes()["plate"](FakeApp())
+
+        def menu(title, items, depth=2):
+            return NS(title=title, items=items, pages=[None] * depth)
+        rows = [Item(f"Row {i}", submenu=lambda: []) for i in range(7)]
+        self.assertEqual(skin.menu_cols(menu("SETTINGS", rows)), 2)
+        self.assertEqual(skin.menu_cols(menu("SETTINGS", rows[:6])), 1)        # fits as a list
+        valued = rows[:6] + [Item("Motion", value=lambda: "On", adjust=lambda d: None)]
+        self.assertEqual(skin.menu_cols(menu("PICTURE", valued)), 1)          # LEFT/RIGHT change values
+        self.assertEqual(skin.menu_cols(menu("MAIN MENU", rows, depth=1)), 2)
+
+    def test_diagnostics_name_the_codec(self):
+        from cathode.screens.diagnostics import codec_name
+        self.assertEqual(codec_name("h264"), "H.264")
+        self.assertEqual(codec_name("prores"), "PRORES")
+        self.assertEqual(codec_name(None), "-")
+
+    def test_a_chip_names_the_keyboard_key_only_on_a_keyboard(self):
+        app = FakeApp()
+        app.remote = NS(last_device="keys")
+        app.key_name = lambda a: {"MENU": "C"}.get(a, "")
+        skin = skin_classes()["indirect_hd"](app)
+        self.assertEqual(skin.key_also("MENU"), " (C)")
+        app.remote.last_device = "pad"
+        self.assertEqual(skin.key_also("MENU"), "")
+        app.remote.last_device = "keys"
+        app.config.remote = "sony_rm_y195"          # a remote chosen: its buttons, not keys
+        self.assertEqual(skin.key_also("MENU"), "")

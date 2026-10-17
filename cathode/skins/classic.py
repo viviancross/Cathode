@@ -34,7 +34,7 @@ class Classic(Skin):
     # on every screen. 17 is the floor for reading from the couch. Display
     # numerals (the tuned number, digits, the pause tag, link codes) stay
     # literal where they're drawn.
-    TYPE = dict(hint=17, meta=19, body=22, heading=26, title=30, display=40)
+    TYPE = dict(hint=19, meta=19, body=22, heading=26, title=30, display=40)
 
     def __init__(self, app):
         super().__init__(app)
@@ -486,15 +486,13 @@ class Classic(Skin):
         t.draw(c, t.fit(f_title, title, W - 420), f_title, p["YELLOW"], 30, 16)
         if len(s.stack) > 1:
             t.draw(c, t.fit(f_crumb, s.crumb(), W - 420), f_crumb, p["INK_MUTED"], 30, 52)
-        x = W - 30
-        for label, fn in (("MENU", lambda: s.handle("MENU")), ("BACK", s.back)):
-            w = t.width(f_btn, label) + 28
-            r = pygame.Rect(x - w, 20, w, 36)
-            pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), r, border_radius=6)
-            pygame.draw.rect(c, p["OSD_BORDER"], r, 1, border_radius=6)
-            t.draw(c, label, f_btn, p["CYAN"], r.centerx, r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
-            self.hit(r, fn)
-            x -= w + 12
+        x, f_key = W - 30, self.role("hint")
+        for key, word, fn in ((self.k("BACK"), "back", s.back), (self.k("MENU"), "options", lambda: s.handle("MENU"))):
+            seg = f"{key}: {word}"
+            w = t.width(f_key, seg)
+            t.draw(c, seg, f_key, p["INK_MUTED"], x - w, 38 - t.ink(f_key)[1] // 2)
+            self.hit((x - w, 20, w, 36), fn)
+            x -= w + 28
         if s.status:
             t.draw(c, s.status, f_btn, p["ORANGE"], x - 10, 30, align="right")
 
@@ -1033,9 +1031,12 @@ class Classic(Skin):
             px = grid_x + int(a / mins * grid_w)
             pw = int((b - a) / mins * grid_w)
             on_air = prog.start <= now < prog.stop
-            ink = p["ONAIR_TEXT"] if on_air else p["SEL_TEXT_DIM"] if selected else p["WHITE_DIM"]
-            pygame.draw.rect(c, p["GUIDE_ONAIR"] if on_air else bg, (px + 1, y + 2, pw - 2, rh - 4))
+            ink = (p["SEL_TEXT"] if on_air else p["SEL_TEXT_DIM"]) if selected else \
+                p["WHITE"] if on_air else p["WHITE_DIM"]
+            pygame.draw.rect(c, bg, (px + 1, y + 2, pw - 2, rh - 4))
             pygame.draw.line(c, p["GUIDE_BORDER"], (px, y), (px, y + rh))
+            if on_air:
+                pygame.draw.rect(c, p["SEL_TEXT"] if selected else p["CYAN"], (px + 1, y + 2, 4, rh - 4))
             if pw >= 8 + t.width(f_prog, "MMMM"):
                 t.draw(c, t.fit(f_prog, prog.title, pw - 10), f_prog, ink, px + 5,
                        y + (rh - t.ink(f_prog)[1]) // 2)

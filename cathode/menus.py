@@ -85,9 +85,9 @@ DESCRIPTIONS.update({
     "Who's watching": "Switch to another Plex Home user.",
     "Unlink Plex account": "Sign this Cathode out of Plex.",
     # The welcome
-    "Set up your channels": "Add your IPTV playlist: its web address.",
-    "Playlist address": "Where the channels come from: an M3U address or file.",
-    "Guide address": "Where the listings come from: an XMLTV address. Optional.",
+    "Set up your channels": "Type in the channel list link (M3U) your IPTV provider gave you.",
+    "Playlist address": "Where the channels come from: your provider's M3U link, or a file.",
+    "Guide address": "Where the listings come from: your provider's XMLTV link. Optional.",
     "Change the look": "Pick the box and its colors again.",
 })
 
@@ -694,8 +694,8 @@ def _check_playlist(app, url, done):
     threading.Thread(target=work, daemon=True).start()
 
 
-PLAYLIST_HINT = "Your IPTV provider's M3U address, or a playlist file on this computer."
-GUIDE_HINT = "The XMLTV address for the guide. Done as it is skips."
+PLAYLIST_HINT = "Your IPTV provider's channel list link (M3U), or a playlist file."
+GUIDE_HINT = "Your provider's TV guide link (XMLTV). Done as it is skips."
 
 
 def playlist_items(app, pl):

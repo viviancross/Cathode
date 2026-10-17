@@ -244,7 +244,8 @@ class InDirectHD(BoxSkin):
         # named as on Cathode's remote (it has no colour buttons).
         fc = self.fb(Y(17))
         x = bar.right - X(16)
-        for key, label in ((self.k("BROWSE"), "Mini Guide"), (self.k("MENU"), "Menu")):
+        for key, label in ((self.k("BROWSE"), "Mini Guide" + self.key_also("BROWSE")),
+                           (self.k("MENU"), "Menu" + self.key_also("MENU"))):
             x -= t.width(fk, label)
             t.draw(c, label, fk, b["text"], x, ky)
             chip = pygame.Rect(0, bar.y + Y(2), t.width(fc, key) + X(14), bar.h - Y(4))
@@ -474,7 +475,7 @@ class InDirectHD(BoxSkin):
             self._amber(c, pygame.Rect(X(96), bar.y, t.width(fl, cat) + X(28), bar.h))
             self._shadowed(c, cat, fl, b["text"], b["sel_shadow"], X(110), ly)
         else:
-            t.draw(c, cat, fl, b["soft"], X(110), ly)
+            t.draw(c, cat, fl, b["text"], X(110), ly)
         self.hit((X(96), bar.y, X(400), bar.h), lambda: g.handle("THEMES"))
         for dot, label, dx in (("red", "-12hrs", 619), ("green", "+12hrs", 772), ("yellow", "Guide Options", 926)):
             pygame.draw.circle(c, DOTS[dot], (X(dx + 10), bar.centery), Y(10))
@@ -515,6 +516,10 @@ class InDirectHD(BoxSkin):
         n_vis = max(1, (Y(650) - Y(214)) // rh)     # room under the list for the page counter
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         f_row = self.f(Y(24))
+        size = 24                           # one size for the list: smaller before an ellipsis
+        while size > 19 and any(t.width(self.f(Y(size)), it.label) > X(168) for it in m.items):
+            size -= 1
+        fr = self.f(Y(size))
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
             y = Y(214) + k * rh
@@ -523,10 +528,6 @@ class InDirectHD(BoxSkin):
             if sel:
                 pygame.draw.rect(c, b["bar"], row)
             ink = (b["panel"] if sel else b["text"]) if it.enabled else b["soft"]
-            size = 24
-            while size > 19 and t.width(self.f(Y(size)), it.label) > X(168):     # smaller before an ellipsis
-                size -= 1
-            fr = self.f(Y(size))
             t.draw(c, t.fit(fr, it.label, X(168)), fr, ink, X(96), y + (t.ink(f_row)[1] - t.ink(fr)[1]))
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
@@ -572,7 +573,7 @@ class InDirectHD(BoxSkin):
                 fv = self.f(Y(22))
                 t.draw(c, "Open" if it.submenu else "Choose", fv, b["text"], box.x + X(16),
                        box.y + Y(44))
-        t.draw(c, f"{self.k('SELECT')}: choose    {self.k('BACK')}: up a level    {self.k('EXIT')}: close", self.f(Y(20)), b["soft"], X(96), Y(690))
+        t.draw(c, f"{self.k('SELECT')}: choose    {self.k('BACK')}: up a level    {self.k('EXIT')}: close", self.f(Y(20)), b["text"], X(96), Y(690))
 
     # ── Mini guide ────────────────────────────────────────────────────────
 
@@ -654,10 +655,11 @@ class InDirectHD(BoxSkin):
         W, H = self.canvas
         self._page(c, (0, self.Y(192), W, H - self.Y(192)))
 
-    def _hint(self, c, x, y, key, label, ink, chip):
+    def _hint(self, c, x, y, action, label, ink, chip):
         """A remote button named in a footer: the button in a small chip,
         what it does beside it. Returns the x after it."""
         t, X, Y = self.text, self.X, self.Y
+        key, label = self.k(action), label + self.key_also(action)
         fk, fl = self.fb(Y(17)), self.f(Y(21))
         w = t.width(fk, key) + X(14)
         r = pygame.Rect(x, y - Y(3), w, t.ink(fl)[1] + Y(6))
@@ -688,7 +690,7 @@ class InDirectHD(BoxSkin):
         w = sum(t.width(ft, ch) for ch in "ON>DEMAND") + X(3) * 8
         self._spaced(c, "ON>DEMAND", ft, b["text"], tag.centerx - w // 2, tag.y + (tag.h - t.ink(ft)[1]) // 2, X(3))
 
-        head = self.R(364, 35, 472, 183)
+        head = self.R(356, 35, 480, 183)
         pygame.draw.rect(c, b["od_panel"], head, border_radius=Y(6))
         more = self.more(Y(44))             # a taller screen's rows
         main = self.R(356, 218, 880, 408 + more)
@@ -697,8 +699,8 @@ class InDirectHD(BoxSkin):
         bar = self.R(356, 634, 880, 40).move(0, more)
         pygame.draw.rect(c, b["od_bar"], bar, border_radius=Y(6))
         hy = bar.y + (bar.h - t.ink(self.f(Y(21)))[1]) // 2
-        x = self._hint(c, bar.x + X(64), hy, self.k("MENU"), "Options", b["text"], b["navy"])
-        x = self._hint(c, x, hy, self.k("LIST"), "My Recordings", b["text"], b["navy"])
+        x = self._hint(c, bar.x + X(64), hy, "MENU", "Options", b["text"], b["navy"])
+        x = self._hint(c, x, hy, "LIST", "My Recordings", b["text"], b["navy"])
         if s.status:
             t.draw(c, s.status, self.fb(Y(21)), b["text"], bar.right - X(20), hy, align="right")
 
@@ -756,6 +758,10 @@ class InDirectHD(BoxSkin):
             w = sum(t.width(ft, ch) for ch in "ON>DEMAND") + X(3) * 8
             self._spaced(c, "ON>DEMAND", ft, b["text"], tg.centerx - w // 2, tg.y + (tg.h - t.ink(ft)[1]) // 2, X(3))
             t.draw(c, "WELCOME!", self.fb(Y(24)), b["od_ink"], wl.x + X(40), tg.bottom + Y(26))
+            fwl = self.f(Y(20))
+            for k, line in enumerate(t.wrap(fwl, "Movies and shows from your Plex server. Choose a category "
+                                                 f"on the left and press {self.k('SELECT')}.", wl.w - X(80), 2)):
+                t.draw(c, line, fwl, b["od_ink"], wl.x + X(40), tg.bottom + Y(62) + k * Y(26))
             return
         if s.view == "wall":
             self._od_posters(c, s, main)
@@ -835,7 +841,7 @@ class InDirectHD(BoxSkin):
         self._blue(c)
         self._top(c, "My Recordings", "playlist")
         rows = s.rows
-        fs = self.fb(Y(26))
+        fs = self.f(Y(22))
         t.draw(c, f"{len(rows)} Recording" + ("" if len(rows) == 1 else "s"), fs, b["strip_ink"], X(300),
                Y(146) + (Y(46) - t.ink(fs)[1]) // 2)
         fi = self.fb(Y(25))
@@ -891,7 +897,7 @@ class InDirectHD(BoxSkin):
         fl = self.f(Y(23))
         ly = foot.y + (foot.h - t.ink(fl)[1]) // 2
         t.draw(c, f"{int(free * 100)}% Free", fl, b["label"], X(432), ly)
-        self._hint(c, X(860), ly, self.k("MENU"), "Options", b["text"], b["row_head"])
+        self._hint(c, X(860), ly, "MENU", "Options", b["text"], b["row_head"])
 
     # Info: the left column of things to do (orange on the chosen one), the
     # facts and the synopsis in the navy panel.
@@ -902,7 +908,7 @@ class InDirectHD(BoxSkin):
         d = info.detail
         self._blue(c)
         self._top(c, d.get("title", ""), "info")
-        fs = self.fb(Y(26))
+        fs = self.f(Y(22))
         sy = Y(146) + (Y(46) - t.ink(fs)[1]) // 2
         t.draw(c, stamp(), fs, b["strip_ink"], X(95), sy)
         if d.get("duration"):
@@ -910,7 +916,7 @@ class InDirectHD(BoxSkin):
         meta = d.get("subtitle") or d.get("meta", "")
         if meta:
             t.draw(c, t.fit(fs, meta, X(250)), fs, b["strip_ink"], X(580), sy)
-        pn = self.R(300, 222, 880, 478)
+        pn = self.R(300, 222, 880, 468)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
         fb_ = self.f(Y(25))
         for k, name in enumerate(info.buttons()):
@@ -933,8 +939,6 @@ class InDirectHD(BoxSkin):
         x, y, w = pn.x + X(40), pn.y + Y(26), art_r.x - X(30) - (pn.x + X(40))
         lh = t.ink(fb_)[1] + Y(20)
         facts = [d.get("meta", "") if d.get("subtitle") else ""]
-        if d.get("duration"):
-            facts.append(f"Length: {hms(d['duration'])}")
         if info.kind != "download":
             facts.append("Cost: Free")
         for line in [f for f in facts if f]:
@@ -966,9 +970,9 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._blue(c)
         self._top(c, kb.prompt, "setup")
-        fs = self.fb(Y(26))
+        fs = self.f(Y(22))
         t.draw(c, stamp(), fs, b["strip_ink"], X(95), Y(146) + (Y(46) - t.ink(fs)[1]) // 2)
-        pn = self.R(300, 222, 880, 498)
+        pn = self.R(300, 222, 880, 468)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
         fi = self.f(Y(25))
         hint = kb.hint or f"Press {self.k('SELECT')} on the characters to enter the text. Select Done when finished."
@@ -979,7 +983,7 @@ class InDirectHD(BoxSkin):
         cw, ch = X(55.3), Y(37)
         for r, row in enumerate(grid):
             if row in (["DONE"], ["CANCEL"]):
-                rect = self.R(907, 600 + 41 * (r - len(grid) + 2), 273, 41)
+                rect = self.R(907, 590 + 41 * (r - len(grid) + 2), 273, 41)
             else:
                 span = 6 // len(row)
                 rect = None
@@ -1027,7 +1031,7 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._blue(c)
         self._top(c, "System Info & Test", "setup")
-        fs = self.fb(Y(26))
+        fs = self.f(Y(22))
         t.draw(c, stamp(), fs, b["strip_ink"], X(95), Y(146) + (Y(46) - t.ink(fs)[1]) // 2)
         pn = self.R(95, 222, 1085, 498)
         vgrad(c, pn, rgba(b["pnl"]), rgba(b["pnl_bot"]))
@@ -1850,8 +1854,9 @@ class InDirect(InDirectHD):
 
     def draw_keyboard(self, c, kb):
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._dss_page(c, kb.prompt, [kb.hint or f"Use arrows to point to a letter, then press {self.k('SELECT')}.",
-                                      "Choose Done when finished."])
+        hint = kb.hint or f"Use arrows to point to a letter, then press {self.k('SELECT')}."
+        lines = self.text.wrap(self.fb(Y(11)), hint, int(X(258) / self.SQUEEZE), 2)
+        self._dss_page(c, kb.prompt, lines if len(lines) == 2 else lines + ["Choose Done when finished."])
         field = self.R(52, 75, 220, 15)
         pygame.draw.rect(c, b["shadow"], field.move(2, 2))
         pygame.draw.rect(c, b["teal"], field)

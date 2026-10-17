@@ -460,6 +460,19 @@ class Skin:
         remote = getattr(getattr(self.app, "config", None), "remote", "")
         return button_name(remote, action, self.REMOTE_WORDS.get(action, ""))
 
+    def key_also(self, action: str) -> str:
+        """' (C)' after a chip that names the remote's button, for someone on
+        a keyboard with no remote chosen: the key, as the notes' 'MENU (C)'."""
+        from ..remote import REMOTES
+        app = self.app
+        pad = getattr(app, "remote", None)
+        if pad is None or getattr(pad, "last_device", "keys") == "pad" or not hasattr(app, "key_name"):
+            return ""
+        if REMOTES.get(getattr(app.config, "remote", ""), REMOTES[""])[1]:
+            return ""
+        key = app.key_name(action)
+        return f" ({key})" if key else ""
+
     def empty_guide(self, g) -> str:
         """What a guide list with no channels says (only Favorites can be)."""
         if g.category == "Favorites":

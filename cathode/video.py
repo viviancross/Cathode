@@ -301,7 +301,7 @@ class Video:
         """What the diagnostics screen shows as a 'signal' readout."""
         return {k: self.prop(k) for k in ("video-bitrate", "audio-bitrate", "frame-drop-count",
                                     "decoder-frame-drop-count", "demuxer-cache-duration",
-                                    "hwdec-current", "video-codec", "width", "height",
+                                    "hwdec-current", "video-format", "width", "height",
                                     "container-fps", "cache-buffering-state")}
 
     def terminate(self):
