@@ -165,8 +165,12 @@ class Video:
         """Play `url` straight after the current file, with no gap if it opens
         in time (mpv prefetches it); it becomes the file we want."""
         with self._ids:
-            self.player.command("playlist-clear")       # all but the one playing
-            rv = self.player.command("loadfile", url, "append")
+            try:
+                self.player.command("playlist-clear")   # all but the one playing
+                rv = self.player.command("loadfile", url, "append")
+            except Exception as e:                  # the drop then ends it, and that reconnects
+                print(f"[video] follow failed: {e!r}"[:300])
+                return
             self._want = rv.get("playlist_entry_id") if isinstance(rv, dict) else None
 
     def _on_cache(self, _name, state):
@@ -275,7 +279,7 @@ class Video:
                     ("Closed captions" if cc else f"Track {t.get('id')}")
                 out.append({"id": t.get("id"), "lang": t.get("lang", ""), "title": t.get("title", ""),
                             "selected": bool(t.get("selected")), "name": name,
-                            "external": bool(t.get("external"))})
+                            "external": bool(t.get("external")), "file": t.get("external-filename", "")})
         return out
 
     def apply_subtitles(self, on: bool):
@@ -302,16 +306,28 @@ class Video:
         self.set_track("sub", subs[nxt]["id"])
         return subs[nxt]["name"]
 
+    def _try(self, what: str, fn) -> bool:
+        """A track command mpv may refuse (a file the server won't hand over,
+        a track already gone): said in the log, never the end of the app."""
+        try:
+            fn()
+            return True
+        except Exception as e:
+            print(f"[video] {what} failed: {e!r}"[:300])
+            return False
+
     def set_track(self, kind: str, tid):
-        self.player["aid" if kind == "audio" else "sid"] = tid if tid is not None else "no"
+        key = "aid" if kind == "audio" else "sid"
+        self._try(f"{key}={tid}", lambda: self.player.__setitem__(key, tid if tid is not None else "no"))
 
-    def add_subtitle(self, url: str, title: str = "", lang: str = "", select: bool = False):
+    def add_subtitle(self, url: str, title: str = "", lang: str = "", select: bool = False) -> bool:
         """A subtitle file for the playing video, fetched with its headers;
-        select shows it straight away."""
-        self.player.command("sub-add", url, "select" if select else "auto", title, lang)
+        select shows it straight away. False when mpv couldn't load it."""
+        return self._try("sub-add", lambda: self.player.command("sub-add", url, "select" if select else "auto",
+                                                                title or "", lang or ""))
 
-    def remove_subtitle(self, tid):
-        self.player.command("sub-remove", tid)
+    def remove_subtitle(self, tid) -> bool:
+        return self._try("sub-remove", lambda: self.player.command("sub-remove", tid))
 
     def sub_style(self, font=None, size=None, color=None, back=None):
         if font:

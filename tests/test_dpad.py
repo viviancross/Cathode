@@ -101,5 +101,44 @@ class TestNextInQueue(unittest.TestCase):
         self.assertEqual(played, [1])
 
 
+class TestSubtitleReload(unittest.TestCase):
+    """Auto-sync switched mid-title: the files go back to mpv, the one
+    showing stays shown, and one the server won't sync comes back plain."""
+
+    def _pb(self, refuse=()):
+        pb = Playback.__new__(Playback)
+        added, removed = [], []
+
+        class V:
+            def tracks(self, kind):
+                return [{"id": 1, "external": True, "selected": False, "file": "http://s/streams/1"},
+                        {"id": 2, "external": True, "selected": True, "file": "http://s/streams/2?autoAdjustSubtitle=1"}]
+
+            def remove_subtitle(self, tid):
+                removed.append(tid)
+                return True
+
+            def add_subtitle(self, url, title="", lang="", select=False):
+                if url in refuse:
+                    return False
+                added.append((url, select))
+                return True
+        pb.app = SimpleNamespace(video=V(), config=SimpleNamespace(sub_auto_sync=True))
+        pb.subs = [{"url": "http://s/streams/1", "title": "A", "lang": "en"},
+                   {"url": "http://s/streams/2", "title": "B", "lang": "en", "sync": True}]
+        return pb, added, removed
+
+    def test_the_shown_file_stays_shown(self):
+        pb, added, removed = self._pb()
+        pb.reload_subs()
+        self.assertEqual(removed, [1, 2])
+        self.assertEqual(added, [("http://s/streams/1", False),
+                                 ("http://s/streams/2?autoAdjustSubtitle=1", True)])
+
+    def test_a_sync_the_server_refuses_falls_back_to_the_file(self):
+        pb, added, _ = self._pb(refuse={"http://s/streams/2?autoAdjustSubtitle=1"})
+        pb.reload_subs()
+        self.assertIn(("http://s/streams/2", True), added)
+
 if __name__ == "__main__":
     unittest.main()

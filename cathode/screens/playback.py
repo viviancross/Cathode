@@ -68,14 +68,18 @@ class Playback(Screen):
 
     def reload_subs(self):
         """Hand mpv the subtitle files again (auto-sync was switched),
-        keeping the one that was showing."""
+        keeping the one that was showing; one the server won't sync comes
+        back as it was."""
         v = self.app.video
         files = [t for t in v.tracks("sub") if t["external"]]
-        shown = next((k for k, t in enumerate(files) if t["selected"]), None)
+        on = next((t["file"] for t in files if t["selected"]), None)
         for t in files:
             v.remove_subtitle(t["id"])
-        for k, s in enumerate(self.subs):
-            v.add_subtitle(self.sub_url(s), s["title"], s["lang"], select=k == shown)
+        for s in self.subs:
+            shown = bool(on) and on.split("?")[0] == s["url"].split("?")[0]
+            url = self.sub_url(s)
+            if not v.add_subtitle(url, s.get("title", ""), s.get("lang", ""), select=shown) and url != s["url"]:
+                v.add_subtitle(s["url"], s.get("title", ""), s.get("lang", ""), select=shown)
 
     # ── Position ──────────────────────────────────────────────────────────
 
@@ -166,7 +170,7 @@ class Playback(Screen):
         if kind == "video_started" and not self._subs_added:
             self._subs_added = True                 # (it fires again after every seek)
             for s in self.subs:
-                self.app.video.add_subtitle(self.sub_url(s), s["title"], s["lang"])
+                self.app.video.add_subtitle(self.sub_url(s), s.get("title", ""), s.get("lang", ""))
         if kind == "video_ended":
             if data.get("reason") == "eof":
                 self.finished()

@@ -77,7 +77,7 @@ DESCRIPTIONS.update({
     "Size": "How big subtitles are.",
     "Find subtitles": "Search for subtitles through your Plex server.",
     "Search language": "The language Find subtitles looks for.",
-    "Auto-sync": "Plex lines subtitles up with the speech.",
+    "Auto-sync": "Plex lines subtitle files up with the speech, once it has analysed the title.",
     # On Demand
     "View": "A list, or a wall of posters.",
     "Quality": "How much Plex sends: lower if it stutters.",
@@ -395,6 +395,9 @@ def subtitle_items(app):
             cfg.sub_auto_sync = not cfg.sub_auto_sync
             cfg.save()
             pb.reload_subs()
+            if cfg.sub_auto_sync and not any(s.get("sync") for s in pb.subs):
+                app.toast("Plex can't sync these subtitles yet: it hasn't analysed this title's speech. "
+                          "In Plex, turn on Settings > Library > Generate voice activity data.", 8.0)
         rows[2:2] = [Item("Find subtitles", submenu=lambda: find_subtitle_items(app, pb)),
                      style("Search language", "sub_search_lang", SUB_LANGS, lambda _: None),
                      Item("Auto-sync", value=lambda: "On" if cfg.sub_auto_sync else "Off", adjust=sync)]
@@ -435,10 +438,12 @@ def find_subtitle_items(app, pb):
         def done(sub):
             if app.find(Playback) is pb and pb.rk == rk:
                 pb.subs.append(sub)
-                app.video.add_subtitle(pb.sub_url(sub), sub["title"], sub["lang"], select=True)
+                if not app.video.add_subtitle(pb.sub_url(sub), sub.get("title", ""), sub.get("lang", ""), select=True):
+                    app.toast("The server fetched them, but they wouldn't load. Try another.", 5.0)
+                    return
                 cfg.subtitles = True
                 cfg.save()
-            app.toast(f"Subtitles added: {sub['title'] or lang}")
+            app.toast(f"Subtitles added: {sub.get('title') or lang}")
         od.run(work, done, lambda msg: app.toast(f"Couldn't get subtitles. {msg}"))
 
     def found(results):

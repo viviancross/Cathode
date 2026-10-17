@@ -476,5 +476,21 @@ class TestStreamEnd(unittest.TestCase):
         v._on_cache("demuxer-cache-state", {"eof": True})
         self.assertEqual(posted, ["video_draining"] * 2)
 
+class TestTrackCommandsDontCrash(unittest.TestCase):
+    def test_mpv_refusing_a_subtitle_is_said_not_raised(self):
+        from cathode.video import Video
+        v = Video.__new__(Video)
+
+        class Player(dict):
+            def command(self, *a):
+                raise SystemError("Error running mpv command", -12)
+
+            def __setitem__(self, k, val):
+                raise SystemError("Error setting property", -12)
+        v.player = Player()
+        self.assertFalse(v.add_subtitle("http://s/x.srt", "x", "en", select=True))
+        self.assertFalse(v.remove_subtitle(3))
+        v.set_track("sub", 9)                                       # no exception
+
 if __name__ == "__main__":
     unittest.main()
