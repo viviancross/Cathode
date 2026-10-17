@@ -492,5 +492,21 @@ class TestTrackCommandsDontCrash(unittest.TestCase):
         self.assertFalse(v.remove_subtitle(3))
         v.set_track("sub", 9)                                       # no exception
 
+class TestMpvLog(unittest.TestCase):
+    def test_mpv_warnings_reach_the_log_once_with_a_count(self):
+        import contextlib, io
+        from cathode.video import Video
+        v = Video.__new__(Video)
+        v._last_log, v._log_repeats = None, 0
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for _ in range(3):
+                v._on_log("warn", "ad", "Error decoding audio.")
+            v._on_log("warn", "ao/wasapi", "Audio device underrun detected.")
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines, ["[mpv] warn ad: Error decoding audio.", "[mpv] (repeated 2 more times)",
+                                 "[mpv] warn ao/wasapi: Audio device underrun detected."])
+
+
 if __name__ == "__main__":
     unittest.main()

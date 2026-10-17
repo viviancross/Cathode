@@ -480,7 +480,8 @@ class App:
         self.skin = load_skin(self.config.skin, self)
         self.video = Video(self._video_post, self.gfx.renderer,
                            user_agent=self.config.user_agent, volume=self.config.volume,
-                           extra=_mpv_extra(self.config.mpv_extra_args))
+                           extra=_mpv_extra(self.config.mpv_extra_args),
+                           log_path=os.path.join(paths.cache_dir(), "mpv.log") if self.config.mpv_verbose_log else "")
         self.video.attach_gl(self.gfx.get_proc_address)
         self.video.muted = self.config.muted
         self.video.set_format(self.config.picture_format)

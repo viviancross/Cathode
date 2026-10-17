@@ -85,7 +85,11 @@ class Video:
         if log_path:
             opts["log_file"] = log_path
         opts.update(extra or {})
-        self.player = mpv.MPV(**opts)
+        # mpv's warnings and errors go to cathode.log: a glitch on someone's
+        # PC (a damaged audio frame, an audio underrun, a decoder giving up)
+        # leaves its cause there. Repeats are counted, not written again.
+        self._last_log, self._log_repeats = None, 0
+        self.player = mpv.MPV(log_handler=self._on_log, loglevel="warn", **opts)
         self.ctx = None
         self._want = None        # playlist entry id of the file we asked for
         self._current = None     # entry id of the file mpv says it started
@@ -106,6 +110,16 @@ class Video:
         self.player.observe_property("demuxer-cache-state", self._on_cache)
         # Waiting on the network with nothing left to show.
         self.player.observe_property("paused-for-cache", self._on_stall)
+
+    def _on_log(self, level, prefix, text):
+        line = f"{prefix}: {text.strip()}"
+        if line == self._last_log:
+            self._log_repeats += 1
+            return
+        if self._log_repeats:
+            print(f"[mpv] (repeated {self._log_repeats} more times)")
+        self._last_log, self._log_repeats = line, 0
+        print(f"[mpv] {level} {line}"[:300])
 
     # ── GL ────────────────────────────────────────────────────────────────
 
