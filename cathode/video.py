@@ -266,7 +266,10 @@ class Video:
             self.player["sub-color"] = color
         if back is not None:
             self.player["sub-back-color"] = back or "#00000000"
-            self.player["sub-border-style"] = "background-box" if back else "outline-and-shadow"
+            try:
+                self.player["sub-border-style"] = "background-box" if back else "outline-and-shadow"
+            except AttributeError:
+                pass        # mpv before 0.38 (Ubuntu 24.04's, in the Linux builds): the back colour alone boxes it
 
     def chapter(self, d: int):
         try:
