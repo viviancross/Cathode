@@ -47,6 +47,10 @@ a retro-themed player.
   entered ("Found N channels"); a playlist file on the computer works too.
   Dead-channel cards say what to do next, toasts are no longer cut short,
   small type is up to 17 px, and focus is only ever lit where the cursor is.
+- **Kind to servers that transcode (Tunarr).** Surfing with CH+/CH- moves the
+  banner at once but loads the stream only once the presses stop, and a
+  dropped stream is retried after 2, 5, 10, then every 20 seconds instead of
+  restarting the server's transcode every 2.
 - **Linux displays.** On a Wayland session (a Steam Deck's desktop) Cathode
   falls back to X11 when Wayland isn't reachable, and tells PyOpenGL to use
   the same path SDL does; the Flatpak sets both itself.

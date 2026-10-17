@@ -141,8 +141,29 @@ class TestTuning(unittest.TestCase):
         for _ in range(3):
             self.live.handle(R.UP)
         self.assertEqual(self.live.idx, 3)
-        self.assertEqual(self.app.video.played, ["u0", "u1", "u2", "u3"])
+        self.assertEqual(self.app.video.played, ["u0"])           # surfing: nothing loaded yet
+        self.app.fire(lambda t: t[0] == LiveTV.SURF_SETTLE)
+        self.assertEqual(self.app.video.played, ["u0", "u3"])     # once the presses stop: just the last
         self.assertEqual(self.app.video.played[-1], self.live.channel.url)
+
+    def test_the_channel_surfed_past_cant_lift_the_cover(self):
+        self.live.handle(R.UP)
+        self.live.on_video("video_started")                         # the old stream, still coming in
+        self.assertEqual(self.live.phase, "cover")
+
+    def test_a_failing_stream_is_retried_less_often_each_time(self):
+        self.live.on_video("video_started")
+        waits = []
+        for _ in range(5):
+            self.live.phase = "watch"
+            self.live.on_video("video_ended", reason="error")
+            waits.append(self.app.timers[-1][0])
+            self.app.timers[-1][2]()                                 # the retry itself
+        self.assertEqual(waits, [2.0, 5.0, 10.0, 20.0, 20.0])
+        self.live.on_video("video_started")                          # it came back: start over
+        self.live.phase = "watch"
+        self.live.on_video("video_ended", reason="error")
+        self.assertEqual(self.app.timers[-1][0], 2.0)
 
     def test_a_frame_lifts_the_cover(self):
         self.assertEqual(self.live.cover(), ("static", 1.0))

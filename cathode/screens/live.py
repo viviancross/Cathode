@@ -36,6 +36,16 @@ class LiveTV(Screen):
         self.behind, self._paused_at = 0.0, 0.0     # pause-live bookkeeping
         self._reveal_start = 0.0
         self._timeout = self._digit_timer = self._banner_timer = None
+        self._settle = None         # surfing: the stream loads once the presses stop
+        self._fails = 0             # a dropped stream's retries in a row
+
+    # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
+    # only once the presses stop: a server that starts a transcode per tune
+    # (Tunarr's HLS) isn't asked for every channel skipped past.
+    SURF_SETTLE = 0.5
+    # A dropped stream is picked up again, less often each time it fails in a
+    # row, so a slow server isn't restarted from scratch in a loop.
+    RETRY = (2.0, 5.0, 10.0, 20.0)
 
     # ── Channels ──────────────────────────────────────────────────────────
 
@@ -58,23 +68,40 @@ class LiveTV(Screen):
                 return i
         return 0
 
-    def tune(self, idx: int):
+    def tune(self, idx: int, settle: bool = False, retry: bool = False):
         """Change channel: cover the picture until the new stream's first frame
-        is up (or the timeout gives up on it), with the banner showing."""
+        is up (or the timeout gives up on it), with the banner showing.
+        settle: surfing, load the stream once the presses stop. retry: a
+        dropped stream picked up again (keeps counting the failures)."""
         if not self.channels:
             return
         idx %= len(self.channels)
         if self.phase != "idle" and idx != self.idx:
             self.prev = self.idx
         self.idx = idx
+        if not retry:
+            self._fails = 0
         ch = self.channels[idx]
         self.phase, self.standby = "cover", False
         self.behind = 0.0                   # a fresh tune is live
         self.app.cancel(self._timeout)
-        self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
-        self.app.video.play(ch.url)
+        self.app.cancel(self._settle)
+        self._settle = None
         self.app.config.last_channel = ch.number
         self.show_banner()
+        if settle:
+            self._settle = self.app.after(self.SURF_SETTLE, lambda: self._play(idx))
+        else:
+            self._play(idx)
+
+    def _play(self, idx: int):
+        """Load the stream on the banner, with the timeout that gives up on it."""
+        self._settle = None
+        if idx != self.idx:
+            return
+        ch = self.channels[idx]
+        self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
+        self.app.video.play(ch.url)
         print(f"[cathode] Tuning to {ch}")
 
     def _timed_out(self):
@@ -108,14 +135,18 @@ class LiveTV(Screen):
     def on_video(self, kind, **data):
         if self.suspended:
             return                      # about On Demand's video, not ours
+        if self._settle is not None:
+            return                      # the channel being surfed past, not the one coming
         if kind == "video_started":
-            self.standby = False
+            self.standby, self._fails = False, 0
             if self.phase == "cover":
                 self._reveal()
         elif kind == "video_ended" and self.channels and self.phase in ("watch", "reveal"):
             # A live stream that ends has dropped; pick it back up.
-            print(f"[cathode] stream ended ({data.get('reason')}), retuning")
-            self.app.after(2.0, lambda i=self.idx: self.idx == i and self.tune(i))
+            wait = self.RETRY[min(self._fails, len(self.RETRY) - 1)]
+            self._fails += 1
+            print(f"[cathode] stream ended ({data.get('reason')}), retuning in {wait:g} s")
+            self.app.after(wait, lambda i=self.idx: self.idx == i and self.tune(i, retry=True))
 
     # ── What the compositor and skin read ─────────────────────────────────
 
@@ -211,13 +242,13 @@ class LiveTV(Screen):
         if self._trick_keys(a):
             return True
         if a in (R.UP, R.CH_UP):
-            self.tune(self.idx + 1)
+            self.tune(self.idx + 1, settle=True)
         elif a in (R.DOWN, R.CH_DOWN):
-            self.tune(self.idx - 1)
+            self.tune(self.idx - 1, settle=True)
         elif a == R.PAGE_UP:
-            self.tune(self.idx + 10)
+            self.tune(self.idx + 10, settle=True)
         elif a == R.PAGE_DOWN:
-            self.tune(self.idx - 10)
+            self.tune(self.idx - 10, settle=True)
         elif a == R.PREV:
             if self.prev is not None:
                 self.tune(self.prev)
