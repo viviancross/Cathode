@@ -73,8 +73,14 @@ class LogoStore:
     _MAX_BYTES = 8 * 1024 * 1024
     # Decoded size, which is the number that actually costs memory: a small
     # file can decode to an enormous bitmap (a "decompression bomb"), and
-    # Pillow's own default only warns. 40 MP is ~160 MB as RGBA.
-    _MAX_PIXELS = 40_000_000
+    # Pillow's own default only warns. 50 MP is ~200 MB as RGBA: real channel
+    # art gets close (a Tunarr upload measured 8098x5430), so anything over
+    # _BIG decodes one at a time, and what's kept is cut to _KEEP a side
+    # (nothing is drawn bigger).
+    _MAX_PIXELS = 50_000_000
+    _BIG = 16_000_000
+    _KEEP = 1024
+    _big = threading.Lock()
     _MAX_FRAMES = 1000       # an animated logo's frames kept (the pixel budget usually binds first)
 
     def __init__(self, cache_dir: str, on_loaded: Optional[Callable] = None,
@@ -168,6 +174,12 @@ class LogoStore:
         w, h = im.size
         if w <= 0 or h <= 0 or w * h > self._MAX_PIXELS:
             return None
+        if w * h > self._BIG:
+            with self._big:
+                return self._decode_now(im, w, h)
+        return self._decode_now(im, w, h)
+
+    def _decode_now(self, im, w, h):
         n = getattr(im, "n_frames", 1)
         if n > 1:
             # Animated: every frame, within the frame cap and the same pixel
@@ -179,7 +191,10 @@ class LogoStore:
                 frames.append(im.convert("RGBA"))
                 durations.append((im.info.get("duration") or 100) / 1000)
             return Animation(frames, durations) if len(frames) > 1 else frames[0]
-        return im.convert("RGBA")
+        out = im.convert("RGBA")
+        if max(w, h) > self._KEEP:
+            out.thumbnail((self._KEEP, self._KEEP), Image.LANCZOS)
+        return out
 
     def _fetch(self, url: str):
         img = None

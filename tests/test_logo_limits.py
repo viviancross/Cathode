@@ -109,10 +109,14 @@ class TestDecodeLimits(unittest.TestCase):
             def __init__(self, wh):
                 self.size = wh
             def convert(self, mode):
-                return "decoded"
+                return Image.new("RGBA", (4, 4))
         cap = self.store._MAX_PIXELS
-        self.assertEqual(self.store._decode(_Fake((cap // 1000, 1000))), "decoded")
+        self.assertIsNotNone(self.store._decode(_Fake((cap // 1000, 1000))))
         self.assertIsNone(self.store._decode(_Fake((cap // 1000 + 1, 1001))))
+
+    def test_huge_real_channel_art_decodes_and_is_kept_small(self):
+        out = self.store._decode(Image.new("RGB", (8098, 5430), (200, 30, 30)))
+        self.assertEqual(max(out.size), self.store._KEEP)
 
 
 class TestFetchRefusals(unittest.TestCase):
