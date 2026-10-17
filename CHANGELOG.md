@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.23
+
+- **Subtitles can't crash Cathode.** Switching Auto-sync (or adding a
+  subtitle the server wouldn't hand over) could close the app. Now a file
+  that won't load is noted in the log, the subtitle you had on stays on,
+  and one Plex won't sync comes back as it was.
+- **Auto-sync says when Plex can't.** Plex lines subtitles up with the
+  speech only after it has analysed a title ("Generate voice activity
+  data" in its Library settings, off by default). Switching Auto-sync on
+  where none can be synced now says so.
+
 ## 4.22
 
 - **Live TV keeps going when a stream drops.** When the server ends a
