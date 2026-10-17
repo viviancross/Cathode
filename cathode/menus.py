@@ -150,13 +150,37 @@ def open_welcome(app):
     app.push(m)
 
 
+def leave_ondemand(app):
+    """Back to live TV from inside On Demand (the Main Menu opened over a
+    playing title): the title stops, keeping its resume point, On Demand's
+    pages close, and the channel has the picture again."""
+    from .screens.ondemand import OnDemandScreen
+    from .screens.playback import Playback
+    od = app.find(OnDemandScreen)
+    if od is None:
+        return
+    pb = app.find(Playback)
+    if pb:
+        pb.stop()
+    for s in app.screens[app.screens.index(od) + 1:]:
+        app.pop(s)
+    od.leave()
+
+
 def main_items(app):
     from .screens.guide import Guide
 
     def guide(cat="All"):
         def go():
+            leave_ondemand(app)
             if app.channels:
                 app.push(Guide(app, category=cat))
+        return go
+
+    def ondemand(recordings=False):
+        def go():
+            leave_ondemand(app)
+            open_ondemand(app, recordings=recordings)
         return go
     return [
         Item("Program Guide", guide(), close=True, enabled=bool(app.channels)),
@@ -164,8 +188,8 @@ def main_items(app):
             Item(c, guide(c), close=True) for c in app.categories() if c not in ("All", "Favorites")
         ] or [Item("(no genres in this lineup)", enabled=False)], enabled=bool(app.channels)),
         Item("Favorites", guide("Favorites"), close=True, enabled=bool(app.channels)),
-        Item("On Demand", lambda: open_ondemand(app), close=True),
-        Item("My Recordings", lambda: open_ondemand(app, recordings=True), close=True),
+        Item("On Demand", ondemand(), close=True),
+        Item("My Recordings", ondemand(recordings=True), close=True),
         Item("Settings", submenu=lambda: settings_items(app)),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
@@ -455,6 +479,8 @@ def playback_menu(app, pb):
         Item("Audio track", submenu=lambda: track_items(app, "audio")),
         Item("Subtitles", submenu=lambda: subtitle_items(app)),
         Item(f"Play queue ({len(app.ondemand.queue.items)})", submenu=lambda: queue_items(app)),
+        Item("Main Menu", lambda: open_main(app), close=True,
+             help="Settings and the rest, over the title. The guide stops it and goes back to TV."),
         Item("Stop", pb.stop, close=True),
     ]))
 

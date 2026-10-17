@@ -323,6 +323,7 @@ class PlateHD(BoxSkin):
         seg = max(4, X(12))
         n = (bar.w - X(8)) // (seg + X(3))
         lit = int(time.monotonic() * 4) % (n + 1)
+        self._next_frame(0.25 - time.monotonic() % 0.25 + 0.005)     # it walks: draw it again
         for i in range(lit):
             pygame.draw.rect(c, b["pb_fill"], (bar.x + X(4) + i * (seg + X(3)), bar.y + 3, seg, bar.h - 6))
 
@@ -896,7 +897,12 @@ class PlateHD(BoxSkin):
         f = self.fb(Y(28))
         q = self.app.ondemand.queue
         title = pb.title + (f"  ({q.pos + 1} of {len(q.items)})" if q.items and q.pos >= 0 else "")
-        self.cb(c, self.fit_cb(f, title, X(860)), f, b["banner_ink"], r.x + X(24), r.y + Y(16))
+        title = self.fit_cb(f, title, X(860))
+        tw = self.cb(c, title, f, b["banner_ink"], r.x + X(24), r.y + Y(16))
+        if pb.subtitle and X(860) - tw > X(120):        # the title's facts beside it
+            fm = self.f(Y(24))
+            self.cb(c, self.fit_cb(fm, pb.subtitle, X(860) - tw - X(24)), fm, b["banner_ink"],
+                    r.x + X(24) + tw + X(24), r.y + Y(16) + (t.ink(f)[1] - t.ink(fm)[1]))
         mode = "Paused" if self.app.video.paused else "Play"
         self.cb(c, mode, f, b["gold"], r.right - X(24), r.y + Y(16), align="right")
         line = pygame.Rect(r.x + X(140), r.y + Y(74), r.w - X(280), Y(14))
@@ -1883,7 +1889,9 @@ class Plate(PlateHD):
         pygame.draw.rect(c, b["band_soft"], line, border_radius=Y(5))
         frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
         pygame.draw.rect(c, b["warn"], (line.x, line.y, max(Y(10), int(line.w * frac)), line.h), border_radius=Y(5))
-        t.draw(c, "Paused" if self.app.video.paused else "Play", fs, ink, mid.centerx, top + Y(67), align="center")
+        state = "Paused" if self.app.video.paused else "Play"
+        t.draw(c, t.fit(fs, f"{state}   {pb.subtitle}".strip(), mid.w - X(20)), fs, ink, mid.centerx, top + Y(67),
+               align="center")
         self.hit(line.inflate(0, Y(20)), lambda: pb.seek_to(self._click_frac(line)))
         # The transport buttons: small capsules like the banner's.
         rects = []

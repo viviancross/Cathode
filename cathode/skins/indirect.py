@@ -1086,7 +1086,15 @@ class InDirectHD(BoxSkin):
         title = pb.title + (f"  ({q.pos + 1} of {len(q.items)})" if q.items and q.pos >= 0 else "")
         t.draw(c, hms(pb.pos), f, b["text"], band.x + X(20), band.y + Y(10))
         t.draw(c, hms(pb.dur) if pb.dur else "--:--", f, b["text"], band.right - X(20), band.y + Y(10), align="right")
-        t.draw(c, t.fit(f, title, band.w - X(220)), f, b["text"], band.centerx, band.y + Y(10), align="center")
+        room = band.w - X(220)
+        title = t.fit(f, title, room)
+        fm = self.f(Y(19))
+        meta = t.fit(fm, pb.subtitle, room - t.width(f, title) - X(16)) if pb.subtitle and \
+            room - t.width(f, title) > X(80) else ""
+        x = band.centerx - (t.width(f, title) + (X(16) + t.width(fm, meta) if meta else 0)) // 2
+        x += t.draw(c, title, f, b["text"], x, band.y + Y(10))
+        if meta:                            # the title's facts beside it
+            t.draw(c, meta, fm, b["text"], x + X(16), band.y + Y(10) + t.ink(f)[1] - t.ink(fm)[1])
         line = pygame.Rect(band.x + X(20), band.y + Y(40), band.w - X(40), Y(10))
         pygame.draw.rect(c, b["tk_state"], line)
         frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
@@ -1315,7 +1323,13 @@ class InDirect(InDirectHD):
         vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
         if tag:
             self.chip(c, X(12), r.bottom + Y(4), tag, self.fb(Y(9)), rgba(b["sel"]), b["sel_ink"])
-        self.mark(c, X(24), Y(19), X(22))
+        logo = self.channel_logo(ch, X(32), Y(20))
+        if logo:                            # on the grey tile, as the box had it, over the number's
+            plate = pygame.Rect(X(18), Y(15), X(36), Y(24))
+            pygame.draw.rect(c, b["tile"], plate, border_radius=2)
+            c.blit(logo, logo.get_rect(center=plate.center))
+        else:
+            self.mark(c, X(24), Y(19), X(22))
         num = pygame.Rect(X(22), Y(41), X(28), Y(13))
         pygame.draw.rect(c, b["tile"], num, border_radius=2)
         fn = self.fb(Y(10))
@@ -1824,7 +1838,8 @@ class InDirect(InDirectHD):
         if not pb.bar_visible():
             return
         state = "Paused" if self.app.video.paused else "Playing"
-        r = self._notice(c, [pb.title, f"{state}    {hms(pb.pos)} of {hms(pb.dur) if pb.dur else '--:--'}", "", ""],
+        head = self.text.fit(self.fb(Y(12)), f"{pb.title}   {pb.subtitle}".strip(), int(X(238) / self.SQUEEZE))
+        r = self._notice(c, [head, f"{state}    {hms(pb.pos)} of {hms(pb.dur) if pb.dur else '--:--'}", "", ""],
                          min_w=X(262), centre=True)
         bar = pygame.Rect(r.x + X(12), r.y + Y(32), r.w - X(24), Y(4))
         pygame.draw.rect(c, b["gap"], bar)
@@ -1930,7 +1945,11 @@ class InDirect(InDirectHD):
         self._notice(c, lines, y_bottom=self.Y(150), min_w=self.X(262))
 
     def draw_toast(self, c, msg):
-        self._notice(c, self.text.wrap(self.fb(self.Y(12)), msg, int(self.X(238) / self.SQUEEZE), 3))
+        screens = getattr(self.app, "screens", None)
+        top = screens[-1] if screens else None
+        over_bar = getattr(top, "name", "") == "playback" and top.bar_visible()
+        self._notice(c, self.text.wrap(self.fb(self.Y(12)), msg, int(self.X(238) / self.SQUEEZE), 3),
+                     y_bottom=self.Y(160) if over_bar else None)
 
     def draw_screensaver(self, c, ss):
         W, H = self.canvas

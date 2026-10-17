@@ -88,5 +88,18 @@ class TestBarGoes(unittest.TestCase):
         pb.handle(R.BACK)
         self.assertEqual(stopped, [1])
 
+class TestNextInQueue(unittest.TestCase):
+    def test_a_title_that_runs_out_plays_the_next(self):
+        from cathode.ondemand import Queue
+        pb = Playback.__new__(Playback)
+        played, q = [], Queue()
+        q.replace([{"rating_key": "e1"}, {"rating_key": "e2"}])
+        pb.od = SimpleNamespace(queue=q, report=lambda *a, **k: None, remember_offset=lambda *a: None,
+                                play_queue_at=played.append)
+        pb.rk, pb.pos, pb.dur, pb._subs_added = "e1", 600.0, 600.0, True
+        pb.on_video("video_ended", reason="eof")        # mpv's end, now that it's reported
+        self.assertEqual(played, [1])
+
+
 if __name__ == "__main__":
     unittest.main()
