@@ -14,7 +14,33 @@ import sys
 from typing import Optional, Tuple
 
 import pygame
-import OpenGL
+
+
+def settle_linux_display():
+    """On Linux, SDL and PyOpenGL must reach GL the same way. SDL draws
+    through X11 (GLX) unless it really is on Wayland (EGL), but PyOpenGL
+    guesses EGL from any Wayland session and then can't see SDL's context
+    ("Attempt to retrieve context when no valid context"). A session that
+    asks SDL for Wayland where it can't have it (the Flatpak's X11-only
+    sandbox: "wayland not available") falls back to X11. Must run before
+    OpenGL is imported; a user's own PYOPENGL_PLATFORM wins."""
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        pygame.display.init()
+    except pygame.error:
+        if os.environ.get("SDL_VIDEODRIVER", "x11") == "x11":
+            return                  # no display at all: Gfx says so
+        os.environ["SDL_VIDEODRIVER"] = "x11"
+        try:
+            pygame.display.init()
+        except pygame.error:
+            return
+    os.environ.setdefault("PYOPENGL_PLATFORM", "egl" if pygame.display.get_driver() == "wayland" else "glx")
+
+
+settle_linux_display()
+import OpenGL  # noqa: E402
 OpenGL.ERROR_CHECKING = False   # a glGetError after every call doubles the cost
 from OpenGL import GL  # noqa: E402
 

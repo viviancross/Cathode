@@ -47,6 +47,9 @@ a retro-themed player.
   entered ("Found N channels"); a playlist file on the computer works too.
   Dead-channel cards say what to do next, toasts are no longer cut short,
   small type is up to 17 px, and focus is only ever lit where the cursor is.
+- **Linux displays.** On a Wayland session (a Steam Deck's desktop) Cathode
+  falls back to X11 when Wayland isn't reachable, and tells PyOpenGL to use
+  the same path SDL does; the Flatpak sets both itself.
 - **Posters.** Every skin's title info shows the poster, and every skin
   offers the **poster wall** (On Demand > MENU > View), each in its box's
   style. Classic's info buttons are centred.

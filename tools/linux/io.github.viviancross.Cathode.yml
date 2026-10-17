@@ -21,6 +21,10 @@ finish-args:
   - --filesystem=home
   # Keep the screen awake while watching.
   - --talk-name=org.freedesktop.ScreenSaver
+  # X11 only in here, so SDL and PyOpenGL use it (GLX) even when the
+  # session is Wayland and says so (a Steam Deck's desktop).
+  - --env=SDL_VIDEODRIVER=x11
+  - --env=PYOPENGL_PLATFORM=glx
 modules:
   - name: cathode
     buildsystem: simple
