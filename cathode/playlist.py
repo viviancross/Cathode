@@ -7,7 +7,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .net import SSL as _SSL
+from .net import SSL as _SSL, as_seen_from
 
 
 @dataclass
@@ -52,7 +52,10 @@ def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
     else:
         with open(source, "rb") as f:
             content = _decode(f.read())
-    return _parse(content)
+    channels = _parse(content)
+    for ch in channels:
+        ch.logo = as_seen_from(ch.logo, source)
+    return channels
 
 
 def _decode(raw: bytes) -> str:

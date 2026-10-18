@@ -88,6 +88,7 @@ DESCRIPTIONS.update({
     "Unlink Plex account": "Sign this Cathode out of Plex.",
     # The welcome
     "Set up your channels": "Type in the channel list link (M3U) your IPTV provider gave you.",
+    "Server": "The Tunarr or ErsatzTV this playlist comes from.",
     "Playlist address": "Where the channels come from: your provider's M3U link, or a file.",
     "Guide address": "Where the listings come from: your provider's XMLTV link. Optional.",
     "Change the look": "Pick the box and its colors again.",
@@ -716,6 +717,16 @@ def _short(url):
     return "None" if not s else s if len(s) <= 26 else f"{s[:13]}...{s[-10:]}"
 
 
+def _find_server(app, address, done):
+    """Ask the address what it is, off the UI thread; done(Server or None)."""
+    import threading
+    from . import servers
+
+    def work():
+        app.post(done, servers.detect(address, user_agent=app.config.user_agent))
+    threading.Thread(target=work, daemon=True).start()
+
+
 def _check_playlist(app, url, done):
     """Fetch the playlist off the UI thread; done(channel count, error text)."""
     import threading
@@ -731,6 +742,7 @@ def _check_playlist(app, url, done):
     threading.Thread(target=work, daemon=True).start()
 
 
+SERVER_HINT = "Your Tunarr or ErsatzTV address, like 10.0.0.215:8000. An M3U link works too."
 PLAYLIST_HINT = "Your IPTV provider's channel list link (M3U), or a playlist file."
 GUIDE_HINT = "Your provider's TV guide link (XMLTV). Done as it is skips."
 
@@ -763,6 +775,7 @@ def playlist_items(app, pl):
         app.push(Keyboard(app, "Rename this playlist", got, initial=pl.get("name", "")))
     return [
         Item("Watch this playlist", lambda: app.switch_playlist(pl), close=True),
+    ] + ([Item("Server", value=lambda: _short(pl.get("server", "")), enabled=False)] if pl.get("server") else []) + [
         Item("Playlist address", lambda: edit("playlist_url", "Playlist address", PLAYLIST_HINT),
              value=lambda: _short(pl.get("playlist_url", ""))),
         Item("Guide address", lambda: edit("epg_url", "Guide address", GUIDE_HINT),
@@ -787,8 +800,38 @@ def add_playlist(app, on_added=None, first_run=False):
     step = (lambda n, s: f"3/3  {s}") if first_run else (lambda n, s: s)
 
     def ask_url(initial=""):
-        app.push(Keyboard(app, step("a", "Playlist address"), got_url, initial=initial, url=True,
-                          hint=PLAYLIST_HINT))
+        app.push(Keyboard(app, step("a", "Server address"), got_address, initial=initial, url=True,
+                          hint=SERVER_HINT))
+
+    def got_address(text):
+        """A bare host is asked what it is; a known server skips the guide
+        step. Anything else is taken as a playlist link."""
+        from . import servers
+        if not text or not _bare(text):
+            return
+        if not servers.looks_like_address(text):
+            got_url(text)
+            return
+        app.toast("Looking for the server...", 30.0)
+
+        def found(server):
+            if server is None:
+                got_url(text)       # not a server: maybe it's a playlist link
+                return
+            entry["server"] = server.base
+            entry["playlist_url"], entry["epg_url"] = server.playlist_url, server.epg_url
+            entry["name"] = server.name
+            app.toast(f"Found {server}.", 4.0)
+
+            def checked(n, err):
+                if not n:
+                    app.toast(f"{server} answered, but its channel list didn't load: {err or 'no channels'}.", 8.0)
+                    ask_url(text)
+                    return
+                app.toast(f"Found {server}: {n} channel{'' if n == 1 else 's'}.", 4.0)
+                finish()
+            _check_playlist(app, server.playlist_url, checked)
+        _find_server(app, text, found)
 
     def got_url(url):
         if not url or not _bare(url):

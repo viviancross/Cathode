@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 import re
 
-from .net import SSL as _SSL
+from .net import SSL as _SSL, as_seen_from
 
 
 @dataclass
@@ -138,6 +138,7 @@ class EPG:
         unknown."""
         now = now or datetime.now(timezone.utc)
         self._window = (now - KEEP_BEHIND, now + KEEP_AHEAD)
+        self._source = source       # icons written as the server's own "localhost" mean it
         if source.startswith(("http://", "https://")):
             req = urllib.request.Request(source, headers={"User-Agent": user_agent})
             raw = urllib.request.urlopen(req, timeout=30, context=_SSL)
@@ -186,7 +187,7 @@ class EPG:
         if icon_el is not None:
             src = icon_el.get("src", "").strip()
             if src and ch_id:
-                self._icons[ch_id] = src
+                self._icons[ch_id] = as_seen_from(src, getattr(self, "_source", ""))
 
     def _parse_programme(self, prog_el: ET.Element):
         """One <programme> element -> a Program in the channel's bucket."""

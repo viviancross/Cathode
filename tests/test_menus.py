@@ -203,6 +203,9 @@ class SetupApp(FakeApp):
     def switch_playlist(self, pl):
         self.switched.append(pl)
 
+    def post(self, fn, *a, **k):
+        fn(*a, **k)
+
     def quit(self):
         pass
 
@@ -240,11 +243,14 @@ class TestFirstRun(unittest.TestCase):
         kb._press("DONE")
         return kb.prompt
 
-    def _checked(self, n=5, err=""):
+    def _checked(self, n=5, err="", server=None):
         from cathode import menus
         patcher = mock.patch.object(menus, "_check_playlist", lambda app, url, done: done(n, err))
         patcher.start()
         self.addCleanup(patcher.stop)
+        finder = mock.patch.object(menus, "_find_server", lambda app, address, done: done(server))
+        finder.start()
+        self.addCleanup(finder.stop)
 
     def test_setup_asks_for_the_addresses_then_the_name(self):
         from cathode import menus
@@ -253,7 +259,7 @@ class TestFirstRun(unittest.TestCase):
         app.toast = lambda *a: None
         menus.add_playlist(app)
         prompts = [self._type(app, "http://provider/list.m3u"), self._type(app, ""), self._type(app, "")]
-        self.assertIn("Playlist address", prompts[0])
+        self.assertIn("Server address", prompts[0])          # a playlist link is taken as it is
         self.assertIn("Guide address", prompts[1])
         self.assertIn("Name", prompts[2])
         self.assertEqual(app.switched, [{"name": "My Channels", "playlist_url": "http://provider/list.m3u",
@@ -309,7 +315,7 @@ class TestFirstRun(unittest.TestCase):
         app.toast = lambda text, *a: said.append(text)
         menus.add_playlist(app)
         prompt = self._type(app, "http://provider/typo.m3u")
-        self.assertIn("Playlist address", prompt)
+        self.assertIn("Server address", prompt)
         self.assertEqual(app.top().value, "http://provider/typo.m3u")     # back, to fix it
         self.assertIn("the server said no", said[-1])
 
@@ -373,6 +379,61 @@ class TestSubtitleFonts(unittest.TestCase):
         families = [f for f, _ in fonts]
         self.assertEqual(len(families), len(set(families)))
         self.assertIn(("Space Mono", "Closed Caption"), fonts)     # mpv matches the family
+
+
+class TestServerSetup(unittest.TestCase):
+    """One address: a Tunarr or ErsatzTV fills in both links and the name."""
+
+    def test_a_known_server_fills_in_the_links_and_skips_the_guide_step(self):
+        from cathode import menus, servers
+        from test_menus import TestFirstRun
+        TestFirstRun._checked(self, 26, server=servers.Server("tunarr", "http://10.0.0.215:8000", "2026.10.1"))
+        app = SetupApp()
+        said = []
+        app.toast = lambda text, *a: said.append(text)
+        menus.add_playlist(app)
+        TestFirstRun._type(self, app, "10.0.0.215:8000")
+        self.assertEqual(app.switched, [{"name": "Tunarr", "server": "http://10.0.0.215:8000",
+                                         "playlist_url": "http://10.0.0.215:8000/api/channels.m3u",
+                                         "epg_url": "http://10.0.0.215:8000/api/xmltv.xml"}])
+        self.assertIn("Found Tunarr 2026.10.1: 26 channels.", said)
+
+    def test_an_address_that_is_no_server_goes_on_as_a_playlist_link(self):
+        from cathode import menus
+        from test_menus import TestFirstRun
+        TestFirstRun._checked(self, 5, server=None)
+        app = SetupApp()
+        app.toast = lambda *a: None
+        menus.add_playlist(app)
+        TestFirstRun._type(self, app, "provider.example")
+        self.assertIn("Guide address", app.top().prompt)    # checked as an M3U, then the guide is asked
+
+    def test_what_the_servers_say_and_where_their_files_are(self):
+        from cathode import servers
+        self.assertEqual(servers.identify({"tunarr": "2026.10.1", "ffmpeg": "n8"}), ("tunarr", "2026.10.1"))
+        self.assertEqual(servers.identify({"apiVersion": 3, "appVersion": "v26.11.3"}), ("ersatztv", "26.11.3"))
+        self.assertIsNone(servers.identify({"FriendlyName": "HDHomeRun"}))
+        self.assertIsNone(servers.identify("<html>"))
+        e = servers.Server("ersatztv", "http://nas:8409", "26.11.3")
+        self.assertEqual(e.playlist_url, "http://nas:8409/iptv/channels.m3u?mode=segmenter")
+        self.assertEqual(e.epg_url, "http://nas:8409/iptv/xmltv.xml")
+        self.assertEqual(str(e), "ErsatzTV 26.11.3")
+        self.assertEqual(servers.candidates("10.0.0.215"),
+                         ["http://10.0.0.215", "http://10.0.0.215:8000", "http://10.0.0.215:8409"])
+        self.assertEqual(servers.candidates("https://tv.example.com:9000/"), ["https://tv.example.com:9000"])
+        self.assertTrue(servers.looks_like_address("10.0.0.215:8000"))
+        self.assertFalse(servers.looks_like_address("http://provider/list.m3u"))
+        self.assertFalse(servers.looks_like_address("C:/lists/x.m3u"))
+
+    def test_a_servers_own_localhost_means_the_server(self):
+        from cathode.net import as_seen_from
+        base = "http://10.0.0.215:8000/api/channels.m3u"
+        self.assertEqual(as_seen_from("http://localhost:8000/images/a.png", base),
+                         "http://10.0.0.215:8000/images/a.png")
+        for same in ("http://10.0.0.215:8000/images/a.png", "https://upload.example/a.png", ""):
+            self.assertEqual(as_seen_from(same, base), same)
+        self.assertEqual(as_seen_from("http://localhost/a.png", "http://localhost:8000/x.m3u"), "http://localhost/a.png")
+        self.assertEqual(as_seen_from("http://localhost/a.png", "C:/lists/x.m3u"), "http://localhost/a.png")
 
 
 if __name__ == "__main__":
