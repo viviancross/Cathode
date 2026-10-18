@@ -149,7 +149,40 @@ feedback is LED flashes [M]. The one tone is the Point Dish peaking tone
 
 ## Plate Network HD (ViP622 / ViP722, 2006-2011)
 
-(Research pending; this section is filled in when it lands.)
+The best-evidenced box: boot and channel change are from video frames.
+
+**Boot [V].** Black, then the DISH logo on black with "Starting up..."
+(static; 80+ s on a cold 722k), then black, then the "Acquiring Signal"
+dialog: code 535 in a tab at its top right, text "This should take no more
+than 5 minutes to complete...", a five-block bar that fills green left to
+right in ~10 s and then holds full for ~80 s, then a hard cut to live
+video. The guide downloads only when its cache is stale (330 "Program
+guide is being downloaded"). The first-run wizard is separate ("Step 2 of
+5 Download Software... Status: Testing Switch..." with a green bar).
+
+**Channel change.** ~1 s black (not a freeze), then the new video with the
+Program Banner "for a few seconds" [M, F]. No banner timeout setting. RECALL
+goes back to the last channel; repeated presses step through recent ones
+[M]. A bad channel shows the same Acquiring Signal box (015/002/535);
+unsubscribed 013/014; blackout 011/012; locked = a password prompt [M].
+
+**Banner (official diagram, ViP622 manual p.37).** A dark translucent bar
+at the top. Left cell: TV icon and receiver number, "TUE 3/19" over
+"6:25 pm", "Dual Mode". Middle: the title in bold, "6:00 pm - 9:30 pm",
+"301 HBO2E". Right: rating "NR", "Time Left: 0:45", "List: Family" (lists
+All Chan / All Sub / All HD). "Next:" lives only in the Browse Banner (a
+bottom strip: the current and next programme cells with a > arrow) [M].
+Guide text style [V, 2009 photo]: "List: All HD", "10:41am Mon 3/09",
+"PG-13 Movie. ... (2000) ... (HD) (CC) (Stereo)", an HD badge, a cyan
+selection.
+
+**PPV.** A "Dish-On-Demand" dialog, "Do you wish to purchase this
+program?", with Event / Date/Time / Channel / Cost and Yes / Cancel / No,
+then a "Confirmation" dialog with the same buttons [M, p.43].
+
+**Sounds.** None: no beep, key click, error tone or lock sound on the ViP
+line; three manuals have no sound setting; the remotes have no speaker
+[M]. Programme audio mutes during the ~1 s black. Silent UI.
 
 ## What this means for Cathode
 
@@ -164,6 +197,7 @@ feedback is LED flashes [M]. The one tone is the Point Dish peaking tone
   in the banner. Nobody freezes the old picture.
 - **Banners** carry more than ours: the favourites list name, the lock and
   mail icons, the audio icon; the HR20's expanded banner is a menu.
-- **Sounds** are an HD-only feature by the evidence: the HR20 had effects
-  and a bonk; every SD box was silent. Sounds off on the SD skins is the
-  accurate choice, not a cop-out.
+- **Sounds** exist on exactly one of the five boxes: the HR20 (effects
+  and a bonk, from 2007-08 firmware). The DSS, D10, Dish SD and ViP were
+  all silent. So UI sounds belong to the InDirecTV HD skin alone; silence
+  elsewhere is the accurate choice, and Classic is Cathode's own call.
