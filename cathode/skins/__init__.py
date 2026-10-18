@@ -515,6 +515,11 @@ class Skin:
         """A key's notice (the picture format, subtitles) in this skin's style."""
         self.draw_toast(c, text)
 
+    def draw_program_info(self, c, info):
+        """INFO on a guide cell. A skin whose guide already describes the
+        chosen cell in its header just notes it; the SD skins draw a box."""
+        self.draw_toast(c, f"{info.title}: " + "  ".join(info.lines()))
+
     def draw_guide_progress(self, c, frac):
         """A guide load's truthful progress (frac -1 when the size is
         unknown), while live TV or the guide is up."""

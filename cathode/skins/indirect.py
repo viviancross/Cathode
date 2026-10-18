@@ -390,7 +390,7 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         sel = g.selected()
         now = datetime.now(timezone.utc)
-        cur = self.app.live.programs(sel)[0] if sel else None
+        cur = g.selected_program()
         self._page(c, (0, Y(192), W, H - Y(192)))
         self._top(c, cur.title if cur else (sel.name if sel else ""), "guide")
         more = Y(48) * (g.rows - 6)         # rows a taller screen adds
@@ -437,6 +437,7 @@ class InDirectHD(BoxSkin):
         epg = self.app.epg
         f_cell, f_ch = self.f(Y(30)), self.fb(Y(30))
         grid_x, grid_w = X(294), X(890)
+        sel = g.sel_time()
         for i, ch in enumerate(rows):
             y = Y(352 + 48 * i)
             rh = Y(44)
@@ -465,7 +466,7 @@ class InDirectHD(BoxSkin):
                 if e <= a:
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(4), rh)
-                on = row_sel and p.start <= max(now, start) < p.stop
+                on = row_sel and p.start <= sel < p.stop
                 self._cell(c, cell, on)
                 ink, shadow = (b["sel_ink"], b["sel_shadow"]) if on else (b["text"], None)
                 x = cell.x + X(8)
@@ -1537,6 +1538,7 @@ class InDirect(InDirectHD):
             f_call = self.fb(Y(size))
             if all(t.width(f_call, call_sign(ch)) * self.SQUEEZE <= room for ch in rows):
                 break
+        sel = g.sel_time()
         for i, ch in enumerate(rows):
             y = Y(42) + i * Y(28)
             rh = Y(26)
@@ -1561,7 +1563,7 @@ class InDirect(InDirectHD):
                 if e <= a:
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(2), rh)
-                on = row_sel and p.start <= max(now, start) < p.stop
+                on = row_sel and p.start <= sel < p.stop
                 self._dss_cell(c, cell, on)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
                 room = int((cell.w - X(8)) / self.SQUEEZE)
@@ -1997,6 +1999,16 @@ class InDirect(InDirectHD):
                 label += f": < {v} >" if on and it.adjust else f": {v}"
             self._dss_button(c, br, label, "info" if it.value else "play", on)
             self.hit(br, lambda k=k: m.activate(k))
+
+    def draw_program_info(self, c, info):
+        """A guide cell's programme as the DSS notice: the title, the channel,
+        when, then the synopsis, over the grid."""
+        f = self.fb(self.Y(12))
+        room = int(self.X(238) / self.SQUEEZE)
+        lines = [self.text.fit(f, info.title, room)]
+        for line in info.lines():
+            lines += self.text.wrap(f, line, room, 4)
+        self._notice(c, lines[:9], y_bottom=self.Y(205), min_w=self.X(262))
 
     def draw_capture(self, c, cap):
         f = self.fb(self.Y(12))

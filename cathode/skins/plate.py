@@ -339,7 +339,7 @@ class PlateHD(BoxSkin):
         self.wordmark(c, X(42), Y(52), Y(44), b["text"], b["dish"])
         pic = self._picture(c)
         sel = g.selected()
-        cur = self.app.live.programs(sel)[0] if sel else None
+        cur = g.selected_program()
         f_title, f_info, f_small = self.fb(Y(37)), self.fb(Y(22)), self.fb(Y(24))
         title = cur.title if cur else (sel.name if sel else "")
         cx = X(470)
@@ -386,6 +386,7 @@ class PlateHD(BoxSkin):
         epg = self.app.epg
         f_cell, f_chan = self.fb(Y(27)), self.f(Y(24))
         grid_x, grid_w = X(255), X(1025)
+        sel = g.sel_time()
         for i, ch in enumerate(rows):
             y = Y(328 + 53 * i)
             rh = Y(50)
@@ -409,7 +410,7 @@ class PlateHD(BoxSkin):
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(8), rh)
                 airing = p.start <= now < p.stop
-                on = row_sel and p.start <= max(now, start) < p.stop
+                on = row_sel and p.start <= sel < p.stop
                 self._cell(c, cell, airing, on)
                 x0 = cell.x + X(6)
                 if p.start < start:
@@ -1252,6 +1253,7 @@ class Plate(PlateHD):
         now = datetime.now(timezone.utc)
         epg = self.app.epg
         f_cell, f_tile = self.fb(Y(17)), self.fb(Y(17))
+        sel = g.sel_time()
         for i, ch in enumerate(rows):
             y = Y(261 + 46.7 * i)
             rh = Y(42)
@@ -1270,7 +1272,7 @@ class Plate(PlateHD):
                 if e <= a:
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(3), rh)
-                on = row_sel and p.start <= max(now, start) < p.stop
+                on = row_sel and p.start <= sel < p.stop
                 self._cell(c, cell, on)
                 ink = b["sel_ink"] if on else b["cell_ink"]
                 mark = b["sel_ink"] if on else mix(b["text"], b["blue"], 0.12)
@@ -1986,6 +1988,11 @@ class Plate(PlateHD):
         for line in wrapped:
             t.draw(c, line, f, b["ink"], r.centerx, y, align="center")
             y += Y(20)
+
+    def draw_program_info(self, c, info):
+        """A guide cell's programme as the grey dialog: the title in the pill,
+        the channel, when, and the synopsis under it."""
+        self._sd_dialog(c, self.fit_cb(self.fb(self.Y(15)), info.title.upper(), self.X(360)), info.lines())
 
     def draw_capture(self, c, cap):
         self._sd_dialog(c, "REMOTE SETUP", [cap.prompt, "Waiting..."])

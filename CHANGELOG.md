@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.30
+
+- **The guide's highlight walks the programmes.** LEFT/RIGHT move from
+  one show to the next along the row, as a box's cursor does; the time
+  window slides only when the chosen show would leave it, and never
+  before now. UP/DOWN keep the time, so the lit cell follows the clock
+  down the grid. REW/FF jump a day and put the cursor on the first column.
+- **A list of categories** on THEMES (keyboard T) or OPTIONS (pad: left
+  stick), as a pop-up in the skin's style: one pick, no cycling.
+- **INFO on a guide cell** pops up that programme (channel, when, rating,
+  synopsis) on the InDirecTV SD and Plate SD guides, whose pages have no
+  header for it; the HD guides' headers already follow the chosen cell.
+
 ## 4.29
 
 - **The guide for provider lines that lock their XMLTV** (xmltv.php

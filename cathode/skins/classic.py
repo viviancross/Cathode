@@ -962,7 +962,7 @@ class Classic(Skin):
         t.draw(c, t.fit(f_small, f"{ch.number}  {ch.name}" + ("  *" if self.app.is_favorite(ch) else ""),
                         box.w), f_small, p["YELLOW"], box.x, y)
         y += t.ink(f_small)[1] + 12
-        cur, _ = self.app.live.programs(ch)
+        cur = guide.selected_program()
         if not cur:
             t.draw(c, "No program information", f_text, p["INK_MUTED"], box.x, y)
             return
@@ -1019,6 +1019,7 @@ class Classic(Skin):
                    grid_x + 8, y + (rh - t.ink(f_prog)[1]) // 2)
             return
         mins = guide.hours * 60
+        sel = guide.sel_time()
         for prog in progs:
             a = max(0.0, (prog.start - start).total_seconds() / 60)
             b = min(float(mins), (prog.stop - start).total_seconds() / 60)
@@ -1031,6 +1032,8 @@ class Classic(Skin):
                 p["WHITE"] if on_air else p["WHITE_DIM"]
             pygame.draw.rect(c, bg, (px + 1, y + 2, pw - 2, rh - 4))
             pygame.draw.line(c, p["GUIDE_BORDER"], (px, y), (px, y + rh))
+            if selected and prog.start <= sel < prog.stop:        # the chosen cell on the chosen row
+                pygame.draw.rect(c, p["YELLOW"], (px + 2, y + 3, pw - 4, rh - 6), 2)
             if on_air:
                 pygame.draw.rect(c, p["SEL_TEXT"] if selected else p["CYAN"], (px + 1, y + 2, 4, rh - 4))
             if pw >= 8 + t.width(f_prog, "MMMM"):
