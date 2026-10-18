@@ -383,6 +383,8 @@ class App:
 
     def load_playlist(self, url: str, epg_url: str = ""):
         """Fetch channels (and then the guide) off the UI thread."""
+        if url.startswith("xtream://") and "/xmltv.php?" in epg_url:
+            epg_url = url           # the line's guide comes the way its channels did
         def work():
             try:
                 chans, agent, _used = m3u.load_as(url, user_agent=self.agent)

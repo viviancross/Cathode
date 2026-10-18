@@ -502,3 +502,10 @@ class TestRefusalWording(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLineGuideAddress(unittest.TestCase):
+    def test_a_line_address_is_shown_without_its_password(self):
+        from cathode.menus import _short
+        self.assertEqual(_short("xtream://h:80/user/secret"), "h:80/***/***")
+        self.assertNotIn("secret", _short("http://h/xmltv.php?username=u&password=secret"))

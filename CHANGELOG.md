@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.29
+
+- **The guide for provider lines that lock their XMLTV** (xmltv.php
+  answering 513 while the channels load) comes through the provider's
+  API instead, channel by channel, the way IPTV Smarters shows it. A
+  line that does serve its XMLTV still uses that. Lines added with 4.28
+  switch over on their own.
+- A provider line's password no longer shows in Settings > Channels.
+
 ## 4.28
 
 - **Provider lines that refuse the playlist link** (the ones that answer

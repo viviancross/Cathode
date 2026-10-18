@@ -155,6 +155,11 @@ class TestXtreamApi(unittest.TestCase):
         self.assertEqual(rows, [{"number": 3, "name": "Alpha HD", "url": "http://h:80/live/u/p/42.ts",
                                  "group": "US| NEWS", "logo": "http://h/a.png", "epg_id": "alpha.1"}])
 
+    def test_a_stream_without_an_epg_id_is_keyed_by_its_stream_id(self):
+        from cathode import servers
+        self.assertEqual(servers.xtream_epg_key({"stream_id": 42}), "xtream:42")
+        self.assertEqual(servers.xtream_epg_key({"stream_id": 42, "epg_channel_id": "a.b"}), "a.b")
+
     def test_an_xtream_address_round_trips_and_scrubs(self):
         from cathode import servers
         from cathode.playlist import _scrub

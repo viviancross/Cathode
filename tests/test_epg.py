@@ -138,3 +138,69 @@ class TestParse(unittest.TestCase):
             _parse_xmltv_dt("tomorrow")
 
 
+
+
+class TestLineGuide(unittest.TestCase):
+    """A provider line (xtream://): xmltv.php when it answers, else the
+    panel's per-channel API, titles base64 as the panels send them."""
+
+    def _panel(self, xmltv_code):
+        import base64
+        import json
+        import urllib.error
+        from urllib.parse import parse_qs, urlsplit
+        calls = []
+
+        def R(body):
+            import io
+            r = io.BytesIO(body)
+            r.headers = {}
+            return r
+
+        def urlopen(req, timeout=0, context=None):
+            u = urlsplit(req.full_url)
+            q = parse_qs(u.query)
+            action, sid = q.get("action", [""])[0], q.get("stream_id", [""])[0]
+            calls.append((u.path, action, sid))
+            if u.path == "/xmltv.php":
+                if xmltv_code != 200:
+                    raise urllib.error.HTTPError(req.full_url, xmltv_code, "Locked", {}, None)
+                return R(_xmltv([("alpha.1", "From XMLTV", NOW, NOW + timedelta(hours=1))]))
+            if action == "get_live_streams":
+                return R(json.dumps([{"stream_id": 7, "name": "Alpha", "epg_channel_id": "alpha.1"},
+                                     {"stream_id": 8, "name": "Beta", "epg_channel_id": ""}]).encode())
+            t = int(NOW.timestamp())
+
+            def e(x):
+                return base64.b64encode(x.encode()).decode()
+            rows = {"7": [{"title": e("News Hour"), "description": e("Headlines"),
+                           "start_timestamp": str(t - 600), "stop_timestamp": str(t + 3000)},
+                          {"title": e("Old"), "start_timestamp": str(t - 90000), "stop_timestamp": str(t - 86400)}],
+                    "8": [{"title": "Plain Title", "start_timestamp": t + 60, "stop_timestamp": t + 3660}]}
+            return R(json.dumps({"epg_listings": rows[sid]}).encode())
+        return urlopen, calls
+
+    def _load(self, code, **kw):
+        urlopen, calls = self._panel(code)
+        with mock.patch.object(epg_mod.urllib.request, "urlopen", urlopen):
+            with mock.patch("cathode.servers.urllib.request.urlopen", urlopen):
+                g = EPG()
+                g.load("xtream://h:80/u/p", now=NOW, **kw)
+        return g, calls
+
+    def test_a_locked_xmltv_falls_back_to_the_api_per_channel(self):
+        seen = []
+        g, calls = self._load(513, progress=seen.append)
+        self.assertEqual(g.current_program("alpha.1", NOW).title, "News Hour")
+        self.assertEqual(g.current_program("alpha.1", NOW).description, "Headlines")
+        self.assertEqual([p.title for p in g._programs["alpha.1"]], ["News Hour"])   # outside the window: dropped
+        self.assertEqual(g.next_program("xtream:8", NOW).title, "Plain Title")      # no EPG id: filed by stream id
+        self.assertEqual(g.resolve_channel_id("xtream:8", "Beta"), "xtream:8")
+        self.assertEqual(seen, [1.0])
+        self.assertEqual(calls[0], ("/xmltv.php", "", ""))
+        self.assertEqual(sorted(c[2] for c in calls if c[1] == "get_simple_data_table"), ["7", "8"])
+
+    def test_a_served_xmltv_is_used_as_is(self):
+        g, calls = self._load(200)
+        self.assertEqual(g.current_program("alpha.1", NOW).title, "From XMLTV")
+        self.assertEqual(len(calls), 1)

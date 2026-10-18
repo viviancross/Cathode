@@ -722,8 +722,9 @@ def _bare(url):
 
 
 def _short(url):
-    """An address short enough for a menu value."""
-    s = (url or "").split("://", 1)[-1]
+    """An address short enough for a menu value, a line's password hidden."""
+    from .playlist import _scrub
+    s = _scrub(url or "").split("://", 1)[-1]
     return "None" if not s else s if len(s) <= 26 else f"{s[:13]}...{s[-10:]}"
 
 
@@ -839,7 +840,8 @@ def add_playlist(app, on_added=None, first_run=False):
                     ask_url(text)
                     return
                 entry.setdefault("playlist_url", provider.playlist_url)   # the check keeps the address that answered
-                entry["epg_url"] = provider.epg_url
+                # a line that only answers through its API gets its guide the same way
+                entry["epg_url"] = entry["playlist_url"] if entry["playlist_url"].startswith("xtream://") else provider.epg_url
                 entry["name"] = "My Channels"
                 app.toast(f"Found {n} channel{'' if n == 1 else 's'}. The guide comes from the same provider.", 5.0)
                 app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",

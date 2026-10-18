@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import re
 
 from .net import SSL as _SSL, as_seen_from
+from .servers import parse_xtream_api, xtream_api_epg
 
 
 @dataclass
@@ -139,13 +140,45 @@ class EPG:
         now = now or datetime.now(timezone.utc)
         self._window = (now - KEEP_BEHIND, now + KEEP_AHEAD)
         self._source = source       # icons written as the server's own "localhost" mean it
+        line = parse_xtream_api(source)
+        if line:
+            return self._load_line(line, user_agent, progress)
         if source.startswith(("http://", "https://")):
-            req = urllib.request.Request(source, headers={"User-Agent": user_agent})
-            raw = urllib.request.urlopen(req, timeout=30, context=_SSL)
-            total = int(raw.headers.get("Content-Length") or 0)
+            raw, total = self._open(source, user_agent)
         else:
             raw = open(source, "rb")
             total = os.path.getsize(source)
+        self._read(raw, total, progress)
+
+    def _load_line(self, line, user_agent, progress):
+        """A provider line: its XMLTV guide when the panel serves one, else
+        every channel's programmes through the API, which panels tend to
+        leave open while locking xmltv.php."""
+        from urllib.parse import urlencode
+        base, user, pw = line
+        self._source = base
+        try:
+            raw, total = self._open(f"{base}/xmltv.php?" + urlencode({"username": user, "password": pw}), user_agent)
+            self._read(raw, total, progress)
+        except (OSError, ET.ParseError) as e:
+            print(f"[cathode] guide: the provider's xmltv.php didn't answer ({e!r}); asking its API per channel")
+        if self._programs:
+            return
+        w0, w1 = self._window
+        for key, progs in xtream_api_epg(base, user, pw, user_agent, progress=progress).items():
+            self.add_programs(key, [
+                Program(channel_id=key, title=t[:200], description=d[:1500],
+                        start=datetime.fromtimestamp(a, timezone.utc), stop=datetime.fromtimestamp(b, timezone.utc))
+                for a, b, t, d in progs
+                if not (datetime.fromtimestamp(b, timezone.utc) <= w0 or datetime.fromtimestamp(a, timezone.utc) >= w1)])
+
+    @staticmethod
+    def _open(url, user_agent):
+        req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+        raw = urllib.request.urlopen(req, timeout=30, context=_SSL)
+        return raw, int(raw.headers.get("Content-Length") or 0)
+
+    def _read(self, raw, total, progress):
         with raw:
             f = io.BufferedReader(_Counted(raw, total, progress) if progress else raw)
             if f.peek(2)[:2] == b"\x1f\x8b":

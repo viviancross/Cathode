@@ -191,7 +191,66 @@ def xtream_api_channels(base: str, user: str, pw: str, user_agent: str = "Cathod
         out.append({"number": int(s.get("num") or n), "name": str(s.get("name", "")).strip() or f"Channel {sid}",
                     "url": f"{base}/live/{user}/{pw}/{sid}.{fmt}",
                     "group": cats.get(str(s.get("category_id")), ""), "logo": s.get("stream_icon") or "",
-                    "epg_id": s.get("epg_channel_id") or ""})
+                    "epg_id": xtream_epg_key(s)})
+    return out
+
+
+def xtream_epg_key(stream: dict) -> str:
+    """What a stream's programmes are filed under: the panel's EPG id, or
+    the stream id when it has none, so the API guide still lines up."""
+    return str(stream.get("epg_channel_id") or "") or f"xtream:{stream.get('stream_id')}"
+
+
+def xtream_api_epg(base: str, user: str, pw: str, user_agent: str = "Cathode", timeout: float = 30,
+                   progress=None, workers: int = 12) -> dict:
+    """The programmes of every live channel of a line through the panel's
+    API, for panels that lock xmltv.php but leave the per-channel calls
+    open: one get_simple_data_table call per channel, a few at a time.
+    {epg key: [(start unix, stop unix, title, description)]}, keyed as
+    xtream_epg_key does. A channel whose call fails just has no guide."""
+    from base64 import b64decode
+    from concurrent.futures import ThreadPoolExecutor
+    from urllib.parse import urlencode
+
+    def get(action: str, **extra):
+        q = urlencode({"username": user, "password": pw, "action": action, **extra})
+        req = urllib.request.Request(f"{base}/player_api.php?{q}",
+                                     headers={"User-Agent": user_agent, "Accept": "*/*"})
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL) as resp:
+            return json.loads(resp.read().decode("utf-8", "replace"))
+
+    def text(v) -> str:
+        s = str(v or "")
+        try:                            # panels base64 their titles; some don't
+            return b64decode(s, validate=True).decode("utf-8", "replace") if s else ""
+        except ValueError:
+            return s
+
+    def one(s: dict):
+        try:
+            rows = get("get_simple_data_table", stream_id=s["stream_id"])
+        except (OSError, ValueError):
+            return s, []
+        rows = rows.get("epg_listings") if isinstance(rows, dict) else rows
+        progs = []
+        for r in rows if isinstance(rows, list) else []:
+            try:
+                a, b = int(r["start_timestamp"]), int(r["stop_timestamp"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if b > a:
+                progs.append((a, b, text(r.get("title")), text(r.get("description"))))
+        return s, progs
+
+    streams = [s for s in (get("get_live_streams") or []) if isinstance(s, dict) and s.get("stream_id")]
+    out, done = {}, 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for s, progs in pool.map(one, streams):
+            done += 1
+            if progs:
+                out[xtream_epg_key(s)] = progs
+            if progress and (done % 25 == 0 or done == len(streams)):
+                progress(done / len(streams))
     return out
 
 
