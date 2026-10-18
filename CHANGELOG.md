@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.24
+
+- **Easier to read from the couch.** The InDirecTV HD pause bar's tag and
+  time, the InDirecTV SD synopsis and Plate Network HD's buttons and small
+  lines all read better, and no colour theme can push text on the boxes'
+  fixed colours below the legibility floor.
+- **First run** opens on a welcome line, counts its steps as 3/3, and every
+  keyboard says how to type or paste. MENU pastes, so a remote or a pad can.
+- **Hints:** the InDirecTV HD guide names REW/FF (the remote has no colour
+  keys); no "Press DOWN" tip or Skip Intro over an open menu; BACK is "back"
+  everywhere; the comma key shows in hints.
+- **TV safe area:** text and controls sit inside the area an overscanning TV
+  shows, on every skin.
+- **For bug reports:** mpv's own warnings and errors (a damaged audio frame,
+  an audio dropout) now go to cathode.log.
+
 ## 4.23
 
 - **Subtitles can't crash Cathode.** Switching Auto-sync (or adding a
