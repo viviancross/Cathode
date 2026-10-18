@@ -125,5 +125,61 @@ class TestLinkVariants(unittest.TestCase):
         self.assertEqual(used, "http://h/playlist/u/p/m3u_plus")
 
 
+class TestXtreamApi(unittest.TestCase):
+    """A panel that refuses the playlist for everyone but serves its API."""
+
+    def _api(self, url, agent):
+        import json
+        from urllib.parse import urlsplit, parse_qs
+        q = parse_qs(urlsplit(url).query)
+        action = q.get("action", [""])[0]
+        if action == "":
+            return {"user_info": {"auth": 1, "status": "Active"}, "server_info": {"output_formats": ["ts"]}}
+        if action == "get_live_categories":
+            return [{"category_id": "7", "category_name": "US| NEWS"}]
+        return [{"num": 3, "name": "Alpha HD", "stream_id": 42, "stream_icon": "http://h/a.png",
+                 "epg_channel_id": "alpha.1", "category_id": "7"}]
+
+    def test_channels_come_from_the_api_with_their_stream_urls(self):
+        import json
+        from unittest import mock
+        from cathode import servers
+        with mock.patch.object(servers.urllib.request, "urlopen") as uo:
+            class R:
+                def __init__(self, body): self.body = body
+                def read(self): return json.dumps(self.body).encode()
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            uo.side_effect = lambda req, timeout=0, context=None: R(self._api(req.full_url, ""))
+            rows = servers.xtream_api_channels("http://h:80", "u", "p")
+        self.assertEqual(rows, [{"number": 3, "name": "Alpha HD", "url": "http://h:80/live/u/p/42.ts",
+                                 "group": "US| NEWS", "logo": "http://h/a.png", "epg_id": "alpha.1"}])
+
+    def test_an_xtream_address_round_trips_and_scrubs(self):
+        from cathode import servers
+        from cathode.playlist import _scrub
+        a = servers.xtream_api_url("http://h:8080", "u", "p")
+        self.assertEqual(a, "xtream://h:8080/u/p")
+        self.assertEqual(servers.parse_xtream_api(a), ("http://h:8080", "u", "p"))
+        self.assertEqual(servers.parse_xtream_api(servers.xtream_api_url("https://h", "u", "p")), ("https://h", "u", "p"))
+        self.assertIsNone(servers.parse_xtream_api("http://h/get.php"))
+        self.assertEqual(_scrub(a), "xtream://h:8080/***/***")
+
+    def test_a_refused_playlist_falls_back_to_the_api(self):
+        import urllib.error
+        from unittest import mock
+        from cathode import playlist, servers
+
+        def fetch(url, agent, timeout=30):
+            raise urllib.error.HTTPError(url, 884, "Refused", {}, None)
+        with mock.patch.object(playlist, "_fetch_url", fetch), \
+                mock.patch.object(servers, "xtream_api_channels",
+                                  lambda *a, **k: [{"number": 1, "name": "One", "url": "http://h/live/u/p/1.ts",
+                                                    "group": "", "logo": "", "epg_id": ""}]):
+            chans, agent, used = playlist.load_as("http://h/get.php?username=u&password=p&type=m3u_plus", "Cathode/1.0 IPTV")
+        self.assertEqual(len(chans), 1)
+        self.assertEqual(used, "xtream://h/u/p")
+
+
 if __name__ == "__main__":
     unittest.main()

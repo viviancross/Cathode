@@ -141,6 +141,60 @@ def xtream(url: str) -> Optional[Server]:
     return s
 
 
+def xtream_api_url(base: str, user: str, pw: str) -> str:
+    """Cathode's own address for a line fetched through the panel's API
+    (xtream://host:port/USER/PASS); what the playlist loader recognises."""
+    u = urlsplit(base)
+    return f"xtream://{u.netloc}/{user}/{pw}" + (f"?scheme={u.scheme}" if u.scheme == "https" else "")
+
+
+def parse_xtream_api(url: str):
+    """(base, user, pw) from an xtream:// address, or None."""
+    from urllib.parse import parse_qs
+    u = urlsplit(url or "")
+    if u.scheme != "xtream" or not u.netloc:
+        return None
+    parts = u.path.strip("/").split("/")
+    if len(parts) != 2 or not all(parts):
+        return None
+    scheme = (parse_qs(u.query).get("scheme") or ["http"])[0]
+    return f"{scheme}://{u.netloc}", parts[0], parts[1]
+
+
+def xtream_api_channels(base: str, user: str, pw: str, user_agent: str = "Cathode", timeout: float = 30) -> list:
+    """The live channels of a line, from the panel's API (player_api.php),
+    as the playlist loader's dicts: name, url, group, logo, epg_id, number.
+    The API is what IPTV Smarters and TiviMate use; some panels serve it
+    while refusing the M3U playlist."""
+    from urllib.parse import urlencode
+
+    def get(action: str):
+        q = urlencode({"username": user, "password": pw, **({"action": action} if action else {})})
+        req = urllib.request.Request(f"{base}/player_api.php?{q}",
+                                     headers={"User-Agent": user_agent, "Accept": "*/*"})
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL) as resp:
+            return json.loads(resp.read().decode("utf-8", "replace"))
+
+    info = get("")
+    auth = (info or {}).get("user_info", {}) if isinstance(info, dict) else {}
+    if str(auth.get("auth", "1")) == "0" or str(auth.get("status", "Active")).lower() not in ("active", ""):
+        raise PermissionError(f"the provider says this line is {auth.get('status') or 'not accepted'}")
+    ext = (info.get("server_info", {}) or {}).get("output_formats") if isinstance(info, dict) else None
+    fmt = "ts" if not ext or "ts" in ext else ext[0]
+    cats = {str(c.get("category_id")): c.get("category_name", "") for c in (get("get_live_categories") or [])
+            if isinstance(c, dict)}
+    out = []
+    for n, s in enumerate(get("get_live_streams") or [], start=1):
+        if not isinstance(s, dict) or not s.get("stream_id"):
+            continue
+        sid = s["stream_id"]
+        out.append({"number": int(s.get("num") or n), "name": str(s.get("name", "")).strip() or f"Channel {sid}",
+                    "url": f"{base}/live/{user}/{pw}/{sid}.{fmt}",
+                    "group": cats.get(str(s.get("category_id")), ""), "logo": s.get("stream_icon") or "",
+                    "epg_id": s.get("epg_channel_id") or ""})
+    return out
+
+
 def looks_like_address(text: str) -> bool:
     """A bare host or host:port rather than a playlist file or link: worth
     asking the server what it is."""

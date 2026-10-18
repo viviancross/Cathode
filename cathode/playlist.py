@@ -52,6 +52,7 @@ PLAYER_AGENTS = ["VLC/3.0.20 LibVLC/3.0.20", "TiviMate/4.7.0 (Android)", "IPTVSm
 
 
 def _scrub(url: str) -> str:
+    url = re.sub(r"^xtream://([^/]+)/[^/?]+/[^/?]+", lambda m: "xtream://" + m.group(1) + "/***/***", url)
     return re.sub(r"(username|password)=[^&]+", lambda m: m.group(1) + "=***",
                   re.sub(r"/playlist/[^/]+/[^/]+/", "/playlist/***/***/", url))
 
@@ -89,6 +90,19 @@ def load_as(source: str, user_agent: str = "Cathode/1.0"):
         return load(source, user_agent), user_agent, source
     agents = [user_agent] + [a for a in PLAYER_AGENTS if a != user_agent]
     variants = link_variants(source)
+    # A line's playlist refused in every shape: the panel's API, which the
+    # apps providers expect use instead, often still answers (one such panel
+    # answered 884 to get.php for everyone, and served Smarters by API).
+    from . import servers
+    prov = servers.xtream(source)
+    if prov is not None:
+        api = servers.xtream_api_url(prov.base, *prov.creds)
+        try:
+            chans = load(api, user_agent, timeout=20)
+            print(f"[playlist] the panel's API answered where the playlist didn't: {_scrub(api)}")
+            return chans, user_agent, api
+        except Exception as e:
+            print(f"[playlist] {_scrub(api)}: {e!r}"[:200])
     # The link's shapes first, with Cathode's own agent (a panel that refuses
     # get.php outright is found in three tries), then each shape as each
     # player. The search uses short timeouts: a refusal is quick, and a
@@ -110,7 +124,16 @@ def load_as(source: str, user_agent: str = "Cathode/1.0"):
 
 
 def load(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
-    """Load an M3U playlist from a file path or URL."""
+    """Load an M3U playlist from a file path or URL, or a line through a
+    provider's API (an xtream:// address)."""
+    if source.startswith("xtream://"):
+        from . import servers
+        line = servers.parse_xtream_api(source)
+        if line is None:
+            raise ValueError("not a line address")
+        rows = servers.xtream_api_channels(*line, user_agent=user_agent, timeout=timeout)
+        return [Channel(number=r["number"], name=_clean_name(r["name"]), url=r["url"], group=r["group"],
+                        logo=r["logo"], epg_id=r["epg_id"]) for r in rows]
     if source.startswith(("http://", "https://", "rtsp://")):
         content = _fetch_url(source, user_agent, timeout)
     else:

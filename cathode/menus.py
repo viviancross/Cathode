@@ -838,7 +838,8 @@ def add_playlist(app, on_added=None, first_run=False):
                               "Check it and try again.", 8.0)
                     ask_url(text)
                     return
-                entry["playlist_url"], entry["epg_url"] = provider.playlist_url, provider.epg_url
+                entry.setdefault("playlist_url", provider.playlist_url)   # the check keeps the address that answered
+                entry["epg_url"] = provider.epg_url
                 entry["name"] = "My Channels"
                 app.toast(f"Found {n} channel{'' if n == 1 else 's'}. The guide comes from the same provider.", 5.0)
                 app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
