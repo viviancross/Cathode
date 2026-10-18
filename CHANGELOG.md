@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.26
+
+- **IPTV providers that refuse unknown players** (a link that answered
+  "refused it (884)") are fetched as a player: Cathode tries the
+  User-Agents real players send and keeps the one the provider answers
+  to, for its guide and its streams.
+- **InDirecTV HD makes the HR20's sounds:** a key tick and an error bonk,
+  with Settings > System > Sound effects (Off / Low / Medium / High). The
+  other boxes were silent and stay so.
+- **Banners after the manuals:** the InDirecTV HD strip's audio, messages
+  and lock icons; the Plate Network HD banner laid out as its manual
+  shows it.
+
 ## 4.25
 
 - **One address to set up.** Setup asks for your Tunarr or ErsatzTV
