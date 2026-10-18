@@ -130,8 +130,14 @@ def package(d):
     if os.path.exists(out):
         os.remove(out)
     env = dict(os.environ, ARCH="x86_64")
-    subprocess.run(["appimagetool", "--appimage-extract-and-run", "--no-appstream", d, out],
+    # Written inside the container and moved out once: the bind mount is slow
+    # for a big file's many writes. The image's pre-fetched runtime when it has one.
+    runtime = os.environ.get("APPIMAGE_RUNTIME")
+    tmp = os.path.join(WORK, os.path.basename(out))
+    subprocess.run(["appimagetool", "--appimage-extract-and-run", "--no-appstream"]
+                   + (["--runtime-file", runtime] if runtime and os.path.exists(runtime) else []) + [d, tmp],
                    check=True, env=env)
+    shutil.move(tmp, out)
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     from build_source import write_sha256
     write_sha256(out)
@@ -166,7 +172,9 @@ def flatpak(d, held):
     subprocess.run(["flatpak-builder", "--force-clean", "--disable-rofiles-fuse", "--repo=repo",
                     "build", manifest], check=True, cwd=fp)
     out = os.path.join(BUILDS, f"cathode-linux-x86_64-{cathode.__version__}.flatpak")
-    subprocess.run(["flatpak", "build-bundle", "repo", out, APP_ID], check=True, cwd=fp)
+    tmp = os.path.join(WORK, os.path.basename(out))
+    subprocess.run(["flatpak", "build-bundle", "repo", tmp, APP_ID], check=True, cwd=fp)
+    shutil.move(tmp, out)
     from build_source import write_sha256
     write_sha256(out)
     log(f"DONE -> {out}  ({os.path.getsize(out) / 1024 / 1024:.1f} MB)")

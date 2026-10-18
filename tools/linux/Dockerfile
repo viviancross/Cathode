@@ -2,6 +2,7 @@
 # repo root (privileged: flatpak-builder sandboxes its build):
 #   docker build -t cathode-linux-build tools/linux
 #   docker run --rm --privileged -v "$PWD:/src" -v "<builds dir>:/builds" cathode-linux-build
+# (tools/build_all.py runs both, with a pip cache volume so wheels download once.)
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,11 +13,13 @@ RUN wget -q -O /usr/local/bin/appimagetool \
         https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
     && chmod +x /usr/local/bin/appimagetool \
     && wget -q -O /opt/excludelist \
-        https://raw.githubusercontent.com/AppImageCommunity/pkg2appimage/master/excludelist
+        https://raw.githubusercontent.com/AppImageCommunity/pkg2appimage/master/excludelist \
+    && wget -q -O /opt/appimage-runtime \
+        https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
 RUN flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
     && flatpak install -y --noninteractive flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
 RUN python3 -m venv /venv
 # Work inside the container: a Windows bind mount is slow and drops symlinks.
-ENV PATH=/venv/bin:$PATH CATHODE_BUILDS=/builds CATHODE_WORK=/work
+ENV PATH=/venv/bin:$PATH CATHODE_BUILDS=/builds CATHODE_WORK=/work APPIMAGE_RUNTIME=/opt/appimage-runtime
 WORKDIR /src
 CMD ["sh", "-c", "pip install -q -r requirements.txt pyinstaller && python tools/build_linux.py"]
