@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.25
+
+- **One address to set up.** Setup asks for your Tunarr or ErsatzTV
+  address (like 10.0.0.215:8000), finds it, and takes the playlist and
+  guide from it. An IPTV provider's **M3U Plus link** works the same way:
+  paste the get.php link and the guide comes from the same provider.
+  Channel icons a server wrote as "localhost" now point at the server.
+- **Boot sequences after the real boxes:** InDirecTV HD's blue "hello"
+  screens and Step 1 / Step 2; Plate Network HD's "Starting up..." and
+  Acquiring Signal dialog; Plate Network SD's ATTENTION 015; InDirecTV SD
+  starts straight on the picture, as a DSS box did.
+- **Channel changes feel like the box:** a moment of black on every
+  change (each box's own); Banner time (2-8 s) under Picture & Style on
+  the InDirecTV skins.
+- **Save diagnostics** under Settings > System: one zip for a bug report,
+  with the Plex tokens removed.
+
 ## 4.24
 
 - **Easier to read from the couch.** The InDirecTV HD pause bar's tag and
