@@ -121,6 +121,12 @@ class Video:
 
     def _on_log(self, level, prefix, text):
         line = f"{prefix}: {text.strip()}"
+        # The chosen output can't be opened (unplugged, a different PC): mpv
+        # would play on in silence. Back to the default output, and say so.
+        if level == "error" and "Could not open/initialize audio device" in text and                 (self.player["audio-device"] or "auto") != "auto":
+            print(f"[video] audio output {self.player['audio-device']!r} isn't there: using the default")
+            self.player["audio-device"] = "auto"
+            self._post("audio_fallback")
         if line == self._last_log:
             self._log_repeats += 1
             return
@@ -382,6 +388,10 @@ class Video:
     @audio_device.setter
     def audio_device(self, name: str):
         self.player["audio-device"] = name or "auto"
+
+    def has_audio_device(self, name: str) -> bool:
+        """Whether mpv lists that output now (a saved one may be unplugged)."""
+        return not name or name == "auto" or any(d.get("name") == name for d in self.audio_devices())
 
     def buffered_behind(self) -> float:
         """How far back REW can reach: seconds of past still in the buffer."""

@@ -481,6 +481,11 @@ class App:
     # ── Video ─────────────────────────────────────────────────────────────
 
     def _on_video(self, kind, **data):
+        if kind == "audio_fallback":        # the chosen output went away mid-session
+            self.config.audio_device = ""
+            self.config.save()
+            self.toast("The audio output went away, so sound is on the default one.", 6.0)
+            return
         if kind in ("video_started", "tracks_changed"):
             self.video.apply_subtitles(self.config.subtitles)
         for s in reversed(self.screens):
@@ -517,7 +522,14 @@ class App:
         cfg = self.config
         self.video.sub_style(font=cfg.sub_font or None, size=cfg.sub_size, color=cfg.sub_color, back=cfg.sub_back)
         if self.config.audio_device:
-            self.video.audio_device = self.config.audio_device
+            if self.video.has_audio_device(self.config.audio_device):
+                self.video.audio_device = self.config.audio_device
+            else:                           # saved on another PC, or unplugged: the default, and say so
+                print(f"[cathode] audio output {self.config.audio_device!r} isn't on this computer: using the default")
+                self.config.audio_device = ""
+                self.config.save()
+                self.after(1.5, lambda: self.toast("The saved audio output isn't on this computer, so sound is on "
+                                                   "the default one. Change it under Settings > System > Audio output.", 8.0))
         from .ondemand import OnDemand
         self.ondemand = OnDemand(self)
         self.ondemand.downloads.resume()     # anything a quit or a dropout interrupted

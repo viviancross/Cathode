@@ -579,5 +579,28 @@ class TestSounds(unittest.TestCase):
         self.assertGreater(sounds.bonk_sound().get_length(), 0.1)
 
 
+class TestAudioOutput(unittest.TestCase):
+    def test_an_output_that_cant_open_falls_back_to_the_default(self):
+        from cathode.video import Video
+        v = Video.__new__(Video)
+        v._last_log, v._log_repeats = None, 0
+        v.player = {"audio-device": "wasapi/{gone}"}
+        posted = []
+        v._post = lambda kind, **d: posted.append(kind)
+        v._on_log("error", "cplayer", "Could not open/initialize audio device -> no sound.")
+        self.assertEqual(v.player["audio-device"], "auto")
+        self.assertEqual(posted, ["audio_fallback"])
+        v._on_log("error", "cplayer", "Could not open/initialize audio device -> no sound.")
+        self.assertEqual(posted, ["audio_fallback"])          # already on the default: once
+
+    def test_a_saved_output_is_checked_against_the_list(self):
+        from cathode.video import Video
+        v = Video.__new__(Video)
+        v.audio_devices = lambda: [{"name": "auto"}, {"name": "wasapi/{here}"}]
+        self.assertTrue(v.has_audio_device("wasapi/{here}"))
+        self.assertTrue(v.has_audio_device(""))
+        self.assertFalse(v.has_audio_device("wasapi/{gone}"))
+
+
 if __name__ == "__main__":
     unittest.main()
