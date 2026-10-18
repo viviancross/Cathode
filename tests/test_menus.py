@@ -489,5 +489,16 @@ class TestDiagnosticsZip(unittest.TestCase):
                 self.assertIn("Tuning to", z.read("cathode.log").decode())
 
 
+class TestRefusalWording(unittest.TestCase):
+    def test_a_panels_own_code_is_explained_as_the_line_not_the_client(self):
+        import urllib.error
+        from cathode.app import load_error_text
+        e = urllib.error.HTTPError("http://h/get.php", 884, "", {}, None)
+        self.assertIn("username and password", load_error_text(e))
+        self.assertIn("884", load_error_text(e))
+        self.assertIn("refused it (500)", load_error_text(urllib.error.HTTPError("http://h", 500, "", {}, None)))
+        self.assertIn("isn't there", load_error_text(urllib.error.HTTPError("http://h", 404, "", {}, None)))
+
+
 if __name__ == "__main__":
     unittest.main()

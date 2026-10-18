@@ -719,7 +719,14 @@ def load_error_text(e: Exception, what: str = "playlist") -> str:
     goes to the log)."""
     import urllib.error
     if isinstance(e, urllib.error.HTTPError):
-        return "the server said it isn't there" if e.code == 404 else f"the server refused it ({e.code})"
+        if e.code == 404:
+            return "the server said it isn't there"
+        if e.code == 401 or e.code >= 505 and e.code not in (505, 507, 508, 510, 511):
+            # A provider panel's own codes (884, 512...) and the plain ones
+            # mean the same: it doesn't accept these details.
+            return (f"the provider didn't accept that link ({e.code}). Check the username and password in it, "
+                    "that the line is active, and that no other app is signed in with it")
+        return f"the server refused it ({e.code})"
     if isinstance(e, FileNotFoundError):
         return "there's no file at that address"
     if isinstance(e, (urllib.error.URLError, TimeoutError, ConnectionError)):
