@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.28
+
+- **Provider lines that refuse the playlist link** (the ones that answer
+  "884" however they're asked) load through the provider's own API, the
+  way IPTV Smarters and TiviMate do: paste the same M3U Plus link and
+  Cathode finds the channels, their groups and the guide that way.
+- A provider's refusal now says what to check (the username and password
+  in the link, that the line is active, other apps signed in with it).
+
 ## 4.27
 
 - **Provider links that answer "refused it (884)"** are tried in every
