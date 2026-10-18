@@ -436,5 +436,31 @@ class TestServerSetup(unittest.TestCase):
         self.assertEqual(as_seen_from("http://localhost/a.png", "C:/lists/x.m3u"), "http://localhost/a.png")
 
 
+class TestDiagnosticsZip(unittest.TestCase):
+    def test_the_zip_holds_the_logs_and_a_config_without_tokens(self):
+        import json
+        import zipfile
+        from types import SimpleNamespace
+        from cathode import diagnostics_zip, paths
+        from cathode.config import Config
+        cfg = Config("")
+        cfg.plex_token, cfg.plex_user_name, cfg.skin = "secret-token", "Vivian", "plate_hd"
+        app = SimpleNamespace(config=cfg, gfx=SimpleNamespace(version="3.2", renderer="Test GPU", size=(1280, 720)),
+                              video=None, fullscreen=False)
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(paths, "cache_dir", lambda: d):
+            open(os.path.join(d, "cathode.log"), "w").write("[cathode] Tuning to [4] Test Card\n")
+            path = diagnostics_zip.write(app, out_dir=d)
+            with zipfile.ZipFile(path) as z:
+                names = set(z.namelist())
+                self.assertEqual(names, {"system.txt", "config.json", "cathode.log"})
+                conf = json.loads(z.read("config.json"))
+                self.assertEqual(conf["plex_token"], "<removed>")
+                self.assertEqual(conf["plex_user_name"], "<removed>")
+                self.assertEqual(conf["skin"], "plate_hd")
+                self.assertNotIn("secret-token", z.read("config.json").decode())
+                self.assertIn("Test GPU", z.read("system.txt").decode())
+                self.assertIn("Tuning to", z.read("cathode.log").decode())
+
+
 if __name__ == "__main__":
     unittest.main()

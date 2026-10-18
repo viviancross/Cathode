@@ -1,6 +1,8 @@
 """What MENU opens: the box's menu tree. Settings apply as they change and
 are saved straight away."""
 
+import os
+
 from . import autostart, remote as R
 from .screens.menu import DESCRIPTIONS, Item, Keyboard, Menu
 
@@ -903,6 +905,16 @@ def _toggle_autostart(app):
 
 # ── System ────────────────────────────────────────────────────────────────
 
+def _save_diagnostics(app):
+    from . import diagnostics_zip
+    try:
+        path = diagnostics_zip.write(app)
+    except OSError as e:
+        app.toast(f"Couldn't write the diagnostics file: {e}", 6.0)
+        return
+    app.toast(f"Saved {os.path.basename(path)} on your Desktop. Attach it to a bug report.", 8.0)
+
+
 def system_items(app):
     from . import __version__
     from .screens.diagnostics import Diagnostics
@@ -910,6 +922,8 @@ def system_items(app):
     cfg = app.config
     return [
         Item("Diagnostics", lambda: app.push(Diagnostics(app)), close=True),
+        Item("Save diagnostics", lambda: _save_diagnostics(app),
+             help="One zip on your Desktop to attach to a bug report: logs, settings without passwords, system."),
         Item("Audio output", submenu=lambda: audio_items(app)),
         Item("Weather", submenu=lambda: weather_items(app)),
         Item("Check for updates", lambda: update_flow.open_check(app)),
