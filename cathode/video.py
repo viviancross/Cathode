@@ -67,7 +67,11 @@ class Video:
                  volume: int = 80, extra: Optional[dict] = None, log_path: str = ""):
         self._post = post
         opts = dict(
-            vo="libmpv", hwdec="auto-safe", keep_open="yes", idle="yes",
+            # auto-copy: decode in hardware but hand the frames back to
+            # system memory, so the deinterlacer can take them. auto-safe
+            # left them on the GPU (cuda), where bwdif can't run: mpv dropped
+            # the filter and every interlaced channel played interlaced.
+            vo="libmpv", hwdec="auto-copy", keep_open="yes", idle="yes",
             # A file queued behind this one (follow()) is opened as soon as
             # this one's source has been read to its end, so a live stream's
             # replacement is ready by the time the buffered picture runs out.
@@ -77,6 +81,10 @@ class Video:
             # Pause-live: keep the recent past so REW can reach back into it.
             demuxer_max_back_bytes="128MiB",
             vf="bwdif=deint=1", volume=str(volume),
+            # A deeper audio buffer: the default 0.2 s ran dry ("Audio device
+            # underrun detected") at a live handover on a Windows PC, heard
+            # as a glitch; half a second rides it out.
+            audio_buffer=0.5,
             sub_fonts_dir=paths.asset("fonts"))     # the bundled fonts, for subtitles
         if user_agent:
             opts["user_agent"] = user_agent
