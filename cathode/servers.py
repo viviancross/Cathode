@@ -26,7 +26,7 @@ PATHS = {
     # legacy modes are rewritten to it since 26.11.
     "ersatztv": {"playlist": "/iptv/channels.m3u?mode=segmenter", "epg": "/iptv/xmltv.xml"},
 }
-NAMES = {"tunarr": "Tunarr", "ersatztv": "ErsatzTV"}
+NAMES = {"tunarr": "Tunarr", "ersatztv": "ErsatzTV", "xtream": "IPTV provider"}
 
 
 @dataclass
@@ -41,13 +41,21 @@ class Server:
 
     @property
     def playlist_url(self) -> str:
+        if self.kind == "xtream":
+            return self.playlist
         return self.base + PATHS[self.kind]["playlist"]
 
     @property
     def epg_url(self) -> str:
+        if self.kind == "xtream":
+            from urllib.parse import urlencode
+            user, pw = self.creds
+            return f"{self.base}/xmltv.php?{urlencode({'username': user, 'password': pw})}"
         return self.base + PATHS[self.kind]["epg"]
 
     def __str__(self) -> str:
+        if self.kind == "xtream":
+            return f"{self.name} at {urlsplit(self.base).hostname}"
         return f"{self.name} {self.version}".strip()
 
 
@@ -104,6 +112,33 @@ def detect(address: str, user_agent: str = "Cathode", timeout: float = 4.0) -> O
         if found:
             return Server(found[0], base, found[1])
     return None
+
+
+# ── Xtream Codes providers: the "M3U Plus" link ───────────────────────────
+# Most IPTV providers hand out one link in this shape:
+#   http://host:port/get.php?username=U&password=P&type=m3u_plus&output=ts
+# The same host serves the guide at xmltv.php with the same credentials.
+
+def xtream(url: str) -> Optional[Server]:
+    """The Xtream provider behind an M3U Plus link, or None. Its playlist
+    URL is the link as given (output and type kept), its guide the host's
+    xmltv.php with the same username and password."""
+    from urllib.parse import parse_qs
+    try:
+        u = urlsplit((url or "").strip())
+    except ValueError:
+        return None
+    if not u.hostname or not u.path.lower().endswith("/get.php"):
+        return None
+    q = parse_qs(u.query)
+    user, pw = (q.get("username") or [""])[0], (q.get("password") or [""])[0]
+    if not user or not pw:
+        return None
+    base = urlunsplit((u.scheme or "http", u.netloc, u.path[: -len("/get.php")], "", ""))
+    s = Server("xtream", base, "")
+    s.playlist = url.strip()
+    s.creds = (user, pw)
+    return s
 
 
 def looks_like_address(text: str) -> bool:

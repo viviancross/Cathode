@@ -298,7 +298,10 @@ class Keyboard(Screen):
         elif a == R.RIGHT:
             self.move(0, 1)
         elif a == R.SELECT:
-            self._press(self.grid()[self.row][self.col])
+            g = self.grid()                 # a layer switch can leave the cursor past a shorter grid
+            self.row = min(self.row, len(g) - 1)
+            self.col = min(self.col, len(g[self.row]) - 1)
+            self._press(g[self.row][self.col])
         elif a == R.BACK:
             # Empty: BACK leaves, as everywhere else. Emptied by this same
             # held BACK a moment ago: it only stops erasing.

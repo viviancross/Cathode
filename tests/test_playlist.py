@@ -46,5 +46,26 @@ class TestExtinf(unittest.TestCase):
         self.assertEqual(chans[0].number, 42)
 
 
+class TestProviderLists(unittest.TestCase):
+    """The shapes an IPTV provider's M3U Plus list takes."""
+
+    def test_name_in_tvg_name_extgrp_and_attributes_after_the_comma(self):
+        from cathode.playlist import _parse
+        text = """#EXTM3U url-tvg="http://h/xmltv.php?username=u&password=p"
+#EXTINF:-1 tvg-id="a.1" tvg-name="Alpha HD" tvg-logo="http://h/1.png" group-title="US| NEWS",
+http://h/live/u/p/1.ts
+#EXTGRP:UK| SPORTS
+#EXTINF:-1 tvg-name="Beta",Beta
+http://h/live/u/p/2.ts
+#EXTINF:-1  tvg-id="c.3" group-title="CA| KIDS", Gamma: Kids, East
+http://h/live/u/p/3.ts
+"""
+        chans = _parse(text)
+        self.assertEqual([c.name for c in chans], ["Alpha HD", "Beta", "Gamma: Kids, East"])
+        self.assertEqual([c.group for c in chans], ["US| NEWS", "UK| SPORTS", "CA| KIDS"])
+        self.assertEqual(chans[0].epg_id, "a.1")
+        self.assertEqual(chans[1].url, "http://h/live/u/p/2.ts")
+
+
 if __name__ == "__main__":
     unittest.main()

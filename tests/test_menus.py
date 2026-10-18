@@ -425,6 +425,33 @@ class TestServerSetup(unittest.TestCase):
         self.assertFalse(servers.looks_like_address("http://provider/list.m3u"))
         self.assertFalse(servers.looks_like_address("C:/lists/x.m3u"))
 
+    def test_an_m3u_plus_link_brings_its_guide_and_skips_the_guide_step(self):
+        from cathode import menus
+        from test_menus import TestFirstRun
+        TestFirstRun._checked(self, 5000, server=None)
+        app = SetupApp()
+        said = []
+        app.toast = lambda text, *a: said.append(text)
+        menus.add_playlist(app)
+        link = "http://tv.example.com:8080/get.php?username=u1&password=p1&type=m3u_plus&output=ts"
+        prompt = TestFirstRun._type(self, app, link)
+        self.assertIn("Server address", prompt)
+        self.assertIn("Name", app.top().prompt)                       # no guide step: it came with the link
+        TestFirstRun._type(self, app, "http://pasted.by/mistake")    # a link isn't a name
+        self.assertEqual(app.switched, [{"name": "My Channels", "playlist_url": link,
+                                         "epg_url": "http://tv.example.com:8080/xmltv.php?username=u1&password=p1"}])
+        self.assertTrue(any("5000 channels" in t for t in said))
+
+    def test_xtream_links_are_recognised_and_nothing_else_is(self):
+        from cathode import servers
+        s = servers.xtream("https://h.example:443/get.php?username=u&password=p&type=m3u_plus&output=m3u8")
+        self.assertEqual((s.kind, s.base), ("xtream", "https://h.example:443"))
+        self.assertEqual(s.epg_url, "https://h.example:443/xmltv.php?username=u&password=p")
+        self.assertEqual(str(s), "IPTV provider at h.example")
+        self.assertIsNone(servers.xtream("http://h.example/get.php?type=m3u_plus"))      # no credentials
+        self.assertIsNone(servers.xtream("http://h.example/list.m3u"))
+        self.assertIsNone(servers.xtream("10.0.0.215:8000"))
+
     def test_a_servers_own_localhost_means_the_server(self):
         from cathode.net import as_seen_from
         base = "http://10.0.0.215:8000/api/channels.m3u"

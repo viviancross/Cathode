@@ -91,22 +91,30 @@ def _parse(content: str) -> List[Channel]:
 
     pending_meta: Optional[dict] = None
     auto_number = 1
+    group_line = ""                     # an #EXTGRP: names the group of the entries after it
 
     for line in lines:
         line = line.strip()
-        if not line or line == "#EXTM3U":
+        if not line or line.startswith("#EXTM3U"):
             continue
 
         if line.startswith("#EXTINF:"):
             m = _EXTINF_RE.match(line)
             if m:
                 attr_str, name = _split_attrs_name(m.group("rest"))
-                name = _clean_name(name)
+                attrs = _parse_attrs(attr_str)
+                # A provider's list often leaves the name after the comma
+                # empty and carries it in tvg-name, or puts attributes after
+                # the comma; take the name where it is.
+                name = _clean_name(name) or _clean_name(attrs.get("tvg-name", ""))
                 if name:
-                    pending_meta = {
-                        "name": name,
-                        "attrs": _parse_attrs(attr_str),
-                    }
+                    if group_line and not attrs.get("group-title"):
+                        attrs["group-title"] = group_line
+                    pending_meta = {"name": name, "attrs": attrs}
+            continue
+
+        if line.startswith("#EXTGRP:"):
+            group_line = line[len("#EXTGRP:"):].strip()
             continue
 
         if line.startswith("#"):

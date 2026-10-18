@@ -46,6 +46,13 @@ class TestAddressKeyboard(unittest.TestCase):
         hr20 = self._kb([list("abcdef"), list("567890"), ["DONE"]]).grid()
         self.assertEqual(hr20[2], list("./:-_?"))         # a row of its own, before the actions
 
+    def test_select_survives_a_layer_that_shrinks_the_grid(self):
+        kb = self._kb([list("abc"), ["SHIFT", "SYM"], ["DONE"]])
+        kb.row, kb.col = 3, 0                             # the URL row the abc layer adds
+        kb.layer = "sym"                                  # SYM: no URL row, the cursor is past the end
+        kb.handle(R.SELECT)                               # clamps instead of crashing
+        self.assertEqual(kb.row, 2)
+
     def test_back_on_an_empty_field_leaves_but_not_mid_erase(self):
         kb = self._kb([list("abc"), ["DONE"]])
         kb.value, kb.caret = "a", 1

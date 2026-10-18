@@ -752,7 +752,7 @@ def _check_playlist(app, url, done):
     threading.Thread(target=work, daemon=True).start()
 
 
-SERVER_HINT = "Your Tunarr or ErsatzTV address, like 10.0.0.215:8000. An M3U link works too."
+SERVER_HINT = "Your Tunarr or ErsatzTV address (10.0.0.215:8000), or your provider's M3U Plus link."
 PLAYLIST_HINT = "Your IPTV provider's channel list link (M3U), or a playlist file."
 GUIDE_HINT = "Your provider's TV guide link (XMLTV). Done as it is skips."
 
@@ -815,9 +815,27 @@ def add_playlist(app, on_added=None, first_run=False):
 
     def got_address(text):
         """A bare host is asked what it is; a known server skips the guide
-        step. Anything else is taken as a playlist link."""
+        step; an M3U Plus (Xtream) link brings its guide with it. Anything
+        else is taken as a playlist link."""
         from . import servers
         if not text or not _bare(text):
+            return
+        provider = servers.xtream(text)
+        if provider is not None:
+            app.toast("Checking the address...", 30.0)
+
+            def checked(n, err):
+                if not n:
+                    app.toast(f"Couldn't use that address: {err or 'there are no channels in it'}. "
+                              "Check it and try again.", 8.0)
+                    ask_url(text)
+                    return
+                entry["playlist_url"], entry["epg_url"] = provider.playlist_url, provider.epg_url
+                entry["name"] = "My Channels"
+                app.toast(f"Found {n} channel{'' if n == 1 else 's'}. The guide comes from the same provider.", 5.0)
+                app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
+                                  hint="How it's listed under Settings > Channels."))
+            _check_playlist(app, provider.playlist_url, checked)
             return
         if not servers.looks_like_address(text):
             got_url(text)
@@ -870,6 +888,8 @@ def add_playlist(app, on_added=None, first_run=False):
     def got_name(name):
         if name is None:
             return
+        if "://" in (name or ""):           # a link pasted into the name by mistake: a URL isn't a name
+            name = ""
         entry["name"] = name or "My Channels"
         finish()
 
