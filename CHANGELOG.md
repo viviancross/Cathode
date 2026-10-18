@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.27
+
+- **Provider links that answer "refused it (884)"** are tried in every
+  shape a panel serves (get.php as m3u_plus and m3u, and the /playlist/
+  path) and as the players panels expect; what the panel said to each
+  try goes in the log, so a diagnostics zip shows why.
+- **A saved audio output that isn't on this computer** no longer mutes
+  Cathode: sound goes to the default output, with a note.
+
 ## 4.26
 
 - **IPTV providers that refuse unknown players** (a link that answered
