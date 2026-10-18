@@ -1008,27 +1008,49 @@ class PlateHD(BoxSkin):
 
     # ── Boot ──────────────────────────────────────────────────────────────
 
+    # The ViP's boot, from video frames (docs/cathode-4/box-behaviour.md):
+    # the logo on black with "Starting up...", black, then the Acquiring
+    # Signal dialog with its code in a tab and a five-block bar that fills
+    # green and holds, then a hard cut to the picture.
+    boot_scenes = [("logo", 2.4), ("black", 0.6), ("attention", 1.2)]
+
     def draw_boot(self, c, boot):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        stage = boot.stage()
-        self._page(c, (0, 0, W, H))
-        size = Y(72)
-        mw = self.measure(self.wordmark, size, b["text"], b["dish"])
-        self.wordmark(c, (W - mw) // 2, Y(200), size, b["text"], b["dish"])
-        caption = {"starting": "Starting up...", "signal": "Acquiring satellite signal.",
-                   "guide": "Retrieving program information from satellite." + self.guide_pct(),
-                   "done": "Ready"}[stage]
-        r = self.R(290, 440, 700, 110)
+        scene, age = boot.scene(), boot.scene_age()
+        c.fill((0, 0, 0, 255))
+        if scene == "black":
+            return
+        if scene == "logo":
+            size = Y(72)
+            mw = self.measure(self.wordmark, size, b["text"], b["dish"])
+            self.wordmark(c, (W - mw) // 2, Y(260), size, b["text"], b["dish"])
+            self.cb(c, "Starting up...", self.fb(Y(26)), b["text"], W // 2, Y(380), align="center")
+            return
+        # The dialog, its code in a tab at the top right.
+        r = self.R(290, 250, 700, 220)
         panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(12), edge=rgba(b["pip_edge"]), edge_w=Y(3))
+        tab = pygame.Rect(r.right - X(96), r.y - Y(18), X(72), Y(30))
+        vgrad(c, tab, rgba(mix(b["later"], (255, 255, 255), 0.35)), rgba(b["later"]), radius=Y(8))
+        self.cb(c, "535", self.fb(Y(18)), b["text"], tab.centerx, tab.y + (tab.h - t.ink(self.fb(Y(18)))[1]) // 2,
+                align="center")
         pill = pygame.Rect(r.x + X(30), r.y + Y(14), r.w - X(60), Y(36))
         vgrad(c, pill, rgba(mix(b["later"], (255, 255, 255), 0.35)), rgba(b["later"]), radius=Y(10))
         f = self.fb(Y(22))
-        self.cb(c, "ATTENTION", f, b["text"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
-        self.cb(c, self.fit_cb(self.fb(Y(19)), caption, r.w - X(40)), self.fb(Y(19)), b["ink"], r.centerx, pill.bottom + Y(14),
-                align="center")
-        if stage != "starting":
-            self.cb(c, "Please wait, or press any button to skip.", self.fb(Y(17)), b["soft"], W // 2, Y(600), align="center")
+        self.cb(c, "Acquiring Signal", f, b["text"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        fl = self.fb(Y(19))
+        self.cb(c, "This should take no more than 5 minutes to complete...", fl, b["ink"], r.centerx,
+                pill.bottom + Y(16), align="center")
+        # Five blocks that fill green left to right, then hold.
+        g = getattr(self.app, "guide_progress", None)
+        frac = max(min(1.0, age / 1.0), g if g is not None and g >= 0 else 0.0)
+        bar = pygame.Rect(r.x + X(60), r.bottom - Y(58), r.w - X(120), Y(24))
+        pygame.draw.rect(c, b["pb_track"], bar)
+        pygame.draw.rect(c, b["pb_edge"], bar, 1)
+        seg = (bar.w - X(24)) // 5
+        for i in range(int(round(frac * 5))):
+            pygame.draw.rect(c, (60, 170, 70), (bar.x + X(4) + i * (seg + X(4)), bar.y + 3, seg, bar.h - 6))
+        self.cb(c, "Press any button to skip.", self.fb(Y(17)), b["soft"], W // 2, Y(600), align="center")
 
 
 class Plate(PlateHD):
@@ -1983,31 +2005,27 @@ class Plate(PlateHD):
         c.fill((0, 0, 0, 255))
         self._sd_dialog(c, "ATTENTION", [msg])
 
+    # The 2005 box (docs/cathode-4/box-behaviour.md): no splash, a black
+    # moment, then the grey ATTENTION 015 dialog "Acquiring satellite
+    # signal. Please wait." with its bar, then straight to the picture.
+    boot_scenes = [("black", 0.8), ("attention", 1.0)]
+
     def draw_boot(self, c, boot):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        stage = boot.stage()
-        self._grey_page(c, (0, 0, W, H))
-        tab = pygame.Surface((W, Y(236)), pygame.SRCALPHA)
-        pygame.draw.ellipse(tab, b["blue"], ((W - X(420)) // 2, Y(17), X(420), Y(197)))
-        c.blit(tab, (0, 0))
-        size = Y(44)
-        mw = self.measure(self.wordmark, size, b["text"], b["dish"])
-        self.wordmark(c, (W - mw) // 2, Y(91), size, b["text"], b["dish"])
-        caption = {"starting": "Starting up...", "signal": "Acquiring Satellite Signal",
-                   "guide": "Retrieving program information from satellite." + self.guide_pct(),
-                   "done": "Ready"}[stage]
-        r = self.R(100, 280, 440, 90)
+        c.fill((0, 0, 0, 255))
+        if boot.scene() == "black":
+            return
+        r = self.R(100, 150, 440, 150)
         panel(c, r, rgba(b["panel_top"]), rgba(b["panel_bot"]), radius=Y(10), edge=rgba((255, 255, 255)), edge_w=Y(2))
         pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
         vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
         f = self.fb(Y(15))
-        t.draw(c, "ATTENTION", f, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
-        t.draw(c, t.fit(self.f(Y(13)), caption, r.w - X(30)), self.f(Y(13)), b["ink"], r.centerx, pill.bottom + Y(10),
-               align="center")
-        if stage != "starting":
-            t.draw(c, "Please wait, or press any button to skip.", self.f(Y(12)), b["ink"], r.centerx, r.bottom - Y(22),
-                   align="center")
+        t.draw(c, "ATTENTION  015", f, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        fl = self.f(Y(13))
+        t.draw(c, "Acquiring satellite signal. Please wait.", fl, b["ink"], r.centerx, pill.bottom + Y(12), align="center")
+        t.draw(c, "Press any button to skip.", fl, b["ink"], r.centerx, pill.bottom + Y(34), align="center")
+        self._progress_bar(c, pygame.Rect(r.x + X(30), r.bottom - Y(34), r.w - X(60), Y(16)))
 
 
 def dish_call(ch) -> str:

@@ -1229,32 +1229,58 @@ class InDirectHD(BoxSkin):
 
     # ── Boot ──────────────────────────────────────────────────────────────
 
+    # The HR20's boot, as owners described it (docs/cathode-4/box-behaviour.md):
+    # two blue text screens, a black moment, "Step 1 of 2 Checking Satellite
+    # Settings...", "Step 2 of 2 Receiving Satellite Info..." with a percent,
+    # then live video with an "Acquiring Guide Data" box. The real box took
+    # minutes; these hold seconds.
+    boot_scenes = [("hello", 1.6), ("almost", 1.4), ("black", 0.7), ("step1", 1.8), ("step2", 1.6),
+                   ("acquiring", 0.0)]
+    boot_over_video = ("acquiring", "done")
+
     def draw_boot(self, c, boot):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        stage = boot.stage()
-        self._grad(c, (0, 0, W, H), rgba(b["deep"]), rgba(b["cell"]))
-        cx, cy = W // 2, Y(250)
-        glow = pygame.Surface((W, H), pygame.SRCALPHA)       # the lit-up mark of a box starting
-        for k in range(6, 0, -1):
-            pygame.draw.circle(glow, (*b["sky"], 14), (cx, cy), Y(55) * k)
-        c.blit(glow, (0, 0))
-        self.tile(c, (cx - X(60), cy - Y(100), X(120), Y(100)), b["sky"])
-        f = self.fb(Y(34))
-        w = sum(t.width(f, ch) for ch in "InDirecTV") + X(4) * 8
-        self._spaced(c, "InDirecTV", f, b["text"], cx - w // 2, cy + Y(16), X(4))
-        if stage == "starting":
+        scene, age = boot.scene(), boot.scene_age()
+        if scene == "black":
+            c.fill((0, 0, 0, 255))
             return
-        caption = {"signal": "Step 1 of 2: Acquiring satellite signal...",
-                   "guide": "Step 2 of 2: Downloading guide data..." + self.guide_pct(), "done": "Ready"}[stage]
-        t.draw(c, caption, self.f(Y(24)), b["text"], cx, Y(440), align="center")
-        bar = self.R(360, 492, 560, 12)
-        age = time.monotonic() - boot.start
-        g = getattr(self.app, "guide_progress", None)
-        guide = 0.45 + 0.55 * g if g is not None and g >= 0 else 0.45 + 0.45 * min(1, age / 8)
-        frac = {"signal": 0.15 + 0.25 * min(1, age / 4), "guide": guide, "done": 1.0}[stage]
-        self.progress(c, bar, frac, rgba(b["gap"]), rgba(b["sel"]))
-        t.draw(c, "Press any button to skip", self.f(Y(18)), b["soft"], cx, Y(660), align="center")
+        if scene == "acquiring" or scene == "done":
+            # Live video is coming up under this: the box only drew its
+            # message over the picture. Until the stream is up, the DSS-era
+            # box's black; the compositor paints the picture through.
+            c.fill((0, 0, 0, 0))                # the picture shows through
+            box = self.R(360, 280, 560, 150)
+            pygame.draw.rect(c, b["navy"], box)
+            pygame.draw.rect(c, b["sky"], box, Y(3))
+            f = self.fb(Y(26))
+            t.draw(c, "Acquiring Guide Data" + self.guide_pct(), f, b["text"], box.centerx, box.y + Y(28), align="center")
+            bar = pygame.Rect(box.x + X(40), box.y + Y(84), box.w - X(80), Y(16))
+            g = getattr(self.app, "guide_progress", None)
+            frac = g if g is not None and g >= 0 else min(0.95, 0.1 + age / 8)
+            self.progress(c, bar, frac, rgba(b["gap"]), rgba(b["sel"]))
+            t.draw(c, "Press any button to skip", self.f(Y(18)), b["soft"], W // 2, Y(660), align="center")
+            return
+        # The blue bitmap screens: a flat DirecTV blue, white text, nothing else.
+        blue = (0, 48, 135)
+        c.fill((*blue, 255))
+        f_big, f = self.fb(Y(40)), self.f(Y(28))
+        if scene == "hello":
+            t.draw(c, "hello,", f_big, b["text"], X(160), Y(250))
+            t.draw(c, "DirecTV", f_big, b["text"], X(160), Y(304))
+            t.draw(c, "your receiver is starting up", f, b["text"], X(160), Y(372))
+        elif scene == "almost":
+            t.draw(c, "Almost there...", f_big, b["text"], X(160), Y(280))
+            t.draw(c, "just a few more seconds", f, b["text"], X(160), Y(344))
+        elif scene == "step1":
+            t.draw(c, "Step 1 of 2", f_big, b["text"], X(160), Y(230))
+            t.draw(c, "Checking Satellite Settings...", f, b["text"], X(160), Y(300))
+            t.draw(c, "This will take a few minutes.", f, b["soft"], X(160), Y(344))
+        elif scene == "step2":
+            pct = int(min(100, age / 1.6 * 100))
+            t.draw(c, "Step 2 of 2", f_big, b["text"], X(160), Y(230))
+            t.draw(c, f"Receiving Satellite Info...  {pct}%", f, b["text"], X(160), Y(300))
+        t.draw(c, "Press any button to skip", self.f(Y(18)), b["soft"], W // 2, Y(660), align="center")
 
 
 class InDirect(InDirectHD):
@@ -1265,6 +1291,7 @@ class InDirect(InDirectHD):
     name = "indirect"
     label = "InDirecTV"
     canvas = (640, 480)
+    boot_scenes = []                # a DSS box was never off: power-on is the last channel, at once
     guide_hours = 2                 # four half-hour columns, as the DSS showed
     guide_rows = 6
     default_font = "sans"           # Liberation Sans Bold, condensed (SQUEEZE) as the DSS lettered

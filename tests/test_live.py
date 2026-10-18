@@ -123,6 +123,31 @@ class TestBrowse(unittest.TestCase):
 
 
 class TestBoot(unittest.TestCase):
+    def test_a_skins_scenes_play_in_order_and_the_last_waits_for_loading(self):
+        from cathode.screens.boot import Boot
+        app = FakeApp()
+        app._live = LiveTV(app)
+        app.screens = [app._live]
+        app.skin.boot_scenes = [("hello", 1.0), ("step1", 0.5), ("acquiring", 0.0)]
+        app.channels = []                                   # still loading
+        app._live.message = "Loading channels..."
+        boot = Boot(app)
+        self.assertEqual(boot.scene(), "hello")
+        boot.start -= 1.2
+        self.assertEqual(boot.scene(), "step1")
+        boot.start -= 0.5
+        self.assertEqual(boot.scene(), "acquiring")         # holds: nothing loaded yet
+        boot.start -= 5
+        self.assertEqual(boot.scene(), "acquiring")
+        app.channels = [object()]
+        app.config.epg_url = ""
+        self.assertEqual(boot.scene(), "done")
+
+    def test_a_box_with_no_boot_screen_names_no_scenes(self):
+        from cathode.skins import skin_classes
+        self.assertEqual(skin_classes()["indirect"].boot_scenes, [])
+        self.assertTrue(skin_classes()["indirect_hd"].boot_scenes)
+
     def test_any_button_skips_it(self):
         from cathode.screens.boot import Boot
         app = FakeApp()

@@ -267,6 +267,11 @@ class Skin:
     canvas = (1280, 720)
     nearest = False             # pixel-art upscale (SD skins) vs smooth
     tune_cover = "static"       # what covers a channel change: static | black
+    # The boot's scenes, (name, min seconds): the box's own start-up screens
+    # (see docs/cathode-4/box-behaviour.md). None = the shared starting /
+    # signal / guide; [] = this box had no boot screen (straight to TV).
+    boot_scenes = None
+    boot_over_video = ()        # the scenes the box drew over live video
     right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume
     browse_style = "banner"     # BROWSE shows: banner (one channel) | mini (a mini guide)
     guide_jump_min = 24 * 60    # how far REW / FF move the guide

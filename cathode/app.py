@@ -510,7 +510,7 @@ class App:
             self.after(t, partial(self.press, button))
         if self.config.playlist_url:
             self.load_playlist(self.config.playlist_url, self.config.epg_url)
-            if self.config.boot_sequence:
+            if self.config.boot_sequence and getattr(self.skin, "boot_scenes", None) != []:
                 from .screens.boot import Boot
                 self.push(Boot(self))
         else:
