@@ -233,9 +233,22 @@ class InDirectHD(BoxSkin):
             t.draw(c, hours(cur), fs, b["paper_ink"], X(385), sy)
             if cur.rating:
                 t.draw(c, cur.rating, fs, b["paper_ink"], X(808), sy)
+        # The strip's icons, upper right as the manual places them: audio
+        # options (filled when the stream carries another audio track),
+        # messages (filled when mail waits: never, here), the lock (open).
+        ink = b["paper_ink"]
+        tracks = self.app.video.tracks("audio") if hasattr(self.app.video, "tracks") else []
+        alt_audio = len(tracks) > 1
+        sp = pygame.Rect(X(1036), strip.y + Y(16), X(14), Y(22))         # a speaker: box and cone
+        pygame.draw.rect(c, ink, (sp.x, sp.y + Y(6), X(6), Y(10)), 0 if alt_audio else 2)
+        pygame.draw.polygon(c, ink, [(sp.x + X(6), sp.y + Y(6)), (sp.right, sp.y), (sp.right, sp.bottom),
+                                     (sp.x + X(6), sp.bottom - Y(6))], 0 if alt_audio else 2)
+        env = pygame.Rect(X(1070), strip.y + Y(19), X(26), Y(17))         # an envelope, hollow
+        pygame.draw.rect(c, ink, env, 2)
+        pygame.draw.lines(c, ink, False, [(env.x, env.y), (env.centerx, env.centery), (env.right, env.y)], 2)
         lock = pygame.Rect(X(1112), strip.y + Y(18), X(26), Y(18))      # the box's lock, open
-        pygame.draw.rect(c, b["paper_ink"], lock, 3, border_radius=3)
-        pygame.draw.arc(c, b["paper_ink"], (lock.x + X(4), lock.y - Y(12), X(16), Y(20)), 0.2, 3.0, 3)
+        pygame.draw.rect(c, ink, lock, 3, border_radius=3)
+        pygame.draw.arc(c, ink, (lock.x + X(4), lock.y - Y(12), X(16), Y(20)), 0.2, 3.0, 3)
         bar = self.R(96, 186, 1088, 22)
         kb = pygame.Surface(bar.size, pygame.SRCALPHA)
         kb.fill((*b["keybar"], 215))

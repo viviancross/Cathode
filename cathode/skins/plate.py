@@ -186,27 +186,28 @@ class PlateHD(BoxSkin):
             r.bottom = H - Y(43)
         self._box(c, r)
         ink = b["banner_ink"]
-        f_big, f_mid = self.fb(Y(38)), self.fb(Y(30))
+        # The ViP622 manual's banner (p.37): the day and clock in the left
+        # cell; the title, its hours and the channel in the middle; the
+        # rating, time left and the list at the right.
+        f_big, f_mid, f_small = self.fb(Y(34)), self.fb(Y(28)), self.fb(Y(24))
+        local, now = datetime.now(), datetime.now(timezone.utc)
         cx = r.x + X(123)
-        # Both outer stacks sit centred in the box's height.
-        self.cb(c, str(ch.number), f_big, ink, cx, r.y + Y(10), align="center")
-        self.cb(c, self.fit_cb(f_mid, ch.name.upper(), X(200)), f_mid, ink, cx, r.y + Y(45), align="center")
-        self.cb(c, self.fit_cb(f_mid, g_list(self), X(200)), f_mid, ink, cx, r.y + Y(73), align="center")
+        self.cb(c, f"{local:%a} {local.month}/{local.day}".upper(), f_mid, ink, cx, r.y + Y(22), align="center")
+        self.cb(c, ampm(local).replace("am", " am").replace("pm", " pm"), f_mid, ink, cx, r.y + Y(56), align="center")
         mid = r.x + X(607)
-        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(560)), f_mid, ink, mid, r.y + Y(12), align="center")
-        now = datetime.now(timezone.utc)
+        self.cb(c, self.fit_cb(f_big, cur.title if cur else ch.name, X(560)), f_big, ink, mid, r.y + Y(8), align="center")
         if cur:
-            bits = [s for s in (cur.rating, f"{ampm(cur.start)} - {ampm(cur.stop)}") if s]
-            self.cb(c, "   ".join(bits), f_mid, ink, mid, r.y + Y(46), align="center")
-        local = datetime.now()
+            self.cb(c, f"{ampm(cur.start)} - {ampm(cur.stop)}", f_small, ink, mid, r.y + Y(44), align="center")
+        self.cb(c, self.fit_cb(f_small, f"{ch.number} {ch.name.upper()}", X(400)), f_small, ink, mid, r.y + Y(72),
+                align="center")
         rx = r.right - X(20)
-        self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_mid, ink, rx, r.y + Y(12), align="right")
-        self.cb(c, ampm(local), f_mid, ink, rx, r.y + Y(42), align="right")
+        self.cb(c, (cur.rating if cur and cur.rating else "NR"), f_small, ink, rx, r.y + Y(10), align="right")
         if cur:
-            self.cb(c, time_left(cur, now), f_mid, ink, rx, r.y + Y(72), align="right")
-        if nxt:
+            self.cb(c, time_left(cur, now).replace("Time left", "Time Left:"), f_small, ink, rx, r.y + Y(40), align="right")
+        self.cb(c, self.fit_cb(f_small, f"List: {g_list(self)}", X(220)), f_small, ink, rx, r.y + Y(70), align="right")
+        if nxt and full:                # the Browse Banner had "Next:"; the full banner carries it too
             fn = self.fb(Y(20))
-            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(76), align="center")
+            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(100), align="center")
         label = tag or (f"{self.k('INFO')} FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
