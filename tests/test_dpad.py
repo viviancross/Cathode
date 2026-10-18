@@ -140,5 +140,39 @@ class TestSubtitleReload(unittest.TestCase):
         pb.reload_subs()
         self.assertIn(("http://s/streams/2", True), added)
 
+class TestKeyboardPaste(unittest.TestCase):
+    def _kb(self, device):
+        from cathode.screens.menu import Keyboard
+        kb = Keyboard.__new__(Keyboard)
+        kb.app = SimpleNamespace(invalidate=lambda: None, remote=SimpleNamespace(last_device=device),
+                                 skin=SimpleNamespace(k=lambda a: {"MENU": "MENU", "CH_DOWN": "LB", "CH_UP": "RB"}.get(a, a)))
+        kb.value, kb.caret, kb.url, kb.layer = "", 0, True, "abc"
+        return kb
+
+    def test_menu_pastes_and_the_tip_names_the_way(self):
+        kb = self._kb("pad")
+        pasted = []
+        kb.paste = lambda: pasted.append(1)
+        kb.handle(R.MENU)
+        self.assertEqual(pasted, [1])
+        self.assertIn("MENU: paste", kb.tip())
+        self.assertIn("Ctrl+V", self._kb("keys").tip())
+
+    def test_the_down_tip_clears_when_a_menu_opens(self):
+        import cathode.menus as menus
+        pb = Playback.__new__(Playback)
+        pb.tfocus, pb.skip_label = None, ""
+        pb.app = SimpleNamespace(toast_text=Playback.TIP, toast_until=1e18)
+        opened = []
+        real = menus.playback_menu
+        menus.playback_menu = lambda app, p: opened.append(p)
+        try:
+            pb.handle(R.MENU)
+        finally:
+            menus.playback_menu = real
+        self.assertEqual(opened, [pb])
+        self.assertEqual(pb.app.toast_until, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

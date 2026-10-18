@@ -48,8 +48,10 @@ class Playback(Screen):
         self.app.cancel(self._tick)
         if not getattr(self.app, "_told_transport", False):    # the buttons stay dim until DOWN
             self.app._told_transport = True
-            self.app.toast("Press DOWN for the playback buttons.", 4.0)
+            self.app.toast(self.TIP, 4.0)
         self._tick = self.app.after(0.5, self._monitor)
+
+    TIP = "Press DOWN for the playback buttons."
 
     def video_box(self):
         return "full"
@@ -269,6 +271,8 @@ class Playback(Screen):
             self.stop()
         elif a == R.MENU:
             from ..menus import playback_menu
+            if getattr(self.app, "toast_text", "") == self.TIP:     # DOWN moves the menu now
+                self.app.toast_until = 0.0
             playback_menu(self.app, self)
         elif a in R.DIGITS or a in (R.GUIDE, R.PREV, R.BROWSE, R.FAV, R.THEMES):
             # No channels to change during a movie: say how to get back to them.

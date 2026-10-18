@@ -19,6 +19,8 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
+WELCOME_HELP = "Have your IPTV playlist link (M3U) ready."
+
 # Beside each box's name on the wizard's first page, and what it is.
 LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
               "plate": "2005, 4:3", "plate_hd": "2007, HD"}
@@ -146,7 +148,11 @@ def open_welcome(app):
         boxes = [Item(cls.label, lambda k=k: (app.set_skin(k), colours()), value=lambda k=k: LOOK_NOTES.get(k, ""),
                       preview=lambda k=k: app.set_skin(k), help=LOOK_HELP.get(k, ""))
                  for k, cls in skin_classes().items()]
-        m.pages = [["1/3 CHOOSE YOUR BOX", boxes, names.index(app.config.skin) if app.config.skin in names else 0]]
+
+        def choose_box():
+            m.open("1/3 CHOOSE YOUR BOX", boxes)
+            m.cursor = names.index(app.config.skin) if app.config.skin in names else 0
+        m.pages = [["WELCOME TO CATHODE", [Item("Start", choose_box, help=WELCOME_HELP)], 0]]
     app.push(m)
 
 
@@ -778,7 +784,7 @@ def add_playlist(app, on_added=None, first_run=False):
     """The playlist's address, an optional guide address, then its name. On
     first run they're the wizard's step 3, numbered 3a to 3c."""
     entry = {"name": "My Channels"}
-    step = (lambda n, s: f"3{n}  {s}") if first_run else (lambda n, s: s)
+    step = (lambda n, s: f"3/3  {s}") if first_run else (lambda n, s: s)
 
     def ask_url(initial=""):
         app.push(Keyboard(app, step("a", "Playlist address"), got_url, initial=initial, url=True,

@@ -133,7 +133,7 @@ def _build(bg, accent, accent2, hot, text=(255, 255, 255),
         # fixed light label measured 3.6:1 there.
         "BTN_PRIMARY_TEXT": _a(_ink(_primary_bg(bg, accent, ink_d, text),
                                     text, ink_d, target=4.5), 255),
-        "OSD_BG":      _a(bg, 215),
+        "OSD_BG":      _a(bg, 232),
         "OSD_BORDER":  _a(accent, 205),
         "GUIDE_BG":         _a(bg_d, 240),
         "GUIDE_HEADER_BG":  _a(bg_l, 255),
@@ -145,7 +145,7 @@ def _build(bg, accent, accent2, hot, text=(255, 255, 255),
         # Text that sits ON the selection / on-air fills. Fixed white text
         # fails on light-accent themes; these flip to dark ink when needed.
         "SEL_TEXT":         _a(_ink(sel, text, ink_d), 255),
-        "SEL_TEXT_DIM":     _a(_ink(sel, text, ink_d), 215),
+        "SEL_TEXT_DIM":     _a(_ink(sel, text, ink_d), 240),
         "ONAIR_TEXT":       _a(_ink(onair, text, ink_d), 255),
         # Full-screen page backdrop (main menu, PPV, info, OSK, editor) —
         # near-black tinted toward the theme bg so every theme drenches.

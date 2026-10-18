@@ -50,7 +50,7 @@ class InDirectHD(BoxSkin):
     NATIVE = {"bg": [8, 36, 75], "accent": [10, 70, 112], "accent2": [240, 165, 22],
               "text": [255, 255, 255], "chnum": [15, 154, 209]}
     LEGIBLE = [("text", ["page_top", "page_mid", "page_bot", "teal", "teal_dark", "cell", "navy", "panel",
-                         "pnl", "pnl_bot", "od_panel", "od_row2"], "ground"),
+                         "pnl", "pnl_bot", "od_panel", "od_row2", "band", "keybar"], "ground"),
                ("ink", ["paper_top", "paper_bot"], "ink"), ("strip_ink", ["strip"], "ink"),
                ("soft", ["cell", "navy", "teal", "teal_dark", "panel", "page_mid", "page_bot"], "ink"),
                ("label", ["page_mid", "page_bot", "row_head"], "ink"), ("dim", ["cell", "navy"], "ink"),
@@ -272,9 +272,9 @@ class InDirectHD(BoxSkin):
     def _digits(self, c, digits):
         """Typed digits take the channel's place on a short band."""
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        self._band(c, self.R(0, 0, 1280, 70))
-        t.draw(c, digits + "-" * (3 - len(digits)), self.fb(Y(36)), b["text"], X(240), Y(16))
-        t.draw(c, stamp(), self.fb(Y(24)), b["text"], X(1184), Y(22), align="right")
+        self._band(c, self.R(0, 0, 1280, 92))
+        t.draw(c, digits + "-" * (3 - len(digits)), self.fb(Y(36)), b["text"], X(240), Y(38))
+        t.draw(c, stamp(), self.fb(Y(24)), b["text"], X(1184), Y(44), align="right")
 
     def _volume(self, c, cx, cy):
         b, t, X, Y = self.b, self.text, self.X, self.Y
@@ -310,7 +310,13 @@ class InDirectHD(BoxSkin):
         mm, ss = divmod(int(behind), 60)
         tag = ("PAUSE" if s["paused"] else "LIVE" if behind < 2 else "PLAY")
         f = self.fb(Y(26))
-        t.draw(c, tag, f, b["sel"] if s["paused"] else b["text"], r.x + X(20), r.y + (r.h - t.ink(f)[1]) // 2)
+        ty = r.y + (r.h - t.ink(f)[1]) // 2
+        if s["paused"]:
+            chip = pygame.Rect(r.x + X(12), r.y + Y(14), t.width(f, tag) + X(20), r.h - Y(28))
+            self._amber(c, chip)
+            t.draw(c, tag, f, b["navy"], chip.centerx, ty, align="center")
+        else:
+            self._shadowed(c, tag, f, b["text"], b["band_edge"], r.x + X(20), ty)
         bar = pygame.Rect(r.x + X(190), r.y + Y(29), X(760), Y(12))
         pygame.draw.rect(c, b["gap"], bar)
         span = s["buffer"] + behind
@@ -318,8 +324,8 @@ class InDirectHD(BoxSkin):
             x = bar.x + int(bar.w * s["buffer"] / span)
             pygame.draw.rect(c, b["sky"], (bar.x, bar.y, x - bar.x, bar.h))
             pygame.draw.rect(c, b["text"], (x - X(2), bar.y - Y(6), X(4), bar.h + Y(12)))
-        t.draw(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", self.fb(Y(22)), b["soft"], r.right - X(20),
-               r.y + (r.h - t.ink(self.fb(Y(22)))[1]) // 2, align="right")
+        self._shadowed(c, f"-{mm}:{ss:02d}" if behind >= 1 else "LIVE", self.fb(Y(24)), b["text"], b["band_edge"],
+                       r.right - X(20), r.y + (r.h - t.ink(self.fb(Y(24)))[1]) // 2, align="right")
 
     def _note(self, c, text, frac=None):
         """A short notice on the sky band, bottom left; an amber bar under
@@ -477,9 +483,13 @@ class InDirectHD(BoxSkin):
         else:
             t.draw(c, cat, fl, b["text"], X(110), ly)
         self.hit((X(96), bar.y, X(400), bar.h), lambda: g.handle("THEMES"))
-        for dot, label, dx in (("red", "-12hrs", 619), ("green", "+12hrs", 772), ("yellow", "Guide Options", 926)):
-            pygame.draw.circle(c, DOTS[dot], (X(dx + 10), bar.centery), Y(10))
-            t.draw(c, label, fl, b["text"], X(dx + 32), ly)
+        x, fk = X(640), self.fb(Y(22))
+        for action, label in (("REW", "-12hrs"), ("FF", "+12hrs")):
+            key = self.k(action)
+            chip = pygame.Rect(x, bar.y + Y(4), t.width(fk, key) + X(16), bar.h - Y(8))
+            pygame.draw.rect(c, b["navy"], chip, border_radius=Y(5))
+            t.draw(c, key, fk, b["text"], chip.centerx, chip.y + (chip.h - t.ink(fk)[1]) // 2, align="center")
+            x = chip.right + X(10) + t.draw(c, label + self.key_also(action), fl, b["text"], chip.right + X(10), ly) + X(36)
 
     def _cell(self, c, cell, on):
         b = self.b
@@ -513,7 +523,7 @@ class InDirectHD(BoxSkin):
         # The list down the left, a light bar on the chosen row.
         rh = Y(39)
         n = len(m.items)
-        n_vis = max(1, (Y(650) - Y(214)) // rh)     # room under the list for the page counter
+        n_vis = max(1, (Y(630) - Y(214)) // rh)     # room under the list for the page counter
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         f_row = self.f(Y(24))
         size = 24                           # one size for the list: smaller before an ellipsis
@@ -535,7 +545,7 @@ class InDirectHD(BoxSkin):
 
         # The panel on the right explains the chosen row; its setting sits in
         # the box at the bottom, amber when it can be changed here.
-        pn = self.R(300, 240, 876, 440)
+        pn = self.R(300, 240, 876, 412)
         pygame.draw.rect(c, b["panel"], pn)
         it = m.items[m.cursor] if 0 <= m.cursor < n else None
         if it:
@@ -559,7 +569,7 @@ class InDirectHD(BoxSkin):
                     y += Y(30)
                 y += Y(6)
             t.draw(c, hint, fh, b["soft"], pn.x + X(20), y)
-            box = self.R(912, 560, 256, 110)
+            box = self.R(912, 532, 256, 110)
             pygame.draw.rect(c, b["deep"], box)
             pygame.draw.rect(c, b["navy"], box, Y(2))
             if it.value:
@@ -573,7 +583,7 @@ class InDirectHD(BoxSkin):
                 fv = self.f(Y(22))
                 t.draw(c, "Open" if it.submenu else "Choose", fv, b["text"], box.x + X(16),
                        box.y + Y(44))
-        t.draw(c, f"{self.k('SELECT')}: choose    {self.k('BACK')}: up a level    {self.k('EXIT')}: close", self.f(Y(20)), b["text"], X(96), Y(690))
+        t.draw(c, f"{self.k('SELECT')}: choose    {self.k('BACK')}: back    {self.k('EXIT')}: close", self.f(Y(20)), b["text"], X(96), Y(662))
 
     # ── Mini guide ────────────────────────────────────────────────────────
 
@@ -582,7 +592,7 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         rows = mg.rows()
         rh = Y(40)
-        r = pygame.Rect(0, 0, W, Y(44) + rh * len(rows) + Y(10))
+        r = pygame.Rect(0, 0, W, Y(44) + rh * len(rows) + Y(36))      # the last row inside the title-safe area
         r.bottom = H
         self._band(c, r)
         fh = self.fb(Y(22))
@@ -728,7 +738,7 @@ class InDirectHD(BoxSkin):
         n_col = 9 + more // Y(42)
         first = max(0, min(col_sel - n_col + 1, len(col_rows) - n_col)) if len(col_rows) > n_col else 0
         for k, i in enumerate(range(first, min(len(col_rows), first + n_col))):
-            r = pygame.Rect(X(32), Y(218) + k * Y(42), X(312), Y(40))
+            r = pygame.Rect(X(64), Y(218) + k * Y(42), X(280), Y(40))
             on = i == col_sel
             here = on and parent            # where you are, not where the cursor is
             pygame.draw.rect(c, b["bar"] if here else b["od_sel"] if on else b["od_col"], r)
@@ -989,7 +999,7 @@ class InDirectHD(BoxSkin):
                 rect = None
             for col, cell in enumerate(row):
                 if rect is None:
-                    cell_r = pygame.Rect(X(342) + int(col * span * cw), Y(352) + r * ch, int(span * cw), ch)
+                    cell_r = pygame.Rect(X(342) + int(col * span * cw), Y(330) + r * ch, int(span * cw), ch)
                 else:
                     cell_r = rect
                 on = (r, col) == (kb.row, kb.col)
@@ -1011,7 +1021,10 @@ class InDirectHD(BoxSkin):
                                    align="center")
                 self.hit(cell_r, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                   kb._press(cell)))
-        field = self.R(692, 352, 448, 42)
+        ft = self.f(Y(20))
+        for k, line in enumerate(t.wrap(ft, kb.tip(), X(448), 2)):     # how to type or paste, under the field
+            t.draw(c, line, ft, b["label"], X(692), Y(392) + k * Y(28))
+        field = self.R(692, 330, 448, 42)
         pygame.draw.rect(c, b["field"], field)
         pygame.draw.rect(c, b["key_edge"], field, Y(2))
         ff = self.f(Y(26))
@@ -1063,7 +1076,7 @@ class InDirectHD(BoxSkin):
         from ..screens.iteminfo import hms
         b, t, X, Y = self.b, self.text, self.X, self.Y
         paused = self.app.video.paused
-        if pb.skip_label:
+        if pb.skip_label and self.on_top(pb):
             sk = self.R(880, 476 if pb.bar_visible() else 600, 320, 50)
             pygame.draw.rect(c, b["pop_body"], sk)
             pygame.draw.rect(c, b["orange"], sk, Y(3))
@@ -1635,7 +1648,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         rows = mg.rows()
         rh = Y(13)
-        r = pygame.Rect(0, 0, W, Y(14) + rh * len(rows) + Y(4))
+        r = pygame.Rect(0, 0, W, Y(14) + rh * len(rows) + Y(14))     # the last row inside the title-safe area
         r.bottom = H
         vgrad(c, r, rgba(b["purple"], 230), rgba(b["purple"], 240))
         f = self.fb(Y(11))
@@ -1821,7 +1834,7 @@ class InDirect(InDirectHD):
         y = art_r.bottom + Y(2)
         f = self.f(Y(11))
         for line in t.wrap(f, d.get("summary", ""), int(X(158) / self.SQUEEZE), max(0, (Y(232) - y - Y(6)) // Y(12))):
-            self._shadowed(c, line, f, b["soft"], b["shadow"], X(57), y + Y(6))
+            self._shadowed(c, line, f, b["text"], b["shadow"], X(57), y + Y(6))
             y += Y(12)
         for k, name in enumerate(info.buttons()):
             r = pygame.Rect(X(220), Y(83) + k * Y(19), X(92), Y(13))
@@ -1832,7 +1845,7 @@ class InDirect(InDirectHD):
     def draw_playback(self, c, pb):
         from ..screens.iteminfo import hms
         b, X, Y = self.b, self.X, self.Y
-        if pb.skip_label:
+        if pb.skip_label and self.on_top(pb):
             self._notice(c, [f"{pb.skip_label.title()}: press {self.k('SELECT')}"], y_bottom=Y(160) if pb.bar_visible() else Y(227),
                          centre=True)
         if not pb.bar_visible():
@@ -1871,7 +1884,7 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         hint = kb.hint or f"Use arrows to point to a letter, then press {self.k('SELECT')}."
         lines = self.text.wrap(self.fb(Y(11)), hint, int(X(258) / self.SQUEEZE), 2)
-        self._dss_page(c, kb.prompt, lines if len(lines) == 2 else lines + ["Choose Done when finished."])
+        self._dss_page(c, kb.prompt, lines if len(lines) == 2 else lines + [kb.tip()])
         field = self.R(52, 75, 220, 15)
         pygame.draw.rect(c, b["shadow"], field.move(2, 2))
         pygame.draw.rect(c, b["teal"], field)

@@ -283,6 +283,16 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
             self.assertTrue(0 <= x and 0 <= y and x + w <= W and y + h <= H, name)
 
 
+class TestCritique4(unittest.TestCase):
+    def test_a_skin_knows_which_screen_is_on_top(self):
+        app = FakeApp()
+        skin = skin_classes()["classic"](app)
+        a, b = object(), object()
+        app.screens = [a, b]
+        self.assertTrue(skin.on_top(b))
+        self.assertFalse(skin.on_top(a))
+
+
 if __name__ == "__main__":
     unittest.main()
 

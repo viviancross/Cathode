@@ -264,6 +264,17 @@ class Keyboard(Screen):
         """Typed on a real keyboard."""
         self.insert("".join(ch for ch in s if ch.isprintable()))
 
+    def tip(self) -> str:
+        """How to get text in, for the device in hand: a pad picks keys and
+        pastes with MENU; a keyboard types and pastes with Ctrl+V (MENU on a
+        remote that types)."""
+        skin = getattr(self.app, "skin", None)
+        k = skin.k if skin else (lambda a: a)
+        remote = getattr(self.app, "remote", None)
+        if remote is not None and getattr(remote, "last_device", "keys") == "pad":
+            return f"{k(R.MENU)}: paste    {k(R.CH_DOWN)}/{k(R.CH_UP)}: move the cursor"
+        return f"Type here, or paste: Ctrl+V or {k(R.MENU)}."
+
     def paste(self):
         try:
             got = pygame.scrap.get_text() if hasattr(pygame.scrap, "get_text") else ""
@@ -299,6 +310,8 @@ class Keyboard(Screen):
             self._back_at = now
         elif a == R.EXIT:
             self._finish(None)
+        elif a == R.MENU:               # a remote or pad's way to paste
+            self.paste()
         elif a == R.CH_DOWN:            # bumpers move the caret
             self.caret = max(0, self.caret - 1)
         elif a == R.CH_UP:

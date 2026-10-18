@@ -106,10 +106,10 @@ class Classic(Skin):
             tag = f"|| PAUSE  -{mm}:{ss:02d}" if behind >= 1 else "|| PAUSE"
         else:
             tag = f">  -{mm}:{ss:02d}" if behind >= 2 else ">  LIVE"
-        t.draw(c, tag, self.f(48), p["WHITE"], 48, 40, outline=(0, 0, 0))
+        t.draw(c, tag, self.f(48), p["WHITE"], 64, 40, outline=(0, 0, 0))
         span = s["buffer"] + behind
         if span >= 2:
-            self._blocks(c, (48, 104, 360, 14), s["buffer"] / span, p["CYAN"], p["TRACK"])
+            self._blocks(c, (64, 104, 360, 14), s["buffer"] / span, p["CYAN"], p["TRACK"])
         f_btn = self.role("meta")
         for i, (_, _, label) in enumerate(s.get("buttons", ())):
             r = pygame.Rect(48 + i * 124, 136, 114, 36)
@@ -136,8 +136,8 @@ class Classic(Skin):
         D = type(self).canvas[1]            # sized to the design: a taller screen moves it, not grows it
         p, t = self.p, self.text
         bh = int(D * 0.155)
-        bx, bw = int(W * 0.02), int(W * 0.96)
-        by = H - bh - int(D * 0.025)
+        bx, bw = int(W * 0.05), int(W * 0.90)
+        by = H - bh - int(D * 0.05)
         f_huge, f_large, f_med, f_small = (self.f(int(bh * k)) for k in (0.55, 0.32, 0.24, 0.18))
 
         if full and cur and cur.description:
@@ -389,7 +389,7 @@ class Classic(Skin):
             t.draw(c, t.fit(f_hint, about, pw - 40), f_hint, p["WHITE_DIM"], panel.centerx,
                    panel.bottom - foot + 12, align="center")
         change = "   </>: change" if any(it.adjust for it in m.items) else ""
-        hint = f"{self.k('SELECT')}: select{change}   {self.k('BACK')}: return   {self.k('EXIT')}: close"
+        hint = f"{self.k('SELECT')}: select{change}   {self.k('BACK')}: back   {self.k('EXIT')}: close"
         if t.width(f_hint, hint) > pw - 40:        # a remote's longer names: tighter, not cut
             hint = f"{self.k('SELECT')}: select{change.replace('   ', '  ')}  {self.k('BACK')}: back  {self.k('EXIT')}: close"
         t.draw(c, t.fit(f_hint, hint, pw - 40), f_hint, p["INK_MUTED"], panel.centerx,
@@ -445,15 +445,12 @@ class Classic(Skin):
                                                                 kb._press(cell)))
                 x += widths[col] + gap
             y += kh + gap
-        pad = getattr(getattr(self.app, "remote", None), "last_device", "keys") == "pad"
-        tip = ("Pick keys with the D-pad.  LB/RB move the cursor." if pad else
-               f"Pick keys with the arrows and {self.k('SELECT')}, or type.  Ctrl+V pastes.")
-        t.draw(c, tip, f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+        t.draw(c, kb.tip(), f_hint, p["INK_MUTED"], W // 2, H - 60, align="center")
 
     # ── On Demand: browse ─────────────────────────────────────────────────
 
     OD_ROW_H = 56
-    OD_TOP = 96
+    OD_TOP = 108
     OD_TILE = (150, 225)        # poster, 2:3: two whole rows fit under the header
     OD_GAP = 26
 
@@ -467,34 +464,34 @@ class Classic(Skin):
 
     def ondemand_cols(self, screen) -> int:
         W = self.layout_canvas()[0]
-        return max(1, (W - 60 + self.OD_GAP) // (self.OD_TILE[0] + self.OD_GAP))
+        return max(1, (W - 128 + self.OD_GAP) // (self.OD_TILE[0] + self.OD_GAP))
 
     def ondemand_page(self, screen) -> int:
         H = self.layout_canvas()[1]
         if screen.view == "wall":
             return self.ondemand_cols(screen) * 2
-        return (H - self.OD_TOP - 30) // self.OD_ROW_H
+        return (H - self.OD_TOP - 40) // self.OD_ROW_H
 
     def draw_ondemand(self, c, s):
         W, H = self.canvas
         p, t = self.p, self.text
         c.fill(p["SCREEN_BG"])
         f_title, f_crumb, f_btn = self.role("title"), self.role("hint"), self.role("meta")
-        pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, 76))
-        pygame.draw.rect(c, p["OSD_BORDER"], (0, 74, W, 2))
+        pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, 92))
+        pygame.draw.rect(c, p["OSD_BORDER"], (0, 90, W, 2))
         title = s.level["title"] if s.level and s.mode == "browse" else "ON DEMAND"
-        t.draw(c, t.fit(f_title, title, W - 420), f_title, p["YELLOW"], 30, 16)
+        t.draw(c, t.fit(f_title, title, W - 460), f_title, p["YELLOW"], 64, 36)
         if len(s.stack) > 1:
-            t.draw(c, t.fit(f_crumb, s.crumb(), W - 420), f_crumb, p["INK_MUTED"], 30, 52)
-        x, f_key = W - 30, self.role("hint")
+            t.draw(c, t.fit(f_crumb, s.crumb(), W - 460), f_crumb, p["INK_MUTED"], 64, 64)
+        x, f_key = W - 64, self.role("hint")
         for key, word, fn in ((self.k("BACK"), "back", s.back), (self.k("MENU"), "options", lambda: s.handle("MENU"))):
             seg = f"{key}: {word}"
             w = t.width(f_key, seg)
-            t.draw(c, seg, f_key, p["INK_MUTED"], x - w, 38 - t.ink(f_key)[1] // 2)
-            self.hit((x - w, 20, w, 36), fn)
+            t.draw(c, seg, f_key, p["INK_MUTED"], x - w, 46 - t.ink(f_key)[1] // 2)
+            self.hit((x - w, 36, w, 24), fn)
             x -= w + 28
         if s.status:
-            t.draw(c, s.status, f_btn, p["ORANGE"], x - 10, 30, align="right")
+            t.draw(c, s.status, f_btn, p["ORANGE"], x - 10, 38, align="right")
 
         if s.mode == "auth":
             self._od_auth(c, s)
@@ -513,7 +510,7 @@ class Classic(Skin):
             t.draw(c, s.auth_link or "plex.tv/link", self.role("title"), p["CYAN"], W // 2, 290, align="center")
             t.draw(c, "and enter this code:", self.role("body"), p["WHITE_DIM"], W // 2, 350, align="center")
             t.draw(c, s.auth_code, self.f(84), p["CHANNEL_GREEN"], W // 2, 400, align="center")
-        t.draw(c, f"{self.k('BACK')} to return to TV", self.role("hint"), p["INK_MUTED"], W // 2, H - 44, align="center")
+        t.draw(c, f"{self.k('BACK')}: back to TV", self.role("hint"), p["INK_MUTED"], W // 2, H - 60, align="center")
 
     def _od_list(self, c, s):
         W, H = self.canvas
@@ -525,7 +522,7 @@ class Classic(Skin):
         y = self.OD_TOP
         for i in range(top, min(len(rows), top + n_vis)):
             row = rows[i]
-            r = pygame.Rect(30, y, W - 60, rh - 6)
+            r = pygame.Rect(64, y, W - 128, rh - 6)
             sel = i == s.sel
             pygame.draw.rect(c, p["GUIDE_SELECTED"] if sel else p["OSD_BG"][:3] + (255,), r,
                              border_radius=6)
@@ -562,7 +559,7 @@ class Classic(Skin):
         x0 = (W - (cols * tw + (cols - 1) * gap)) // 2
         y = self.OD_TOP + 8
         # A taller screen than two rows need: the wall sits mid-way down it.
-        y += max(0, H - y - 2 * row_h - (40 if off else 0) - 30) // 2
+        y += max(0, H - y - 2 * row_h - (40 if off else 0) - 40) // 2
         if off:     # the Sort row: a bar above the posters, not a poster
             bar = pygame.Rect(x0, y - 4, W - 2 * x0, 32)
             on = s.sel == 0
@@ -663,9 +660,9 @@ class Classic(Skin):
         paused = self.app.video.paused
         tag = "|| PAUSE" if paused else pb.flash[0] if time.monotonic() < pb.flash[1] else ""
         if tag:
-            t.draw(c, tag, self.f(48), p["WHITE"], 48, 40, outline=(0, 0, 0))
-        if pb.skip_label:
-            r = pygame.Rect(W - 300, H - 230 if pb.bar_visible() else H - 110, 250, 56)
+            t.draw(c, tag, self.f(48), p["WHITE"], 64, 40, outline=(0, 0, 0))
+        if pb.skip_label and self.on_top(pb):
+            r = pygame.Rect(W - 314, H - 246 if pb.bar_visible() else H - 126, 250, 56)
             pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), r, border_radius=8)
             pygame.draw.rect(c, p["YELLOW"], r, 2, border_radius=8)
             f_skip = self.role("body")
@@ -674,7 +671,7 @@ class Classic(Skin):
             self.hit(r, lambda: pb.handle("SELECT"))
         if not pb.bar_visible():
             return
-        bar = pygame.Rect(26, H - 170, W - 52, 150)
+        bar = pygame.Rect(64, H - 186, W - 128, 150)
         pygame.draw.rect(c, p["OSD_BG"], bar, border_radius=8)
         pygame.draw.rect(c, p["OSD_BORDER"], (bar.x, bar.y, bar.w, 3))
         f_title, f_sub, f_btn = self.role("heading"), self.role("meta"), self.role("meta")
@@ -751,7 +748,7 @@ class Classic(Skin):
             t.draw(c, label, f_row, p["CYAN"], 160, y)
             t.draw(c, t.fit(f_row, str(value), W - 640), f_row, p["WHITE"], 480, y)
             y += 42
-        t.draw(c, f"{self.k('BACK')}: return", f_hint, p["INK_MUTED"], W // 2, H - 44, align="center")
+        t.draw(c, f"{self.k('BACK')}: back", f_hint, p["INK_MUTED"], W // 2, H - 60, align="center")
 
     # ── Toast ─────────────────────────────────────────────────────────────
 
@@ -772,7 +769,7 @@ class Classic(Skin):
     # Fixed geometry on the 1280x720 canvas (3.x's fractions at 720p).
 
     guide_hours = 3
-    _G = dict(pad=25, header_h=50, panel_h=259, ruler_h=32, ch_w=179, row_h=54, cat_h=32)
+    _G = dict(pad=64, gap=25, header_h=64, panel_h=245, ruler_h=32, ch_w=179, row_h=50, cat_h=32)
 
     @property
     def guide_rows(self):
@@ -780,8 +777,8 @@ class Classic(Skin):
 
     def guide_video_box(self):
         g = self._G
-        top = g["header_h"] + g["pad"]
-        h = g["panel_h"] - 2 * g["pad"]
+        top = g["header_h"] + g["gap"]
+        h = g["panel_h"] - 2 * g["gap"]
         return (g["pad"], top, int(h * 16 / 9), h)
 
     def draw_guide(self, c, guide):
@@ -804,11 +801,11 @@ class Classic(Skin):
         pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, hh))
         pygame.draw.rect(c, p["OSD_BORDER"], (0, hh - 2, W, 2))
         f_title, f_stamp = self.role("heading"), self.role("meta")
-        t.draw(c, "PROGRAM GUIDE", f_title, p["YELLOW"], W // 2, (hh - t.ink(f_title)[1]) // 2,
+        t.draw(c, "PROGRAM GUIDE", f_title, p["YELLOW"], W // 2, hh - t.ink(f_title)[1] - 10,
                align="center")
         local = datetime.now()
         stamp = clock(local) + local.strftime("  %a %b ") + str(local.day)
-        t.draw(c, stamp, f_stamp, p["CYAN"], W - pad, (hh - t.ink(f_stamp)[1]) // 2,
+        t.draw(c, stamp, f_stamp, p["CYAN"], W - pad, hh - t.ink(f_stamp)[1] - 10,
                align="right")
         wx = self.app.weather.current() if self.app.weather else None
         if wx:
@@ -826,7 +823,7 @@ class Classic(Skin):
         pygame.draw.rect(c, p["OSD_BORDER"], (0, ruler_y - 2, W, 2))
 
         # Category bar, right of the preview.
-        cx0 = vx + vw + pad
+        cx0 = vx + vw + g["gap"]
         cat = pygame.Rect(cx0, vy, W - pad - cx0, g["cat_h"])
         focused = guide.focus == "category"
         pygame.draw.rect(c, p["GUIDE_SELECTED"] if focused else p["GUIDE_TIME_BG"], cat)
@@ -878,8 +875,7 @@ class Classic(Skin):
         # The key hints, in the band under the grid.
         band = grid_y + g["row_h"] * guide.rows
         hint = f"{self.k('SELECT')}: watch   </>: earlier/later   CH+/-: page   REW/FF: a day   {self.k('EXIT')}: close"
-        t.draw(c, t.fit(f_small, hint, W - 2 * pad), f_small, p["INK_MUTED"], W // 2,
-               band + (H - band - t.ink(f_small)[1]) // 2 + 4, align="center")
+        t.draw(c, t.fit(f_small, hint, W - 2 * pad), f_small, p["INK_MUTED"], W // 2, band + 18, align="center")
 
         # Scroll hints.
         if guide.top > 0:
@@ -892,16 +888,16 @@ class Classic(Skin):
         """Icon and two lines of conditions, left of the guide's title."""
         p, t = self.p, self.text
         f = self.role("hint")
-        s = hh - 12
+        s = min(hh - 12, 40)
         line1 = f"{w.get('temp', '')}°{w.get('units', 'F')}  {w.get('conditions', '')}"
         line2 = "   ".join(x for x in (w.get("city"), f"{w['humidity']}% RH" if w.get("humidity") else "",
                                       f"{w['rain']}% rain" if w.get("rain") else "") if x)
         avail = right - x - s - 8
         if avail < 60:
             return
-        self._weather_icon(c, x, 6, s, w.get("category", "cloudy"))
+        self._weather_icon(c, x, hh - s - 6, s, w.get("category", "cloudy"))
         lh = t.ink(f)[1] + 4
-        y = (hh - 2 * lh + 4) // 2
+        y = hh - 2 * lh - 4
         t.draw(c, t.fit(f, line1, avail), f, p["WHITE"], x + s + 8, y)
         t.draw(c, t.fit(f, line2, avail), f, p["WHITE_DIM"], x + s + 8, y + lh)
 

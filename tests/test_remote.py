@@ -50,5 +50,16 @@ class TestRemote(unittest.TestCase):
         self.assertEqual(r.translate(ev(30000)), [R.DOWN])
 
 
+class TestKeyNames(unittest.TestCase):
+    def test_the_comma_key_has_a_name(self):
+        from types import SimpleNamespace
+        from cathode.app import App
+        app = App.__new__(App)
+        app.remote = SimpleNamespace(key_for=lambda a: {"REW": ",", "MENU": "c, menu", "PREV": "`, p"}[a])
+        self.assertEqual(app.key_name("REW"), ",")
+        self.assertEqual(app.key_name("MENU"), "C")
+        self.assertEqual(app.key_name("PREV"), "P")
+
+
 if __name__ == "__main__":
     unittest.main()

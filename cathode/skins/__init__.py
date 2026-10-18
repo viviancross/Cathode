@@ -460,6 +460,12 @@ class Skin:
         remote = getattr(getattr(self.app, "config", None), "remote", "")
         return button_name(remote, action, self.REMOTE_WORDS.get(action, ""))
 
+    def on_top(self, screen) -> bool:
+        """Whether `screen` is the one the remote is talking to (a menu over
+        it means its own prompts would point at the wrong thing)."""
+        screens = getattr(self.app, "screens", None)
+        return not screens or screens[-1] is screen
+
     def key_also(self, action: str) -> str:
         """' (C)' after a chip that names the remote's button, for someone on
         a keyboard with no remote chosen: the key, as the notes' 'MENU (C)'."""

@@ -281,6 +281,9 @@ class TestFirstRun(unittest.TestCase):
         app.set_skin = lambda k: (skins.append(k), setattr(app.config, "skin", k))
         menus.open_welcome(app)
         m = app.top()
+        self.assertEqual(m.title, "WELCOME TO CATHODE")         # what's coming, and what to have ready
+        self.assertIn("M3U", m.items[0].help)
+        m.handle(R.SELECT)
         self.assertEqual(m.title, "1/3 CHOOSE YOUR BOX")
         m.handle(R.DOWN)
         self.assertEqual(skins, ["indirect"])           # the page redrew as that box

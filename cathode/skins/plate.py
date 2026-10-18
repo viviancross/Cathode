@@ -53,7 +53,8 @@ class PlateHD(BoxSkin):
     NATIVE = {"bg": [0, 51, 66], "accent": [0, 62, 61], "accent2": [0, 17, 55],
               "text": [255, 255, 255], "chnum": [230, 235, 134]}
     LEGIBLE = [("text", ["page", "page_lo", "page_hi", "vp_top", "vp_mid", "vp_bot", "now", "later", "row",
-                         "vp_row", "vp_green", "vp_green2", "vp_info"], "ground"),
+                         "vp_row", "vp_green", "vp_green2", "vp_info", "pill", "vp_btn", "chan", "list_panel"],
+                "ground"),
                ("soft", ["page", "page_lo"], "ink"), ("muted", ["page", "page_lo"], "ink"),
                ("vp_dim", ["page", "vp_bot"], "ink"), ("cursor_ink", ["cursor"], "ink")]
 
@@ -203,8 +204,8 @@ class PlateHD(BoxSkin):
         if cur:
             self.cb(c, time_left(cur, now), f_mid, ink, rx, r.y + Y(72), align="right")
         if nxt:
-            fn = self.fb(Y(17))
-            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(78), align="center")
+            fn = self.fb(Y(20))
+            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(76), align="center")
         label = tag or (f"{self.k('INFO')} FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
@@ -372,7 +373,7 @@ class PlateHD(BoxSkin):
         fh = self.fb(Y(28))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
-        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(34), hy)
+        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(64), hy)
         slots = int(g.hours * 2)
         cols = [X(251), X(605), X(961), X(1280)]
         for i in range(slots):
@@ -381,7 +382,7 @@ class PlateHD(BoxSkin):
         mins = g.hours * 60
         now = datetime.now(timezone.utc)
         epg = self.app.epg
-        f_cell, f_chan = self.fb(Y(27)), self.f(Y(27))
+        f_cell, f_chan = self.fb(Y(27)), self.f(Y(24))
         grid_x, grid_w = X(255), X(1025)
         for i, ch in enumerate(rows):
             y = Y(328 + 53 * i)
@@ -390,7 +391,7 @@ class PlateHD(BoxSkin):
             chr_ = pygame.Rect(0, y, X(247), rh)
             pygame.draw.rect(c, b["chan"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(220)), f_chan, b["text"], X(26), cy)
+            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(176)), f_chan, b["text"], X(64), cy)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["gold"], (chr_.right - X(14), y + Y(12)), Y(5))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
@@ -415,12 +416,14 @@ class PlateHD(BoxSkin):
                 if p.stop > end:
                     pygame.draw.polygon(c, b["text"], [(cell.right - X(6), cell.centery), (cell.right - X(15), cell.centery - Y(9)),
                                                        (cell.right - X(15), cell.centery + Y(9))])
-                if cell.w > X(40):
-                    self.cb(c, self.fit_cb(f_cell, p.title, cell.w - X(36)), f_cell, b["text"], cell.centerx, cy, align="center")
+                right = min(cell.right, X(1216))         # the lettering stays inside the title-safe area
+                if right - cell.x > X(40):
+                    self.cb(c, self.fit_cb(f_cell, p.title, right - cell.x - X(36)), f_cell, b["text"],
+                            (cell.x + right) // 2, cy, align="center")
             self.hit((0, y, W, rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                 setattr(g, "focus", "grid"), g.handle("SELECT")))
         foot = Y(328) + g.rows * Y(53)            # the band under the last row: the keys
-        fk = self.fb(Y(17))
+        fk = self.fb(Y(18))                        # the band the box's seven rows leave: as big as fits
         if H - foot >= t.ink(fk)[1] + Y(4):
             self.cb(c, self.guide_keys(), fk, b["soft"], W // 2, foot + (H - foot - t.ink(fk)[1]) // 2, align="center")
         if not rows:
@@ -455,11 +458,11 @@ class PlateHD(BoxSkin):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._page(c, (0, 0, W, H))
-        self.wordmark(c, X(42), Y(30), Y(36), b["text"], b["dish"])
+        self.wordmark(c, X(64), Y(36), Y(36), b["text"], b["dish"])
         f = self.fb(Y(36))
         f.italic = True
         try:
-            self.cb(c, self.fit_cb(f, title, X(600)), f, b["text"], X(230), Y(36))
+            self.cb(c, self.fit_cb(f, title, X(600)), f, b["text"], X(250), Y(38))
         finally:
             f.italic = False
         local = datetime.now()
@@ -492,7 +495,7 @@ class PlateHD(BoxSkin):
             fa = self.fb(Y(20))
             for k, line in enumerate(t.wrap(fa, it.help, int(X(570) / 0.86), 2)):
                 self.cb(c, line, fa, b["soft"], X(597), Y(622) + k * Y(26))
-        lp = self.R(51, 127, 493, 545)
+        lp = self.R(64, 127, 480, 515)
         pygame.draw.rect(c, b["list_panel"], lp, border_radius=Y(14))
         pygame.draw.rect(c, b["pip_edge"], lp, Y(3), border_radius=Y(14))
         n = len(m.items)
@@ -526,7 +529,7 @@ class PlateHD(BoxSkin):
             self.hit(row, lambda i=i: m.activate(i))
         if n > n_vis:
             self.cb(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.fb(Y(18)), b["ink"], lp.x + X(32), lp.bottom - Y(28))
-        self.cb(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.fb(Y(18)), mix(b["muted"], b["text"], 0.4), X(51), Y(690))
+        self.cb(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.fb(Y(21)), mix(b["muted"], b["text"], 0.4), X(64), Y(654))
 
     def menu_video_box(self, menu):
         r = self.R(609, 181, 569, 354)
@@ -565,11 +568,11 @@ class PlateHD(BoxSkin):
         hdr = pygame.Surface((W, Y(90)), pygame.SRCALPHA)
         pygame.draw.ellipse(hdr, (*b["vp_hdr"], 70), (-X(200), -Y(160), W + X(400), Y(240)))
         c.blit(hdr, (0, 0))
-        self.wordmark(c, X(40), Y(26), Y(34), b["text"], b["dish"])
+        self.wordmark(c, X(64), Y(36), Y(34), b["text"], b["dish"])
         f = self.fb(Y(36))
         f.italic = True
         try:
-            self.cb(c, self.fit_cb(f, title, X(600)), f, b["text"], X(214), Y(30))
+            self.cb(c, self.fit_cb(f, title, X(600)), f, b["text"], X(240), Y(38))
         finally:
             f.italic = False
         if sub:
@@ -580,7 +583,7 @@ class PlateHD(BoxSkin):
             finally:
                 fs.italic = False
         local = datetime.now()
-        self.cb(c, f"{local:%a}, {local:%B} {local.day}", self.fb(Y(26)), b["text"], X(1240), Y(34), align="right")
+        self.cb(c, f"{local:%a}, {local:%B} {local.day}", self.fb(Y(26)), b["text"], X(1216), Y(40), align="right")
         if not picture:
             return None
         vx, vy, vw, vh = self.page_video_box(None)
@@ -610,11 +613,13 @@ class PlateHD(BoxSkin):
         if hot and not on:
             fill = b["vp_orange"]
         pygame.draw.rect(c, edge, r.inflate(Y(4), Y(4)), border_radius=r.h)
-        vgrad(c, r, rgba(mix(fill, (255, 255, 255), 0.4)), rgba(fill), radius=r.h // 2)
+        vgrad(c, r, rgba(mix(fill, (255, 255, 255), 0.4 if on else 0.22)), rgba(fill), radius=r.h // 2)
         f = self.fb(Y(24))
-        self.cb(c, self.fit_cb(f, label, r.w - Y(20)), f, b["sel_ink"] if on else b["vp_ink"], r.centerx,
-                r.y + (r.h - self.text.ink(f)[1]) // 2,
-                align="center")
+        label = self.fit_cb(f, label, r.w - Y(20))
+        ty = r.y + (r.h - self.text.ink(f)[1]) // 2
+        if not on:                          # white on grey: a dark shadow under it, as the box's lettering had
+            self.cb(c, label, f, mix(fill, (0, 0, 0), 0.7), r.centerx + 1, ty + 1, align="center")
+        self.cb(c, label, f, b["sel_ink"] if on else b["vp_ink"], r.centerx, ty, align="center")
 
     def _vip_buttons(self, c, labels, focus, x=870, y=412, w=300, h=44, pitch=58, hits=None):
         for k, label in enumerate(labels):
@@ -856,6 +861,8 @@ class PlateHD(BoxSkin):
                             rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
                 self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                 kb._press(cell)))
+        self.cb(c, self.fit_cb(self.fb(Y(20)), kb.tip(), X(800)), self.fb(Y(20)), b["vp_ink"], card.centerx, Y(652),
+                align="center")
 
     # Diagnostics: the System Info card, labels right-aligned to a centre
     # line, values beside them, Help / Done / Cancel along the foot.
@@ -886,7 +893,7 @@ class PlateHD(BoxSkin):
     def draw_playback(self, c, pb):
         from ..screens.iteminfo import hms
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        if pb.skip_label:
+        if pb.skip_label and self.on_top(pb):
             r = self.R(880, 424 if pb.bar_visible() else 600, 350, 52)
             self._vip_button(c, r, f"{pb.skip_label.title()}  ({self.k('SELECT')})", True)
             self.hit(r, lambda: pb.handle("SELECT"))
@@ -1617,11 +1624,11 @@ class Plate(PlateHD):
                 self._lens_text(c, ">", f_row, end, ty, sel, align="right")
             self.hit(row, lambda i=i: m.activate(i))
         f_foot = self.f(Y(12))
-        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", f_foot, b["m_ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", f_foot, b["m_ink"], X(40), Y(444))
         if n > n_vis:
             count = f"{first + 1}-{min(n, first + n_vis)} of {n}"
-            t.draw(c, count, f_foot, b["m_ink"], X(600), Y(456), align="right")
-            ax, ay = X(600) - t.width(f_foot, count) - X(16), Y(456) + t.ink(f_foot)[1] // 2
+            t.draw(c, count, f_foot, b["m_ink"], X(600), Y(444), align="right")
+            ax, ay = X(600) - t.width(f_foot, count) - X(16), Y(444) + t.ink(f_foot)[1] // 2
             if first + n_vis < n:           # more below
                 pygame.draw.polygon(c, b["m_ink"], [(ax - X(6), ay - Y(3)), (ax + X(6), ay - Y(3)), (ax, ay + Y(4))])
             if first:                       # more above
@@ -1719,7 +1726,7 @@ class Plate(PlateHD):
             t.draw(c, s.status, self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
         side = self.od_side(s)
         self._sd_side(c, [lab for lab, _ in side], -1 if s.side is None else s.side, hits=[fn for _, fn in side])
-        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(12)), b["m_ink"], X(40), Y(456))
+        t.draw(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", self.f(Y(12)), b["m_ink"], X(40), Y(444))
 
     def od_side(self, s):
         if s.mode != "browse":
@@ -1824,7 +1831,7 @@ class Plate(PlateHD):
             for col, cell in enumerate(row):
                 on = (r, col) == (kb.row, kb.col)
                 if r == len(grid) - 1:
-                    rect = self.R(40 + col * 190, 404, 176, 30)
+                    rect = self.R(40 + col * 190, 396, 176, 30)
                     self._sd_pill(c, rect, words[cell], on)
                 else:
                     if len(cell) == 1:
@@ -1842,6 +1849,7 @@ class Plate(PlateHD):
                     t.draw(c, label, fl, ink, rect.centerx, rect.y + (rect.h - t.ink(fl)[1]) // 2, align="center")
                 self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
                                                                 kb._press(cell)))
+        t.draw(c, t.fit(self.f(Y(12)), kb.tip(), X(560)), self.f(Y(12)), b["ink"], X(40), Y(431))
 
     def draw_diagnostics(self, c, d):
         b, t, X, Y = self.b, self.text, self.X, self.Y
@@ -1865,7 +1873,7 @@ class Plate(PlateHD):
         from ..screens.iteminfo import hms
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
-        if pb.skip_label:
+        if pb.skip_label and self.on_top(pb):
             r = self.R(370, 262 if pb.bar_visible() else 400, 230, 32)
             self._sd_pill(c, r, f"{pb.skip_label.title()}: {self.k('SELECT')}", True)
             self.hit(r, lambda: pb.handle("SELECT"))

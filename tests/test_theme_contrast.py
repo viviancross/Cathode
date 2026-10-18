@@ -102,10 +102,6 @@ class TestEditor(unittest.TestCase):
         self.assertIs(theme.resolve("nonsense"), theme.PALETTES["blue"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestBoxSkinThemes(unittest.TestCase):
     def test_every_cathode_theme_reads_on_every_box(self):
         # A Cathode 3 theme on a box skin is translated into the box's own
@@ -132,3 +128,35 @@ class TestBoxSkinThemes(unittest.TestCase):
                     for g in grounds:
                         ratio = theme.contrast(skin.b[ink], skin.b[g])
                         self.assertGreaterEqual(ratio, 4.5, f"{name}/{key}: {ink} on {g} is {ratio:.2f}:1")
+
+    def test_the_hr20_pause_tag_reads_in_the_boxs_own_colours(self):
+        # Native colours are the real box's and are left alone; the pause
+        # tag is drawn dark on the amber, as the box's own cursor ink.
+        import os
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import pygame
+        pygame.font.init()
+        from test_skins import FakeApp
+        from cathode.skins import skin_classes
+        app = FakeApp()
+        app.config.skin = "indirect_hd"
+        skin = skin_classes()["indirect_hd"](app)
+        self.assertGreaterEqual(theme.contrast(skin.b["navy"], skin.b["sel"]), 4.5)
+
+
+class TestBlendedInks(unittest.TestCase):
+    def test_translucent_inks_read_once_blended(self):
+        # SEL_TEXT_DIM sits on the selection; blended at its alpha it fell
+        # under its own 3:1 floor on some themes.
+        def over(fg, bg):
+            a = fg[3] / 255 if len(fg) > 3 else 1.0
+            return tuple(round(f * a + b * (1 - a)) for f, b in zip(fg[:3], bg[:3]))
+        for name in theme.PALETTES:
+            pal = theme.PALETTES[name]
+            ratio = theme.contrast(over(pal["SEL_TEXT_DIM"], pal["GUIDE_SELECTED"]), pal["GUIDE_SELECTED"][:3])
+            self.assertGreaterEqual(ratio, 3.0, f"{name}: SEL_TEXT_DIM blended {ratio:.2f}:1")
+
+
+if __name__ == "__main__":
+    unittest.main()
