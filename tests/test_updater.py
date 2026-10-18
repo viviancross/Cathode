@@ -173,16 +173,64 @@ class TestAssetMatch(unittest.TestCase):
             self.assertEqual(updater.pick_asset(assets)["url"], "u3")
             self.assertEqual(updater.install_dir(), "/apps/Cathode.AppImage")
 
-    def test_the_mac_app_and_flatpak_only_notify(self):
+    def test_the_mac_app_only_notifies(self):
         with mock.patch.object(updater.os, "name", "posix"),                 mock.patch.object(updater.sys, "frozen", True, create=True):
             self.assertEqual(updater.build_kind(), "macos")
             self.assertFalse(updater.self_installs())
             self.assertIsNone(updater.pick_asset(self.ASSETS))
-        real = os.path.exists
-        with mock.patch.object(updater.os.path, "exists",
-                               lambda p: p == "/.flatpak-info" or real(p)):
+
+    def _flatpak(self, info):
+        """The sandbox: /.flatpak-info exists and says `info`."""
+        real_exists, real_open = os.path.exists, open
+
+        def exists(p):
+            return p == updater.FLATPAK_INFO or real_exists(p)
+
+        def fake_open(p, *a, **k):
+            if p == updater.FLATPAK_INFO:
+                import io
+                return io.StringIO(info)
+            return real_open(p, *a, **k)
+        return mock.patch.multiple(updater.os.path, exists=exists), mock.patch("builtins.open", fake_open)
+
+    def test_the_flatpak_installs_its_bundle_through_the_host(self):
+        assets = self.ASSETS + [
+            {"name": "cathode-linux-x86_64-2.1.flatpak.sha256", "url": "side", "size": 1},
+            {"name": "cathode-linux-x86_64-2.1.AppImage", "url": "ai", "size": 3},
+            {"name": "cathode-linux-x86_64-2.1.flatpak", "url": "fp", "size": 1}]
+        info = "[Application]\nname=io.github.viviancross.Cathode\n[Instance]\napp-path=/home/deck/.local/share/flatpak/app/io.github.viviancross.Cathode/x86_64/master/abc/files\n"
+        p1, p2 = self._flatpak(info)
+        with p1, p2:
             self.assertEqual(updater.build_kind(), "flatpak")
-            self.assertIsNone(updater.pick_asset(self.ASSETS))
+            self.assertTrue(updater.self_installs())
+            self.assertEqual(updater.pick_asset(assets)["url"], "fp")
+            cmd = updater.flatpak_install_command("/home/deck/.var/app/x/cache/cathode/updates/c.flatpak")
+        self.assertEqual(cmd, ["flatpak-spawn", "--host", "flatpak", "install", "--user", "-y", "--noninteractive",
+                               "/home/deck/.var/app/x/cache/cathode/updates/c.flatpak"])
+
+    def test_a_system_flatpak_updates_the_system_install(self):
+        p1, p2 = self._flatpak("[Instance]\napp-path=/var/lib/flatpak/app/io.github.viviancross.Cathode/x86_64/master/abc/files\n")
+        with p1, p2:
+            self.assertEqual(updater.flatpak_scope(), "--system")
+        p1, p2 = self._flatpak("garbage without sections")
+        with p1, p2:
+            self.assertEqual(updater.flatpak_scope(), "--user")
+
+    def test_a_failed_flatpak_install_reports_the_hosts_last_line(self):
+        import subprocess
+        p1, p2 = self._flatpak("[Instance]\napp-path=/home/u/.local/share/flatpak/app/x\n")
+        ok = subprocess.CompletedProcess([], 0, "", "")
+        bad = subprocess.CompletedProcess([], 1, "", "Warning: foo\nerror: Bundle has no matching installed ref\n")
+        with p1, p2, mock.patch.object(subprocess, "run", return_value=ok) as run:
+            updater.install_flatpak("b.flatpak")
+            self.assertEqual(run.call_args[0][0][:4], ["flatpak-spawn", "--host", "flatpak", "install"])
+        with p1, p2, mock.patch.object(subprocess, "run", return_value=bad):
+            with self.assertRaises(updater.UpdateError) as cm:
+                updater.install_flatpak("b.flatpak")
+        self.assertEqual(str(cm.exception), "error: Bundle has no matching installed ref")
+        with p1, p2, mock.patch.object(subprocess, "run", side_effect=FileNotFoundError("flatpak-spawn")):
+            with self.assertRaises(updater.UpdateError):
+                updater.install_flatpak("b.flatpak")
 
     def test_none_when_no_match(self):
         with mock.patch.object(updater.os, "name", "posix"):

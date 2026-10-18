@@ -83,6 +83,13 @@ def open_check(app):
                 side = updater.find_checksum_asset(latest["assets"], asset["name"])
                 if side:
                     updater.verify_sha256(path, side["url"])
+                if updater.build_kind() == "flatpak":
+                    # The sandbox dies with the app, so install now, through the host.
+                    app.post(show, f"Installing {latest['tag']}...", "This takes a minute.")
+                    updater.install_flatpak(path)
+                    os.remove(path)
+                    app.post(done, "Installed.", "It runs the next time you start Cathode.")
+                    return
                 script = updater.write_apply_script(path, updater.install_dir(), _updates_dir())
             except Exception as e:
                 app.post(done, "The update failed:", str(e))

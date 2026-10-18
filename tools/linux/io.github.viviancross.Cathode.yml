@@ -21,6 +21,9 @@ finish-args:
   - --filesystem=home
   # Keep the screen awake while watching.
   - --talk-name=org.freedesktop.ScreenSaver
+  # Settings > System > Check for updates installs the new bundle through
+  # the host (flatpak-spawn --host flatpak install): see updater.install_flatpak.
+  - --talk-name=org.freedesktop.Flatpak
   # X11 only in here, so SDL and PyOpenGL use it (GLX) even when the
   # session is Wayland and says so (a Steam Deck's desktop).
   - --env=SDL_VIDEODRIVER=x11

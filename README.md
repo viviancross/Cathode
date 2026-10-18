@@ -65,8 +65,9 @@ redrawn unless something changed, so an idle Cathode costs next to nothing.
 ## Install
 
 Every build has libmpv inside: nothing else to install. Updates: Windows, the
-AppImage and source installs update themselves from **Settings > System >
-Check for updates**; the Flatpak and the Mac app say when one is out.
+AppImage, the Flatpak and source installs update themselves from **Settings >
+System > Check for updates** (the Flatpak through the host's `flatpak`, so a
+Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 

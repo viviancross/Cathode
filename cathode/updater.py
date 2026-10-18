@@ -68,9 +68,10 @@ class UpdateError(Exception):
 def build_kind() -> str:
     """How this Cathode was installed, which decides how it updates:
     'windows' (the portable exe), 'appimage', 'source' (a checkout or the
-    source zip) install themselves; 'flatpak' and 'macos' (the .app) only say
-    an update is out."""
-    if os.path.exists("/.flatpak-info"):
+    source zip) install themselves on quit; 'flatpak' installs the new bundle
+    through the host while running; 'macos' (the .app) only says an update
+    is out."""
+    if os.path.exists(FLATPAK_INFO):
         return "flatpak"
     if os.environ.get("APPIMAGE"):
         return "appimage"
@@ -80,13 +81,56 @@ def build_kind() -> str:
 
 
 def self_installs() -> bool:
-    return build_kind() in ("windows", "appimage", "source")
+    return build_kind() in ("windows", "appimage", "source", "flatpak")
+
+
+FLATPAK_INFO = "/.flatpak-info"
+
+
+def flatpak_scope() -> str:
+    """'--user' or '--system': where this Flatpak is installed, read from the
+    sandbox's /.flatpak-info (its app-path). User installs need no password,
+    so a Steam Deck in Game Mode updates without a dialog."""
+    import configparser
+    cp = configparser.ConfigParser(interpolation=None)
+    try:
+        cp.read(FLATPAK_INFO, encoding="utf-8")
+        app_path = cp.get("Instance", "app-path", fallback="")
+    except configparser.Error:
+        app_path = ""
+    return "--system" if app_path.startswith("/var/lib/flatpak/") else "--user"
+
+
+def flatpak_install_command(bundle: str) -> List[str]:
+    """The host-side install of a downloaded .flatpak bundle over this one.
+    flatpak-spawn --host is what the manifest's org.freedesktop.Flatpak
+    talk-name permits; the bundle sits under the app's cache, the same path
+    inside and outside the sandbox. Installing a bundle over the installed
+    app is an update, and the running instance keeps its own deployment
+    until it quits."""
+    return ["flatpak-spawn", "--host", "flatpak", "install", flatpak_scope(),
+            "-y", "--noninteractive", bundle]
+
+
+def install_flatpak(bundle: str, timeout: float = 900):
+    """Install the bundle now (unlike the other builds, nothing can run after
+    the sandbox's last process exits). Raises UpdateError with the host's
+    last line on failure."""
+    import subprocess
+    try:
+        r = subprocess.run(flatpak_install_command(bundle), capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise UpdateError(f"Couldn't run flatpak on the host: {e}")
+    if r.returncode:
+        lines = [ln.strip() for ln in (r.stderr + "\n" + r.stdout).splitlines() if ln.strip()]
+        raise UpdateError(lines[-1] if lines else f"flatpak install exited {r.returncode}.")
 
 
 def _asset_match(name: str) -> bool:
     """Pick the release asset for this build: the Windows exe gets the portable
-    Windows zip, the AppImage the AppImage, and source runs (any OS) the
-    cathode-linux-macos source zip. Flatpak and the macOS app pick nothing.
+    Windows zip, the AppImage the AppImage, the Flatpak the .flatpak bundle,
+    and source runs (any OS) the cathode-linux-macos source zip. The macOS
+    app picks nothing.
 
     Matched on the desktop build's full filename prefix, not on a loose
     substring. A port release that happened to carry its own windows zip would
@@ -101,6 +145,8 @@ def _asset_match(name: str) -> bool:
         return n.startswith("cathode-windows-")
     if kind == "appimage":
         return n.startswith("cathode-linux-x86_64-") and n.endswith(".appimage")
+    if kind == "flatpak":
+        return n.startswith("cathode-linux-x86_64-") and n.endswith(".flatpak")
     if kind == "source":
         return n.startswith("cathode-linux-macos-")
     return False

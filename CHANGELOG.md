@@ -8,6 +8,11 @@
   line that does serve its XMLTV still uses that. Lines added with 4.28
   switch over on their own.
 - A provider line's password no longer shows in Settings > Channels.
+- **The Flatpak updates itself** from Settings > System > Check for
+  updates: it installs the new bundle through the host's flatpak, so a
+  Steam Deck updates from Game Mode without a password. (The 4.28
+  Flatpak lacks the permission for this, so 4.28 to 4.29 is one last
+  manual install; from 4.29 on it updates itself.)
 
 ## 4.28
 
