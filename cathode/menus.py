@@ -747,11 +747,13 @@ def _check_playlist(app, url, done, entry=None):
 
     def work():
         try:
-            chans, agent = m3u.load_as(url, user_agent=app.config.user_agent)
+            chans, agent, used = m3u.load_as(url, user_agent=app.config.user_agent)
             n, err = len(chans), ""
-            if entry is not None and agent != app.config.user_agent:
-                entry["user_agent"] = agent
-                print(f"[cathode] the provider wanted a player's User-Agent: {agent}")
+            if entry is not None:
+                if agent != app.config.user_agent:
+                    entry["user_agent"] = agent
+                if used != url:                 # another shape of the link answered: keep that one
+                    entry["playlist_url"] = used
         except Exception as e:
             n, err = 0, load_error_text(e)
         app.post(done, n, err)
@@ -879,7 +881,7 @@ def add_playlist(app, on_added=None, first_run=False):
                 ask_url(url)
                 return
             app.toast(f"Found {n} channel{'' if n == 1 else 's'}.", 4.0)
-            entry["playlist_url"] = url
+            entry.setdefault("playlist_url", url)       # the check may have kept another shape of the link
             app.push(Keyboard(app, step("b", "Guide address (optional)"), got_epg, url=True,
                               hint=GUIDE_HINT + " Without one, the guide has no listings."))
         _check_playlist(app, url, checked, entry)

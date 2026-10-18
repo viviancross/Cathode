@@ -74,15 +74,16 @@ class TestProviderAgents(unittest.TestCase):
         from cathode import playlist
         seen = []
 
-        def fetch(url, agent):
+        def fetch(url, agent, timeout=30):
             seen.append(agent)
             if "VLC" not in agent:          # the panel answers only to a player, with its own code
                 raise urllib.error.HTTPError(url, 884, "Refused", {}, None)
             return "#EXTM3U\n#EXTINF:-1,One\nhttp://h/1.ts\n"
         with mock.patch.object(playlist, "_fetch_url", fetch):
-            chans, agent = playlist.load_as("http://h/get.php?username=u&password=p", "Cathode/1.0 IPTV")
+            chans, agent, used = playlist.load_as("http://h/get.php?username=u&password=p", "Cathode/1.0 IPTV")
         self.assertEqual(len(chans), 1)
         self.assertIn("VLC", agent)
+        self.assertEqual(used, "http://h/get.php?username=u&password=p")
         self.assertEqual(seen[0], "Cathode/1.0 IPTV")              # its own first
 
     def test_a_404_is_not_retried(self):
@@ -91,13 +92,37 @@ class TestProviderAgents(unittest.TestCase):
         from cathode import playlist
         seen = []
 
-        def fetch(url, agent):
+        def fetch(url, agent, timeout=30):
             seen.append(agent)
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         with mock.patch.object(playlist, "_fetch_url", fetch):
             with self.assertRaises(urllib.error.HTTPError):
                 playlist.load_as("http://h/list.m3u", "Cathode/1.0 IPTV")
         self.assertEqual(len(seen), 1)
+
+
+class TestLinkVariants(unittest.TestCase):
+    def test_a_get_php_link_has_the_shapes_panels_serve(self):
+        from cathode.playlist import link_variants
+        v = link_variants("http://h:80/get.php?username=u&password=p&type=m3u_plus&output=ts")
+        self.assertEqual(v[0], "http://h:80/get.php?username=u&password=p&type=m3u_plus&output=ts")
+        self.assertIn("type=m3u&", v[1] + "&")
+        self.assertEqual(v[2], "http://h:80/playlist/u/p/m3u_plus")
+        self.assertEqual(link_variants("http://h/list.m3u"), ["http://h/list.m3u"])
+
+    def test_a_panel_that_only_serves_the_playlist_path_is_found(self):
+        import urllib.error
+        from unittest import mock
+        from cathode import playlist
+
+        def fetch(url, agent, timeout=30):
+            if "/playlist/" not in url:
+                raise urllib.error.HTTPError(url, 884, "Refused", {}, None)
+            return "#EXTM3U\n#EXTINF:-1,One\nhttp://h/1.ts\n"
+        with mock.patch.object(playlist, "_fetch_url", fetch):
+            chans, agent, used = playlist.load_as("http://h/get.php?username=u&password=p&type=m3u_plus", "Cathode/1.0 IPTV")
+        self.assertEqual(len(chans), 1)
+        self.assertEqual(used, "http://h/playlist/u/p/m3u_plus")
 
 
 if __name__ == "__main__":

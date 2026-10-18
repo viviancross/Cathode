@@ -51,30 +51,68 @@ def _split_attrs_name(rest: str):
 PLAYER_AGENTS = ["VLC/3.0.20 LibVLC/3.0.20", "TiviMate/4.7.0 (Android)", "IPTVSmarters/2.2.2", "okhttp/4.12.0"]
 
 
+def _scrub(url: str) -> str:
+    return re.sub(r"(username|password)=[^&]+", lambda m: m.group(1) + "=***",
+                  re.sub(r"/playlist/[^/]+/[^/]+/", "/playlist/***/***/", url))
+
+
+def link_variants(url: str) -> list:
+    """The shapes one Xtream link can take: as given; type=m3u instead of
+    m3u_plus (older panels); the /playlist/USER/PASS/m3u_plus path newer
+    panels serve beside get.php. Only for a get.php link."""
+    from urllib.parse import parse_qs, urlsplit, urlunsplit, urlencode
+    u = urlsplit(url)
+    if not u.path.lower().endswith("/get.php"):
+        return [url]
+    q = parse_qs(u.query)
+    user, pw = (q.get("username") or [""])[0], (q.get("password") or [""])[0]
+    if not user or not pw:
+        return [url]
+    out = [url]
+    if (q.get("type") or [""])[0] != "m3u":
+        q2 = {k: v[0] for k, v in q.items()}
+        q2["type"] = "m3u"
+        out.append(urlunsplit((u.scheme, u.netloc, u.path, urlencode(q2), "")))
+    base = u.path[: -len("/get.php")]
+    out.append(urlunsplit((u.scheme, u.netloc, f"{base}/playlist/{user}/{pw}/m3u_plus", "", "")))
+    return out
+
+
 def load_as(source: str, user_agent: str = "Cathode/1.0"):
     """load(), and the agent it took: a provider that refuses Cathode's own
-    is tried with the agents real players send, so its playlist (and its
-    guide and streams, with the same agent) still comes through. Returns
-    (channels, user_agent)."""
+    is tried with the agents real players send, and with the other shapes
+    its link can take, so its playlist (and its guide and streams, with the
+    same agent) still comes through. Returns (channels, user_agent, url):
+    the url is the one that answered. Every attempt is logged, scrubbed."""
     import urllib.error
     if not source.startswith(("http://", "https://")):
-        return load(source, user_agent), user_agent
-    tried = [user_agent] + [a for a in PLAYER_AGENTS if a != user_agent]
+        return load(source, user_agent), user_agent, source
+    agents = [user_agent] + [a for a in PLAYER_AGENTS if a != user_agent]
+    variants = link_variants(source)
+    # The link's shapes first, with Cathode's own agent (a panel that refuses
+    # get.php outright is found in three tries), then each shape as each
+    # player. The search uses short timeouts: a refusal is quick, and a
+    # dozen slow ones would be a long "Checking the address...".
+    order = [(url, user_agent) for url in variants] + [(url, a) for a in agents[1:] for url in variants]
     last = None
-    for agent in tried:
+    for url, agent in order:
         try:
-            return load(source, agent), agent
+            chans = load(url, agent, timeout=8)
+            if url != source or agent != user_agent:
+                print(f"[playlist] {_scrub(url)} answered to {agent!r}")
+            return chans, agent, url
         except urllib.error.HTTPError as e:
             last = e
-            if e.code == 404:
-                raise                           # not a refusal: nothing there
+            print(f"[playlist] {_scrub(url)} as {agent!r}: HTTP {e.code}")
+            if e.code == 404 and len(variants) == 1:
+                raise                       # a plain link that isn't there: nothing to try
     raise last
 
 
-def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
+def load(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
     """Load an M3U playlist from a file path or URL."""
     if source.startswith(("http://", "https://", "rtsp://")):
-        content = _fetch_url(source, user_agent)
+        content = _fetch_url(source, user_agent, timeout)
     else:
         with open(source, "rb") as f:
             content = _decode(f.read())
@@ -101,9 +139,11 @@ def _clean_name(name: str) -> str:
     return " ".join(name.split())[:120]
 
 
-def _fetch_url(url: str, user_agent: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=30, context=_SSL) as resp:
+def _fetch_url(url: str, user_agent: str, timeout: float = 30) -> str:
+    # The headers a player sends with its agent: some panels look at these too.
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent, "Accept": "*/*",
+                                               "Accept-Encoding": "identity", "Connection": "keep-alive"})
+    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as resp:
         return _decode(resp.read())
 
 

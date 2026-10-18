@@ -385,7 +385,7 @@ class App:
         """Fetch channels (and then the guide) off the UI thread."""
         def work():
             try:
-                chans, agent = m3u.load_as(url, user_agent=self.agent)
+                chans, agent, _used = m3u.load_as(url, user_agent=self.agent)
                 if agent != self.agent:         # a provider that wanted a player's agent: keep it
                     self.agent = agent
                     for pl in self.config.playlists:
