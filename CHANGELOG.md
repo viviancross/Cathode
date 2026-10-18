@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.31
+
+- **A provider line's guide fills in from the API.** The panel's XMLTV
+  (when it serves one) rarely lists every channel of a big line; the
+  channels it leaves out now get their programmes through the panel's
+  per-channel API, as IPTV Smarters shows them. The log says how many
+  channels the XMLTV covered and how many the API added.
+- The log also says, for any playlist, how many channels the guide
+  covers and names a few it doesn't, with their guide ids, so a
+  diagnostics zip shows why a guide comes up empty.
+
 ## 4.30
 
 - **The guide's highlight walks the programmes.** LEFT/RIGHT move from

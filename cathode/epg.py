@@ -11,7 +11,11 @@ from typing import Dict, List, Optional
 import re
 
 from .net import SSL as _SSL, as_seen_from
-from .servers import parse_xtream_api, xtream_api_epg
+from .servers import parse_xtream_api, xtream_api_epg, xtream_epg_key, xtream_live_streams
+
+# Lines whose API gave no listings at all this session: not asked again
+# (a 20,000-channel line is 20,000 calls).
+_API_EMPTY = set()
 
 
 @dataclass
@@ -161,11 +165,22 @@ class EPG:
             raw, total = self._open(f"{base}/xmltv.php?" + urlencode({"username": user, "password": pw}), user_agent)
             self._read(raw, total, progress)
         except (OSError, ET.ParseError) as e:
-            print(f"[cathode] guide: the provider's xmltv.php didn't answer ({e!r}); asking its API per channel")
-        if self._programs:
+            print(f"[cathode] guide: the provider's xmltv.php didn't answer ({e!r})")
+        # The channels the XMLTV left out (all of them when it didn't answer,
+        # or when its ids aren't the ones the channel list carries) through
+        # the API, one call each.
+        streams = xtream_live_streams(base, user, pw, user_agent)
+        left = [s for s in streams if not self.resolve_channel_id(xtream_epg_key(s), str(s.get("name", "")))]
+        print(f"[cathode] guide: the provider's XMLTV covers {len(streams) - len(left)} of {len(streams)} channels")
+        if not left or base in _API_EMPTY:
             return
+        self.__dict__.pop("_resolved", None)
+        rows = xtream_api_epg(base, user, pw, user_agent, progress=progress, streams=left)
+        print(f"[cathode] guide: the provider's API listed {len(rows)} of the other {len(left)}")
+        if not rows:
+            _API_EMPTY.add(base)
         w0, w1 = self._window
-        for key, progs in xtream_api_epg(base, user, pw, user_agent, progress=progress).items():
+        for key, progs in rows.items():
             self.add_programs(key, [
                 Program(channel_id=key, title=t[:200], description=d[:1500],
                         start=datetime.fromtimestamp(a, timezone.utc), stop=datetime.fromtimestamp(b, timezone.utc))

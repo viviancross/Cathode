@@ -467,6 +467,10 @@ class App:
             print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
             if url != self._epg_checked:        # once per guide: one that matches nothing says so
                 self._epg_checked = url
+                missed = [ch for ch in self.channels if not epg.resolve_channel_id(ch.epg_id, ch.name)]
+                print(f"[cathode] guide covers {len(self.channels) - len(missed)} of {len(self.channels)} channels"
+                      + (f"; e.g. not " + ", ".join(f"{ch.name} (epg id {ch.epg_id or 'none'})" for ch in missed[:3])
+                         if missed else "") + (f"; guide ids e.g. {', '.join(epg.channel_ids[:3])}" if missed else ""))
                 if not epg.channel_ids:
                     self.toast("The guide loaded, but there's nothing in it. Check its address in "
                                "Settings > Channels.", 8.0)

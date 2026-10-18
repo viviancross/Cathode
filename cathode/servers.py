@@ -201,23 +201,35 @@ def xtream_epg_key(stream: dict) -> str:
     return str(stream.get("epg_channel_id") or "") or f"xtream:{stream.get('stream_id')}"
 
 
+def _xtream_get(base: str, user: str, pw: str, user_agent: str, timeout: float, action: str, **extra):
+    from urllib.parse import urlencode
+    q = urlencode({"username": user, "password": pw, "action": action, **extra})
+    req = urllib.request.Request(f"{base}/player_api.php?{q}",
+                                 headers={"User-Agent": user_agent, "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout, context=SSL) as resp:
+        return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+def xtream_live_streams(base: str, user: str, pw: str, user_agent: str = "Cathode", timeout: float = 30) -> list:
+    """The line's live streams as the panel lists them (dicts with stream_id,
+    name, epg_channel_id...)."""
+    rows = _xtream_get(base, user, pw, user_agent, timeout, "get_live_streams") or []
+    return [s for s in rows if isinstance(s, dict) and s.get("stream_id")]
+
+
 def xtream_api_epg(base: str, user: str, pw: str, user_agent: str = "Cathode", timeout: float = 30,
-                   progress=None, workers: int = 12) -> dict:
-    """The programmes of every live channel of a line through the panel's
-    API, for panels that lock xmltv.php but leave the per-channel calls
-    open: one get_simple_data_table call per channel, a few at a time.
-    {epg key: [(start unix, stop unix, title, description)]}, keyed as
-    xtream_epg_key does. A channel whose call fails just has no guide."""
+                   progress=None, workers: int = 12, streams=None) -> dict:
+    """The programmes of a line's live channels (all of them, or `streams`)
+    through the panel's API: one get_simple_data_table call per channel, a
+    few at a time, for channels the panel's XMLTV leaves out or when it
+    locks xmltv.php altogether. {epg key: [(start unix, stop unix, title,
+    description)]}, keyed as xtream_epg_key does. A channel whose call
+    fails just has no guide."""
     from base64 import b64decode
     from concurrent.futures import ThreadPoolExecutor
-    from urllib.parse import urlencode
 
     def get(action: str, **extra):
-        q = urlencode({"username": user, "password": pw, "action": action, **extra})
-        req = urllib.request.Request(f"{base}/player_api.php?{q}",
-                                     headers={"User-Agent": user_agent, "Accept": "*/*"})
-        with urllib.request.urlopen(req, timeout=timeout, context=SSL) as resp:
-            return json.loads(resp.read().decode("utf-8", "replace"))
+        return _xtream_get(base, user, pw, user_agent, timeout, action, **extra)
 
     def text(v) -> str:
         s = str(v or "")
@@ -242,7 +254,8 @@ def xtream_api_epg(base: str, user: str, pw: str, user_agent: str = "Cathode", t
                 progs.append((a, b, text(r.get("title")), text(r.get("description"))))
         return s, progs
 
-    streams = [s for s in (get("get_live_streams") or []) if isinstance(s, dict) and s.get("stream_id")]
+    if streams is None:
+        streams = xtream_live_streams(base, user, pw, user_agent, timeout)
     out, done = {}, 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for s, progs in pool.map(one, streams):

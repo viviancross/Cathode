@@ -200,7 +200,29 @@ class TestLineGuide(unittest.TestCase):
         self.assertEqual(calls[0], ("/xmltv.php", "", ""))
         self.assertEqual(sorted(c[2] for c in calls if c[1] == "get_simple_data_table"), ["7", "8"])
 
-    def test_a_served_xmltv_is_used_as_is(self):
+    def test_a_served_xmltv_is_used_and_the_api_fills_what_it_left_out(self):
         g, calls = self._load(200)
         self.assertEqual(g.current_program("alpha.1", NOW).title, "From XMLTV")
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(g.next_program("xtream:8", NOW).title, "Plain Title")
+        self.assertEqual([c[2] for c in calls if c[1] == "get_simple_data_table"], ["8"])
+
+    def test_a_line_whose_api_has_nothing_is_not_asked_again(self):
+        from cathode import epg as e
+        e._API_EMPTY.discard("http://h:80")
+        urlopen, calls = self._panel(513)
+
+        def quiet(req, timeout=0, context=None):
+            r = urlopen(req, timeout, context)
+            if "get_simple_data_table" in req.full_url:
+                import io
+                r = io.BytesIO(b'{"epg_listings": []}')
+                r.headers = {}
+            return r
+        try:
+            for _ in range(2):
+                with mock.patch.object(epg_mod.urllib.request, "urlopen", quiet):
+                    with mock.patch("cathode.servers.urllib.request.urlopen", quiet):
+                        EPG().load("xtream://h:80/u/p", now=NOW)
+            self.assertEqual(sum(1 for c in calls if c[1] == "get_simple_data_table"), 2)   # once per channel, one load
+        finally:
+            e._API_EMPTY.discard("http://h:80")
