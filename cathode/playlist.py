@@ -45,6 +45,32 @@ def _split_attrs_name(rest: str):
     return rest, ""
 
 
+# What a provider's panel answers to. Xtream panels refuse clients they
+# don't know, with their own status codes (884, say), and most only answer
+# to the players they expect; these are what those players send.
+PLAYER_AGENTS = ["VLC/3.0.20 LibVLC/3.0.20", "TiviMate/4.7.0 (Android)", "IPTVSmarters/2.2.2", "okhttp/4.12.0"]
+
+
+def load_as(source: str, user_agent: str = "Cathode/1.0"):
+    """load(), and the agent it took: a provider that refuses Cathode's own
+    is tried with the agents real players send, so its playlist (and its
+    guide and streams, with the same agent) still comes through. Returns
+    (channels, user_agent)."""
+    import urllib.error
+    if not source.startswith(("http://", "https://")):
+        return load(source, user_agent), user_agent
+    tried = [user_agent] + [a for a in PLAYER_AGENTS if a != user_agent]
+    last = None
+    for agent in tried:
+        try:
+            return load(source, agent), agent
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code == 404:
+                raise                           # not a refusal: nothing there
+    raise last
+
+
 def load(source: str, user_agent: str = "Cathode/1.0") -> List[Channel]:
     """Load an M3U playlist from a file path or URL."""
     if source.startswith(("http://", "https://", "rtsp://")):

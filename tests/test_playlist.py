@@ -67,5 +67,38 @@ http://h/live/u/p/3.ts
         self.assertEqual(chans[1].url, "http://h/live/u/p/2.ts")
 
 
+class TestProviderAgents(unittest.TestCase):
+    def test_a_refusal_is_retried_as_a_player_and_the_agent_comes_back(self):
+        import urllib.error
+        from unittest import mock
+        from cathode import playlist
+        seen = []
+
+        def fetch(url, agent):
+            seen.append(agent)
+            if "VLC" not in agent:          # the panel answers only to a player, with its own code
+                raise urllib.error.HTTPError(url, 884, "Refused", {}, None)
+            return "#EXTM3U\n#EXTINF:-1,One\nhttp://h/1.ts\n"
+        with mock.patch.object(playlist, "_fetch_url", fetch):
+            chans, agent = playlist.load_as("http://h/get.php?username=u&password=p", "Cathode/1.0 IPTV")
+        self.assertEqual(len(chans), 1)
+        self.assertIn("VLC", agent)
+        self.assertEqual(seen[0], "Cathode/1.0 IPTV")              # its own first
+
+    def test_a_404_is_not_retried(self):
+        import urllib.error
+        from unittest import mock
+        from cathode import playlist
+        seen = []
+
+        def fetch(url, agent):
+            seen.append(agent)
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        with mock.patch.object(playlist, "_fetch_url", fetch):
+            with self.assertRaises(urllib.error.HTTPError):
+                playlist.load_as("http://h/list.m3u", "Cathode/1.0 IPTV")
+        self.assertEqual(len(seen), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

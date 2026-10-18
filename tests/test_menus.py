@@ -245,7 +245,7 @@ class TestFirstRun(unittest.TestCase):
 
     def _checked(self, n=5, err="", server=None):
         from cathode import menus
-        patcher = mock.patch.object(menus, "_check_playlist", lambda app, url, done: done(n, err))
+        patcher = mock.patch.object(menus, "_check_playlist", lambda app, url, done, entry=None: done(n, err))
         patcher.start()
         self.addCleanup(patcher.stop)
         finder = mock.patch.object(menus, "_find_server", lambda app, address, done: done(server))

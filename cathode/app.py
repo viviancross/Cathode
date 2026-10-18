@@ -88,6 +88,7 @@ class App:
         self.last_input = time.monotonic()
         self.weather = None
         self.pending_update = None  # install script to run once we've quit
+        self.agent = config.user_agent  # the User-Agent the current playlist's provider answers to
 
     # ── Threads -> UI thread ──────────────────────────────────────────────
 
@@ -326,8 +327,16 @@ class App:
     def switch_playlist(self, pl: dict):
         self.live.message = "Loading channels..."
         self.channels, self._cats = [], None
+        self.use_agent(pl.get("user_agent", ""))
         self.load_playlist(pl.get("playlist_url", ""), pl.get("epg_url", ""))
         self.invalidate()
+
+    def use_agent(self, agent: str):
+        """The User-Agent this playlist's provider answers to (a player's,
+        when it refused Cathode's own), for its fetches and its streams."""
+        self.agent = agent or self.config.user_agent
+        if getattr(self, "video", None) is not None:
+            self.video.player["user-agent"] = self.agent
 
     def move_to_display(self, index: int):
         self.config.display = index
@@ -376,7 +385,14 @@ class App:
         """Fetch channels (and then the guide) off the UI thread."""
         def work():
             try:
-                chans = m3u.load(url, user_agent=self.config.user_agent)
+                chans, agent = m3u.load_as(url, user_agent=self.agent)
+                if agent != self.agent:         # a provider that wanted a player's agent: keep it
+                    self.agent = agent
+                    for pl in self.config.playlists:
+                        if pl.get("playlist_url") == url:
+                            pl["user_agent"] = agent
+                    self.config.save()
+                    self.post(self.use_agent, agent)
                 err = "" if chans else (f"Your playlist has no channels in it. Press {self.press_hint(R.MENU)} "
                                         "to check its address under Settings > Channels.")
             except Exception as e:
@@ -424,7 +440,7 @@ class App:
             err = ""
             try:
                 epg = EPG()
-                epg.load(url, user_agent=self.config.user_agent, progress=progress)
+                epg.load(url, user_agent=self.agent, progress=progress)
             except Exception as e:
                 print(f"[cathode] EPG load failed: {e!r}")
                 epg, err = None, load_error_text(e, "guide")
@@ -522,6 +538,9 @@ class App:
         for t, button in self.script:
             self.after(t, partial(self.press, button))
         if self.config.playlist_url:
+            # The saved playlist's own agent, if its provider wanted a player's.
+            self.use_agent(next((pl.get("user_agent", "") for pl in self.config.playlists
+                                 if pl.get("playlist_url") == self.config.playlist_url), ""))
             self.load_playlist(self.config.playlist_url, self.config.epg_url)
             if self.config.boot_sequence and getattr(self.skin, "boot_scenes", None) != []:
                 from .screens.boot import Boot

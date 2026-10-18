@@ -737,15 +737,21 @@ def _find_server(app, address, done):
     threading.Thread(target=work, daemon=True).start()
 
 
-def _check_playlist(app, url, done):
-    """Fetch the playlist off the UI thread; done(channel count, error text)."""
+def _check_playlist(app, url, done, entry=None):
+    """Fetch the playlist off the UI thread; done(channel count, error text).
+    A provider that only answers a player's User-Agent is fetched as one,
+    and `entry` remembers which, for its guide and streams."""
     import threading
     from . import playlist as m3u
     from .app import load_error_text
 
     def work():
         try:
-            n, err = len(m3u.load(url, user_agent=app.config.user_agent)), ""
+            chans, agent = m3u.load_as(url, user_agent=app.config.user_agent)
+            n, err = len(chans), ""
+            if entry is not None and agent != app.config.user_agent:
+                entry["user_agent"] = agent
+                print(f"[cathode] the provider wanted a player's User-Agent: {agent}")
         except Exception as e:
             n, err = 0, load_error_text(e)
         app.post(done, n, err)
@@ -835,7 +841,7 @@ def add_playlist(app, on_added=None, first_run=False):
                 app.toast(f"Found {n} channel{'' if n == 1 else 's'}. The guide comes from the same provider.", 5.0)
                 app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
                                   hint="How it's listed under Settings > Channels."))
-            _check_playlist(app, provider.playlist_url, checked)
+            _check_playlist(app, provider.playlist_url, checked, entry)
             return
         if not servers.looks_like_address(text):
             got_url(text)
@@ -876,7 +882,7 @@ def add_playlist(app, on_added=None, first_run=False):
             entry["playlist_url"] = url
             app.push(Keyboard(app, step("b", "Guide address (optional)"), got_epg, url=True,
                               hint=GUIDE_HINT + " Without one, the guide has no listings."))
-        _check_playlist(app, url, checked)
+        _check_playlist(app, url, checked, entry)
 
     def got_epg(epg):
         if epg is None:
