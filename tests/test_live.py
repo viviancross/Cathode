@@ -547,5 +547,37 @@ class TestMpvLog(unittest.TestCase):
                                  "[mpv] warn ao/wasapi: Audio device underrun detected."])
 
 
+class TestSounds(unittest.TestCase):
+    def test_only_the_hr20_skin_makes_them_and_off_silences_it(self):
+        from types import SimpleNamespace
+        from cathode.app import App
+        from cathode.skins import skin_classes
+        self.assertTrue(skin_classes()["indirect_hd"].ui_sounds)
+        for name in ("indirect", "plate", "plate_hd", "classic"):
+            self.assertFalse(skin_classes()[name].ui_sounds, name)
+        app = App.__new__(App)
+        played = []
+        app._sounds = SimpleNamespace(level="medium", key=lambda: played.append("key"), bonk=lambda: played.append("bonk"))
+        app.config = SimpleNamespace(sound_effects="medium")
+        app.skin = SimpleNamespace(ui_sounds=True)
+        app.sound("key"); app.sound("bonk")
+        app.config.sound_effects = "off"
+        app.sound("key")
+        app.config.sound_effects = "high"
+        app.skin = SimpleNamespace(ui_sounds=False)
+        app.sound("key")
+        self.assertEqual(played, ["key", "bonk"])
+
+    def test_the_synthesised_sounds_build(self):
+        import pygame
+        from cathode import sounds
+        try:
+            pygame.mixer.init(frequency=sounds.RATE, size=-16, channels=2)
+        except pygame.error as e:
+            self.skipTest(f"no audio device: {e}")
+        self.assertGreater(sounds.key_sound().get_length(), 0.01)
+        self.assertGreater(sounds.bonk_sound().get_length(), 0.1)
+
+
 if __name__ == "__main__":
     unittest.main()

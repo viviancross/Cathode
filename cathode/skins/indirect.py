@@ -44,6 +44,7 @@ class InDirectHD(BoxSkin):
     guide_hours = 1.5               # three half-hour columns, as the box showed
     guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
     tune_black = 1.5                # the HR20 went black about 1.5 s on a change (3 s with Native On)
+    ui_sounds = True                # the HR20's "beeps and boops" and its error bonk
     banner_time_setting = True      # Display > Preferences > Banner Time, 2-8 s
     TALL = ("guide", "screensaver", "ondemand")
     default_font = "barlow"         # the HR20's DIN-like screen face: Barlow matches its letterforms
@@ -1294,6 +1295,7 @@ class InDirect(InDirectHD):
     label = "InDirecTV"
     canvas = (640, 480)
     boot_scenes = []                # a DSS box was never off: power-on is the last channel, at once
+    ui_sounds = False               # the DSS was silent
     tune_black = 0.8
     guide_hours = 2                 # four half-hour columns, as the DSS showed
     guide_rows = 6

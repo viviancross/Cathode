@@ -481,3 +481,5 @@ class LiveTV(Screen):
                 self.tune(i)
                 return
         self.app.note(f"No channel {number}")
+        if hasattr(self.app, "sound"):
+            self.app.sound("bonk")

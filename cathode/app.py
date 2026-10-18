@@ -256,6 +256,7 @@ class App:
     def press(self, action: str):
         """Offer a remote button to the screens, top first."""
         self.last_input = time.monotonic()
+        self.sound("key")
         if action == R.FORMAT:          # like the box's key: works over any screen
             self.cycle_format()
             return
@@ -273,6 +274,18 @@ class App:
             self.toggle_fullscreen()
         elif action == R.QUIT:
             self.quit()
+
+    def sound(self, which: str):
+        """The box's UI sound, on a skin whose box made them ('key' on a
+        press, 'bonk' on an error), at the Sound Effects level."""
+        if not getattr(self.skin, "ui_sounds", False) or self.config.sound_effects == "off":
+            return
+        snd = getattr(self, "_sounds", None)
+        if snd is None:
+            from .sounds import Sounds
+            snd = self._sounds = Sounds(self.config.sound_effects)
+        snd.level = self.config.sound_effects
+        getattr(snd, which)()
 
     def quit(self):
         self.running = False

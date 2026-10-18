@@ -272,6 +272,7 @@ class Skin:
     # The boot's scenes, (name, min seconds): the box's own start-up screens
     # (see docs/cathode-4/box-behaviour.md). None = the shared starting /
     # signal / guide; [] = this box had no boot screen (straight to TV).
+    ui_sounds = False           # the box made key sounds (only the HR20 did)
     boot_scenes = None
     boot_over_video = ()        # the scenes the box drew over live video
     right_is_browse = False     # RIGHT on live TV browses (Dish) instead of volume

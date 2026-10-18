@@ -130,6 +130,7 @@ class Config:
     # Window
     start_fullscreen: bool = True  # -w on the command line overrides it
     boot_sequence: bool = True     # the "acquiring signal" start-up screen
+    sound_effects: str = "medium"  # the box's key sounds, on the skins whose box had them: off|low|medium|high
     display: int = 0               # which monitor (0 = the first)
 
     # Startup

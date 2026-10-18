@@ -944,7 +944,7 @@ def _save_diagnostics(app):
 
 
 def system_items(app):
-    from . import __version__
+    from . import __version__, sounds
     from .screens.diagnostics import Diagnostics
     from . import update_flow
     cfg = app.config
@@ -957,6 +957,11 @@ def system_items(app):
         Item("Check for updates", lambda: update_flow.open_check(app)),
         Item("Check at start-up", value=lambda: "Yes" if cfg.update_check else "No",
              adjust=lambda d: (setattr(cfg, "update_check", not cfg.update_check), cfg.save())),
+        *([Item("Sound effects", value=lambda: _label(sounds.LEVELS, cfg.sound_effects),
+                adjust=lambda d: (setattr(cfg, "sound_effects", _cycle(sounds.LEVELS, cfg.sound_effects, d)), cfg.save(),
+                                  app.sound("key")),
+                help="The box's key sounds and its error bonk, as the HR20 had them.")]
+          if getattr(app.skin, "ui_sounds", False) else []),
         Item("Start-up screen", value=lambda: "On" if cfg.boot_sequence else "Off",
              adjust=lambda d: (setattr(cfg, "boot_sequence", not cfg.boot_sequence), cfg.save())),
         Item("Screensaver", value=lambda: "On" if cfg.screensaver else "Off",
