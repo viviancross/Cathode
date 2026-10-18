@@ -35,6 +35,7 @@ class LiveTV(Screen):
         self.suspended = False                      # On Demand has the picture
         self.behind, self._paused_at = 0.0, 0.0     # pause-live bookkeeping
         self._reveal_start = 0.0
+        self._cover_at = 0.0        # when the picture went dark for a tune: the box's black has a floor
         self._timeout = self._digit_timer = self._banner_timer = None
         self._settle = None         # surfing: the stream loads once the presses stop
         self._fails = 0             # a dropped stream's retries in a row
@@ -95,6 +96,7 @@ class LiveTV(Screen):
         self._stall = None
         ch = self.channels[idx]
         self.phase, self.standby = "cover", False
+        self._cover_at = time.monotonic()
         self.behind = 0.0                   # a fresh tune is live
         self.app.cancel(self._timeout)
         self.app.cancel(self._settle)
@@ -157,7 +159,14 @@ class LiveTV(Screen):
             if self._handover:              # the replacement took over: it's live
                 self._handover, self.behind = False, 0.0
             if self.phase == "cover":
-                self._reveal()
+                # The real box sat black for a second or more while its tuner
+                # locked; a LAN stream can answer in a tenth of that. Hold the
+                # black to the skin's floor, so the change feels like the box.
+                left = self.app.skin.tune_black - (time.monotonic() - self._cover_at)
+                if left > 0.05:
+                    self.app.after(left, lambda i=self.idx: self.idx == i and self.phase == "cover" and self._reveal())
+                else:
+                    self._reveal()
         elif kind == "video_buffering":
             self.app.cancel(self._stall)
             self._stall = None

@@ -623,6 +623,13 @@ def style_items(app):
     cw, ch = type(app.skin).canvas
     wide = [Item("Wide screen", value=lambda: "Stretch" if cfg.stretch_43 else "Pillarbox",
                  adjust=set_and(lambda d: setattr(cfg, "stretch_43", not cfg.stretch_43)))] if cw * 3 == ch * 4 else []
+
+    def banner_time(d):             # the HR20's 2-8 s, a second a step
+        cfg.osd_timeout = float(max(2, min(8, int(cfg.osd_timeout) + d)))
+        cfg.save()
+    banner = [Item("Banner time", value=lambda: f"{int(cfg.osd_timeout)} seconds", adjust=banner_time,
+                   help="How long the channel banner stays after a change.")] \
+        if getattr(app.skin, "banner_time_setting", False) else []
     return [
         Item("Skin", value=lambda: _label(skins, cfg.skin), adjust=set_skin),
         Item("Color theme", value=lambda: _label(skin().theme_choices(), skin().theme_key()),
@@ -637,6 +644,7 @@ def style_items(app):
         Item("Picture format", value=lambda: _format_label(cfg.picture_format),
              adjust=lambda d: app.cycle_format(d)),
         *wide,
+        *banner,
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
         Item("Edit colors", submenu=lambda: color_items(app)),

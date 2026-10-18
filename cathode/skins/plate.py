@@ -38,6 +38,7 @@ def time_left(prog, now) -> str:
 
 class PlateHD(BoxSkin):
     name = "plate_hd"
+    tune_black = 1.0                # the ViP's black on a change, about a second
     label = "Plate Network HD"
     canvas = (1280, 720)
     right_is_browse = True
@@ -1064,6 +1065,7 @@ class Plate(PlateHD):
     name = "plate"
     label = "Plate Network"
     canvas = (640, 480)
+    tune_black = 1.2                # the 301's black on a change, a second or two
     guide_rows = 4
     SD = True
     # Measured: the tab blue, the page grey, the pale selection, the pill

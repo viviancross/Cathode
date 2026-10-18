@@ -267,6 +267,8 @@ class Skin:
     canvas = (1280, 720)
     nearest = False             # pixel-art upscale (SD skins) vs smooth
     tune_cover = "static"       # what covers a channel change: static | black
+    tune_black = 0.0            # seconds the cover holds at least (the box's tuner-lock black)
+    banner_time_setting = False # the box let you set how long the banner stays (DirecTV's Banner Time)
     # The boot's scenes, (name, min seconds): the box's own start-up screens
     # (see docs/cathode-4/box-behaviour.md). None = the shared starting /
     # signal / guide; [] = this box had no boot screen (straight to TV).

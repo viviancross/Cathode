@@ -36,6 +36,7 @@ class FakeVideo:
 
 class FakeSkin:
     tune_cover = "static"
+    tune_black = 0.0
 
 
 class FakeApp:
@@ -240,6 +241,19 @@ class TestTuning(unittest.TestCase):
         self.assertEqual(self.live.cover(), ("static", 1.0))
         self.live.on_video("video_started")
         self.assertEqual(self.live.phase, "reveal")
+
+    def test_a_boxs_black_has_a_floor(self):
+        # The real box sat black while its tuner locked; a frame that comes
+        # at once waits out the skin's floor, then reveals.
+        self.app.skin.tune_black = 1.5
+        self.live.tune(1)
+        self.live.on_video("video_started")
+        self.assertEqual(self.live.phase, "cover")
+        t = self.app.timers[-1]
+        self.assertAlmostEqual(t[0], 1.5, delta=0.1)
+        t[2]()
+        self.assertEqual(self.live.phase, "reveal")
+        self.app.skin.tune_black = 0.0
 
     def test_a_stale_timeout_does_not_reveal_the_next_channel(self):
         self.live.handle(R.UP)                     # tune again: first timeout is cancelled
