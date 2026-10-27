@@ -74,6 +74,7 @@ DESCRIPTIONS.update({
     # System
     "Diagnostics": "Signal, stream and picture details.",
     "Audio output": "Which speakers or HDMI the sound uses.",
+    "Music channels": "YouTube playlists as channels of music videos, each on its own timeline.",
     "Weather": "Local weather in the guide's header and on the Weather channel.",
     "Check for updates": "See if there's a newer Cathode.",
     "Check at start-up": "Look for a newer Cathode each time it opens.",
@@ -713,6 +714,7 @@ def channel_items(app):
                           submenu=lambda pl=pl: playlist_items(app, pl)))
     items.append(Item("Add a playlist...", lambda: add_playlist(app)))
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
+    items.append(Item("Music channels", submenu=lambda: music_channel_items(app)))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
@@ -767,6 +769,52 @@ def own_channel_items(app):
         Item("Background music", music, value=lambda: "On" if cfg.own_music else "Off", adjust=music,
              help="The channels' own music while one is tuned. Drop your own tvguide.ogg or weather.ogg "
                   "in ~/.config/cathode/music to play that instead.")]
+
+
+def music_channel_items(app):
+    """The YouTube playlists that are music channels: SELECT edits a link
+    (empty removes the channel), one more is added at the foot, and yt-dlp
+    (what resolves them) can be brought up to date."""
+    from . import musicchannels, ytdl
+    cfg = app.config
+
+    def name(url):
+        pl = ytdl.cached_playlist(url)
+        return musicchannels.clean_name(pl["title"]) if pl else "Music Videos"
+
+    def edit(i):
+        def got(text):
+            if text is None:
+                return
+            text = text.strip()
+            if text and text != Keyboard.URL_START:
+                cfg.music_playlists[i] = text
+            else:
+                cfg.music_playlists.pop(i)
+            cfg.save()
+            app.place_own_channels()
+        app.push(Keyboard(app, "Playlist link (empty removes the channel)", got,
+                          initial=cfg.music_playlists[i], url=True))
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if text and text != Keyboard.URL_START:
+                cfg.music_playlists.append(text)
+                cfg.save()
+                app.place_own_channels()
+        app.push(Keyboard(app, "YouTube playlist link", got, url=True,
+                          hint="A YouTube playlist link, or just the list= part of one."))
+    items = [Item(name(url), lambda i=i: edit(i), value=lambda u=url: ytdl.playlist_id(u)[:16],
+                  help="A YouTube playlist as a channel: its videos on a timeline, the day's order shuffled "
+                       "by the date. SELECT edits the link; an empty link removes the channel.")
+             for i, url in enumerate(cfg.music_playlists)]
+    items.append(Item("Add a playlist...", add, help="Any YouTube playlist becomes a music channel."))
+    items.append(Item("YouTube support", lambda: app.check_ytdl(manual=True),
+                      value=lambda: f"yt-dlp {ytdl.version()}",
+                      help="yt-dlp resolves the videos. YouTube changes break it now and then: SELECT fetches "
+                           "the newest release (checked weekly on its own); it takes over at the next start."))
+    return items
 
 
 def _bare(url):

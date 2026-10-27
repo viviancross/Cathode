@@ -27,7 +27,8 @@ KINDS = {
 
 
 def is_own(ch) -> bool:
-    return ch.url.startswith(SCHEME)
+    """One of these page channels (a music channel is cathode:// too, but not one)."""
+    return ch.url.startswith(SCHEME) and kind_of(ch) in KINDS
 
 
 def kind_of(ch) -> str:

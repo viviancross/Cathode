@@ -552,6 +552,24 @@ class Skin:
         fn = getattr(self, f"draw_{screen.name}", None)
         if fn:
             fn(canvas, screen)
+        card = getattr(screen, "card", None)
+        if card and getattr(screen, "phase", "") != "cover" and time.monotonic() < card["until"]:
+            self.draw_music_card(canvas, card)
+
+    def draw_music_card(self, c, card):
+        """A music channel's lower-third as its song starts and ends: the
+        artist, the song in quotes, the label, bottom left over the picture,
+        the way MTV named them."""
+        W, H = self.canvas
+        t = self.text
+        fb, fr, fs = t.font("Barlow-Bold.ttf", 40), t.font("Barlow-Medium.ttf", 34), t.font("Barlow-Medium.ttf", 24)
+        lines = [(card.get("artist", ""), fb), (f"\u201c{card['song']}\u201d" if card.get("song") else "", fr),
+                 (card.get("label", ""), fs)]
+        lines = [(s, f) for s, f in lines if s]
+        y = int(H * 0.86) - sum(t.ink(f)[1] + 8 for _s, f in lines)
+        for s, f in lines:
+            t.draw(c, t.fit(f, s, W - 160), f, (255, 255, 255), 80, y, outline=(0, 0, 0))
+            y += t.ink(f)[1] + 8
 
     def logo(self, url: str, max_w: int, max_h: int, headers=None) -> Optional[pygame.Surface]:
         """A channel logo or poster fitted to the box, as a pygame surface;

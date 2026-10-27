@@ -8,3 +8,6 @@ PyOpenGL>=3.1.7
 Pillow>=10.3.0
 # CA bundle so HTTPS verifies on macOS, whose bundled Python often lacks one.
 certifi>=2023.0.0
+# YouTube playlists as music channels (cathode/ytdl.py): pure Python, runs
+# in-process; a newer release is fetched into the cache from Settings.
+yt-dlp>=2026.10.26

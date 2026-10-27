@@ -33,7 +33,7 @@ DONE Oct 27 (4.33): the framework (`cathode/ownchannels.py`, a page drawn at SD 
 One framework: a screen that takes a channel number, sits in the lineup and the guide like any channel, and draws itself instead of playing a stream.
 - **The TV Guide channel.** Prevue-style: the current picture in the top half, the grid scrolling through every channel's now and next in the bottom half, in that blue-and-yellow look.
 - **The Weather channel.** Local-on-the-8s pages from the weather feed Cathode already has: current conditions, the outlook, the hourly rain chance, the clock.
-- **Music channels.** A Plex music library as Music Choice-style channels: shuffled playback with the static card of artist, album art, title and a line of trivia; one channel per genre or playlist.
+- **Music channels.** DONE Oct 27 (4.34), redesigned after a grill session: YouTube playlists via yt-dlp in-process (`cathode/ytdl.py`, `cathode/musicchannels.py`), not Plex music. Each playlist a channel on a date-seeded timeline; lower-third card; guide blocks; in-app yt-dlp update (weekly + Settings button). Pre-filled with three Vevo decade playlists. Cathode is personal-use only now (user, Oct 27), so distribution risk no longer shapes sources.
 
 ### From the Oct 27 critique (28/40, snapshot in `.impeccable/critique/`)
 Done the same day: the key tip in the device's words, pad bindings that reach the app, LAN discovery of the server during setup, Q asks before quitting, digits as wide as the lineup, BACK asks before stopping a title, a Plex error with a next step, the lists pop-up named per box, DSS guide buttons that work, the layout defects (overlaps, safe area, 17 px type), On Demand out of the way without Plex.
@@ -53,12 +53,12 @@ Ships beside 5.0 as `android-v5.0`, labelled a beta: one APK, arm64, Android 8+,
 |---|---|
 | Oct 27 to 28 | Strong8K from the zip (4.32). Decimal numbers, lineup refresh. Server API research, then guide posters with the rating and up-next bugs. |
 | Oct 29 to 31 | ~~Channel framework, TV Guide channel, Weather channel~~ (done Oct 27). Alpha 4.33 build. Music channels start. |
-| Nov 1 to 3 | Music channels. Phone companion and API. Android box pass as reports arrive. |
+| Nov 1 to 3 | ~~Music channels~~ (done Oct 27, 4.34). Phone companion and API. Music channels on the Deck, macOS and the Android box from their builds (yt-dlp in requirements; android-tv branch's buildozer.spec needs it added). |
 | Nov 4 to 6 | Editable channel lists. LAN discovery. Start over / watch later if the research allowed. Alpha 4.34. |
 | Nov 7 to 10 | Cold-install QA: Tunarr, ErsatzTV (Docker), keyboard, pad, Deck Game Mode. On Demand audio check. Fix round. Android signing and box pass two. Freeze at the end of Nov 10. |
-| Nov 11 | Release notes ("Cathode 5", the story from 4.0 for people who never saw an alpha), README with screenshots, LICENSE and notices check. |
+| Nov 11 | ~~Release notes, README with screenshots, LICENSE and notices check~~ (dropped Oct 27: personal use only, never released). Free for features or QA. |
 | Nov 12 to 13 | 5.0 release-candidate builds: four desktop artifacts and the signed APK, audited. Final pass on the RC. |
-| Nov 14 | The user publishes `v5.0` and `android-v5.0`. |
+| Nov 14 | ~~The user publishes `v5.0` and `android-v5.0`.~~ (no public release; 5.0 is the feature-complete build for the user's own devices) |
 | Nov 15 | Buffer: a hotfix build if the day needs one. |
 
 ## Release checklist (Nov 11 onward)

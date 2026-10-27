@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 
 import pygame
 
-from . import ownchannels, paths, playlist as m3u, remote as R
+from . import musicchannels, ownchannels, paths, playlist as m3u, remote as R
 from .config import Config
 from .epg import EPG
 from .logos import LogoStore
@@ -88,6 +88,7 @@ class App:
         self._cats = None           # category list, rebuilt when channels or guide change
         self.last_input = time.monotonic()
         self.weather = None
+        self.music = {}             # playlist id -> musicchannels.Schedule, once resolved
         self.pending_update = None  # install script to run once we've quit
         self.agent = config.user_agent  # the User-Agent the current playlist's provider answers to
 
@@ -425,11 +426,13 @@ class App:
             live.message = err
             self.invalidate()
             return
-        self.channels = ownchannels.add_to(chans, self.config)
+        self.channels = musicchannels.add_to(ownchannels.add_to(chans, self.config), self.config)
         self._cats = None
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         ownchannels.fill_guide(self.epg)
+        musicchannels.load(self)
+        self.check_ytdl()
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
         self.after(self.EPG_REFRESH, lambda gen=self._lineup_gen: gen == self._lineup_gen and self.refresh_lineup())
@@ -468,13 +471,14 @@ class App:
             return
         from .screens.live import LiveTV
         live = self.find(LiveTV)
-        had = [c for c in self.channels if not ownchannels.is_own(c)]
+        had = [c for c in self.channels if not ownchannels.is_own(c) and not musicchannels.is_music(c)]
         before = {c.number for c in had}
         after = {c.number for c in chans}
         if before == after and [c.name for c in had] == [c.name for c in chans]:
             return
         current = live.channel.number if live and live.channel else None
-        self.channels = ownchannels.add_to(chans, self.config)
+        self.channels = musicchannels.add_to(ownchannels.add_to(chans, self.config), self.config)
+        musicchannels.fill_guide(self.epg, self.channels, self.music)
         self._cats = None
         if live and current is not None:
             live.idx = live.number_to_idx(current)
@@ -487,9 +491,11 @@ class App:
         change, the channel playing kept (retuned to the first if it went)."""
         live = self.live
         current = live.channel.number if live and live.channel else None
-        self.channels = ownchannels.add_to([c for c in self.channels if not ownchannels.is_own(c)], self.config)
+        plain = [c for c in self.channels if not ownchannels.is_own(c) and not musicchannels.is_music(c)]
+        self.channels = musicchannels.add_to(ownchannels.add_to(plain, self.config), self.config)
         self._cats = None
         ownchannels.fill_guide(self.epg)
+        musicchannels.load(self)
         if live and current is not None and self.channels:
             idx = live.number_to_idx(current)
             if self.channels[idx].number != current:
@@ -528,6 +534,36 @@ class App:
             self.guide_progress = frac
             self.invalidate()
 
+    YTDL_CHECK = 7 * 86400
+
+    def check_ytdl(self, manual: bool = False):
+        """A newer yt-dlp fetched into the cache (it loads at the next start):
+        weekly on its own, or now from Settings, which also says the result."""
+        from . import ytdl
+        if not manual and time.time() - self.config.ytdl_checked < self.YTDL_CHECK:
+            return
+        if manual:
+            self.toast(f"Checking for a newer yt-dlp (running {ytdl.version()})...", 20.0)
+
+        def work():
+            try:
+                got = ytdl.update()
+                msg = (f"yt-dlp {got} fetched; it takes over when Cathode next starts." if got
+                       else f"yt-dlp {ytdl.version()} is the newest.")
+                ok = True
+            except Exception as e:
+                msg, ok = f"Couldn't update yt-dlp: {e.__class__.__name__}: {str(e)[:60]}", False
+            print(f"[ytdl] {msg}")
+            if manual or (ok and got):
+                self.post(self.toast, msg, 8.0)
+            if ok:
+                self.post(self._ytdl_checked)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ytdl_checked(self):
+        self.config.ytdl_checked = time.time()
+        self.config.save()
+
     def _epg_loaded(self, gen, url, epg, err=""):
         if gen != self._epg_gen or url != self.config.epg_url:
             return                      # the playlist changed under it
@@ -539,9 +575,10 @@ class App:
             ids = ownchannels.real_ids(epg)
             print(f"[cathode] EPG loaded ({len(ids)} channels).")
             ownchannels.fill_guide(epg)
+            musicchannels.fill_guide(epg, self.channels, self.music)
             if url != self._epg_checked:        # once per guide: one that matches nothing says so
                 self._epg_checked = url
-                chans = [ch for ch in self.channels if not ownchannels.is_own(ch)]
+                chans = [ch for ch in self.channels if not ownchannels.is_own(ch) and not musicchannels.is_music(ch)]
                 missed = [ch for ch in chans if not epg.resolve_channel_id(ch.epg_id, ch.name)]
                 print(f"[cathode] guide covers {len(chans) - len(missed)} of {len(chans)} channels"
                       + (f"; e.g. not " + ", ".join(f"{ch.name} (epg id {ch.epg_id or 'none'})" for ch in missed[:3])

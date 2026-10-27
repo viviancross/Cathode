@@ -166,13 +166,16 @@ class Video:
 
     # ── Playback ──────────────────────────────────────────────────────────
 
-    def play(self, url: str, headers: Optional[dict] = None, start: float = 0, sub_delay: float = 0.0):
+    def play(self, url: str, headers: Optional[dict] = None, start: float = 0, sub_delay: float = 0.0,
+             audio: Optional[str] = None):
         """Load `url`, replacing whatever plays. Events about any earlier file
-        are ignored from here on: only this load's start can reveal it."""
+        are ignored from here on: only this load's start can reveal it.
+        `audio` is a separate audio stream played with it (YouTube's)."""
         # Always set (empty clears), so a Plex token can't ride along onto the
         # next live stream. Headers go out before the load they belong to.
         self.player["http-header-fields"] = (
             [f"{k}: {v}" for k, v in headers.items()] if headers else [])
+        self.player["audio-files"] = [audio] if audio else []
         self.player["start"] = str(start) if start > 0 else "none"
         self.player["sub-delay"] = sub_delay     # a transcode's clock starts mid-file
         with self._ids:

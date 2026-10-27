@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.34
+
+- **Music channels.** YouTube playlists as channels of music videos, after
+  Cathode's own channels. Three official decade playlists are there from
+  the start ('80s, '90s, 2000s); Settings > Channels > Music channels
+  adds any playlist link or takes one away. Each channel is a timeline: the
+  day's running order is the playlist shuffled by the date, laid out from
+  midnight, so tuning in lands mid-song, tuning away and back finds the
+  same song further on, and the guide's half-hour blocks say which songs
+  start in them. A lower-third names the artist and the song as each
+  starts and again before it ends. A video that can't play is dropped
+  from the day's order. Resolved through yt-dlp running inside Cathode
+  (no JavaScript runtime needed today); Settings > Channels > Music
+  channels > YouTube support fetches the newest yt-dlp when YouTube
+  changes break it (checked weekly on its own), which takes over at the
+  next start.
+
 ## 4.33
 
 - **Cathode's own channels.** Two channels of Cathode's own sit in the
