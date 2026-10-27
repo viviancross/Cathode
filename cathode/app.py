@@ -81,6 +81,7 @@ class App:
         self.epg_failed = False     # the last guide load failed (vs loaded and empty)
         self._repeat = None
         self.shot = None            # (path, seconds): save a frame and exit (tests, CI)
+        self._cursor_timer = None
         self.script = []            # [(seconds, button)]: scripted presses (tests, CI)
         self.toast_text, self.toast_until = "", 0.0
         self.note_text, self.note_until = "", 0.0   # a key's notice (FORMAT, SUBTITLE)
@@ -625,6 +626,7 @@ class App:
         pygame.key.set_repeat(self.config.nav_repeat_delay,
                               int(1000 / max(1, self.config.nav_repeat_rate)))
         pygame.display.set_allow_screensaver(False)     # a TV box keeps the set awake
+        self._cursor_timer = self.after(self.CURSOR_HIDE, self._hide_cursor)   # a TV has no pointer
         self.remote = R.Remote(self.config.key_bindings, self.config.gamepad_bindings)
         self.logos = LogoStore(os.path.join(paths.cache_dir(), "logos"),
                                on_loaded=lambda: self.post(self.invalidate),
@@ -779,7 +781,23 @@ class App:
         self.gfx.compose(self.skin.canvas, video_box=box, cover=cover, crt=crt,
                          vignette=self.config.vignette_enabled, seed=time.monotonic() % 97)
 
+    CURSOR_HIDE = 3.0           # seconds the mouse sits still before its pointer goes
+
+    def _cursor_seen(self):
+        """The mouse moved or clicked: show the pointer until it sits still."""
+        pygame.mouse.set_visible(True)
+        self.cancel(self._cursor_timer)
+        self._cursor_timer = self.after(self.CURSOR_HIDE, self._hide_cursor)
+
+    def _hide_cursor(self):
+        self._cursor_timer = None
+        pygame.mouse.set_visible(False)
+
     def _dispatch(self, e):
+        if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL):
+            self._cursor_seen()
+        elif e.type in (pygame.KEYDOWN, pygame.CONTROLLERBUTTONDOWN) and self._cursor_timer:
+            self._hide_cursor()             # a remote or key in hand: the pointer is in the way
         if e.type == _CALL:
             e.fn()
         elif e.type == _FRAME:

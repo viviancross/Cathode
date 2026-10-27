@@ -2,6 +2,9 @@
 
 ## 4.34
 
+- **The mouse pointer goes away.** It hides three seconds after the mouse
+  sits still, and at once on a key or a pad button; it's back as soon as
+  the mouse moves.
 - **Music channels.** YouTube playlists as channels of music videos, after
   Cathode's own channels. Three official decade playlists are there from
   the start ('80s, '90s, 2000s); Settings > Channels > Music channels
