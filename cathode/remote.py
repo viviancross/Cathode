@@ -73,11 +73,16 @@ for _i in range(10):
     DEFAULT_KEYS[f"K_{_i}"] = DIGITS[_i]
     DEFAULT_KEYS[f"K_KP{_i}"] = DIGITS[_i]
 
+# The small View/Back button is Options (favourites, picture format,
+# subtitles, the guide's lists): a stick click is the least findable input
+# on a pad. The Guide/Steam/Xbox button is left alone: Game Mode and the
+# Xbox overlay take it before the app sees it, so EXIT on a pad is BACK
+# from the top screen. The mini guide moves to the left stick.
 DEFAULT_PAD = {
     "A": SELECT, "B": BACK, "X": GUIDE, "Y": INFO,
-    "BACK": BROWSE, "START": MENU, "GUIDE": EXIT,
+    "BACK": OPTIONS, "START": MENU,
     "LEFTSHOULDER": CH_DOWN, "RIGHTSHOULDER": CH_UP,
-    "LEFTSTICK": OPTIONS, "RIGHTSTICK": PREV,
+    "LEFTSTICK": BROWSE, "RIGHTSTICK": PREV,
     "DPAD_UP": UP, "DPAD_DOWN": DOWN, "DPAD_LEFT": LEFT, "DPAD_RIGHT": RIGHT,
     "TRIGGERLEFT": VOL_DOWN, "TRIGGERRIGHT": VOL_UP,
 }

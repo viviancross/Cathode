@@ -267,6 +267,84 @@ def xtream_api_epg(base: str, user: str, pw: str, user_agent: str = "Cathode", t
     return out
 
 
+def _local_ip() -> str:
+    """This machine's address on the LAN (the route a packet to the outside
+    would take; nothing is sent)."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        s.close()
+
+
+def scan_lan(user_agent: str = "Cathode", connect_timeout: float = 0.25, workers: int = 128) -> list:
+    """Tunarr and ErsatzTV servers on this machine's /24: a quick connect to
+    each host's known ports, then the version question of whatever answers.
+    [Server, ...] nearest-first by address; [] off a network."""
+    import socket
+    from concurrent.futures import ThreadPoolExecutor
+    # Every /24 this machine sits on (a Deck on Wi-Fi, a PC with a VPN or
+    # Docker adapter too), the default route's first.
+    ips = [_local_ip()]
+    try:
+        ips += [a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+    except OSError:
+        pass
+    nets = []
+    for ip in ips:
+        if ip and not ip.startswith(("127.", "169.254.")) and ip.rsplit(".", 1)[0] not in nets:
+            nets.append(ip.rsplit(".", 1)[0])
+    hosts = [f"{net}.{i}" for net in nets[:4] for i in range(1, 255)]
+    if not hosts:
+        return []
+
+    def listening(host):
+        hits = []
+        for port in PORTS:
+            try:
+                with socket.create_connection((host, port), connect_timeout):
+                    hits.append(f"http://{host}:{port}")
+            except OSError:
+                pass
+        return hits
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        candidates = [addr for hits in pool.map(listening, hosts) for addr in hits]
+    # The same server shows up once per adapter it's reachable through (a
+    # PC running Tunarr sees itself on its LAN, VPN, Tailscale and WSL
+    # addresses): keep one per server, the plainest home address first.
+    candidates.sort(key=_address_rank)
+    found, seen = [], set()
+    for addr in candidates:
+        try:
+            server = detect(addr, user_agent=user_agent, timeout=3.0)
+        except Exception:
+            server = None
+        if server is not None and (server.kind, server.version) not in seen:
+            seen.add((server.kind, server.version))
+            found.append(server)
+    return found
+
+
+def _address_rank(addr: str) -> int:
+    """Home LAN ranges first (192.168, 10.0), other private 10.x next, then
+    Docker/WSL's 172.16-31 and Tailscale's 100.64-127 last."""
+    host = urlsplit(addr).hostname or ""
+    if host.startswith(("192.168.", "10.0.")):
+        return 0
+    if host.startswith("10."):
+        return 1
+    if host.startswith("172.") and 16 <= int(host.split(".")[1] or 0) <= 31:
+        return 2
+    if host.startswith("100.") and 64 <= int(host.split(".")[1] or 0) <= 127:
+        return 3
+    return 4
+
+
 def looks_like_address(text: str) -> bool:
     """A bare host or host:port rather than a playlist file or link: worth
     asking the server what it is."""

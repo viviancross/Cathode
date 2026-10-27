@@ -267,7 +267,13 @@ class Playback(Screen):
             self.show_bar()
         elif a == R.BACK and self.bar_visible() and not self.app.video.paused:
             self.hide_bar()                 # BACK (B on a pad) takes the bar away first
-        elif a in (R.STOP, R.BACK, R.EXIT):
+        elif a == R.BACK:
+            # The second B is a reflex on a pad: ask, rather than end the film.
+            from ..menus import _confirm
+            from .menu import Menu
+            self.app.push(Menu(self.app, "STOP WATCHING?",
+                               _confirm(self.app, "Stop watching", self.stop, "Keep watching", close=True)))
+        elif a in (R.STOP, R.EXIT):
             self.stop()
         elif a == R.MENU:
             from ..menus import playback_menu

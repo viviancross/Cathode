@@ -86,13 +86,20 @@ class TestBarGoes(unittest.TestCase):
         pb._monitor()
         self.assertEqual(len(drawn), 1)                 # then nothing to draw
 
-    def test_back_hides_the_bar_then_leaves(self):
+    def test_back_hides_the_bar_then_asks_before_leaving(self):
         pb, _, stopped = self._pb()
+        pushed = []
+        pb.app.push = pushed.append
+        pb.app.top = lambda: pb.app.screens[-1]
         pb.show_bar()
         pb.handle(R.BACK)
         self.assertFalse(pb.bar_visible())
         self.assertEqual(stopped, [])
-        pb.handle(R.BACK)
+        pb.handle(R.BACK)                               # the reflex second B: a question, not the exit
+        self.assertEqual(stopped, [])
+        self.assertEqual(pushed[-1].title, "STOP WATCHING?")
+        self.assertEqual([it.label for it in pushed[-1].items], ["Keep watching", "Stop watching"])
+        pb.handle(R.STOP)
         self.assertEqual(stopped, [1])
 
 class TestNextInQueue(unittest.TestCase):

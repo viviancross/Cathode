@@ -504,7 +504,8 @@ class LiveTV(Screen):
     def _digit(self, d: str) -> bool:
         if not self.channels:
             return False
-        self.digits = (self.digits + d)[-4:]
+        width = max(4, len(str(int(max(c.number for c in self.channels)))))   # provider lines run past 9999
+        self.digits = (self.digits + d)[-width:]
         self.app.cancel(self._digit_timer)
         self._digit_timer = self.app.after(self.DIGIT_WAIT, self._commit_digits)
         return True

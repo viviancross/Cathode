@@ -207,7 +207,7 @@ class OnDemandScreen(Screen):
             if self.od.downloads.items():
                 self.show_libraries([self._recordings_row()], "OFFLINE")
             else:
-                self.error(msg)
+                self.error(f"{msg} Press SELECT to try again, or check Settings > On Demand.")
         self.od.run(work, done, fail)
 
     def begin_auth(self):
@@ -314,6 +314,10 @@ class OnDemandScreen(Screen):
             return
         row = self.current()
         if not row:
+            if self.status and self.status not in ("LOADING...", "CONNECTING..."):
+                self.status = "CONNECTING..."   # the error's own "try again"
+                self.app.invalidate()
+                self.connect()
             return
         t, title, rk = row.get("type"), row.get("title", ""), row.get("rating_key")
         c = self.od.client

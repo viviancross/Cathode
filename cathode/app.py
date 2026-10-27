@@ -274,7 +274,7 @@ class App:
         elif action == R.FULLSCREEN:
             self.toggle_fullscreen()
         elif action == R.QUIT:
-            self.quit()
+            self.confirm_quit()
 
     def sound(self, which: str):
         """The box's UI sound, on a skin whose box made them ('key' on a
@@ -290,6 +290,18 @@ class App:
 
     def quit(self):
         self.running = False
+
+    def confirm_quit(self):
+        """QUIT (Q) asks first, as the menu's Exit Cathode does: a key hunted
+        for by a keyboard user mustn't end the evening. Q again on the
+        question quits."""
+        from .menus import _confirm
+        from .screens.menu import Menu
+        top = self.top()
+        if isinstance(top, Menu) and top.title == "EXIT CATHODE?":
+            self.quit()
+            return
+        self.push(Menu(self, "EXIT CATHODE?", _confirm(self, "Exit Cathode", self.quit, "Keep watching", close=True)))
 
     def click(self, wx: int, wy: int, button: int = 1):
         """A mouse click at window pixels. Left clicks hit what the skin drew
@@ -423,9 +435,10 @@ class App:
             # Once ever: which keys do what, the first time channels play.
             self.config.key_tip_shown = True
             self.config.save()
-            self.toast("   ".join(f"{label}: {self.key_name(a)}" for a, label in
-                                  ((R.GUIDE, "Guide"), (R.MENU, "Menu"), (R.INFO, "Info"))
-                                  if self.key_name(a)) + "   Channels: Up/Down", 9.0)
+            # In the words of what's in hand: a pad's buttons, a chosen
+            # remote's names, or the keyboard's letters.
+            self.toast("   ".join(self.press_hint(a) for a in (R.GUIDE, R.MENU, R.INFO, R.OPTIONS))
+                       + "   Channels: Up/Down", 9.0)
         self.load_epg()
 
     def refresh_lineup(self):

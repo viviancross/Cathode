@@ -21,7 +21,7 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
-WELCOME_HELP = "Have your IPTV playlist link (M3U) ready."
+WELCOME_HELP = "Have your Tunarr or ErsatzTV address ready (or your provider's M3U link)."
 
 # Beside each box's name on the wizard's first page, and what it is.
 LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
@@ -728,6 +728,27 @@ def _short(url):
     return "None" if not s else s if len(s) <= 26 else f"{s[:13]}...{s[-10:]}"
 
 
+def _offer_lan_server(app, kb):
+    """Look for a Tunarr or ErsatzTV on the local network while the address
+    keyboard is up; the first one found is typed in, so a Deck or a TV box
+    needs no typing at all. Nothing happens if the user has started typing."""
+    import threading
+    from . import servers
+
+    def work():
+        found = servers.scan_lan(user_agent=app.agent)
+        if found:
+            app.post(offer, found[0])
+
+    def offer(server):
+        if app.top() is not kb or kb.value:
+            return
+        kb.value, kb.caret = server.base, len(server.base)
+        app.toast(f"Found {server.name} at {server.base}. Press DONE to use it, or type another address.", 10.0)
+        app.invalidate()
+    threading.Thread(target=work, daemon=True).start()
+
+
 def _find_server(app, address, done):
     """Ask the address what it is, off the UI thread; done(Server or None)."""
     import threading
@@ -819,8 +840,10 @@ def add_playlist(app, on_added=None, first_run=False):
     step = (lambda n, s: f"3/3  {s}") if first_run else (lambda n, s: s)
 
     def ask_url(initial=""):
-        app.push(Keyboard(app, step("a", "Server address"), got_address, initial=initial, url=True,
-                          hint=SERVER_HINT))
+        kb = Keyboard(app, step("a", "Server address"), got_address, initial=initial, url=True, hint=SERVER_HINT)
+        app.push(kb)
+        if not initial:
+            _offer_lan_server(app, kb)
 
     def got_address(text):
         """A bare host is asked what it is; a known server skips the guide

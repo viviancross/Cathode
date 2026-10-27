@@ -658,3 +658,32 @@ class TestCornerBugs(unittest.TestCase):
         live = self._live(start_ago=5, length=1800, rating="")
         live._watch_since = time.monotonic() - 60
         self.assertIsNone(live.bug())                      # no rating in the guide: no mark
+
+
+class TestDigitsAndQuit(unittest.TestCase):
+    def test_typed_digits_are_as_wide_as_the_lineup_needs(self):
+        app = FakeApp()
+        app._live = LiveTV(app)
+        live = app._live
+        for d in "123456":
+            live._digit(d)
+        self.assertEqual(live.digits, "3456")                    # four, for a lineup under 10000
+        app.channels.append(Channel(number=21805, name="Far", url="u"))
+        live.digits = ""
+        for d in "218050":
+            live._digit(d)
+        self.assertEqual(live.digits, "18050")                   # five, once the lineup goes past 9999
+
+    def test_q_asks_before_quitting_and_q_again_quits(self):
+        from cathode.app import App
+        app = FakeApp()
+        app.screens = [object()]
+        app.top = lambda: app.screens[-1]
+        app.running = True
+        app.quit = lambda: setattr(app, "running", False)
+        App.confirm_quit(app)
+        self.assertTrue(app.running)
+        self.assertEqual(app.screens[-1].title, "EXIT CATHODE?")
+        self.assertEqual([it.label for it in app.screens[-1].items], ["Keep watching", "Exit Cathode"])
+        App.confirm_quit(app)                                    # Q on the question itself
+        self.assertFalse(app.running)
