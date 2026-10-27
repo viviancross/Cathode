@@ -479,10 +479,14 @@ class Classic(Skin):
         f_title, f_crumb, f_btn = self.role("title"), self.role("hint"), self.role("meta")
         pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, 92))
         pygame.draw.rect(c, p["OSD_BORDER"], (0, 90, W, 2))
-        title = s.level["title"] if s.level and s.mode == "browse" else "ON DEMAND"
+        # Cathode 3 called this PLEX-PER-VIEW, and Classic still does: the
+        # top level wears the name, deeper levels their own title under it.
+        deep = s.level and s.mode == "browse" and len(s.stack) > 1
+        title = s.level["title"] if deep else "PLEX-PER-VIEW"
         t.draw(c, t.fit(f_title, title, W - 460), f_title, p["YELLOW"], 64, 36)
-        if len(s.stack) > 1:
-            t.draw(c, t.fit(f_crumb, s.crumb(), W - 460), f_crumb, p["INK_MUTED"], 64, 64)
+        crumb = s.crumb() if deep else ("Movies and shows from your Plex server" if s.mode == "browse" else "")
+        if crumb:
+            t.draw(c, t.fit(f_crumb, crumb, W - 460), f_crumb, p["INK_MUTED"], 64, 64)
         x, f_key = W - 64, self.role("hint")
         for key, word, fn in ((self.k("BACK"), "back", s.back), (self.k("MENU"), "options", lambda: s.handle("MENU"))):
             seg = f"{key}: {word}"
@@ -528,11 +532,19 @@ class Classic(Skin):
                              border_radius=6)
             ink = p["SEL_TEXT"] if sel else p["WHITE"]
             meta = row.get("meta", "")      # recordings: their state ("42%", "PAUSED")
-            mw = t.width(f_meta, meta) + 20 if meta else 0
+            # The order marker, as the PPV menu had it: ORDER on something that
+            # plays, OPEN on a show or season, nothing on the sort row.
+            mark = "ORDER" if row.get("playable") else "OPEN" if row.get("type") in ("show", "season") else ""
+            right = r.right - 16
+            if mark:
+                t.draw(c, mark, f_meta, p["SEL_TEXT"] if sel else p["CHANNEL_GREEN"], right,
+                       r.y + (r.h - t.ink(f_meta)[1]) // 2, align="right")
+                right -= t.width(f_meta, "ORDER") + 24
+            mw = (r.right - right) + (t.width(f_meta, meta) + 20 if meta else 0)
             ty = r.y + (r.h - t.ink(f_row)[1]) // 2
             t.draw(c, t.fit(f_row, row.get("title", ""), r.w - mw - 40), f_row, ink, r.x + 16, ty)
             if meta:
-                t.draw(c, meta, f_meta, p["SEL_TEXT_DIM"] if sel else p["INK_MUTED"], r.right - 16,
+                t.draw(c, meta, f_meta, p["SEL_TEXT_DIM"] if sel else p["INK_MUTED"], right,
                        r.y + (r.h - t.ink(f_meta)[1]) // 2, align="right")
             off, dur = row.get("offset", 0), row.get("duration", 0)
             if off and dur:             # part way through: a resume bar along the row
@@ -606,7 +618,16 @@ class Classic(Skin):
         p, t = self.p, self.text
         d = info.detail
         c.fill(p["SCREEN_BG"])
-        poster = pygame.Rect(60, 70, 300, 450)
+        # The order screen's own header band, as the list page has: this is
+        # PLEX-PER-VIEW, and a recording is MY RECORDINGS.
+        f_band = self.role("title")
+        pygame.draw.rect(c, p["GUIDE_HEADER_BG"], (0, 0, W, 60))
+        pygame.draw.rect(c, p["OSD_BORDER"], (0, 58, W, 2))
+        t.draw(c, "MY RECORDINGS" if info.kind == "download" else "PLEX-PER-VIEW", f_band, p["YELLOW"], 64,
+               30 - t.ink(f_band)[1] // 2)
+        t.draw(c, "ORDER SCREEN" if info.kind != "download" else "RECORDED", self.role("hint"), p["INK_MUTED"],
+               W - 64, 30 - t.ink(self.role("hint"))[1] // 2, align="right")
+        poster = pygame.Rect(60, 88, 300, 450)
         pygame.draw.rect(c, p["OSD_BG"][:3] + (255,), poster)
         # A server URL (token in the headers) or, for a recording, a file on disk.
         art = self.logo(d.get("poster", ""), poster.w, poster.h, headers=d.get("poster_headers") or None)
@@ -616,7 +637,7 @@ class Classic(Skin):
 
         x, w = poster.right + 50, W - poster.right - 110
         f_title, f_meta, f_text = self.role("display"), self.role("meta"), self.role("body")
-        y = 76
+        y = 94
         for line in t.wrap(f_title, d.get("title", ""), w, 2):
             t.draw(c, line, f_title, p["WHITE"], x, y)
             y += t.ink(f_title)[1] + 10
@@ -646,7 +667,10 @@ class Classic(Skin):
             pygame.draw.rect(c, fill[:3] + (255,), r, border_radius=8)
             pygame.draw.rect(c, p["CYAN"] if b in PRIMARY else p["OSD_BORDER"], r, 2, border_radius=8)
             ink = p["SEL_TEXT"] if sel else p["BTN_PRIMARY_TEXT"] if b in PRIMARY else p["WHITE"]
-            t.draw(c, t.fit(f_btn, info.label(b), bw - 16), f_btn, ink, r.centerx,
+            # An offer is ORDERed, as the PPV menu said; a recording plays.
+            label = {"play": "ORDER", "playall": "ORDER ALL"}.get(b, info.label(b)) if info.kind != "download" \
+                else info.label(b)
+            t.draw(c, t.fit(f_btn, label, bw - 16), f_btn, ink, r.centerx,
                    r.y + (r.h - t.ink(f_btn)[1]) // 2, align="center")
             self.hit(r, lambda i=i, b=b: (setattr(info, "focus", i), info.press(b)))
             bx += bw + 16
@@ -682,11 +706,9 @@ class Classic(Skin):
             t.draw(c, f"{q.pos + 1} of {len(q.items)}", f_sub, p["INK_MUTED"], bar.right - 20,
                    bar.y + 20, align="right")
         # Timeline: elapsed, track, duration. Click to jump.
-        tl = pygame.Rect(bar.x + 110, bar.y + 82, bar.w - 220, 8)
-        pygame.draw.rect(c, p["TRACK"], tl)
+        tl = pygame.Rect(bar.x + 110, bar.y + 80, bar.w - 220, 12)
         frac = min(1.0, pb.pos / pb.dur) if pb.dur else 0.0
-        pygame.draw.rect(c, p["GREEN"], (tl.x, tl.y, int(tl.w * frac), tl.h))
-        pygame.draw.rect(c, p["WHITE"], (tl.x + int(tl.w * frac) - 2, tl.y - 5, 4, tl.h + 10))
+        self._blocks(c, tl, frac, p["GREEN"], p["TRACK"])       # the set's own OSD bar, as the volume has
         t.draw(c, hms(pb.pos), f_sub, p["WHITE"], tl.x - 14, tl.y - 4, align="right")
         t.draw(c, hms(pb.dur) if pb.dur else "--:--", f_sub, p["WHITE"], tl.right + 14, tl.y - 4)
         self.hit(tl.inflate(0, 24), lambda: pb.seek_to(self._click_frac(tl)))
@@ -758,7 +780,13 @@ class Classic(Skin):
         lines = t.wrap(f, msg, room, 3)
         lh = t.ink(f)[1] + 12
         w = max(t.width(f, line) for line in lines) + 40
-        box = pygame.Rect((self.canvas[0] - w) // 2, 62, w, 20 + lh * len(lines))   # under the guide's header
+        h = 20 + lh * len(lines)
+        screens = getattr(self.app, "screens", None) or []
+        top = screens[-1] if screens else None
+        # Under the guide's header, or over live TV; on the other pages it
+        # sits at the foot, clear of their titles.
+        y = 62 if self.over_picture() or getattr(top, "name", "") == "guide" else self.canvas[1] - 20 - h
+        box = pygame.Rect((self.canvas[0] - w) // 2, y, w, h)
         radius = 22 if len(lines) == 1 else 12
         pygame.draw.rect(c, p["OSD_BG"][:3] + (240,), box, border_radius=radius)
         pygame.draw.rect(c, p["OSD_BORDER"], box, 2, border_radius=radius)

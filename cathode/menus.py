@@ -38,6 +38,8 @@ DESCRIPTIONS.update({
     "Themes & Genres": "Channels grouped by what they show.",
     "Favorites": "The guide with just your favorite channels.",
     "On Demand": "Movies and shows from your Plex server.",
+    "Link Plex": "Link your Plex account: On Demand plays its movies and shows here.",
+    "Refresh guide": "Fetch the TV guide again now.",
     "My Recordings": "What you've downloaded to watch here.",
     "Button Guide": "What every button does, on this box.",
     "Settings": "Picture, channels, subtitles, buttons and more.",
@@ -197,7 +199,7 @@ def main_items(app):
             Item(c, guide(c), close=True) for c in app.categories() if c not in ("All", "Favorites")
         ] or [Item("(no genres in this lineup)", enabled=False)], enabled=bool(app.channels)),
         Item("Favorites", guide("Favorites"), close=True, enabled=bool(app.channels)),
-        Item("On Demand" if app.ondemand.signed_in else "On Demand (link Plex)", ondemand(), close=True),
+        Item("On Demand" if app.ondemand.signed_in else "Link Plex", ondemand(), close=True),
         *([Item("My Recordings", ondemand(recordings=True), close=True)] if app.ondemand.downloads.items() else []),
         Item("Settings", submenu=lambda: settings_items(app)),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
