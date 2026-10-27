@@ -45,7 +45,7 @@ class TestFit(unittest.TestCase):
             self.assertEqual(skin.canvas, type(skin).canvas)
 
     def test_a_taller_guide_lists_more_channels(self):
-        for name, rows in (("classic", 10), ("indirect_hd", 11), ("plate_hd", 11), ("indirect", 6), ("plate", 4)):
+        for name, rows in (("classic", 10), ("indirect_hd", 11), ("plate_hd", 10), ("indirect", 6), ("plate", 4)):
             skin = make(name)
             skin.fit_window((1024, 768))
             self.assertEqual(skin.guide_rows, rows, name)

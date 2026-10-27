@@ -43,12 +43,13 @@ class PlateHD(BoxSkin):
     canvas = (1280, 720)
     right_is_browse = True
     guide_hours = 1.5               # three half-hour columns, as the box showed
+    lists_title = "Favorites Lists" # Dish's name for the guide's lists pop-up
     SD = False
     TALL = ("guide", "screensaver", "ondemand")
 
     @property
     def guide_rows(self):
-        return 7 + self.grow // self.Y(53)          # a taller screen lists more channels
+        return 6 + self.grow // self.Y(53)          # a taller screen lists more channels (7 at 720p ran past the safe area)
     # Measured: the page teal, the on-now cell teal, the later-cell navy, the
     # gold of the selection frame.
     NATIVE = {"bg": [0, 51, 66], "accent": [0, 62, 61], "accent2": [0, 17, 55],
@@ -205,9 +206,6 @@ class PlateHD(BoxSkin):
         if cur:
             self.cb(c, time_left(cur, now).replace("Time left", "Time Left:"), f_small, ink, rx, r.y + Y(40), align="right")
         self.cb(c, self.fit_cb(f_small, f"List: {g_list(self)}", X(220)), f_small, ink, rx, r.y + Y(70), align="right")
-        if nxt and full:                # the Browse Banner had "Next:"; the full banner carries it too
-            fn = self.fb(Y(20))
-            self.cb(c, self.fit_cb(fn, f"Next: {nxt.title}", X(420)), fn, b["soft"], mid, r.y + Y(100), align="center")
         label = tag or (f"{self.k('INFO')} FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
@@ -215,9 +213,11 @@ class PlateHD(BoxSkin):
             pr.w = int(t.width(fp, label) * 0.86) + X(40)
             pygame.draw.rect(c, b["pill"], pr, border_radius=Y(6))
             self.cb(c, label, fp, b["pill_ink"], pr.x + X(18), pr.y + Y(5))
-        if full and cur and cur.description:
+        if full and cur and (cur.description or nxt):
+            # The Browse Banner had "Next:"; the full banner carries it as the
+            # first line of the box under it (the banner itself has no room).
             f = self.fb(Y(18))
-            lines = t.wrap(f, cur.description, int((r.w - X(40)) / 0.86), 3)
+            lines = ([f"Next: {nxt.title}"] if nxt else []) + t.wrap(f, cur.description or "", int((r.w - X(40)) / 0.86), 3)
             d = pygame.Rect(r.x, 0, r.w, Y(16) + len(lines) * Y(26))
             d.y = r.y - d.h - Y(8) if bottom else r.bottom + Y(8)
             self._box(c, d)
@@ -383,7 +383,7 @@ class PlateHD(BoxSkin):
         day = start.astimezone()
         self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(64), hy)
         slots = int(g.hours * 2)
-        cols = [X(251), X(605), X(961), X(1280)]
+        cols = [X(251), X(583), X(917), X(1216)]       # the grid ends at the title-safe edge
         for i in range(slots):
             self.cb(c, ampm(start + timedelta(minutes=30 * i)), fh, b["text"], (cols[i] + cols[i + 1]) // 2, hy, align="center")
         rows = g.filtered()[g.top: g.top + g.rows]
@@ -391,7 +391,7 @@ class PlateHD(BoxSkin):
         now = datetime.now(timezone.utc)
         epg = self.app.epg
         f_cell, f_chan = self.fb(Y(27)), self.f(Y(24))
-        grid_x, grid_w = X(255), X(1025)
+        grid_x, grid_w = X(255), X(961)          # to the title-safe edge
         sel = g.sel_time()
         for i, ch in enumerate(rows):
             y = Y(328 + 53 * i)
@@ -950,7 +950,7 @@ class PlateHD(BoxSkin):
         cap = pygame.Rect(r.x + X(30), r.y + Y(18), r.w - X(60), Y(44))
         vgrad(c, cap, rgba(b["vp_hdr"]), rgba(b["vp_mid"]), radius=Y(22))
         fh = self.fb(Y(26))
-        self.cb(c, "Options", fh, b["text"], cap.centerx, cap.y + (cap.h - t.ink(fh)[1]) // 2, align="center")
+        self.cb(c, m.title, fh, b["text"], cap.centerx, cap.y + (cap.h - t.ink(fh)[1]) // 2, align="center")
         for k, it in enumerate(m.items):
             br = pygame.Rect(r.x + X(60), cap.bottom + Y(18) + k * Y(58), r.w - X(120), Y(44))
             on = k == m.cursor
@@ -994,8 +994,8 @@ class PlateHD(BoxSkin):
         lines = t.wrap(f, msg, int(X(1040) / 0.86), 3)
         lh = Y(32)
         w = max(int(t.width(f, ln) * 0.86) for ln in lines) + X(64)
-        r = pygame.Rect((self.canvas[0] - w) // 2, Y(150) if self.over_picture() else Y(70), w,
-                        Y(18) + lh * len(lines))       # under the banner; on a page, between title and panels
+        r = pygame.Rect((self.canvas[0] - w) // 2, Y(150) if self.over_picture() else Y(300), w,
+                        Y(18) + lh * len(lines))       # under the banner; on a page, mid-screen as its dialogs are
         radius = r.h // 2 if len(lines) == 1 else Y(18)
         pygame.draw.rect(c, b["vp_panel_edge"], r.inflate(X(6), Y(6)), border_radius=radius)
         vgrad(c, r, rgba(b["vp_panel"]), rgba(mix(b["vp_panel"], b["vp_hdr"], 0.4)), radius=radius)
@@ -1004,7 +1004,7 @@ class PlateHD(BoxSkin):
 
     def _message(self, c, msg):
         c.fill((0, 0, 0, 255))
-        self._vip_dialog(c, "ATTENTION", [msg])
+        self._vip_dialog(c, "ATTENTION 015", [msg])
 
     def draw_screensaver(self, c, ss):
         W, H = self.canvas
@@ -1059,7 +1059,7 @@ class PlateHD(BoxSkin):
         seg = (bar.w - X(24)) // 5
         for i in range(int(round(frac * 5))):
             pygame.draw.rect(c, (60, 170, 70), (bar.x + X(4) + i * (seg + X(4)), bar.y + 3, seg, bar.h - 6))
-        self.cb(c, "Press any button to skip.", self.fb(Y(17)), b["soft"], W // 2, Y(600), align="center")
+        self.cb(c, "Press any button to skip.", self.fb(Y(18)), b["soft"], W // 2, Y(600), align="center")
 
 
 class Plate(PlateHD):
@@ -1203,7 +1203,7 @@ class Plate(PlateHD):
         pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
         vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
         f = self.fb(Y(15))
-        t.draw(c, "ATTENTION", f, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
+        t.draw(c, "ATTENTION 015", f, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(f)[1]) // 2, align="center")
         fl = self.f(Y(13))
         t.draw(c, "Acquiring satellite signal.", fl, b["ink"], r.centerx, pill.bottom + Y(12), align="center")
         t.draw(c, "Please wait, or pick another channel.", fl, b["ink"], r.centerx, pill.bottom + Y(34), align="center")
@@ -1754,7 +1754,7 @@ class Plate(PlateHD):
             self._sd_pill(c, r, nice(row.get("title", "")), i == s.sel, right=row.get("meta", "").split("   ")[0])
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         fs = self.f(Y(12))
-        t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["m_ink"], X(40), band.bottom + Y(6))
+        t.draw(c, f"{s.sel + 1} of {len(rows)}", fs, b["m_ink"], X(600), Y(444), align="right")   # beside the keys, not over them
         if s.status:
             t.draw(c, s.status, self.fb(Y(13)), b["m_ink"], X(600), band.bottom + Y(6), align="right")
         side = self.od_side(s)
@@ -1969,7 +1969,7 @@ class Plate(PlateHD):
         pill = pygame.Rect(r.x + X(20), r.y + Y(10), r.w - X(40), Y(28))
         vgrad(c, pill, rgba(b["pill_hi"]), rgba(b["pill"]), radius=Y(8))
         fh = self.fb(Y(15))
-        t.draw(c, "OPTIONS", fh, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(fh)[1]) // 2, align="center")
+        t.draw(c, m.title.upper(), fh, b["pill_ink"], pill.centerx, pill.y + (pill.h - t.ink(fh)[1]) // 2, align="center")
         for k, it in enumerate(m.items):
             br = pygame.Rect(r.x + X(20), pill.bottom + Y(10) + k * Y(40), r.w - X(40), Y(32))
             on = k == m.cursor

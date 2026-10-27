@@ -42,6 +42,7 @@ class InDirectHD(BoxSkin):
     canvas = (1280, 720)
     browse_style = "mini"           # BROWSE opens the mini guide
     guide_hours = 1.5               # three half-hour columns, as the box showed
+    lists_title = "Channel Lists"   # the HR20's name for the guide's lists pop-up
     guide_jump_min = 12 * 60        # the red and green keys: -12hrs / +12hrs
     tune_black = 1.5                # the HR20 went black about 1.5 s on a change (3 s with Native On)
     ui_sounds = True                # the HR20's "beeps and boops" and its error bonk
@@ -258,7 +259,7 @@ class InDirectHD(BoxSkin):
         t.draw(c, f"Favorites List:  {g_list(self)}", fk, b["text"], X(112), ky)
         # Where the HR20 showed its colour buttons, the keys that work here,
         # named as on Cathode's remote (it has no colour buttons).
-        fc = self.fb(Y(17))
+        fc = self.fb(Y(18))
         x = bar.right - X(16)
         for key, label in ((self.k("BROWSE"), "Mini Guide" + self.key_also("BROWSE")),
                            (self.k("MENU"), "Menu" + self.key_also("MENU"))):
@@ -270,7 +271,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, key, fc, b["paper_ink"], chip.centerx, chip.y + (chip.h - t.ink(fc)[1]) // 2, align="center")
             x = chip.x - X(30)
         if tag:
-            self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(17)), rgba(b["sel"]), b["sel_ink"])
+            self.chip(c, X(96), bar.bottom + Y(8), tag, self.fb(Y(18)), rgba(b["sel"]), b["sel_ink"])
         if full and cur and cur.description:
             f = self.f(Y(22))
             lines = t.wrap(f, cur.description, X(1088), 3)
@@ -378,7 +379,7 @@ class InDirectHD(BoxSkin):
         t.draw(c, "Searching for satellite signal. (771)", self.fb(Y(28)), b["text"], X(96), band.y + Y(32))
         f = self.f(Y(22))
         y = band.bottom + Y(26)
-        for line in t.wrap(f, "The channel isn't sending a picture. Cathode keeps trying; press GUIDE or "
+        for line in t.wrap(f, "The channel isn't sending a picture. The receiver keeps trying; press GUIDE or "
                               "a channel number to watch something else.", X(1088), 3):
             t.draw(c, line, f, b["soft"], X(96), y)
             y += Y(32)
@@ -425,8 +426,8 @@ class InDirectHD(BoxSkin):
                 y += Y(36)
 
         # The frame: a navy header, navy channel cells, teal cells, the colour keys.
-        pygame.draw.rect(c, b["gap"], self.R(96, 313, 1182, 359).inflate(0, more).move(0, more // 2))
-        hdr = self.R(96, 313, 1182, 35)
+        pygame.draw.rect(c, b["gap"], self.R(96, 313, 1120, 359).inflate(0, more).move(0, more // 2))
+        hdr = self.R(96, 313, 1120, 35)
         pygame.draw.rect(c, b["navy"], hdr)
         start, end = g.window()
         fh = self.fb(Y(29))
@@ -458,7 +459,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(fl, label, chr_.w - X(24)), fl, b["text"], X(110), y + (rh - t.ink(fl)[1]) // 2)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
-            self._cell(c, pygame.Rect(grid_x + grid_w, y, X(1278) - grid_x - grid_w, rh), False)
+            self._cell(c, pygame.Rect(grid_x + grid_w, y, X(1216) - grid_x - grid_w, rh), False)
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
             progs = epg.programs_in_window(cid, start, end) if cid else []
             if not progs:
@@ -485,7 +486,7 @@ class InDirectHD(BoxSkin):
                 if more:
                     self._shadowed(c, ">", f_cell, ink if on else b["mark"], shadow, cell.right - X(8), cy,
                                    align="right")
-            self.hit((X(96), y, X(1182), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
+            self.hit((X(96), y, X(1120), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                            setattr(g, "focus", "grid"), g.handle("SELECT")))
 
         if not rows:
@@ -494,7 +495,7 @@ class InDirectHD(BoxSkin):
             t.draw(c, t.fit(f_cell, self.empty_guide(g), cell.w - X(28)), f_cell, b["text"], cell.x + X(14),
                    cell.y + (cell.h - t.ink(f_cell)[1]) // 2)
 
-        bar = self.R(96, 639, 1182, 33).move(0, more)
+        bar = self.R(96, 639, 1120, 33).move(0, more)
         pygame.draw.rect(c, b["cell"], bar)
         fl = self.f(Y(30))
         ly = bar.y + (bar.h - t.ink(fl)[1]) // 2
@@ -693,7 +694,7 @@ class InDirectHD(BoxSkin):
         what it does beside it. Returns the x after it."""
         t, X, Y = self.text, self.X, self.Y
         key, label = self.k(action), label + self.key_also(action)
-        fk, fl = self.fb(Y(17)), self.f(Y(21))
+        fk, fl = self.fb(Y(18)), self.f(Y(21))
         w = t.width(fk, key) + X(14)
         r = pygame.Rect(x, y - Y(3), w, t.ink(fl)[1] + Y(6))
         pygame.draw.rect(c, chip, r, border_radius=Y(5))
@@ -847,7 +848,7 @@ class InDirectHD(BoxSkin):
         tw, th, gap = X(112), Y(168), X(28)
         x0 = main.x + (main.w - (cols * tw + (cols - 1) * gap)) // 2
         y0 = main.y + Y(44 if off else 18)
-        fcap = self.fb(Y(17))
+        fcap = self.fb(Y(18))
         for i, slot in self.wall_cells(s, cols, self.ondemand_page(s) // cols):
             row = s.rows[i]
             r = pygame.Rect(x0 + (slot % cols) * (tw + gap), y0 + (slot // cols) * (th + Y(16)), tw, th)
@@ -1187,7 +1188,8 @@ class InDirectHD(BoxSkin):
         body = pygame.Rect(r.x, r.y + Y(42), r.w, r.h - Y(42) - Y(72))
         pygame.draw.rect(c, b["pop_body"], body)
         fh = self.fb(Y(26))
-        t.draw(c, "TV OPTIONS", fh, b["ink"], r.centerx, r.y + (Y(42) - t.ink(fh)[1]) // 2, align="center")
+        title = "TV OPTIONS" if m.title == "Options" else m.title.upper()
+        t.draw(c, title, fh, b["ink"], r.centerx, r.y + (Y(42) - t.ink(fh)[1]) // 2, align="center")
         f = self.fb(Y(24))
         for k, it in enumerate(m.items):
             row = pygame.Rect(body.x + X(20), body.y + Y(12) + k * Y(46), body.w - X(40), Y(42))
@@ -1319,6 +1321,7 @@ class InDirect(InDirectHD):
     tune_black = 0.8
     guide_hours = 2                 # four half-hour columns, as the DSS showed
     guide_rows = 6
+    lists_title = "Lists"
     default_font = "sans"           # Liberation Sans Bold, condensed (SQUEEZE) as the DSS lettered
     SD = True
     # Measured from the frames: the purple band, the lavender page, the teal
@@ -1585,13 +1588,17 @@ class InDirect(InDirectHD):
                 self._shadowed(c, line, f_cell, b["text"], b["shadow"], cell.x + X(4), cell.y + Y(2) + k * Y(12))
         # The teal buttons along the bottom: page, the lists, Exit.
         y = Y(211)
-        labels = [("v", "PAGE_DOWN"), (g.category if g.category != "All" else "Movies", "THEMES"),
-                  ("Sports", "THEMES"), ("Other", "THEMES"), ("All", "THEMES"), ("Exit", "EXIT")]
+        # The lineup's first genres, then All: each button opens the list it names.
+        genres = [c for c in self.app.categories() if c not in ("All", "Favorites")][:3]
+        genres += ["Movies", "Sports", "Other"][len(genres):]
+        labels = [("v", lambda: g.handle("PAGE_DOWN"))]
+        labels += [(name, (lambda n=name: g.set_category(n))) for name in genres]
+        labels += [("All", lambda: g.set_category("All")), ("Exit", lambda: g.handle("EXIT"))]
         bx = X(24)
         bw = X(45)
-        for k, (lab, action) in enumerate(labels):
+        for k, (lab, fn) in enumerate(labels):
             r = pygame.Rect(bx + k * (bw + X(1)), y, bw, Y(13))
-            on = k == 1 and g.focus == "category"
+            on = lab == g.category or (k == 1 and g.focus == "category")
             pygame.draw.rect(c, b["sel"] if on else b["teal"], r)
             pygame.draw.rect(c, b["teal_dark"], (r.x, r.bottom - 1, r.w, 1))
             if lab == "v":
@@ -1600,7 +1607,7 @@ class InDirect(InDirectHD):
             else:
                 self._shadowed(c, t.fit(f_small, lab, bw - X(6)), f_small, b["sel_ink"] if on else b["text"],
                                None if on else b["shadow"], r.centerx, r.y + Y(1), align="center")
-            self.hit(r, lambda a=action: g.handle(a))
+            self.hit(r, fn)
 
     def _dss_cell(self, c, cell, on):
         """A guide cell; the chosen one is light and casts a shadow."""
@@ -1995,7 +2002,7 @@ class InDirect(InDirectHD):
         r.center = (W // 2, H // 2)
         pygame.draw.rect(c, b["purple"], r)
         pygame.draw.rect(c, b["rule"], r, 2)
-        self._shadowed(c, "Options", self.fb(Y(13)), b["text"], b["shadow"], r.x + X(10), r.y + Y(6))
+        self._shadowed(c, m.title, self.fb(Y(13)), b["text"], b["shadow"], r.x + X(10), r.y + Y(6))
         for k, it in enumerate(m.items):
             br = pygame.Rect(r.x + X(10), r.y + Y(24) + k * Y(18), r.w - X(20), Y(14))
             on = k == m.cursor
@@ -2026,7 +2033,7 @@ class InDirect(InDirectHD):
         top = screens[-1] if screens else None
         over_bar = getattr(top, "name", "") == "playback" and top.bar_visible()
         self._notice(c, self.text.wrap(self.fb(self.Y(12)), msg, int(self.X(238) / self.SQUEEZE), 3),
-                     y_bottom=self.Y(160) if over_bar else None)
+                     y_bottom=self.Y(160) if over_bar else None, centre=not self.over_picture())
 
     def draw_screensaver(self, c, ss):
         W, H = self.canvas

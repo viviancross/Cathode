@@ -24,7 +24,7 @@ class FakeApp:
                          Channel(number=2, name="Two", url="u", epg_id="two")]
         self.epg = EPG()
         self.epg.add_programs("one", [Program("one", t, a, b) for t, a, b in progs])
-        self.skin = mock.Mock(guide_rows=5, guide_hours=hours, guide_jump_min=24 * 60)
+        self.skin = mock.Mock(guide_rows=5, guide_hours=hours, guide_jump_min=24 * 60, lists_title="CATEGORIES")
         self.live = mock.Mock(channel=self.channels[0])
         self.pushed = []
         self._cats = list(cats)

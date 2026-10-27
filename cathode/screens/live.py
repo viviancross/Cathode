@@ -128,43 +128,7 @@ class LiveTV(Screen):
         self.app.cancel(self._timeout)
         self.phase = "reveal"
         self._reveal_start = time.monotonic()
-        self._watch_since = time.monotonic()
         self.app.invalidate()
-
-    # ── Corner bugs ───────────────────────────────────────────────────────
-
-    BUG_RATING_S = 15.0     # the rating mark: a programme's first seconds, and after a tune
-    BUG_NEXT_S = 90.0       # the up-next mark: a programme's last seconds
-
-    def bug(self):
-        """What the corner shows while watching, as broadcast did: ("rating",
-        "TV-PG") as a programme begins (or this channel is tuned to), ("next",
-        title) as it ends. None otherwise, and never over the banner."""
-        if self.phase not in ("reveal", "watch") or not self.channel or self.banner_visible():
-            return None
-        cur, nxt = self.programs()
-        if not cur:
-            return None
-        now = datetime.now(timezone.utc)
-        since_start = (now - cur.start).total_seconds()
-        since_tune = time.monotonic() - getattr(self, "_watch_since", 0.0)
-        if cur.rating and (0 <= since_start < self.BUG_RATING_S or since_tune < self.BUG_RATING_S):
-            self._bug_redraw(min(self.BUG_RATING_S - since_start, self.BUG_RATING_S - since_tune))
-            return "rating", cur.rating
-        left = (cur.stop - now).total_seconds()
-        if nxt and 0 < left <= self.BUG_NEXT_S:
-            self._bug_redraw(left)
-            return "next", nxt.title
-        self._bug_redraw(max(0.5, left - self.BUG_NEXT_S) if left > self.BUG_NEXT_S else 0.5)
-        return None
-
-    def _bug_redraw(self, seconds: float):
-        """One redraw when the bug should change, not one per frame."""
-        at = time.monotonic() + max(0.05, seconds)
-        if abs(at - getattr(self, "_bug_at", 0.0)) < 0.5:
-            return
-        self._bug_at = at
-        self.app.after(max(0.05, seconds) + 0.01, self.app.invalidate)
 
     def video_box(self):
         return "full"

@@ -197,8 +197,8 @@ def main_items(app):
             Item(c, guide(c), close=True) for c in app.categories() if c not in ("All", "Favorites")
         ] or [Item("(no genres in this lineup)", enabled=False)], enabled=bool(app.channels)),
         Item("Favorites", guide("Favorites"), close=True, enabled=bool(app.channels)),
-        Item("On Demand", ondemand(), close=True),
-        Item("My Recordings", ondemand(recordings=True), close=True),
+        Item("On Demand" if app.ondemand.signed_in else "On Demand (link Plex)", ondemand(), close=True),
+        *([Item("My Recordings", ondemand(recordings=True), close=True)] if app.ondemand.downloads.items() else []),
         Item("Settings", submenu=lambda: settings_items(app)),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
@@ -484,7 +484,6 @@ def open_options(app):
              adjust=app.cycle_format),
         Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles(),
              help="Step through this channel's subtitles."),
-        Item("On Demand", lambda: open_ondemand(app), close=True),
     ]))
 
 
@@ -711,7 +710,7 @@ def channel_items(app):
                           submenu=lambda pl=pl: playlist_items(app, pl)))
     items.append(Item("Add a playlist...", lambda: add_playlist(app)))
     if cfg.epg_url:
-        items.append(Item("Reload the guide now", lambda: (app.load_epg(), app.toast("Loading the guide...")),
+        items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
     return items
 

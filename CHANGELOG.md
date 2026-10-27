@@ -5,9 +5,6 @@
 - **Guide posters.** A programme's poster, where the guide carries one
   (Tunarr's does), shows in the InDirecTV HD and Plate Network HD guide
   headers and in Classic's programme panel.
-- **The rating in the corner** as a programme begins or a channel is
-  tuned to, and **what's next in the corner** in a programme's last
-  minute and a half, the way broadcast did it. Never over the banner.
 - **Channel numbers with a decimal part** (ErsatzTV's 10.1, 10.2) are
   kept as they are instead of breaking the playlist.
 - **The lineup refreshes itself** on the guide's six-hour schedule: a

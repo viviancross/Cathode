@@ -107,6 +107,14 @@ class Guide(Screen):
         self.cursor = self.top = 0
         self._clamp()
 
+    def set_category(self, name: str):
+        """Straight to a list by name (a skin's labelled button)."""
+        cats = self.app.categories()
+        if name in cats:
+            self.cat_idx, self.focus = cats.index(name), "grid"
+            self.cursor = self.top = 0
+            self._clamp()
+
     def _pick_category(self):
         """The lists as a pop-up (THEMES, or OPTIONS for a pad): one press to
         any category instead of cycling through them all."""
@@ -118,7 +126,8 @@ class Guide(Screen):
             self.cursor = self.top = 0
             self._clamp()
         cats = self.app.categories()
-        menu = Options(self.app, "CATEGORIES", [Item(c, action=partial(pick, i), close=True) for i, c in enumerate(cats)])
+        title = getattr(self.app.skin, "lists_title", "CATEGORIES")      # what this box called them
+        menu = Options(self.app, title, [Item(c, action=partial(pick, i), close=True) for i, c in enumerate(cats)])
         menu.cursor = self.cat_idx
         self.app.push(menu)
 

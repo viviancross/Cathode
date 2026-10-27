@@ -89,10 +89,6 @@ class Classic(Skin):
         if live.banner_visible() and live.channel:
             cur, nxt = live.programs()
             self._banner(c, live.channel, cur, nxt, full=live.banner_full)
-        elif live.phase in ("reveal", "watch"):
-            bug = live.bug()
-            if bug:
-                self.draw_bug(c, *bug)
         if live.digits:
             self.text.draw(c, live.digits + "-" * (3 - len(live.digits)), self.f(72),
                            p["CHANNEL_GREEN"], W - 48, 40, align="right", outline=(0, 0, 0))
@@ -100,23 +96,6 @@ class Classic(Skin):
             self._volume(c, W // 2, int(H * 0.72))
         if live.trick_visible() and live.phase != "cover":
             self._trick(c, live.trick_state())
-
-    def draw_bug(self, c, kind: str, text: str):
-        """A broadcast corner mark in Classic's pixel type: the rating top-left
-        as a programme begins, NEXT bottom-right as it ends."""
-        W, H = self.canvas
-        p = self.p
-        f = self.role("meta")
-        label = text if kind == "rating" else f"NEXT: {text}"
-        label = self.text.fit(f, label, W // 2)
-        pad = 8
-        w, h = self.text.width(f, label) + 2 * pad, self.text.ink(f)[1] + 2 * pad
-        x, y = (48, 40) if kind == "rating" else (W - 48 - w, H - 40 - h)
-        box = pygame.Surface((w, h), pygame.SRCALPHA)
-        box.fill((0, 0, 0, 170))
-        c.blit(box, (x, y))
-        pygame.draw.rect(c, p["WHITE"], (x, y, w, h), 1)
-        self.text.draw(c, label, f, p["WHITE"], x + pad, y + pad)
 
     def _trick(self, c, s):
         """VCR-style transport tag top-left, and where you are in the buffer."""
@@ -886,7 +865,7 @@ class Classic(Skin):
         off = (now - start).total_seconds() / 60
         if 0 <= off <= mins:
             x = grid_x + int(off / mins * grid_w)
-            pygame.draw.line(c, p["RED"][:3] + (200,), (x, ruler_y),
+            pygame.draw.line(c, p["RED"][:3] + (200,), (x, ruler_y + g["ruler_h"] - 6),      # a tick in the ruler, clear of its labels
                              (x, grid_y + g["row_h"] * guide.rows), 2)
         k = guide.cursor - guide.top
         if guide.focus == "grid" and 0 <= k < len(rows):
@@ -895,7 +874,7 @@ class Classic(Skin):
 
         # The key hints, in the band under the grid.
         band = grid_y + g["row_h"] * guide.rows
-        hint = f"{self.k('SELECT')}: watch   </>: earlier/later   CH+/-: page   REW/FF: a day   {self.k('EXIT')}: close"
+        hint = f"{self.k('SELECT')}: watch   </>: show by show   CH+/-: page   REW/FF: a day   {self.k('EXIT')}: close"
         t.draw(c, t.fit(f_small, hint, W - 2 * pad), f_small, p["INK_MUTED"], W // 2, band + 18, align="center")
 
         # Scroll hints.
@@ -910,7 +889,7 @@ class Classic(Skin):
         p, t = self.p, self.text
         f = self.role("hint")
         s = min(hh - 12, 40)
-        line1 = f"{w.get('temp', '')}°{w.get('units', 'F')}  {w.get('conditions', '')}"
+        line1 = f"{w.get('temp', '')}{w.get('units', 'F')}  {w.get('conditions', '')}"    # the pixel font has no degree sign
         line2 = "   ".join(x for x in (w.get("city"), f"{w['humidity']}% RH" if w.get("humidity") else "",
                                       f"{w['rain']}% rain" if w.get("rain") else "") if x)
         avail = right - x - s - 8
