@@ -7,6 +7,7 @@ uploads the frame where mpv's picture would go, so it fills the screen, sits
 in the guide's picture box, takes the channel-change static and the CRT
 pass like a broadcast would."""
 
+import os
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -113,37 +114,126 @@ class Page:
         raise NotImplementedError
 
 
-_PREVUE = "PxPlus_IBM_VGA8.ttf"
-_BLUE, _BLUE_DARK, _LINE = (12, 12, 136), (0, 0, 92), (96, 112, 224)
-_YELLOW, _WHITE, _GREY = (255, 232, 72), (255, 255, 255), (196, 204, 232)
+_GUIDE = "Barlow-Bold.ttf"
+_NAVY = (14, 10, 72)                                # the dark between the cells
+_CELL, _CELL_TOP, _CELL_HI, _CELL_LO = (44, 38, 138), (58, 52, 158), (116, 108, 210), (16, 12, 76)
+_TOP0, _TOP1 = (26, 22, 124), (78, 36, 154)         # the promo half's gradient
+_YELLOW, _WHITE, _GREY, _SHADOW = (255, 232, 72), (255, 255, 255), (196, 204, 232), (4, 2, 40)
+_SQUEEZE = 0.84                                     # Barlow drawn this much narrower: the condensed face
 
 
 def _num(ch) -> str:
     return f"{ch.number:g}"
 
 
+def _gradient(size, top, bottom):
+    w, h = size
+    col = pygame.Surface((1, h))
+    for y in range(h):
+        k = y / max(1, h - 1)
+        col.set_at((0, y), tuple(int(a + (b - a) * k) for a, b in zip(top, bottom)))
+    return pygame.transform.scale(col, (w, h))
+
+
+def _bevel(s, r, col=_CELL, raised=True):
+    """A cell: rounded, lighter across its top, a light edge top-left and a
+    dark one bottom-right (the other way round for a sunken box)."""
+    pygame.draw.rect(s, col, r, border_radius=3)
+    if raised:
+        pygame.draw.rect(s, _CELL_TOP, (r.x, r.y, r.w, r.h // 2), border_top_left_radius=3, border_top_right_radius=3)
+    hi, lo = (_CELL_HI, _CELL_LO) if raised else (_CELL_LO, _CELL_HI)
+    pygame.draw.line(s, hi, (r.x + 2, r.y), (r.right - 3, r.y))
+    pygame.draw.line(s, hi, (r.x, r.y + 2), (r.x, r.bottom - 3))
+    pygame.draw.line(s, lo, (r.x + 2, r.bottom - 1), (r.right - 3, r.bottom - 1))
+    pygame.draw.line(s, lo, (r.right - 1, r.y + 2), (r.right - 1, r.bottom - 3))
+
+
+def _chevrons(s, x, cy, h, right=True):
+    """The double arrow on a programme that runs past the window's edge."""
+    w = h * 0.55
+    for d in (0, 1):
+        x0 = x + d * (w + 2)
+        pts = ([(x0, cy - h / 2), (x0 + w, cy), (x0, cy + h / 2)] if right
+               else [(x0 + w, cy - h / 2), (x0, cy), (x0 + w, cy + h / 2)])
+        pygame.draw.polygon(s, _SHADOW, [(px + 1, py + 1) for px, py in pts])
+        pygame.draw.polygon(s, _WHITE, pts)
+
+
+class _Cond:
+    """Bold condensed type with a drop shadow: Barlow Bold squeezed, drawn
+    twice. Widths are measured through the squeeze."""
+
+    def __init__(self, text, font, k=_SQUEEZE):
+        self.text, self.font, self.k = text, font, k
+        self.h = font.get_height()
+
+    def width(self, s):
+        return int(self.text.width(self.font, s) * self.k)
+
+    def fit(self, s, w):
+        return self.text.fit(self.font, s, int(w / self.k))
+
+    def wrap(self, s, w, lines):
+        return self.text.wrap(self.font, s, int(w / self.k), lines)
+
+    def render(self, s, color):
+        img, _ = self.text.render(self.font, s, color)
+        return pygame.transform.smoothscale(img, (max(1, int(img.get_width() * self.k)), img.get_height()))
+
+    def draw(self, surf, s, color, x, y, align="left", shadow=2):
+        if not s:
+            return
+        img = self.render(s, color)
+        if align == "center":
+            x -= img.get_width() // 2
+        elif align == "right":
+            x -= img.get_width()
+        if shadow:
+            surf.blit(self.render(s, _SHADOW), (x + shadow, y + shadow))
+        surf.blit(img, (x, y))
+
+
+def _when(start, now):
+    """'Tonight 8:00 PM', 'Tomorrow 9:30 AM', 'Tuesday 8:00 PM'."""
+    t = start.astimezone()
+    clock = t.strftime("%I:%M %p").lstrip("0")
+    day = "Tonight" if t.date() == now.date() and t.hour >= 17 else "Today" if t.date() == now.date() \
+        else "Tomorrow" if (t.date() - now.date()).days == 1 else t.strftime("%A")
+    return f"{day} {clock}"
+
+
 class TVGuidePage(Page):
-    """Prevue-style: a promo for something showing now in the top half, the
-    grid of every channel's next ninety minutes scrolling up through the
-    bottom half, in the blue-and-yellow look."""
+    """The TV Guide Channel at the end of the nineties: the picture and a
+    promo panel over the top half, the grid of every channel's next ninety
+    minutes rolling up through the bottom half in bevelled navy cells, the
+    clock in the corner cell, bold condensed type with a shadow."""
     fps = 30
     SLOT = timedelta(minutes=30)
-    SCROLL = 24.0           # pixels a second
+    SCROLL = 22.0           # pixels a second
     PROMO = 8.0             # seconds each promo stays
-    ROW, CH_W, HDR = 36, 92, 22
 
     def __init__(self, app):
         super().__init__(app)
         self._promos = (None, [])
+        self._rows = (None, {})         # (window start, {channel index: its row drawn})
+        self._bg = None
+        k = self.k = self.size[1] / 360
+        self.ROW, self.CH_W, self.HDR, self.GAP = round(44 * k), round(96 * k), round(26 * k), round(2 * k)
+        self.f = _Cond(self.text, self.font(_GUIDE, round(17 * k)))
+        self.f_big = _Cond(self.text, self.font(_GUIDE, round(24 * k)))
+        self.f_small = _Cond(self.text, self.font(_GUIDE, round(12 * k)))
 
     def draw(self, s, now):
         W, H = self.size
-        s.fill(_BLUE)
-        top = H // 2
+        top = round(H * 0.52)
+        if self._bg is None:
+            self._bg = _gradient((W, top), _TOP0, _TOP1)
+        s.blit(self._bg, (0, 0))
+        pygame.draw.rect(s, _NAVY, (0, top, W, H - top))
         self._promo(s, now, pygame.Rect(0, 0, W, top))
         self._grid(s, now, pygame.Rect(0, top, W, H - top))
 
-    # The promo panel: what's on now, one channel at a time, with its poster
+    # The promo panel: what's on now, one channel at a time, its poster
     # where the guide carries one.
     def _candidates(self, now):
         epg, utc = self.app.epg, now.astimezone(timezone.utc)
@@ -162,78 +252,148 @@ class TVGuidePage(Page):
         return self._promos[1]
 
     def _promo(self, s, now, r):
-        t, f, fw = self.text, self.font(_PREVUE, 16), self.font(_PREVUE, 28)
-        t.draw(s, "TV GUIDE", fw, _YELLOW, 16, 10)
-        t.draw(s, now.strftime("%I:%M %p").lstrip("0"), f, _YELLOW, r.right - 16, 14, align="right")
-        pygame.draw.line(s, _YELLOW, (16, 44), (r.right - 16, 44))
+        k, f = self.k, self.f
+        m = round(14 * k)
+        box = pygame.Rect(m, m, round(r.w * 0.46), r.h - 2 * m)
+        _bevel(s, box, (6, 4, 40), raised=False)
+        panel = pygame.Rect(box.right + m, box.y, r.right - m - box.right - m, box.h)
+        self._logo(s, r.right - m, box.bottom)
         cands = self._candidates(now)
-        x, y = 16, 56
         if not cands:
-            t.draw(s, "No listings yet.", f, _WHITE, x, y)
+            f.draw(s, "No listings yet", _WHITE, panel.centerx, panel.y + round(6 * k), align="center")
             return
         ch, prog = cands[int(time.time() // self.PROMO) % len(cands)]
         logo = getattr(self.app.skin, "logo", None)
-        art = logo(prog.icon, 72, r.h - y - 12) if prog.icon and logo else None
+        art = logo(prog.icon, box.w - 8, box.h - 8) if prog.icon and logo else None
         if art:
-            s.blit(art, (x, y))
-            x += art.get_width() + 12
-        w = r.w - x - 16
-        t.draw(s, t.fit(f, f"NOW ON {_num(ch)}  {ch.name.upper()}", w), f, _YELLOW, x, y)
-        t.draw(s, t.fit(f, prog.title.upper(), w), f, _WHITE, x, y + 22)
-        for i, line in enumerate(t.wrap(f, prog.description, w, (r.h - y - 50) // 18)):
-            t.draw(s, line, f, _GREY, x, y + 48 + i * 18)
+            s.blit(art, (box.centerx - art.get_width() // 2, box.centery - art.get_height() // 2))
+        else:
+            self.f_big.draw(s, self.f_big.fit(ch.name.upper(), box.w - 24), _WHITE,
+                            box.centerx, box.centery - round(14 * k), align="center")
+        utc = now.astimezone(timezone.utc)
+        on_now = prog.start <= utc < prog.stop
+        local = lambda d: d.astimezone().strftime("%I:%M").lstrip("0")
+        span = (f"{local(prog.start)} - {local(prog.stop)} " + prog.stop.astimezone().strftime("%p")) if on_now \
+            else _when(prog.start, now)
+        lines = [prog.category or ("Now Showing" if on_now else "Coming Up"),
+                 None, span, f"Channel {_num(ch)}"]
+        y, lh = panel.y + round(4 * k), round(30 * k)
+        for i, line in enumerate(lines):
+            if line is None:                        # the title in quotes, its rating in a badge
+                title = f'"{prog.title}"'
+                badge = (prog.rating or "").strip().upper()
+                bw = self.f_small.width(badge) + round(10 * k) if badge else 0
+                title = f.fit(title, panel.w - bw - round(8 * k))
+                tw = f.width(title)
+                x = panel.centerx - (tw + bw) // 2
+                f.draw(s, title, _WHITE, x, y + i * lh)
+                if badge:
+                    br = pygame.Rect(x + tw + round(6 * k), y + i * lh + round(4 * k), bw, self.f_small.h + round(2 * k))
+                    pygame.draw.rect(s, _YELLOW, br, border_radius=2)
+                    self.f_small.draw(s, badge, _NAVY, br.centerx, br.y + round(1 * k), align="center", shadow=0)
+            else:
+                f.draw(s, f.fit(line, panel.w), _WHITE, panel.centerx, y + i * lh, align="center")
 
-    # The grid, scrolling.
+    def _logo(self, s, right, bottom):
+        """The channel's mark, in the panel's corner."""
+        k = self.k
+        r = pygame.Rect(0, 0, round(58 * k), round(40 * k))
+        r.bottomright = (right, bottom)
+        pygame.draw.rect(s, _SHADOW, r.move(2, 2), border_radius=4)
+        pygame.draw.rect(s, _WHITE, r, border_radius=4)
+        pygame.draw.rect(s, _NAVY, r, width=max(1, round(k)), border_radius=4)
+        self.f_big.draw(s, "TV", _NAVY, r.centerx, r.y + round(1 * k), align="center", shadow=0)
+        self.f_small.draw(s, "GUIDE", _NAVY, r.centerx, r.bottom - self.f_small.h - round(1 * k), align="center", shadow=0)
+
+    # The grid, rolling up.
     def _grid(self, s, now, r):
-        t, f = self.text, self.font(_PREVUE, 16)
-        rh, cw, hdr = self.ROW, self.CH_W, self.HDR
+        f, rh, cw, hdr, g = self.f, self.ROW, self.CH_W, self.HDR, self.GAP
         t0 = now.replace(minute=30 if now.minute >= 30 else 0, second=0, microsecond=0)
         cols, colw = 3, (r.w - cw) / 3
-        pygame.draw.rect(s, _BLUE_DARK, (r.x, r.y, r.w, hdr))
+        ty = r.y + g + round(2 * self.k)
+        _bevel(s, pygame.Rect(r.x + g, r.y + g, cw - 2 * g, hdr - 2 * g))
+        f.draw(s, now.strftime("%I:%M:%S").lstrip("0"), _YELLOW, r.x + cw // 2, ty, align="center")
         for i in range(cols):
             x = int(r.x + cw + i * colw)
-            t.draw(s, (t0 + i * self.SLOT).strftime("%I:%M %p").lstrip("0"), f, _YELLOW, x + 8, r.y + 3)
-            pygame.draw.line(s, _LINE, (x, r.y), (x, r.bottom))
+            _bevel(s, pygame.Rect(x + g, r.y + g, int(colw) - 2 * g, hdr - 2 * g))
+            f.draw(s, (t0 + i * self.SLOT).strftime("%I:%M %p").lstrip("0"), _YELLOW, x + int(colw) // 2, ty, align="center")
         chans = self.app.channels
         n = len(chans)
         if not n:
             return
+        u0 = t0.astimezone(timezone.utc)
+        u1 = u0 + cols * self.SLOT
+        epg = self.app.epg
+        key = (u0, id(epg), len(epg.channel_ids) if epg else 0)       # a guide that loads redraws the rows
+        if self._rows[0] != key:
+            self._rows = (key, {})
         view = pygame.Rect(r.x, r.y + hdr, r.w, r.bottom - r.y - hdr)
         s.set_clip(view)
         period = n + 2                  # two blank rows between one pass and the next
         off = ((time.monotonic() - self.t0) * self.SCROLL) % (period * rh)
         k0 = int(off // rh)
         y = view.y - (off - k0 * rh)
-        u0 = t0.astimezone(timezone.utc)
-        u1 = u0 + cols * self.SLOT
         for k in range(k0, k0 + view.h // rh + 2):
             slot = k % period
             if slot < n:
-                self._row(s, chans[slot], u0, u1, pygame.Rect(r.x, int(y), r.w, rh), f)
+                s.blit(self._row(slot, chans[slot], u0, u1), (r.x, int(y)))
             y += rh
         s.set_clip(None)
 
-    def _row(self, s, ch, u0, u1, r, f):
-        t, cw = self.text, self.CH_W
-        pygame.draw.line(s, _LINE, (r.x, r.bottom - 1), (r.right, r.bottom - 1))
-        t.draw(s, _num(ch), f, _YELLOW, r.x + cw - 8, r.y + 3, align="right")
-        t.draw(s, t.fit(f, ch.name.upper(), cw - 12), f, _YELLOW, r.x + 6, r.y + 19)
-        pygame.draw.line(s, _LINE, (r.x + cw, r.y), (r.x + cw, r.bottom))
+    def _row(self, idx, ch, u0, u1):
+        """The channel's row, drawn once a window."""
+        rows = self._rows[1]
+        surf = rows.get(idx)
+        if surf is None:
+            surf = rows[idx] = self._draw_row(ch, u0, u1)
+        return surf
+
+    def _draw_row(self, ch, u0, u1):
+        W = self.size[0]
+        f, k, rh, cw, g = self.f, self.k, self.ROW, self.CH_W, self.GAP
+        surf = pygame.Surface((W, rh))
+        surf.fill(_NAVY)
+        ty, lh, pad = g + round(2 * k), round(18 * k), round(6 * k)
+        _bevel(surf, pygame.Rect(g, g, cw - 2 * g, rh - 2 * g))
+        f.draw(surf, _num(ch), _YELLOW, cw // 2, ty, align="center")
+        name, fn = ch.name.upper(), f
+        if f.width(name) > cw - 2 * pad:                # a long call sign, smaller before it's cut
+            fn = self.f_small
+            name = fn.fit(name, cw - 2 * pad)
+        fn.draw(surf, name, _YELLOW, cw // 2, ty + lh + (round(3 * k) if fn is not f else 0), align="center")
         epg = self.app.epg
         cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
-        if not cid:
-            return
-        span, gw = (u1 - u0).total_seconds(), r.w - cw
-        for p in epg.programs_in_window(cid, u0, u1):
+        progs = epg.programs_in_window(cid, u0, u1) if cid else []
+        span, gw = (u1 - u0).total_seconds(), W - cw
+        if not progs:
+            cell = pygame.Rect(cw + g, g, gw - 2 * g, rh - 2 * g)
+            _bevel(surf, cell)
+            f.draw(surf, "No Information", _GREY, cell.x + pad, ty)
+            return surf
+        for p in progs:
             a, b = max(p.start, u0), min(p.stop, u1)
-            x0 = r.x + cw + (a - u0).total_seconds() / span * gw
-            x1 = r.x + cw + (b - u0).total_seconds() / span * gw
-            pygame.draw.line(s, _LINE, (int(x1), r.y), (int(x1), r.bottom))
-            w = int(x1 - x0) - 10
-            if w < 16:
+            x0 = cw + (a - u0).total_seconds() / span * gw
+            x1 = cw + (b - u0).total_seconds() / span * gw
+            cell = pygame.Rect(int(x0) + g, g, int(x1) - int(x0) - 2 * g, rh - 2 * g)
+            if cell.w < 8:
                 continue
-            for i, line in enumerate(t.wrap(f, p.title, w, 2)):
-                t.draw(s, line, f, _WHITE, int(x0) + 5, r.y + 3 + i * 16)
+            _bevel(surf, cell)
+            tx0, tx1 = cell.x + pad, cell.right - pad
+            arrow, ah = round(22 * k), round(14 * k)        # the chevrons' room, their height
+            if p.start < u0:
+                _chevrons(surf, cell.x + round(4 * k), cell.centery, ah, right=False)
+                tx0 += arrow
+            if p.stop > u1:
+                _chevrons(surf, cell.right - round(4 * k) - round(18 * k), cell.centery, ah, right=True)
+                tx1 -= arrow
+            if tx1 - tx0 < round(20 * k):
+                continue
+            title = p.title
+            if p.start > u0 and p.start.minute % 30:
+                title = f"({p.start.astimezone().strftime('%I:%M').lstrip('0')}) {title}"
+            for i, line in enumerate(f.wrap(title, tx1 - tx0, 2)):
+                f.draw(surf, line, _WHITE, tx0, ty + i * lh)
+        return surf
 
 
 _STAR = "Barlow-Bold.ttf"
@@ -291,11 +451,7 @@ class WeatherPage(Page):
         t = self.text
         f, f_small = self.font(_STAR, 20), self.font(_STAR, 16)
         if self._bg is None:
-            col = pygame.Surface((1, H))
-            for y in range(H):
-                k = y / max(1, H - 1)
-                col.set_at((0, y), tuple(int(a + (b - a) * k) for a, b in zip(_SKY_TOP, _SKY_BOTTOM)))
-            self._bg = pygame.transform.scale(col, (W, H))
+            self._bg = _gradient((W, H), _SKY_TOP, _SKY_BOTTOM)
         s.blit(self._bg, (0, 0))
         t.draw(s, now.strftime("%I:%M:%S %p").lstrip("0"), f, _WHITE, W - 20, 12, align="right")
         t.draw(s, now.strftime("%a %b %d").upper(), f_small, _WHITE, W - 20, 36, align="right")
@@ -438,3 +594,65 @@ class WeatherPage(Page):
         tw = t.width(f, text)
         x = W - ((time.monotonic() - self.t0) * self.CRAWL % (tw + W))
         t.draw(s, text, f, _WHITE, int(x), band.y + 11)
+
+
+# ── Music ─────────────────────────────────────────────────────────────────
+# Each own channel plays its background music while it's tuned, through
+# pygame's mixer (mpv is stopped): Cathode's own loops in assets/sounds,
+# or a file dropped in ~/.config/cathode/music/<kind>.ogg (mp3, wav, flac)
+# to play instead. It follows the box's volume and mute like a programme's
+# sound would.
+
+_playing = None
+
+
+def music_file(kind: str):
+    from . import paths
+    own = os.path.join(os.path.dirname(paths.config_path()), "music")
+    for d in (own, paths.asset("sounds")):
+        for ext in ("ogg", "mp3", "wav", "flac"):
+            p = os.path.join(d, f"{kind}.{ext}")
+            if os.path.isfile(p):
+                return p
+    return None
+
+
+def play_music(kind: str, app):
+    global _playing
+    stop_music()
+    if not getattr(app.config, "own_music", True):
+        return
+    p = music_file(kind)
+    if not p:
+        return
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        pygame.mixer.music.load(p)
+        _playing = kind
+        music_volume(app)
+        pygame.mixer.music.play(-1)
+    except Exception as e:              # no audio device: a quiet channel
+        _playing = None
+        print(f"[cathode] channel music off: {e!r}")
+
+
+def stop_music():
+    global _playing
+    if _playing:
+        _playing = None
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+
+def music_volume(app):
+    """The box's volume and mute, applied to the music."""
+    if not _playing:
+        return
+    try:
+        v = app.video
+        pygame.mixer.music.set_volume(0.0 if v.muted else 0.6 * max(0, min(100, v.volume)) / 100)
+    except Exception:
+        pass

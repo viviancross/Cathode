@@ -754,9 +754,19 @@ def own_channel_items(app):
         want = cfg.own_channels.get(kind, "auto")
         app.push(Keyboard(app, "Channel number (empty = automatic)", got,
                           initial=str(want) if isinstance(want, int) else ""))
+    def music(_d=0):
+        cfg.own_music = not cfg.own_music
+        cfg.save()
+        if not cfg.own_music:
+            ownchannels.stop_music()
+        elif app.live and app.live.page is not None:
+            ownchannels.play_music(ownchannels.kind_of(app.channels[app.live.idx]), app)
     return [Item(f"{name} channel", lambda k=kind: set_number(k), value=lambda k=kind: value(k),
                  adjust=lambda d, k=kind: toggle(k), help=desc)
-            for kind, (name, _t, desc) in ownchannels.KINDS.items()]
+            for kind, (name, _t, desc) in ownchannels.KINDS.items()] + [
+        Item("Background music", music, value=lambda: "On" if cfg.own_music else "Off", adjust=music,
+             help="The channels' own music while one is tuned. Drop your own tvguide.ogg or weather.ogg "
+                  "in ~/.config/cathode/music to play that instead.")]
 
 
 def _bare(url):

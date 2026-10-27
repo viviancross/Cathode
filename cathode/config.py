@@ -154,6 +154,7 @@ class Config:
     # Cathode's own channels (ownchannels.KINDS): where each sits in the
     # lineup. "auto" = after the lineup's last number, "off", or a number.
     own_channels: dict = field(default_factory=lambda: {"tvguide": "auto", "weather": "auto"})
+    own_music: bool = True          # their background music
 
     # Remappable hotkeys (action -> key / gamepad button). Empty = defaults.
     key_bindings: dict = field(default_factory=dict)

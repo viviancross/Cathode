@@ -54,6 +54,7 @@ class FakeWeather:
 class FakeApp:
     def __init__(self, chans):
         self.config = Config("")
+        self.config.own_music = False      # the tests stay quiet
         self.channels = chans
         self.epg = EPG()
         self.video = FakeVideo()
@@ -130,6 +131,18 @@ class TestGuide(unittest.TestCase):
         self.assertEqual(len(epg._programs["cathode.tvguide"]), 96)
 
 
+class TestMusic(unittest.TestCase):
+    def test_each_channel_has_its_tune(self):
+        for kind in own.KINDS:
+            self.assertTrue(own.music_file(kind), kind)
+
+    def test_music_off_in_the_settings_plays_nothing(self):
+        app = FakeApp([])
+        own.play_music("tvguide", app)
+        self.assertIsNone(own._playing)
+        own.stop_music()                    # harmless when nothing plays
+
+
 class TestTuning(unittest.TestCase):
     def test_an_own_channel_stops_the_stream_and_pages(self):
         app = FakeApp(own.add_to(lineup(1, 2), Config("")))
@@ -190,6 +203,7 @@ class TestPages(unittest.TestCase):
                 self.assertEqual(guide.size, (640, 360) if canvas[0] == 1280 else (640, 480))
                 self.assertEqual(guide.frame().get_size(), guide.size)
                 self.assertTrue(guide._candidates(datetime.now()))      # Ch2 has a programme to promote
+                self.assertEqual(len(guide._rows[1]), len(self.app.channels))   # every row drawn once, then kept
                 for wx in (None, FakeWeather(None), FakeWeather(Weather.parse(J1, "F"))):
                     self.app.weather = wx
                     page = own.WeatherPage(self.app)

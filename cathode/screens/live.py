@@ -121,11 +121,13 @@ class LiveTV(Screen):
             # No stream: the page draws itself, after the box's tuner-lock beat.
             self.page = ownchannels.make_page(ch, self.app)
             self.app.video.stop()
+            ownchannels.play_music(ownchannels.kind_of(ch), self.app)
             self._page_tick()
             self.app.after(self.app.skin.tune_black + 0.3,
                            lambda: self.idx == idx and self.phase == "cover" and self._reveal())
             return
         self.page = None
+        ownchannels.stop_music()
         self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
         self.app.video.play(ch.url)
 
@@ -136,6 +138,7 @@ class LiveTV(Screen):
         if self.page is None or self.suspended:
             return
         self.app.page_dirty = True
+        ownchannels.music_volume(self.app)
         self._page_timer = self.app.after(1.0 / self.page.fps, self._page_tick)
 
     def _timed_out(self):
@@ -158,6 +161,7 @@ class LiveTV(Screen):
         self.app.cancel(self._timeout)
         self.suspended, self.standby = True, False
         self.page = None
+        ownchannels.stop_music()
         self.phase = "watch"
 
     def resume(self):

@@ -8,13 +8,23 @@
   Cathode's channels). They draw their picture instead of playing a
   stream, so they take the channel-change static, the CRT pass and the
   guide's picture box like a broadcast.
-  - **The TV Guide channel:** what's on now on one channel after another
-    in the top half, with its poster where the guide has one; every
-    channel's next ninety minutes scrolling through the bottom half.
+  - **The TV Guide channel:** the look of the TV Guide Channel at the end
+    of the nineties. A promo for what's on now, one channel after another,
+    over the top half (its poster where the guide has one, the title,
+    its rating, its time, its channel number); every channel's next
+    ninety minutes rolling up through the bottom half in bevelled navy
+    cells, the clock in the corner cell, arrows on a programme that runs
+    past the edge, bold condensed type with a shadow.
   - **The Weather channel:** the current conditions, the three-hourly
     outlook, the extended forecast and the almanac, each held for eight
     seconds under a running clock, with the conditions crawling along the
     foot. It uses the zip code from Settings > System > Weather.
+  - **Their music.** Each plays its own background music while it's
+    tuned (smooth jazz under the weather, a light synth tune under the
+    guide), following the box's volume and mute. Settings > Channels >
+    Cathode's channels > Background music turns it off; a `tvguide.ogg`
+    or `weather.ogg` (mp3, wav, flac) dropped in `~/.config/cathode/music`
+    plays instead of Cathode's.
 
 ## 4.32
 
