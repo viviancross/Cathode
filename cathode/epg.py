@@ -28,6 +28,7 @@ class Program:
     category: str = ""
     episode: str = ""
     rating: str = ""
+    icon: str = ""           # the programme's poster, where the guide carries one (Tunarr does)
 
     @property
     def duration_minutes(self) -> int:
@@ -272,6 +273,16 @@ class EPG:
         if rating_el is not None and rating_el.text:
             rating = rating_el.text.strip()
 
+        icon_el = prog_el.find("icon")
+        icon = (icon_el.get("src") or "").strip() if icon_el is not None else ""
+        if not icon:                        # Tunarr also writes <image type="poster">
+            for im in prog_el.findall("image"):
+                if (im.get("type") or "poster") == "poster" and im.text:
+                    icon = im.text.strip()
+                    break
+        if icon:
+            icon = as_seen_from(icon, getattr(self, "_source", ""))
+
         self._programs.setdefault(ch_id, []).append(Program(
             channel_id=ch_id,
             title=title,
@@ -281,6 +292,7 @@ class EPG:
             category=category,
             episode=episode,
             rating=rating,
+            icon=icon,
         ))
 
     def add_programs(self, channel_id: str, programs: List[Program]):

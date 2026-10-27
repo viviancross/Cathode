@@ -226,3 +226,30 @@ class TestLineGuide(unittest.TestCase):
             self.assertEqual(sum(1 for c in calls if c[1] == "get_simple_data_table"), 2)   # once per channel, one load
         finally:
             e._API_EMPTY.discard("http://h:80")
+
+
+class TestProgrammePosters(unittest.TestCase):
+    def test_a_programme_icon_is_kept_and_seen_from_the_server(self):
+        from cathode.epg import EPG
+        xml = ('<?xml version="1.0"?><tv><channel id="c1"><display-name>One</display-name></channel>'
+               '<programme channel="c1" start="' + _ts(NOW) + '" stop="' + _ts(NOW + timedelta(hours=1)) + '">'
+               '<title>Show</title><icon src="http://localhost:8000/api/programs/abc/artwork/poster"/></programme>'
+               '<programme channel="c1" start="' + _ts(NOW + timedelta(hours=1)) + '" stop="' + _ts(NOW + timedelta(hours=2)) + '">'
+               '<title>Next</title><image type="poster">http://localhost:8000/p/next.jpg</image></programme></tv>').encode()
+        d = tempfile.mkdtemp()
+        try:
+            path = os.path.join(d, "g.xml")
+            with open(path, "wb") as f:
+                f.write(xml)
+            g = EPG()
+            g._source = "http://10.0.0.5:8000/api/xmltv.xml"
+            with mock.patch.object(epg_mod.EPG, "load", lambda self, *a, **k: None):
+                pass
+            g._window = (NOW - timedelta(hours=3), NOW + timedelta(hours=36))
+            with open(path, "rb") as f:
+                g._parse_stream(f)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        progs = g._programs["c1"]
+        self.assertEqual(progs[0].icon, "http://10.0.0.5:8000/api/programs/abc/artwork/poster")
+        self.assertEqual(progs[1].icon, "http://10.0.0.5:8000/p/next.jpg")

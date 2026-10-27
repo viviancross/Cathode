@@ -186,5 +186,18 @@ class TestXtreamApi(unittest.TestCase):
         self.assertEqual(used, "xtream://h/u/p")
 
 
+class TestChannelNumbers(unittest.TestCase):
+    def test_decimal_numbers_keep_their_part_and_sort(self):
+        from cathode.playlist import _chno, _parse
+        self.assertEqual(_chno("10.5", 1), 10.5)
+        self.assertEqual(_chno("7", 1), 7)
+        self.assertEqual(_chno("x", 4), 4)
+        self.assertEqual(_chno(None, 4), 4)
+        lines = ["#EXTM3U", '#EXTINF:-1 tvg-chno="10.2",B', "http://h/b", '#EXTINF:-1 tvg-chno="10.1",A', "http://h/a",
+                 "#EXTINF:-1,C", "http://h/c"]
+        chans = _parse(chr(10).join(lines) + chr(10))
+        self.assertEqual([c.number for c in chans], [10.1, 10.2, 12])   # the next free number after the highest seen, as before
+
+
 if __name__ == "__main__":
     unittest.main()

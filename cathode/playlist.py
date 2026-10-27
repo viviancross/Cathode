@@ -12,7 +12,7 @@ from .net import SSL as _SSL, as_seen_from
 
 @dataclass
 class Channel:
-    number: int
+    number: float            # whole for most lineups; ErsatzTV numbers like 10.5 keep their part
     name: str
     url: str
     group: str = ""
@@ -123,6 +123,19 @@ def load_as(source: str, user_agent: str = "Cathode/1.0"):
     raise last
 
 
+def _chno(raw, auto: int):
+    """tvg-chno as a number: whole when it is one, with its decimal part when
+    the server numbers channels 10.1, 10.2 (ErsatzTV); the next free number
+    when it's missing or not a number."""
+    if raw is None:
+        return auto
+    s = str(raw).strip()
+    try:
+        return float(s) if "." in s else int(s)
+    except ValueError:
+        return auto
+
+
 def load(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
     """Load an M3U playlist from a file path or URL, or a line through a
     provider's API (an xtream:// address)."""
@@ -215,11 +228,7 @@ def _parse(content: str) -> List[Channel]:
             attrs = pending_meta["attrs"]
             name = pending_meta["name"]
 
-            # Try to get explicit channel number
-            try:
-                number = int(attrs.get("tvg-chno", auto_number))
-            except (ValueError, TypeError):
-                number = auto_number
+            number = _chno(attrs.get("tvg-chno"), auto_number)
 
             ch = Channel(
                 number=number,
@@ -231,7 +240,7 @@ def _parse(content: str) -> List[Channel]:
                 language=attrs.get("tvg-language", ""),
             )
             channels.append(ch)
-            auto_number = max(auto_number, number) + 1
+            auto_number = int(max(auto_number, number)) + 1
             pending_meta = None
         else:
             # Bare URL with no metadata

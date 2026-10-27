@@ -417,6 +417,8 @@ class App:
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         live.channels_loaded()
+        self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
+        self.after(self.EPG_REFRESH, lambda gen=self._lineup_gen: gen == self._lineup_gen and self.refresh_lineup())
         if not self.config.key_tip_shown and self.remote and not self.shot:
             # Once ever: which keys do what, the first time channels play.
             self.config.key_tip_shown = True
@@ -425,6 +427,44 @@ class App:
                                   ((R.GUIDE, "Guide"), (R.MENU, "Menu"), (R.INFO, "Info"))
                                   if self.key_name(a)) + "   Channels: Up/Down", 9.0)
         self.load_epg()
+
+    def refresh_lineup(self):
+        """Fetch the playlist again, quietly: a channel added or removed on
+        the server shows up without a restart. The channel playing stays
+        playing; nothing is retuned."""
+        url, gen = self.config.playlist_url, self._lineup_gen
+        if not url:
+            return
+
+        def work():
+            try:
+                chans, _agent, _used = m3u.load_as(url, user_agent=self.agent)
+            except Exception as e:
+                print(f"[cathode] lineup refresh failed: {e!r}")
+                chans = []
+            self.post(self._lineup_refreshed, gen, url, chans)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _lineup_refreshed(self, gen, url, chans):
+        if gen != self._lineup_gen or url != self.config.playlist_url:
+            return                          # the playlist changed under it
+        self.after(self.EPG_REFRESH, lambda: gen == self._lineup_gen and self.refresh_lineup())
+        if not chans:
+            return
+        from .screens.live import LiveTV
+        live = self.find(LiveTV)
+        before = {c.number for c in self.channels}
+        after = {c.number for c in chans}
+        if before == after and [c.name for c in self.channels] == [c.name for c in chans]:
+            return
+        current = live.channel.number if live and live.channel else None
+        self.channels = chans
+        self._cats = None
+        if live and current is not None:
+            live.idx = live.number_to_idx(current)
+        print(f"[cathode] lineup refreshed: {len(chans)} channels "
+              f"(+{len(after - before)}, -{len(before - after)}).")
+        self.invalidate()
 
     def load_epg(self):
         """Load the guide, then keep reloading it while this playlist stays
