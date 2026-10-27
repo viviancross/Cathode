@@ -4,7 +4,7 @@ numbers, volume, previous channel, and the cover over a channel change."""
 import time
 from datetime import datetime, timezone
 
-from .. import remote as R
+from .. import ownchannels, remote as R
 from ..app import Screen
 
 
@@ -42,6 +42,8 @@ class LiveTV(Screen):
         self.dropped = False        # the stream ended: reconnecting under its last picture
         self._handover = False      # its replacement is queued behind the buffered picture
         self._stall = None          # buffering with nothing to show: the watchdog
+        self.page = None            # an own channel's picture (ownchannels.Page) while one is tuned
+        self._page_timer = None
 
     # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
     # only once the presses stop: a server that starts a transcode per tune
@@ -114,9 +116,27 @@ class LiveTV(Screen):
         if idx != self.idx:
             return
         ch = self.channels[idx]
+        print(f"[cathode] Tuning to {ch}")
+        if ownchannels.is_own(ch):
+            # No stream: the page draws itself, after the box's tuner-lock beat.
+            self.page = ownchannels.make_page(ch, self.app)
+            self.app.video.stop()
+            self._page_tick()
+            self.app.after(self.app.skin.tune_black + 0.3,
+                           lambda: self.idx == idx and self.phase == "cover" and self._reveal())
+            return
+        self.page = None
         self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
         self.app.video.play(ch.url)
-        print(f"[cathode] Tuning to {ch}")
+
+    def _page_tick(self):
+        """A frame of the own channel's page, at its rate, while it's tuned."""
+        self.app.cancel(self._page_timer)
+        self._page_timer = None
+        if self.page is None or self.suspended:
+            return
+        self.app.page_dirty = True
+        self._page_timer = self.app.after(1.0 / self.page.fps, self._page_tick)
 
     def _timed_out(self):
         """No frame in time: reveal anyway, onto the stand-by card."""
@@ -137,6 +157,7 @@ class LiveTV(Screen):
         """Something else (On Demand) is using the picture: let go of it."""
         self.app.cancel(self._timeout)
         self.suspended, self.standby = True, False
+        self.page = None
         self.phase = "watch"
 
     def resume(self):
@@ -151,6 +172,8 @@ class LiveTV(Screen):
             return                      # about On Demand's video, not ours
         if self._settle is not None:
             return                      # the channel being surfed past, not the one coming
+        if self.page is not None:
+            return                      # an own channel: the stopped stream's last words
         if kind == "video_started":
             self.standby, self._fails = False, 0
             if self.dropped:                # back: the new picture replaces the held one
@@ -242,7 +265,7 @@ class LiveTV(Screen):
         app = self.app
         if not app.config.epg_url:
             return "This playlist has no guide. Add its address in Settings > Channels."
-        if not app.epg.channel_ids:
+        if not ownchannels.real_ids(app.epg):
             return ("The guide didn't load. Check its address in Settings > Channels." if app.epg_failed
                     else "The guide has nothing in it. Check its address in Settings > Channels.")
         ch = self.channel

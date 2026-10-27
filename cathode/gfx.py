@@ -324,6 +324,20 @@ class Gfx:
         GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, size[0], size[1], GL.GL_RGBA,
                            GL.GL_UNSIGNED_BYTE, pygame.image.tobytes(surface, "RGBA_PREMULT"))
 
+    def upload_video(self, surface: pygame.Surface):
+        """A drawn picture in place of mpv's (Cathode's own channels): the
+        video target takes the surface's size and pixels, and composes as
+        any picture would (the box, the cover, the CRT pass)."""
+        w, h = surface.get_size()
+        self.video.resize(w, h)
+        GL.glActiveTexture(GL.GL_TEXTURE0)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, self.video.tex)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+        GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, 0)
+        GL.glBindBuffer(GL.GL_PIXEL_UNPACK_BUFFER, 0)
+        GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, w, h, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
+                           pygame.image.tobytes(surface, "RGBA", True))     # rows bottom-up, as mpv's
+
     # ── Compose ───────────────────────────────────────────────────────────
 
     def _ndc(self, px_rect) -> Rect:

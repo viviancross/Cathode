@@ -303,6 +303,12 @@ class EPG:
         self.__dict__.pop("_resolved", None)
         self.__dict__.pop("_last_stop", None)
 
+    def set_programs(self, channel_id: str, programs: List[Program]):
+        """A channel's programmes, replacing any it had (Cathode's own channels)."""
+        self._programs[channel_id] = sorted(programs, key=lambda p: p.start)
+        self.__dict__.pop("_resolved", None)
+        self.__dict__.pop("_last_stop", None)
+
     def resolve_channel_id(self, epg_id: str, channel_name: str) -> Optional[str]:
         """Return the XMLTV channel ID for a given M3U channel. Memoised: the
         fuzzy fallback scans every display name, and the guide asks per row

@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 
 import pygame
 
-from . import paths, playlist as m3u, remote as R
+from . import ownchannels, paths, playlist as m3u, remote as R
 from .config import Config
 from .epg import EPG
 from .logos import LogoStore
@@ -75,6 +75,7 @@ class App:
         self._timers = []
         self._seq = itertools.count()
         self._frame_pending = False
+        self.page_dirty = False     # an own channel's page has a new frame to show
         self._epg_gen = 0
         self._epg_checked = None    # the guide address last checked against the channels
         self.epg_failed = False     # the last guide load failed (vs loaded and empty)
@@ -424,10 +425,11 @@ class App:
             live.message = err
             self.invalidate()
             return
-        self.channels = chans
+        self.channels = ownchannels.add_to(chans, self.config)
         self._cats = None
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
+        ownchannels.fill_guide(self.epg)
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
         self.after(self.EPG_REFRESH, lambda gen=self._lineup_gen: gen == self._lineup_gen and self.refresh_lineup())
@@ -466,17 +468,34 @@ class App:
             return
         from .screens.live import LiveTV
         live = self.find(LiveTV)
-        before = {c.number for c in self.channels}
+        had = [c for c in self.channels if not ownchannels.is_own(c)]
+        before = {c.number for c in had}
         after = {c.number for c in chans}
-        if before == after and [c.name for c in self.channels] == [c.name for c in chans]:
+        if before == after and [c.name for c in had] == [c.name for c in chans]:
             return
         current = live.channel.number if live and live.channel else None
-        self.channels = chans
+        self.channels = ownchannels.add_to(chans, self.config)
         self._cats = None
         if live and current is not None:
             live.idx = live.number_to_idx(current)
         print(f"[cathode] lineup refreshed: {len(chans)} channels "
               f"(+{len(after - before)}, -{len(before - after)}).")
+        self.invalidate()
+
+    def place_own_channels(self):
+        """Cathode's own channels put in, moved or taken out after a settings
+        change, the channel playing kept (retuned to the first if it went)."""
+        live = self.live
+        current = live.channel.number if live and live.channel else None
+        self.channels = ownchannels.add_to([c for c in self.channels if not ownchannels.is_own(c)], self.config)
+        self._cats = None
+        ownchannels.fill_guide(self.epg)
+        if live and current is not None and self.channels:
+            idx = live.number_to_idx(current)
+            if self.channels[idx].number != current:
+                live.tune(idx)
+            else:
+                live.idx = idx
         self.invalidate()
 
     def load_epg(self):
@@ -517,21 +536,24 @@ class App:
         if epg is not None:
             self.epg = epg
             self._cats = None           # genres come from the guide
-            print(f"[cathode] EPG loaded ({len(epg.channel_ids)} channels).")
+            ids = ownchannels.real_ids(epg)
+            print(f"[cathode] EPG loaded ({len(ids)} channels).")
+            ownchannels.fill_guide(epg)
             if url != self._epg_checked:        # once per guide: one that matches nothing says so
                 self._epg_checked = url
-                missed = [ch for ch in self.channels if not epg.resolve_channel_id(ch.epg_id, ch.name)]
-                print(f"[cathode] guide covers {len(self.channels) - len(missed)} of {len(self.channels)} channels"
+                chans = [ch for ch in self.channels if not ownchannels.is_own(ch)]
+                missed = [ch for ch in chans if not epg.resolve_channel_id(ch.epg_id, ch.name)]
+                print(f"[cathode] guide covers {len(chans) - len(missed)} of {len(chans)} channels"
                       + (f"; e.g. not " + ", ".join(f"{ch.name} (epg id {ch.epg_id or 'none'})" for ch in missed[:3])
-                         if missed else "") + (f"; guide ids e.g. {', '.join(epg.channel_ids[:3])}" if missed else ""))
-                if not epg.channel_ids:
+                         if missed else "") + (f"; guide ids e.g. {', '.join(ids[:3])}" if missed else ""))
+                if not ids:
                     self.toast("The guide loaded, but there's nothing in it. Check its address in "
                                "Settings > Channels.", 8.0)
-                elif self.channels and not any(epg.resolve_channel_id(ch.epg_id, ch.name) for ch in self.channels):
+                elif chans and not any(epg.resolve_channel_id(ch.epg_id, ch.name) for ch in chans):
                     self.toast("The guide loaded, but it lists none of these channels. Is it the guide "
                                "for this playlist?", 8.0)
             self.invalidate()
-        elif not self.epg.channel_ids:     # nothing to show: say why (a reload keeps the old guide quietly)
+        elif not ownchannels.real_ids(self.epg):   # nothing to show: say why (a reload keeps the old guide quietly)
             self.toast(f"Couldn't load the guide: {err or 'it failed'}. Trying again in "
                        f"{self.EPG_RETRY // 60} minutes.", 8.0)
         self.after(self.EPG_REFRESH if epg is not None else self.EPG_RETRY,
@@ -659,7 +681,13 @@ class App:
                 # After the UI: a menu just opened may want the picture in a box.
                 box = self._video_box()
                 vfbo, (vw, vh) = self.gfx.video.fbo, self.gfx.video.size
-                if self.gfx.fit_video(self.skin.canvas, box):     # reshaped: draw the frame again
+                page = self.live.page if self.live else None
+                if page is not None:            # an own channel: its page is the picture
+                    if self.page_dirty or self.gfx.video.size != page.size:
+                        self.gfx.upload_video(page.frame())
+                        self.page_dirty, changed = False, True
+                    self._frame_pending = False
+                elif self.gfx.fit_video(self.skin.canvas, box):     # reshaped: draw the frame again
                     vw, vh = self.gfx.video.size
                     if not self.video.render(vfbo, vw, vh):
                         self.video.redraw(vfbo, vw, vh)

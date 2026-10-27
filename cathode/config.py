@@ -151,6 +151,9 @@ class Config:
 
     # Favorite channels (channel numbers). Persisted; shown as a guide category.
     favorites: list = field(default_factory=list)
+    # Cathode's own channels (ownchannels.KINDS): where each sits in the
+    # lineup. "auto" = after the lineup's last number, "off", or a number.
+    own_channels: dict = field(default_factory=lambda: {"tvguide": "auto", "weather": "auto"})
 
     # Remappable hotkeys (action -> key / gamepad button). Empty = defaults.
     key_bindings: dict = field(default_factory=dict)

@@ -29,6 +29,7 @@ Chosen for a Tunarr / ErsatzTV household, in the order they get built.
 - (The rating and up-next corner bugs were built on Oct 27 and withdrawn the same day at the user's call.)
 
 ### Cathode's own channels
+DONE Oct 27 (4.33): the framework (`cathode/ownchannels.py`, a page drawn at SD size uploaded where mpv's picture goes), the TV Guide channel and the Weather channel; Settings > Channels > Cathode's channels places them. Music channels still to do.
 One framework: a screen that takes a channel number, sits in the lineup and the guide like any channel, and draws itself instead of playing a stream.
 - **The TV Guide channel.** Prevue-style: the current picture in the top half, the grid scrolling through every channel's now and next in the bottom half, in that blue-and-yellow look.
 - **The Weather channel.** Local-on-the-8s pages from the weather feed Cathode already has: current conditions, the outlook, the hourly rain chance, the clock.
@@ -51,7 +52,7 @@ Ships beside 5.0 as `android-v5.0`, labelled a beta: one APK, arm64, Android 8+,
 | Days | Work |
 |---|---|
 | Oct 27 to 28 | Strong8K from the zip (4.32). Decimal numbers, lineup refresh. Server API research, then guide posters with the rating and up-next bugs. |
-| Oct 29 to 31 | Channel framework, TV Guide channel, Weather channel. Alpha 4.33. |
+| Oct 29 to 31 | ~~Channel framework, TV Guide channel, Weather channel~~ (done Oct 27). Alpha 4.33 build. Music channels start. |
 | Nov 1 to 3 | Music channels. Phone companion and API. Android box pass as reports arrive. |
 | Nov 4 to 6 | Editable channel lists. LAN discovery. Start over / watch later if the research allowed. Alpha 4.34. |
 | Nov 7 to 10 | Cold-install QA: Tunarr, ErsatzTV (Docker), keyboard, pad, Deck Game Mode. On Demand audio check. Fix round. Android signing and box pass two. Freeze at the end of Nov 10. |

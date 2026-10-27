@@ -47,6 +47,7 @@ DESCRIPTIONS.update({
     # Settings
     "Picture & Style": "The box, its colors and lettering, screen effects.",
     "Channels": "Your playlists and their guides.",
+    "Cathode's channels": "A TV Guide channel and a Weather channel of Cathode's own, in the lineup.",
     "Display": "Full screen, and which screen to use.",
     "Remote control": "Your remote, and which button does what.",
     "System": "Diagnostics, sound, weather, updates.",
@@ -73,7 +74,7 @@ DESCRIPTIONS.update({
     # System
     "Diagnostics": "Signal, stream and picture details.",
     "Audio output": "Which speakers or HDMI the sound uses.",
-    "Weather": "Local weather in the guide's header.",
+    "Weather": "Local weather in the guide's header and on the Weather channel.",
     "Check for updates": "See if there's a newer Cathode.",
     "Check at start-up": "Look for a newer Cathode each time it opens.",
     "Start-up screen": "The box's start-up screen when Cathode opens.",
@@ -711,10 +712,51 @@ def channel_items(app):
         items.append(Item(("> " if active else "  ") + pl.get("name", "Playlist"),
                           submenu=lambda pl=pl: playlist_items(app, pl)))
     items.append(Item("Add a playlist...", lambda: add_playlist(app)))
+    items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
     return items
+
+
+def own_channel_items(app):
+    """Where Cathode's own channels sit: automatic (after the lineup), a
+    number typed in, or off. LEFT/RIGHT switch one on and off; SELECT
+    types its number."""
+    from . import ownchannels
+    cfg = app.config
+
+    def value(kind):
+        want = cfg.own_channels.get(kind, "auto")
+        if want == "off":
+            return "Off"
+        ch = next((c for c in app.channels if c.url == ownchannels.SCHEME + kind), None)
+        at = f" {ch.number:g}" if ch else ""
+        return f"Auto{at}" if want == "auto" else f"Channel{at}"
+
+    def toggle(kind):
+        cfg.own_channels[kind] = "off" if cfg.own_channels.get(kind, "auto") != "off" else "auto"
+        cfg.save()
+        app.place_own_channels()
+
+    def set_number(kind):
+        def got(text):
+            if text is None:
+                return
+            text = text.strip()
+            try:
+                cfg.own_channels[kind] = int(text) if text else "auto"
+            except ValueError:
+                app.toast("A channel number is a whole number.")
+                return
+            cfg.save()
+            app.place_own_channels()
+        want = cfg.own_channels.get(kind, "auto")
+        app.push(Keyboard(app, "Channel number (empty = automatic)", got,
+                          initial=str(want) if isinstance(want, int) else ""))
+    return [Item(f"{name} channel", lambda k=kind: set_number(k), value=lambda k=kind: value(k),
+                 adjust=lambda d, k=kind: toggle(k), help=desc)
+            for kind, (name, _t, desc) in ownchannels.KINDS.items()]
 
 
 def _bare(url):

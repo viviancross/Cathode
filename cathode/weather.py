@@ -123,16 +123,47 @@ class Weather:
         url = f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1"
         req = urllib.request.Request(url, headers={"User-Agent": self._ua})
         j = json.loads(urllib.request.urlopen(req, timeout=12, context=_SSL).read())
+        return self.parse(j, self.units)
+
+    @classmethod
+    def parse(cls, j: dict, units: str) -> dict:
+        """wttr.in's j1 answer as the summary the header shows plus, for the
+        Weather channel, the rest of the conditions and three days of
+        three-hourly outlook with each day's sun and moon."""
+        imperial = units != "C"
         cur = (j.get("current_condition") or [{}])[0]
         area = (j.get("nearest_area") or [{}])[0]
+        desc = lambda h: (h.get("weatherDesc") or [{}])[0].get("value", "").strip()   # noqa: E731
+        days = []
+        for d in (j.get("weather") or [])[:3]:
+            astro = (d.get("astronomy") or [{}])[0]
+            hours = [{"hour": int(h.get("time") or 0) // 100,
+                      "temp": h.get("tempF" if imperial else "tempC", ""),
+                      "desc": desc(h), "category": _category(h.get("weatherCode")),
+                      "rain": int(h.get("chanceofrain") or 0)} for h in d.get("hourly") or []]
+            noon = hours[min(4, len(hours) - 1)] if hours else {}
+            days.append({"date": d.get("date", ""),
+                         "hi": d.get("maxtempF" if imperial else "maxtempC", ""),
+                         "lo": d.get("mintempF" if imperial else "mintempC", ""),
+                         "desc": noon.get("desc", ""), "category": noon.get("category", "cloudy"),
+                         "sunrise": astro.get("sunrise", ""), "sunset": astro.get("sunset", ""),
+                         "moon": astro.get("moon_phase", ""), "moon_lit": astro.get("moon_illumination", ""),
+                         "hours": hours})
         return {
-            "temp": cur.get("temp_C" if self.units == "C" else "temp_F", ""),
-            "units": self.units,
+            "temp": cur.get("temp_F" if imperial else "temp_C", ""),
+            "units": "F" if imperial else "C",
             "humidity": cur.get("humidity", ""),
-            "conditions": (cur.get("weatherDesc") or [{}])[0].get("value", "").strip(),
+            "conditions": desc(cur),
             "category": _category(cur.get("weatherCode")),
-            "rain": self._rain_chance(j),
+            "rain": cls._rain_chance(j),
             "city": (area.get("areaName") or [{}])[0].get("value", "").strip(),
+            "feels": cur.get("FeelsLikeF" if imperial else "FeelsLikeC", ""),
+            "wind": cur.get("windspeedMiles" if imperial else "windspeedKmph", ""),
+            "wind_dir": cur.get("winddir16Point", ""),
+            "pressure": (cur.get("pressureInches", "") + " in") if imperial else (cur.get("pressure", "") + " mb"),
+            "visibility": cur.get("visibilityMiles" if imperial else "visibility", ""),
+            "uv": cur.get("uvIndex", ""),
+            "days": days,
         }
 
     @staticmethod

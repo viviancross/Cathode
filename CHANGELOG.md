@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.33
+
+- **Cathode's own channels.** Two channels of Cathode's own sit in the
+  lineup and the guide like any other, after the lineup's last number
+  (or at a number you choose, or off, under Settings > Channels >
+  Cathode's channels). They draw their picture instead of playing a
+  stream, so they take the channel-change static, the CRT pass and the
+  guide's picture box like a broadcast.
+  - **The TV Guide channel:** what's on now on one channel after another
+    in the top half, with its poster where the guide has one; every
+    channel's next ninety minutes scrolling through the bottom half.
+  - **The Weather channel:** the current conditions, the three-hourly
+    outlook, the extended forecast and the almanac, each held for eight
+    seconds under a running clock, with the conditions crawling along the
+    foot. It uses the zip code from Settings > System > Weather.
+
 ## 4.32
 
 - **Guide posters.** A programme's poster, where the guide carries one
