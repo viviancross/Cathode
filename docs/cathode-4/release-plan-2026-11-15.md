@@ -26,14 +26,17 @@ Chosen for a Tunarr / ErsatzTV household, in the order they get built.
 
 ### The guide knows what the server knows
 - **Guide posters.** Tunarr and ErsatzTV schedule Plex items and their APIs say which; each programme gets its poster, summary and rating in the INFO pop-up and banner. Research first: which of the two servers' guide or API carries the item id. "Start over" (play the item from its beginning) and "Watch later" (the Plex watchlist) ride on the same mapping if the research holds.
-- **Rating bug.** "TV-PG" in the corner for the first seconds of a programme, from Plex's rating.
-- **Up next bug.** Near the end of a programme, a brief corner mark naming what's next on this channel. (Chosen over a commercial-break countdown.)
+- (The rating and up-next corner bugs were built on Oct 27 and withdrawn the same day at the user's call.)
 
 ### Cathode's own channels
 One framework: a screen that takes a channel number, sits in the lineup and the guide like any channel, and draws itself instead of playing a stream.
 - **The TV Guide channel.** Prevue-style: the current picture in the top half, the grid scrolling through every channel's now and next in the bottom half, in that blue-and-yellow look.
 - **The Weather channel.** Local-on-the-8s pages from the weather feed Cathode already has: current conditions, the outlook, the hourly rain chance, the clock.
 - **Music channels.** A Plex music library as Music Choice-style channels: shuffled playback with the static card of artist, album art, title and a line of trivia; one channel per genre or playlist.
+
+### From the Oct 27 critique (28/40, snapshot in `.impeccable/critique/`)
+Done the same day: the key tip in the device's words, pad bindings that reach the app, LAN discovery of the server during setup, Q asks before quitting, digits as wide as the lineup, BACK asks before stopping a title, a Plex error with a next step, the lists pop-up named per box, DSS guide buttons that work, the layout defects (overlaps, safe area, 17 px type), On Demand out of the way without Plex.
+Still to do: **Classic's On Demand back in character** (ORDER, a PPV-style item page, a cable-era transport) and the DSS help-line wrap.
 
 ### Setup and control
 - **Phone companion.** A page Cathode serves on the LAN, address and QR code in Settings: a channel keypad, every remote button, a real keyboard for playlist links and Plex logins. Its HTTP endpoints are a documented control API (Home Assistant, curl).
