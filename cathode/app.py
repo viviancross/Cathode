@@ -91,6 +91,7 @@ class App:
         self.weather = None
         self.music = {}             # playlist id -> musicchannels.Schedule, once resolved
         self.pending_update = None  # install script to run once we've quit
+        self.restarting = False     # quit, then start again (the menu's Restart Cathode)
         self.agent = config.user_agent  # the User-Agent the current playlist's provider answers to
 
     # ── Threads -> UI thread ──────────────────────────────────────────────
@@ -292,6 +293,11 @@ class App:
         getattr(snd, which)()
 
     def quit(self):
+        self.running = False
+
+    def restart(self):
+        """Quit and start again as the same program with the same arguments."""
+        self.restarting = True
         self.running = False
 
     def confirm_quit(self):
@@ -854,6 +860,27 @@ class App:
         if self.pending_update:
             from . import updater
             updater.spawn_apply(self.pending_update)
+        elif self.restarting:
+            _relaunch()
+
+
+def _relaunch():
+    """This program again, detached, with the arguments it was started with:
+    the frozen exe, the AppImage, or the interpreter on main.py."""
+    import subprocess
+    import sys
+    if os.environ.get("APPIMAGE"):
+        cmd = [os.environ["APPIMAGE"]] + sys.argv[1:]
+    elif getattr(sys, "frozen", False):
+        cmd = [sys.executable] + sys.argv[1:]
+    else:
+        cmd = [sys.executable] + sys.argv
+    print(f"[cathode] restarting: {cmd[0]}")
+    kw = {"creationflags": 0x00000208} if os.name == "nt" else {"start_new_session": True}   # detached, own group
+    try:
+        subprocess.Popen(cmd, close_fds=True, **kw)
+    except Exception as e:
+        print(f"[cathode] couldn't restart: {e!r}")
 
 
 def load_error_text(e: Exception, what: str = "playlist") -> str:

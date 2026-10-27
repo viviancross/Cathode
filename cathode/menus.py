@@ -44,6 +44,7 @@ DESCRIPTIONS.update({
     "Button Guide": "What every button does, on this box.",
     "Settings": "Picture, channels, subtitles, buttons and more.",
     "Exit Cathode": "Close Cathode.",
+    "Restart Cathode": "Close Cathode and start it again.",
     # Settings
     "Picture & Style": "The box, its colors and lettering, screen effects.",
     "Channels": "Your playlists and their guides.",
@@ -119,6 +120,8 @@ def open_welcome(app):
 
     def channels(title, extra=()):
         return [title, [Item("Set up your channels", setup), *extra,
+                        Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart,
+                                                                          "Keep going", close=True)),
                         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit,
                                                                        "Keep going", close=True))], 0]
 
@@ -205,6 +208,7 @@ def main_items(app):
         *([Item("My Recordings", ondemand(recordings=True), close=True)] if app.ondemand.downloads.items() else []),
         Item("Settings", submenu=lambda: settings_items(app)),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
+        Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart, "Keep watching", close=True)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
     ]
 

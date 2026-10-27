@@ -2,6 +2,8 @@
 
 ## 4.34
 
+- **Restart Cathode** in the main menu, next to Exit: closes and starts
+  again as it was launched (the exe, the AppImage, or main.py).
 - **The mouse pointer goes away.** It hides three seconds after the mouse
   sits still, and at once on a key or a pad button; it's back as soon as
   the mouse moves.
