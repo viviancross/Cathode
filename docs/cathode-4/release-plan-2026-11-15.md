@@ -36,7 +36,7 @@ One framework: a screen that takes a channel number, sits in the lineup and the 
 
 ### From the Oct 27 critique (28/40, snapshot in `.impeccable/critique/`)
 Done the same day: the key tip in the device's words, pad bindings that reach the app, LAN discovery of the server during setup, Q asks before quitting, digits as wide as the lineup, BACK asks before stopping a title, a Plex error with a next step, the lists pop-up named per box, DSS guide buttons that work, the layout defects (overlaps, safe area, 17 px type), On Demand out of the way without Plex.
-Still to do: **Classic's On Demand back in character** (ORDER, a PPV-style item page, a cable-era transport) and the DSS help-line wrap.
+Also done: Classic's On Demand back in character (PLEX-PER-VIEW, ORDER). Left for later: the DSS help-line wrap, call signs' ellipsis, colour-only favourite marks.
 
 ### Setup and control
 - **Phone companion.** A page Cathode serves on the LAN, address and QR code in Settings: a channel keypad, every remote button, a real keyboard for playlist links and Plex logins. Its HTTP endpoints are a documented control API (Home Assistant, curl).
