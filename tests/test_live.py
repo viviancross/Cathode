@@ -3,6 +3,7 @@ lift the cover. Carried over from 3.4's test_tune_races."""
 
 import os
 import sys
+import time
 import unittest
 from unittest import mock
 
@@ -604,3 +605,56 @@ class TestAudioOutput(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCornerBugs(unittest.TestCase):
+    """The rating mark as a programme (or a tune) begins, the up-next mark
+    as it ends, neither over the banner."""
+
+    def _live(self, start_ago, length, rating="TV-PG", nxt=True):
+        from datetime import datetime, timedelta, timezone
+        from cathode.epg import Program
+        now = datetime.now(timezone.utc)
+        cur = Program("c", "Now Show", now - timedelta(seconds=start_ago), now - timedelta(seconds=start_ago) + timedelta(seconds=length), rating=rating)
+        after = Program("c", "Next Show", cur.stop, cur.stop + timedelta(hours=1))
+
+        class Epg:
+            def resolve_channel_id(self, *a):
+                return "c"
+
+            def current_program(self, cid, t):
+                return cur
+
+            def next_program(self, cid, t):
+                return after if nxt else None
+        app = FakeApp()
+        app.epg = Epg()
+        app._live = LiveTV(app)
+        live = app._live
+        live.idx = 0
+        live.phase = "watch"
+        live.hide_banner()
+        return live
+
+    def test_the_rating_shows_as_a_programme_begins_and_after_a_tune(self):
+        live = self._live(start_ago=5, length=1800)
+        live._watch_since = time.monotonic() - 60
+        self.assertEqual(live.bug(), ("rating", "TV-PG"))
+        live = self._live(start_ago=600, length=1800)
+        live._watch_since = time.monotonic() - 3          # tuned 3 s ago
+        self.assertEqual(live.bug(), ("rating", "TV-PG"))
+        live._watch_since = time.monotonic() - 60         # settled: nothing
+        self.assertIsNone(live.bug())
+
+    def test_up_next_in_the_last_seconds_and_nothing_over_the_banner(self):
+        live = self._live(start_ago=1740, length=1800)      # 60 s left
+        live._watch_since = time.monotonic() - 60
+        self.assertEqual(live.bug(), ("next", "Next Show"))
+        live.show_banner()
+        self.assertIsNone(live.bug())
+        live = self._live(start_ago=1740, length=1800, nxt=False)
+        live._watch_since = time.monotonic() - 60
+        self.assertIsNone(live.bug())
+        live = self._live(start_ago=5, length=1800, rating="")
+        live._watch_since = time.monotonic() - 60
+        self.assertIsNone(live.bug())                      # no rating in the guide: no mark

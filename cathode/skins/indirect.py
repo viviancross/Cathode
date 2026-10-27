@@ -410,12 +410,18 @@ class InDirectHD(BoxSkin):
                 t.draw(c, cur.rating, fs, b["strip_ink"], X(760), sy)
         elif sel:
             t.draw(c, "No information", fs, b["strip_ink"], X(300), sy)
-        # The synopsis, white on the page.
+        # The synopsis, white on the page; the programme's poster beside it
+        # when the guide carries one (Tunarr's does).
+        art = self.logo(cur.icon, X(70), Y(105)) if cur and cur.icon else None
+        tx = X(95)
+        if art:
+            c.blit(art, (X(95), Y(203)))
+            tx = X(95) + art.get_width() + X(14)
         if cur and cur.description:
             fd = self.f(Y(28))
             y = Y(205)
-            for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(735), 3):
-                t.draw(c, line, fd, b["text"], X(95), y)
+            for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(830) - tx, 3):
+                t.draw(c, line, fd, b["text"], tx, y)
                 y += Y(36)
 
         # The frame: a navy header, navy channel cells, teal cells, the colour keys.

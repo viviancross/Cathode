@@ -342,18 +342,24 @@ class PlateHD(BoxSkin):
         cur = g.selected_program()
         f_title, f_info, f_small = self.fb(Y(37)), self.fb(Y(22)), self.fb(Y(24))
         title = cur.title if cur else (sel.name if sel else "")
-        cx = X(470)
         # The title, a line of when / rating / genre under it, then the
         # synopsis in even lines: one block, clear of the logo at the left.
-        self.cb(c, self.fit_cb(f_title, title, X(600)), f_title, b["text"], cx, Y(44), align="center")
+        # With a poster (Tunarr's guide carries one) the block narrows and
+        # sits to its right.
+        art = self.logo(cur.icon, X(110), Y(165)) if cur and cur.icon else None
+        cx, wide = X(470), X(600)
+        if art:
+            c.blit(art, (X(205), Y(40)))
+            cx, wide = X(500), X(440)
+        self.cb(c, self.fit_cb(f_title, title, wide), f_title, b["text"], cx, Y(44), align="center")
         logo = self.channel_logo(sel, X(150), Y(74))
         if logo:                            # where the box carried its guide tag
             c.blit(logo, logo.get_rect(midleft=(X(46), Y(182))))
         if cur:
             info = "   ".join(s for s in (f"{ampm(cur.start)} - {ampm(cur.stop)}", cur.rating, cur.category) if s)
-            self.cb(c, self.fit_cb(f_info, info, X(560)), f_info, b["soft"], cx, Y(92), align="center")
+            self.cb(c, self.fit_cb(f_info, info, wide - X(40)), f_info, b["soft"], cx, Y(92), align="center")
             y = Y(132)
-            for line in t.wrap_even(f_small, cur.description or "", int(X(520) / 0.86), 3):
+            for line in t.wrap_even(f_small, cur.description or "", int((wide - X(80)) / 0.86), 3):
                 self.cb(c, line, f_small, b["text"], cx, y, align="center")
                 y += Y(30)
         f_list = self.fb(Y(30))

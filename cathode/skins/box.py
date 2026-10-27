@@ -336,12 +336,36 @@ class BoxSkin(Classic):
         if (live.banner_visible() or live.phase == "cover") and live.channel:
             cur, nxt = live.programs()
             self._banner(c, live.channel, cur, nxt, full=live.banner_full)
+        elif live.phase in ("reveal", "watch"):
+            bug = live.bug()
+            if bug:
+                self.draw_bug(c, *bug)
         if live.digits:
             self._digits(c, live.digits)
         if live.volume_visible():
             self._volume(c, W // 2, int(H * 0.62))
         if live.trick_visible() and live.phase != "cover":
             self._trick(c, live.trick_state())
+
+    def draw_bug(self, c, kind: str, text: str):
+        """A broadcast corner mark: the rating top-left as a programme begins,
+        "Next: ..." bottom-right as it ends. Translucent black, white type,
+        inside the TV safe area."""
+        # In fractions of the canvas, not design units: the SD skins design on
+        # a 320x240 page, where a 1280-wide figure would land mid-screen.
+        W, H = self.canvas
+        f = self.fb(max(11, int(H * (0.031 if kind == "rating" else 0.028))))
+        label = text if kind == "rating" else f"NEXT: {text}"
+        label = self.text.fit(f, label, int(W * 0.44))
+        pad = max(4, int(H * 0.014))
+        w, h = self.text.width(f, label) + 2 * pad, self.text.ink(f)[1] + 2 * pad
+        mx, my = int(W * 0.05), int(H * 0.055)
+        x, y = (mx, my) if kind == "rating" else (W - mx - w, H - my - h)
+        box = pygame.Surface((w, h), pygame.SRCALPHA)
+        box.fill((0, 0, 0, 165))
+        c.blit(box, (x, y))
+        pygame.draw.rect(c, (255, 255, 255), (x, y, w, h), 1)
+        self.text.draw(c, label, f, (255, 255, 255), x + pad, y + pad)
 
     def measure(self, fn, *args) -> int:
         """Width of something drawn by `fn(surface, x, y, *args)`, found by

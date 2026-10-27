@@ -23,6 +23,27 @@ CHANNELS = [
 ]
 SHOWS = ["Morning Report", "The Big Picture", "Signal & Noise", "Late Edition",
          "Prime Time Movie", "Weather Watch", "Rerun Theater", "Static Hour"]
+RATINGS = ["TV-PG", "TV-14", "TV-G", "TV-MA"]
+
+
+def _posters(out):
+    """A few generated 2:3 posters (a colour, the show's name), so the guide
+    has artwork to show, as Tunarr's guide carries it."""
+    from PIL import Image, ImageDraw
+    d = os.path.join(out, "posters")
+    os.makedirs(d, exist_ok=True)
+    paths_ = []
+    for i, (name, colour) in enumerate(zip(SHOWS, [(180, 40, 40), (40, 90, 180), (40, 140, 60), (150, 90, 20),
+                                                    (110, 40, 150), (30, 130, 140), (160, 60, 100), (80, 80, 80)])):
+        im = Image.new("RGB", (200, 300), colour)
+        dr = ImageDraw.Draw(im)
+        dr.rectangle((8, 8, 191, 291), outline=(255, 255, 255), width=3)
+        for k, word in enumerate(name.split()):
+            dr.text((20, 40 + k * 34), word, fill=(255, 255, 255))
+        p = os.path.join(d, f"{i}.png")
+        im.save(p)
+        paths_.append(p)
+    return paths_
 
 
 def main():
@@ -35,6 +56,7 @@ def main():
         for num, name, src, group in CHANNELS:
             url = src if src.startswith("http") else f"av://lavfi:{src}"
             f.write(f'#EXTINF:-1 tvg-id="dev{num}" tvg-chno="{num}" group-title="{group}",{name}\n{url}\n')
+    posters = _posters(out)
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
     with open(xml, "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n')
@@ -50,7 +72,9 @@ def main():
                 f.write(f'  <programme start="{t.strftime(fmt)}" stop="{(t + length).strftime(fmt)}"'
                         f' channel="dev{num}"><title>{escape(title)}</title>'
                         f'<desc>{escape(f"{title} on {name}: a test programme with a description long enough to wrap onto more than one line of the expanded banner.")}</desc>'
-                        f'<category>{group}</category></programme>\n')
+                        f'<category>{group}</category>'
+                        + (f'<icon src="{escape(posters[i % len(posters)])}"/>' if i % 4 else "")
+                        + f'<rating><value>{RATINGS[i % len(RATINGS)]}</value></rating></programme>\n')
                 t += length
                 i += 1
         f.write("</tv>\n")
