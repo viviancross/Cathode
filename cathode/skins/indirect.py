@@ -1554,9 +1554,10 @@ class InDirect(InDirectHD):
         col_w = 240 / slots
         labels = [ampm(start + timedelta(minutes=15 * i)).upper() + "M" for i in range(slots)]
         every = self.label_every(X(col_w), max(t.width(f_small, s) for s in labels))
-        if every > 1:                               # the quarter hours as 3:45A when AM won't fit
-            labels = [s[:-1] for s in labels]
-            every = self.label_every(X(col_w), max(t.width(f_small, s) for s in labels))
+        if every > 1:                               # the quarter hours as 3:45A when that fits every column
+            short = [s[:-1] for s in labels]
+            if self.label_every(X(col_w), max(t.width(f_small, s) for s in short)) == 1:
+                labels, every = short, 1
         for i in range(slots):
             if i % every == 0:
                 self._shadowed(c, labels[i], f_small, b["text"], b["shadow"], X(55 + col_w * i), Y(30))
