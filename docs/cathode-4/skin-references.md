@@ -310,26 +310,53 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   shortly / Ref code: S0a00".
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
-  frames). Measured: a silver page (205,205,215 running lighter); a cream
-  (245,240,185) card x 48-314, y 28-242 with a cut top-left corner holding
-  a blue channel disc, the call sign and number, the title and hours in
-  bold, the rating and description in a condensed sans (drawn by
-  squeezing the bold face to 86%); the picture x 320-640, y 0-230 over a
-  maroon (125,22,62) strip "KXDJ * 1000" with the clock "12:30:03" in a
-  dark (60,50,90) tab at its right; a dark purple (75,65,120) time header
-  y 252-274 "Thu.11/21 | 8:00 pm | 8:30 pm | 9:00 pm"; five rows 28 tall
-  on a 30 pitch from y 277: lavender (150,140,195) channel tiles x 48-160
-  with the call sign at the left and the number at the right, purple
-  (118,100,170) cells with white lettering, movies maroon, the chosen
-  cell cream with dark lettering; the "PASSPORT echo" mark bottom-left
-  and the A Time / B Theme / C Search keys (a yellow triangle, blue
-  square, red circle) along the foot, the active one in a navy box.
-  Banner: a purple band y 404-466 with a light channel tile at the left
-  (logo, call sign, number), the title and hours in white, a progress
-  line with a green fill, a clock tab above the band's left. Dialogs: a
-  light grey card with a bold title, a maroon strip, a lavender list, the
-  chosen row navy (35,35,110). Settings pages: a light header strip with
-  the title in blue, a cream help panel, a dark lavender panel of rows.
+  frames), drawn 1:1 to them (2026-10-28, second pass). The face is
+  Archivo Narrow (OFL, bundled: Regular and Bold instanced from the
+  variable font), the condensed sans the box lettered in. Measured: a
+  silver page (206,206,216 running lighter to the foot); the cream
+  (246,241,186) card x 50-316, y 30-230 with its left corners rounded,
+  the channel disc at (72,52) 46 wide, the call sign bold 17 and number
+  bold 15 at x 128, the title regular 18 at y 110, the hours bold 17 at
+  129, the rating in a dark chip and the synopsis regular 16 from 149 on
+  a 19 pitch (three lines, cut with "..."); the picture x 320-640, y
+  0-200 over the maroon (118,24,62) strip (22 tall, "KXDJ * 1000" bold
+  17) with the clock "12:30:03" in a dark (62,52,88) slanted tab from x
+  500; the time header y 226-247 in a lighter purple with white rules,
+  "Thu.11/21" bold 16 at x 58, the half hours labelled from x 185 (the
+  grid: x 185-640); five rows 25 tall on a 30 pitch from y 252: lavender
+  (152,142,198) channel tiles x 50-180 with the call sign regular 17 at
+  x 68 and the number at the right, purple (118,103,168) cells with white
+  regular 17, movies maroon, the chosen row's tile and cell dark purple
+  with cream lettering; the "PASSPORT echo" mark at (46,426) and the A
+  Time / B Theme / C Search keys (a yellow triangle, blue square, red
+  disc; bold 18) from x 290 on a 112 pitch, the active one in a navy
+  (40,40,110) box with a white edge. Banner: a purple band y 367-437
+  lighter at the top, a light (228,228,234) channel tile x 0-180 (disc,
+  call sign, number in dark bold 16), the clock in a dark tab x 55-171
+  above the band's left, the title bold 18 at (195,372), the hours bold
+  16 right-aligned at x 603, a green (84,200,60) progress line x 240-515
+  with quarter ticks, its start and end times either side, a white dot
+  and a navy tab with the time above it, a blue arrow at x 575. INFO's
+  banner and Browse (the Browse frame): the band from y 367 to the foot
+  with the title, hours, rating chip and synopsis; Browse adds a light
+  column x 0-134 with the channel's disc, call sign and number, "Browse"
+  between blue arrows in a white box, the clock. Settings pages (the
+  General Settings frame): a light header strip 66 tall with the title in
+  navy bold 16 at x 60, a cream panel to y 190 with the heading bold 15
+  and help regular 15, the picture over the maroon strip; a lavender
+  column-header band x 50-270 at y 192; the dark purple list panel
+  x 50-640, y 216-410 rounded at the left, its left column lighter,
+  rows regular 17 on a 27 pitch, the chosen one a navy pill with white
+  arrows; the SEL and C key hints along the foot with the clock in a
+  dark slanted tab at the right. On Demand (the DVR list frame): the mark
+  on a light header, a bluish (142,157,188) list panel x 50-320 with rows
+  bold 17 in navy on a 37 pitch, the chosen row teal (62,132,138) across
+  the width with yellow arrows, the details in a teal panel under the
+  picture, the A / B / C keys along the foot. Dialogs (the "Meeting Mary"
+  frame): a light rounded card, the title bold 17 centred, a maroon band
+  for the first line, a lavender body with the lines in navy, the chosen
+  row navy with yellow arrows, SEL / C hints at the foot. Volume: a light
+  rounded band with red blocks lit.
 - **Wayfinder**: the Time Warner Navigator (Mystro / ODN), from a 2010
   demo video of the box (youtu.be/mxfafVFcox8, 480x360 frames scaled to
   640x480) and a 2008 photo. Measured: a steel-blue (178,196,222) page;

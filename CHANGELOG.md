@@ -20,6 +20,11 @@
   along the foot, a Main Menu of words in a row). Each has its own banner,
   menus, pages, dialogs, dead-channel card and boot words; every colour
   theme and font applies.
+- **Passage drawn 1:1** to the Passport Echo manual's frames: the guide,
+  banner, Browse column, INFO banner, settings pages, On Demand list,
+  dialogs and volume bar follow the measured frames, and it letters in
+  **Archivo Narrow** (OFL, newly bundled; also a Font choice for every
+  skin), the condensed face the box used.
 
 ## 4.38
 

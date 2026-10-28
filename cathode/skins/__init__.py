@@ -302,6 +302,7 @@ FONTS = {
     "vt323": ("VT323-Regular.ttf", None, "VT323"),
     "jersey": ("Jersey10-Regular.ttf", None, "Jersey 10"),
     "barlow": ("Barlow-Medium.ttf", "Barlow-Bold.ttf", "Barlow"),
+    "narrow": ("ArchivoNarrow-Regular.ttf", "ArchivoNarrow-Bold.ttf", "Archivo Narrow"),
 }
 
 
