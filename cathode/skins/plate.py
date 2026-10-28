@@ -106,8 +106,9 @@ class PlateHD(BoxSkin):
 
     # ── Lettering: the box used a condensed bold sans ─────────────────────
 
-    def cb(self, c, s, f, ink, x, y, align="left", squeeze=0.86) -> int:
-        """Bold text squeezed to the box's condensed width; returns its width."""
+    def cb(self, c, s, f, ink, x, y, align="left", squeeze=0.86, shadow=None) -> int:
+        """Bold text squeezed to the box's condensed width; returns its
+        width. `shadow`: the box's dark drop shadow under it."""
         if not s:
             return 0
         img, extra = self.text.render(f, s, ink[:3])
@@ -115,7 +116,11 @@ class PlateHD(BoxSkin):
         img = pygame.transform.smoothscale(img, (max(1, int(w * squeeze)), h))
         w = img.get_width()
         x = x - w if align == "right" else x - w // 2 if align == "center" else x
-        c.blit(img, (x, y - self.text.ink(f)[0] - extra))
+        top = y - self.text.ink(f)[0] - extra
+        if shadow:
+            d = max(1, self.Y(2))
+            c.blit(pygame.transform.smoothscale(self.text.render(f, s, shadow[:3])[0], (w, h)), (x + d, top + d))
+        c.blit(img, (x, top))
         return w
 
     def fit_cb(self, f, s, max_w, squeeze=0.86) -> str:
@@ -190,22 +195,26 @@ class PlateHD(BoxSkin):
         # The ViP622 manual's banner (p.37): the day and clock in the left
         # cell; the title, its hours and the channel in the middle; the
         # rating, time left and the list at the right.
-        f_big, f_mid, f_small = self.fb(Y(34)), self.fb(Y(28)), self.fb(Y(24))
+        f_big, f_mid, f_small = self.fb(Y(38)), self.fb(Y(30)), self.fb(Y(26))
         local, now = datetime.now(), datetime.now(timezone.utc)
+        # The 2007 frame (2:58PM, Sep 2): the number over the call sign over
+        # the list at the left; the title over its rating and hours in the
+        # middle; the date over the clock over the time left at the right.
         cx = r.x + X(123)
-        self.cb(c, f"{local:%a} {local.month}/{local.day}".upper(), f_mid, ink, cx, r.y + Y(22), align="center")
-        self.cb(c, ampm(local).replace("am", " am").replace("pm", " pm"), f_mid, ink, cx, r.y + Y(56), align="center")
+        self.cb(c, str(ch.number), f_big, ink, cx, r.y + Y(10), align="center", shadow=b["deep"])
+        self.cb(c, self.fit_cb(f_mid, dish_call(ch), X(200)), f_mid, ink, cx, r.y + Y(45), align="center", shadow=b["deep"])
+        self.cb(c, self.fit_cb(f_small, g_list(self), X(200)), f_small, ink, cx, r.y + Y(73), align="center", shadow=b["deep"])
         mid = r.x + X(607)
-        self.cb(c, self.fit_cb(f_big, cur.title if cur else ch.name, X(560)), f_big, ink, mid, r.y + Y(8), align="center")
+        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(600)), f_mid, ink, mid, r.y + Y(24), align="center",
+                shadow=b["deep"])
         if cur:
-            self.cb(c, f"{ampm(cur.start)} - {ampm(cur.stop)}", f_small, ink, mid, r.y + Y(44), align="center")
-        self.cb(c, self.fit_cb(f_small, f"{ch.number} {ch.name.upper()}", X(400)), f_small, ink, mid, r.y + Y(72),
-                align="center")
-        rx = r.right - X(20)
-        self.cb(c, (cur.rating if cur and cur.rating else "NR"), f_small, ink, rx, r.y + Y(10), align="right")
+            line = f"{cur.rating or 'NR'}   {ampm(cur.start)} - {ampm(cur.stop)}"
+            self.cb(c, line, f_small, ink, mid, r.y + Y(59), align="center", shadow=b["deep"])
+        rx = r.right - X(110)
+        self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_small, ink, rx, r.y + Y(12), align="center", shadow=b["deep"])
+        self.cb(c, ampm(local), f_small, ink, rx, r.y + Y(42), align="center", shadow=b["deep"])
         if cur:
-            self.cb(c, time_left(cur, now).replace("Time left", "Time Left:"), f_small, ink, rx, r.y + Y(40), align="right")
-        self.cb(c, self.fit_cb(f_small, f"List: {g_list(self)}", X(220)), f_small, ink, rx, r.y + Y(70), align="right")
+            self.cb(c, time_left(cur, now), f_small, ink, rx, r.y + Y(72), align="center", shadow=b["deep"])
         label = tag or (f"{self.k('INFO')} FOR DETAILS" if not full else "")
         if label:
             pr = pygame.Rect(r.x + X(17), r.y - Y(34) if bottom else r.bottom + Y(10), 0, Y(34))
@@ -351,16 +360,16 @@ class PlateHD(BoxSkin):
         if art:
             c.blit(art, (X(205), Y(40)))
             cx, wide = X(500), X(440)
-        self.cb(c, self.fit_cb(f_title, title, wide), f_title, b["text"], cx, Y(44), align="center")
+        self.cb(c, self.fit_cb(f_title, title, wide), f_title, b["text"], cx, Y(44), align="center", shadow=b["deep"])
         logo = self.channel_logo(sel, X(150), Y(74))
         if logo:                            # where the box carried its guide tag
             c.blit(logo, logo.get_rect(midleft=(X(46), Y(182))))
         if cur:
             info = "   ".join(s for s in (f"{ampm(cur.start)} - {ampm(cur.stop)}", cur.rating, cur.category) if s)
-            self.cb(c, self.fit_cb(f_info, info, wide - X(40)), f_info, b["soft"], cx, Y(92), align="center")
+            self.cb(c, self.fit_cb(f_info, info, wide - X(40)), f_info, b["soft"], cx, Y(92), align="center", shadow=b["deep"])
             y = Y(132)
             for line in t.wrap_even(f_small, cur.description or "", int((wide - X(80)) / 0.86), 3):
-                self.cb(c, line, f_small, b["text"], cx, y, align="center")
+                self.cb(c, line, f_small, b["text"], cx, y, align="center", shadow=b["deep"])
                 y += Y(30)
         f_list = self.fb(Y(30))
         name = g.category if g.category != "All" else "All Sub"
@@ -369,9 +378,9 @@ class PlateHD(BoxSkin):
         tab = pygame.Rect(X(96), Y(262), int(t.width(f_list, name) * 0.86) + X(16), Y(30))
         if g.focus == "category":
             pygame.draw.rect(c, b["gold"], tab.inflate(X(14), Y(10)).move(-X(4), Y(2)), Y(3), border_radius=Y(4))
-        self.cb(c, name, f_list, b["gold"] if g.focus == "category" else b["text"], X(96), Y(268))
+        self.cb(c, name, f_list, b["gold"] if g.focus == "category" else b["text"], X(96), Y(268), shadow=b["deep"])
         self.hit(tab, lambda: g.handle("THEMES"))
-        self.cb(c, when(), f_list, b["text"], X(453), Y(268))
+        self.cb(c, when(), f_list, b["text"], X(453), Y(268), shadow=b["deep"])
 
         # The charcoal header and the rows.
         pygame.draw.rect(c, b["page_lo"], (0, Y(300), W, H - Y(300)))
@@ -381,7 +390,7 @@ class PlateHD(BoxSkin):
         fh = self.fb(Y(28))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
-        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(64), hy)
+        self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(64), hy, shadow=b["deep"])
         slots = int(g.hours * 4)
         col = (X(1216) - X(251)) / slots             # the grid ends at the title-safe edge
         labels = [ampm(start + timedelta(minutes=15 * i)) for i in range(slots)]
@@ -391,12 +400,12 @@ class PlateHD(BoxSkin):
             if i:                                   # a rule between the quarter hours, as the cells have
                 pygame.draw.rect(c, mix(b["hdr"], b["text"], 0.25 if i % every == 0 else 0.1), (int(x), hdr.y + Y(8), 2, hdr.h - Y(16)))
             if i % every == 0:
-                self.cb(c, labels[i], fh, b["text"], int(x + col * every / 2), hy, align="center")
+                self.cb(c, labels[i], fh, b["text"], int(x + col * every / 2), hy, align="center", shadow=b["deep"])
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
         now = datetime.now(timezone.utc)
         epg = self.app.epg
-        f_cell, f_chan = self.fb(Y(27)), self.f(Y(24))
+        f_cell, f_chan = self.fb(Y(27)), self.fb(Y(25))
         grid_x, grid_w = X(255), X(961)          # to the title-safe edge
         sel = g.sel_time()
         for i, ch in enumerate(rows):
@@ -406,7 +415,7 @@ class PlateHD(BoxSkin):
             chr_ = pygame.Rect(0, y, X(247), rh)
             pygame.draw.rect(c, b["chan"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
-            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(176)), f_chan, b["text"], X(64), cy)
+            self.cb(c, self.fit_cb(f_chan, f"{ch.number} {ch.name.upper()}", X(176)), f_chan, b["text"], X(64), cy, shadow=b["deep"])
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["gold"], (chr_.right - X(14), y + Y(12)), Y(5))
             cid = epg.resolve_channel_id(ch.epg_id, ch.name) if epg else None
@@ -414,7 +423,7 @@ class PlateHD(BoxSkin):
             if not progs:
                 cell = pygame.Rect(grid_x, y, grid_w - X(8), rh)
                 self._cell(c, cell, False, row_sel)
-                self.cb(c, "No Information", f_cell, b["text"], cell.centerx, cy, align="center")
+                self.cb(c, "No Information", f_cell, b["text"], cell.centerx, cy, align="center", shadow=b["deep"])
             for p in progs:
                 a = max(0.0, (p.start - start).total_seconds() / 60)
                 e = min(float(mins), (p.stop - start).total_seconds() / 60)
@@ -438,7 +447,7 @@ class PlateHD(BoxSkin):
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
-                    self.cb(c, line, f, b["text"], (l + r) // 2, ty, align="center")
+                    self.cb(c, line, f, b["text"], (l + r) // 2, ty, align="center", shadow=b["deep"])
                     ty += lh + 2
             self.hit((0, y, W, rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                 setattr(g, "focus", "grid"), g.handle("SELECT")))
@@ -459,11 +468,17 @@ class PlateHD(BoxSkin):
                     cell.y + (cell.h - t.ink(f_cell)[1]) // 2, align="center")
 
     def _cell(self, c, cell, airing, on):
+        """A cell with the box's bevel (a light line along its top, a dark
+        one along its foot); the chosen one in the thin gold frame with a
+        dark inner line, as the frame shows."""
         b, Y = self.b, self.Y
-        pygame.draw.rect(c, b["now"] if airing else b["later"], cell)
+        fill = b["now"] if airing else b["later"]
+        pygame.draw.rect(c, fill, cell)
+        pygame.draw.rect(c, mix(fill, (255, 255, 255), 0.25), (cell.x, cell.y, cell.w, max(1, Y(2))))
+        pygame.draw.rect(c, mix(fill, (0, 0, 0), 0.35), (cell.x, cell.bottom - max(1, Y(2)), cell.w, max(1, Y(2))))
         if on:
-            pygame.draw.rect(c, b["gold"], cell, Y(5))
-            pygame.draw.rect(c, mix(b["gold"], (255, 255, 255), 0.55), cell.inflate(-Y(10), -Y(10)), 1)
+            pygame.draw.rect(c, b["gold"], cell, max(2, Y(3)))
+            pygame.draw.rect(c, mix(b["gold"], (0, 0, 0), 0.6), cell.inflate(-Y(6), -Y(6)), 1)
         else:
             pygame.draw.rect(c, b["edge"], cell, 1)
 
@@ -1259,6 +1274,7 @@ class Plate(PlateHD):
         fh = self.fb(Y(18))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
+        t.draw(c, f"{day:%a} {day.month}/{day.day}", fh, b["grey_lo"], X(90) + 1, hy + 1, align="center")
         t.draw(c, f"{day:%a} {day.month}/{day.day}", fh, b["text"], X(90), hy, align="center")
         ax = X(145)
         pygame.draw.polygon(c, b["text"], [(ax, hdr.y + Y(6)), (ax, hdr.bottom - Y(6)), (ax + X(7), hdr.centery)])
@@ -1271,6 +1287,7 @@ class Plate(PlateHD):
                 pygame.draw.rect(c, rule, (x - X(2), hdr.y + (Y(2) if i % every == 0 else hdr.h - Y(8)), X(2),
                                            (hdr.h - Y(4)) if i % every == 0 else Y(6)))
             if i % every == 0:
+                t.draw(c, labels[i], fh, b["grey_lo"], x + int(col * every / 2) + 1, hy + 1, align="center")
                 t.draw(c, labels[i], fh, b["text"], x + int(col * every / 2), hy, align="center")
         pygame.draw.rect(c, (0, 0, 0), self.R(0, 259, 597, 200))
 
@@ -1314,6 +1331,8 @@ class Plate(PlateHD):
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2
                 for line in lines:
+                    if not on:                          # the box's dark drop shadow under the white
+                        t.draw(c, line, f, b["blue_lo"], cx + 1, ty + 1, align="center")
                     t.draw(c, line, f, ink, cx, ty, align="center")
                     ty += lh + 2
             self.hit((0, y, X(597), rh), lambda i=i: (setattr(g, "cursor", g.top + i),

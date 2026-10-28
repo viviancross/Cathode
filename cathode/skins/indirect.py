@@ -419,7 +419,7 @@ class InDirectHD(BoxSkin):
             c.blit(art, (X(95), Y(203)))
             tx = X(95) + art.get_width() + X(14)
         if cur and cur.description:
-            fd = self.f(Y(28))
+            fd = self.fb(Y(28))
             y = Y(205)
             for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(830) - tx, 3):
                 t.draw(c, line, fd, b["text"], tx, y)
@@ -448,7 +448,7 @@ class InDirectHD(BoxSkin):
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
         epg = self.app.epg
-        f_cell, f_ch = self.f(Y(30)), self.fb(Y(30))
+        f_cell, f_ch = self.fb(Y(30)), self.fb(Y(30))
         grid_x, grid_w = X(294), X(890)
         sel = g.sel_time()
         for i, ch in enumerate(rows):
@@ -459,9 +459,9 @@ class InDirectHD(BoxSkin):
             pygame.draw.rect(c, b["navy"], chr_)
             cy = y + (rh - t.ink(f_cell)[1]) // 2
             label, size = f"{ch.number} {ch.name}", 30
-            while size > 21 and t.width(self.f(Y(size)), label) > chr_.w - X(24):
+            while size > 21 and t.width(self.fb(Y(size)), label) > chr_.w - X(24):
                 size -= 1
-            fl = self.f(Y(size))
+            fl = self.fb(Y(size))
             t.draw(c, t.fit(fl, label, chr_.w - X(24)), fl, b["text"], X(110), y + (rh - t.ink(fl)[1]) // 2)
             if self.app.is_favorite(ch):
                 pygame.draw.circle(c, b["sel"], (chr_.right - X(12), y + Y(10)), Y(4))
@@ -487,7 +487,7 @@ class InDirectHD(BoxSkin):
                     x += self._shadowed(c, "<", f_cell, ink if on else b["mark"], shadow, x, cy) + X(4)
                 more = p.stop > end
                 avail = cell.right - X(6) - x - (X(16) if more else 0)
-                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.f(Y(s)), 30)
+                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.fb(Y(s)), 30)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
@@ -513,7 +513,7 @@ class InDirectHD(BoxSkin):
 
         bar = self.R(96, 639, 1120, 33).move(0, more)
         pygame.draw.rect(c, b["cell"], bar)
-        fl = self.f(Y(30))
+        fl = self.fb(Y(30))
         ly = bar.y + (bar.h - t.ink(fl)[1]) // 2
         cat = g.category if g.category != "All" else "Channels I Get"
         if g.focus == "category":           # the amber cursor, as on a chosen cell
