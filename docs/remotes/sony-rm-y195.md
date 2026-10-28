@@ -19,8 +19,9 @@ top) and leave it there. Everything below is recorded in that mode.
 
 **MENU > Settings > Remote control > Remote: Sony RM-Y195** first, so the
 wizard asks for the buttons by the Sony's names. Then **FLIRC receiver > Set
-up every button** and press each button it asks for (the RIGHT key skips
-one; skip VOL+, VOL- and MUTING: the TV does the volume). See
+up every button** and press each button it asks for (to skip one, press
+any button already recorded; skip VOL+, VOL- and MUTING: the TV does the
+volume). See
 [flirc.md](flirc.md) for the wizard. The plan it follows:
 
 | RM-Y195 button | Key it records | What it does in Cathode |

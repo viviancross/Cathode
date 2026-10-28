@@ -26,9 +26,10 @@ FLIRC receiver**.
 - **Set up every button**: the walk-through. Cathode names a button
   ("Press the button for Guide"; with a Remote chosen, that remote's own
   name, "Press DISPLAY for Info"), you press it on the remote, and the next
-  comes up. The **RIGHT arrow key** (or a pad's right) skips one, **Esc**
-  stops. Volume and mute come last: on a TV remote, skip them and let the TV
-  do the volume.
+  comes up. **To skip one, press any button you've already recorded** (the
+  FLIRC refuses a button it knows, and the wizard takes that as a skip); the
+  RIGHT arrow key or a pad's right skips too, **Esc** stops. Volume and mute
+  come last: on a TV remote, skip them and let the TV do the volume.
 - **Record one button**: one of the list, for a button you skipped or want
   moved.
 - **Forget a button**: press a button and the FLIRC drops it.
@@ -43,8 +44,8 @@ FLIRC receiver**.
   type then. (`flirc_util profiles enable` brings them back.)
 - **Erase the FLIRC**: every button, for starting over.
 
-A button already recorded can't be recorded again; the wizard says so and
-waits for another. Forget it first to move it.
+A button already recorded can't be recorded again (pressing one skips the
+step). Forget it first to move it.
 
 ## After
 

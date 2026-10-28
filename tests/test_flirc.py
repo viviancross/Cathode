@@ -89,7 +89,7 @@ class TestWizard(unittest.TestCase):
         self.assertTrue(app.toasts[-1].startswith("flirc_util not found"))
         self.assertEqual(reports, [])
 
-    def test_right_skips_and_esc_stops(self):
+    def test_a_used_button_skips_and_other_errors_retry(self):
         from cathode import remote as R
         from cathode.screens.flircwiz import FlircWizard
         app = FakeApp()
@@ -102,10 +102,12 @@ class TestWizard(unittest.TestCase):
             app.push(w)
             app.timers[0]()
             self.assertEqual(w.prompt, "Press the button for Guide")
-            w.handle(R.RIGHT)
+            w._got(False, "Error: button already exists")      # a used button, with only the remote in hand
+            self.assertEqual(w.prompt, "Press the button for Info")
+            w._got(False, "Error: device disconnected")         # any other error: the same step again
             self.assertEqual(w.prompt, "Press the button for Info")
             w._got(True, "Succesfully recorded button")
-        self.assertEqual(runs, [["a"], ["b"]])
+        self.assertEqual(runs, [["a"], ["b"], ["b"]])
         self.assertEqual(reports, [(1, ["Press the button for Guide"])])
         self.assertNotIn(w, app.screens)
 

@@ -1,13 +1,15 @@
 """The FLIRC wizard: one flirc_util step after another ('Press the button
-for Guide'), each waiting for a remote button. RIGHT skips a step, BACK or
-EXIT stops. Drawn as the skins' remap dialog. The test screen names each
+for Guide'), each waiting for a remote button. A button already recorded
+(or the RIGHT key) skips a step, BACK or EXIT stops. Drawn as the skins' remap dialog. The test screen names each
 button the remote types."""
+
+import re
 
 from .. import remote as R
 from ..app import Screen
 from ..flirc import Flirc
 
-HELP = "RIGHT (the key) skips a button, Esc stops"
+HELP = "To skip a button: press one you've already recorded (or the RIGHT key). Esc stops."
 
 
 class FlircWizard(Screen):
@@ -41,12 +43,18 @@ class FlircWizard(Screen):
             self.done_count += 1
             self.app.toast(f"{label.split(' for ', 1)[-1]}: done")
             self.i += 1
+        elif re.search(r"exist|already", text, re.I):
+            # A button already recorded: the FLIRC refuses it. With only the
+            # remote in hand that's the way to skip, so it is one.
+            self.app.toast(f"{label.split(' for ', 1)[-1]}: skipped", 3)
+            self.skipped.append(label)
+            self.i += 1
         else:
             self.app.toast(text, 4)
             if text.startswith("flirc_util not found"):
                 self._finish(report=False)              # no tool: nothing more will work
                 return
-        self._start()                                   # again on an error (a button already used)
+        self._start()                                   # again on any other error
 
     def _finish(self, report=True):
         self.flirc.cancel()

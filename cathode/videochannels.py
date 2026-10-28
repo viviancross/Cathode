@@ -28,6 +28,7 @@ from .playlist import Channel
 SCHEME = "cathode://video/"
 CARD_SECONDS = 8.0              # the lower-third at a video's start and before its end
 AHEAD = 20.0                    # seconds before a video is due that its stream is resolved
+GRACE = 20.0                    # a video due this recently starts from its top, not its offset
 SAMPLE = 500                    # videos a source contributes to a day
 FLOOR = 0.05                    # automatic weighting: no source under this share of the day
 DAY_STARTS = 4                  # the broadcast day turns over at 4 AM, not midnight
@@ -441,7 +442,7 @@ class Player:
         self.cid = cid_of(ch)
         self.cur = None             # the schedule entry playing
         self.gen = 0
-        self._timer = None
+        self._timer = self._stop_timer = None
 
     @property
     def sched(self) -> Optional[Schedule]:
@@ -495,6 +496,8 @@ class Player:
             return
         e = cur["entry"]
         offset = max(0.0, (datetime.now(timezone.utc) - cur["start"]).total_seconds())
+        if offset < GRACE:
+            offset = 0.0        # due just now (resolving and opening took the seconds): the top, not a cut head
         self.cur = cur
         self.app.video.play(s["video"], headers=s.get("headers"), start=offset, audio=s.get("audio"))
         artist, title = parse_title(e["title"], e.get("uploader", ""))
@@ -505,8 +508,12 @@ class Player:
         print(f"[video] {self.ch.name}: {artist} - {title} from {offset:.0f} s of {e['duration']:.0f}")
         left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
         self.app.cancel(self._timer)
+        self.app.cancel(self._stop_timer)
         if left > CARD_SECONDS + 2 and c.get("card", True):
             self._timer = self.app.after(left - CARD_SECONDS, lambda: gen == self.gen and self._card_again())
+        # The next is due at the stop whatever this one has left (a late start
+        # ends late): its tail goes, so the lateness doesn't pile up video by video.
+        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self.start())
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
@@ -534,6 +541,7 @@ class Player:
     def stop(self):
         self.gen += 1
         self.app.cancel(self._timer)
+        self.app.cancel(self._stop_timer)
         self.live.card = None
 
 

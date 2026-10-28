@@ -305,7 +305,9 @@ class TestTuning(unittest.TestCase):
             url, audio, start = self.app.video.played[-1]
             cur = self.app.schedules[self.cid].at(datetime.now(timezone.utc))
             self.assertEqual((url, audio), (f"V/{cur['entry']['id']}", f"A/{cur['entry']['id']}"))
-            self.assertAlmostEqual(start, cur["offset"], delta=2)
+            self.assertAlmostEqual(start, 0 if cur["offset"] < vc.GRACE else cur["offset"], delta=2)
+            left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
+            self.assertTrue(any(abs(t[0] - left) < 2 and not t[3] for t in self.app.timers), "the next is due at the stop")
             self.assertTrue(live.card["song"])
             live.phase = "watch"
             live.on_video("video_ended", reason="eof")      # the video ends: the next due, no stand-by

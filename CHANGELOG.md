@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.38
+
+- **FLIRC wizard: skipping with the remote.** Pressing a button the FLIRC
+  already knows skips the step (it refuses the button; the wizard takes the
+  hint), so the walk-through needs no keyboard. The RIGHT key still skips.
+- **Video Channels: no cut heads.** A video due within the last 20 seconds
+  plays from its top instead of from the offset that resolving and opening
+  it cost; the next is due at its stop regardless (a late start loses its
+  tail, not the next one's head), so lateness doesn't pile up.
+
 ## 4.37
 
 - **A FLIRC wizard.** Settings > Remote control > FLIRC receiver teaches a
