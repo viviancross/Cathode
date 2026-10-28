@@ -223,20 +223,20 @@ class CableSkin(BoxSkin):
         """The box's card: a title bar, the lines, buttons at the foot."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(13))
+        f = self.f(Y(14))
         wrapped = [w for line in lines for w in self.wrap(f, line, X(wide - 40), 3)]
-        r = pygame.Rect(0, 0, X(wide), Y(30) + Y(14) + len(wrapped) * Y(18) + (Y(44) if buttons else Y(10)))
+        r = pygame.Rect(0, 0, X(wide), Y(30) + Y(14) + len(wrapped) * Y(20) + (Y(44) if buttons else Y(10)))
         r.center = (W // 2, H // 2)
         pygame.draw.rect(c, b["dlg"], r, border_radius=Y(6))
         pygame.draw.rect(c, b["dlg_edge"], r, 2, border_radius=Y(6))
-        head = pygame.Rect(r.x, r.y, r.w, Y(28))
+        head = pygame.Rect(r.x, r.y, r.w, Y(30))
         pygame.draw.rect(c, b["dlg_head"], head, border_top_left_radius=Y(6), border_top_right_radius=Y(6))
-        fh = self.fb(Y(14))
+        fh = self.fb(Y(16))
         self.tx(c, self.fit(fh, title, r.w - X(20)), fh, b["dlg_head_ink"], head.centerx, self.mid(head, fh), align="center")
         y = head.bottom + Y(10)
         for line in wrapped:
             self.tx(c, line, f, b["dlg_ink"], r.x + X(14), y)
-            y += Y(18)
+            y += Y(20)
         if buttons:
             bw = X(100)
             x0 = r.centerx - (len(buttons) * bw + (len(buttons) - 1) * X(10)) // 2
@@ -261,9 +261,9 @@ class CableSkin(BoxSkin):
 
     def draw_toast(self, c, msg):
         b, X, Y = self.b, self.X, self.Y
-        f = self.fb(Y(13))
+        f = self.fb(Y(14))
         lines = self.wrap(f, msg, X(540), 3)
-        lh = Y(17)
+        lh = Y(18)
         w = max(self.width(f, ln) for ln in lines) + X(32)
         r = pygame.Rect((self.canvas[0] - w) // 2, Y(70) if self.over_picture() else Y(200), w, Y(12) + lh * len(lines))
         self._band(c, r, b["band"], 240, radius=Y(4))
@@ -274,17 +274,17 @@ class CableSkin(BoxSkin):
     def draw_options(self, c, m):
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
-        r = pygame.Rect(0, 0, X(340), Y(40) + len(m.items) * Y(28))
+        r = pygame.Rect(0, 0, X(340), Y(40) + len(m.items) * Y(30))
         r.center = (W // 2, H // 2)
         pygame.draw.rect(c, b["dlg"], r, border_radius=Y(6))
         pygame.draw.rect(c, b["dlg_edge"], r, 2, border_radius=Y(6))
         head = pygame.Rect(r.x, r.y, r.w, Y(28))
         pygame.draw.rect(c, b["dlg_head"], head, border_top_left_radius=Y(6), border_top_right_radius=Y(6))
-        fh = self.fb(Y(14))
+        fh = self.fb(Y(16))
         self.tx(c, m.title, fh, b["dlg_head_ink"], head.centerx, self.mid(head, fh), align="center")
-        f = self.f(Y(13))
+        f = self.f(Y(14))
         for k, it in enumerate(m.items):
-            row = pygame.Rect(r.x + X(8), head.bottom + Y(6) + k * Y(28), r.w - X(16), Y(24))
+            row = pygame.Rect(r.x + X(8), head.bottom + Y(6) + k * Y(30), r.w - X(16), Y(26))
             on = k == m.cursor
             v = it.value() if it.value else ""
             v = f"< {v} >" if v and on and it.adjust else v
@@ -493,7 +493,7 @@ class CableSkin(BoxSkin):
         self._page_top(c, "System Information", "", picture=False)
         area = self.R(*self.LIST)
         self._panel(c, area)
-        f = self.f(Y(12))
+        f = self.f(Y(13))
         y = area.y + Y(10)
         rows = [("Signal strength", f"{d.signal()}"), ("Signal quality", f"{d.quality()}")] + d.rows()
         pitch = min(Y(20), (area.h - Y(20)) // max(1, len(rows)))
@@ -674,7 +674,7 @@ class IGrid(CableSkin):
     BOOT_WORDS = ("Please wait...", "Loading program guide...")
     ROWS, ROW_PITCH = 4, 45
     LIST = (0, 232, 640, 206)
-    OD_ROWS = 6
+    OD_ROWS = 5
     # Measured: the header navy, the cell blue, the pale yellow cursor, the
     # steel channel tile.
     NATIVE = {"bg": [16, 38, 98], "accent": [30, 70, 150], "accent2": [250, 245, 160],
@@ -733,9 +733,9 @@ class IGrid(CableSkin):
         the clock, the red tile."""
         b, X, Y = self.b, self.X, self.Y
         pygame.draw.rect(c, b["navy"], (0, 0, right, Y(56)))
-        self.wordmark(c, X(24), Y(10), Y(19))
-        self.tx(c, ampm(datetime.now()), self.fb(Y(14)), b["text"], right - X(70), Y(14), align="right")
-        self._tile(c, right - X(60), Y(10), Y(26))
+        self.wordmark(c, X(24), Y(8), Y(22))
+        self.tx(c, ampm(datetime.now()), self.fb(Y(16)), b["text"], right - X(74), Y(14), align="right")
+        self._tile(c, right - X(64), Y(8), Y(30))
 
     def guide_video_box(self):
         r = self.R(400, 0, 240, 180)
@@ -760,26 +760,26 @@ class IGrid(CableSkin):
         self._info_panel(c, pygame.Rect(0, Y(56), pic.x, pic.bottom - Y(56)))
         pygame.draw.rect(c, b["navy"], (0, pic.bottom, W, Y(228) - pic.bottom))
         sel, cur = g.selected(), g.selected_program()
-        f_title, f_line, f_desc = self.fb(Y(16)), self.fb(Y(13)), self.fb(Y(12))
+        f_title, f_line, f_desc = self.fb(Y(20)), self.fb(Y(15)), self.fb(Y(14))
         title = cur.title if cur else (sel.name if sel else "")
-        self.tx(c, self.fit(f_title, title, X(230)), f_title, b["title"], X(24), Y(64), shadow=b["gap"])
+        self.tx(c, self.fit(f_title, title, X(220)), f_title, b["title"], X(24), Y(62), shadow=b["gap"])
         if sel:
             self.tx(c, self.fit(f_line, f"{sel.number} {sel.name.upper()}", X(120)), f_line, b["text"],
-                    pic.x - X(14), Y(66), align="right", shadow=b["gap"])
+                    pic.x - X(14), Y(64), align="right", shadow=b["gap"])
         if cur:
-            self.tx(c, f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}", f_line, b["text"], X(24), Y(86), shadow=b["gap"])
+            self.tx(c, f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}", f_line, b["text"], X(24), Y(88), shadow=b["gap"])
             if cur.rating:
-                self.tx(c, cur.rating, f_line, b["text"], pic.x - X(14), Y(86), align="right", shadow=b["gap"])
-            y = Y(106)
+                self.tx(c, cur.rating, f_line, b["text"], pic.x - X(14), Y(88), align="right", shadow=b["gap"])
+            y = Y(110)
             for ln in self.wrap(f_desc, cur.description or "", pic.x - X(40), 3):
                 self.tx(c, ln, f_desc, b["text"], X(24), y, shadow=b["gap"])
-                y += Y(17)
+                y += Y(19)
         elif sel:
-            self.tx(c, "No information available.", f_desc, b["text"], X(24), Y(106), shadow=b["gap"])
+            self.tx(c, "No information available.", f_desc, b["text"], X(24), Y(110), shadow=b["gap"])
         # The time bar: the list name where the box said "Today", the quarter hours.
         hdr = self.R(0, 228, 640, 22)
         pygame.draw.rect(c, b["hdr"], hdr)
-        fh = self.fb(Y(13))
+        fh = self.fb(Y(15))
         name = g.category if g.category != "All" else "Today"
         tab = pygame.Rect(X(8), hdr.y + Y(2), X(112), hdr.h - Y(4))
         if g.focus == "category":
@@ -795,10 +795,10 @@ class IGrid(CableSkin):
 
         def tile(cc, r, ch, on):
             pygame.draw.rect(cc, b["tile"], r)
-            fn, fc = self.fb(Y(13)), self.fb(Y(12))
-            self.tx(cc, str(ch.number), fn, b["tile_ink"], r.centerx, r.y + Y(4), align="center")
+            fn, fc = self.fb(Y(17)), self.fb(Y(14))
+            self.tx(cc, str(ch.number), fn, b["tile_ink"], r.centerx, r.y + Y(2), align="center")
             call = "".join(ch.name.upper().split())[:5]
-            self.tx(cc, self.fit(fc, call, r.w - X(6)), fc, b["tile_ink"], r.centerx, r.y + Y(21), align="center")
+            self.tx(cc, self.fit(fc, call, r.w - X(6)), fc, b["tile_ink"], r.centerx, r.y + Y(23), align="center")
             if self.app.is_favorite(ch):
                 pygame.draw.circle(cc, b["red"], (r.right - X(7), r.y + Y(7)), Y(3))
 
@@ -811,10 +811,10 @@ class IGrid(CableSkin):
                 if airing and fill is b["cell"]:
                     fill = b["cell_hi"]
             pygame.draw.rect(cc, fill, r)
-        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(3), 13, tile, cell, lambda on: b["sel_ink"] if on else b["text"])
+        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(3), 17, tile, cell, lambda on: b["sel_ink"] if on else b["text"])
         self._foot_curve(c, Y(438))
-        fk = self.fb(Y(11))
-        self.tx(c, self.fit(fk, self.guide_keys(), W - X(40)), fk, b["text"], W // 2, Y(452), align="center", shadow=b["gap"])
+        fk = self.fb(Y(13))
+        self.tx(c, self.fit(fk, self.guide_keys(), W - X(40)), fk, b["text"], W // 2, Y(451), align="center", shadow=b["gap"])
 
     # ── Live: the banner along the foot ───────────────────────────────────
 
@@ -822,28 +822,28 @@ class IGrid(CableSkin):
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         top = Y(386)
-        bar = pygame.Rect(0, top, W, Y(34))
+        bar = pygame.Rect(0, top, W, Y(36))
         self._band(c, bar, b["navy"], 235)
         body = pygame.Rect(0, bar.bottom, W, H - bar.bottom)
         self._band(c, body, b["panel"], 235, radius=Y(18), border_top_left_radius=0, border_top_right_radius=0)
-        f_title, f_line = self.fb(Y(16)), self.fb(Y(13))
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(360)), f_title, b["title"], X(24), top + Y(8), shadow=b["gap"])
+        f_title, f_line = self.fb(Y(19)), self.fb(Y(15))
+        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(350)), f_title, b["title"], X(24), top + Y(7), shadow=b["gap"])
         right = f"{ch.number} {ch.name.upper()[:8]}  |  {ampm(datetime.now())}"
         self.tx(c, right, f_line, b["text"], W - X(24), top + Y(10), align="right", shadow=b["gap"])
         y = body.y + Y(6)
         if cur:
             line = f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}" + (f"   {cur.rating}" if cur.rating else "")
             self.tx(c, line, f_line, b["text"], X(24), y, shadow=b["gap"])
-            y += Y(18)
-            f_desc = self.fb(Y(12))
+            y += Y(20)
+            f_desc = self.fb(Y(14))
             for ln in self.wrap(f_desc, cur.description or "", W - X(48), 2 if full else 1):
                 self.tx(c, ln, f_desc, b["text"], X(24), y, shadow=b["gap"])
-                y += Y(16)
+                y += Y(18)
         else:
             self.tx(c, "No information available.", f_line, b["text"], X(24), y, shadow=b["gap"])
         hint = tag or (f"{self.k('INFO')} for more" if not full else "")
         if hint:
-            self.tx(c, hint, self.fb(Y(11)), b["title"], W - X(24), body.bottom - Y(18), align="right", shadow=b["gap"])
+            self.tx(c, hint, self.fb(Y(13)), b["title"], W - X(24), body.bottom - Y(20), align="right", shadow=b["gap"])
         if full and nxt:
             self.tx(c, self.fit(f_line, f"Next: {nxt.title}", X(380)), f_line, b["text"], X(24), body.bottom - Y(20), shadow=b["gap"])
         if self._tick is None or self._tick[0] <= time.monotonic():
@@ -872,7 +872,7 @@ class IGrid(CableSkin):
         else:
             pygame.draw.rect(c, b["capsule_rim"], r, border_radius=r.h // 2)
             pygame.draw.rect(c, b["capsule"], r.inflate(-Y(3), -Y(3)), border_radius=r.h // 2)
-        f = f or self.fb(Y(12))
+        f = f or self.fb(Y(15))
         ink = b["sel_ink"] if on else b["text"]
         rw = self.width(f, right) + self.X(16) if right else 0
         if right:
@@ -894,14 +894,14 @@ class IGrid(CableSkin):
             right = pic.x
         self._header(c, right)
         self._info_panel(c, pygame.Rect(0, Y(56), right, Y(124)))
-        f = self.fb(Y(15))
-        self.tx(c, self.fit(f, title, right - X(40)), f, b["title"], X(24), Y(66), shadow=b["gap"])
+        f = self.fb(Y(18))
+        self.tx(c, self.fit(f, title, right - X(40)), f, b["title"], X(24), Y(64), shadow=b["gap"])
         if sub:
-            fs = self.fb(Y(12))
-            y = Y(90)
+            fs = self.fb(Y(14))
+            y = Y(92)
             for ln in self.wrap(fs, sub, right - X(44), 3):
                 self.tx(c, ln, fs, b["text"], X(24), y, shadow=b["gap"])
-                y += Y(16)
+                y += Y(18)
         pygame.draw.rect(c, b["navy"], (0, Y(180), W, H - Y(180)))
         self._foot_curve(c, Y(438))
 
@@ -919,21 +919,21 @@ class IGrid(CableSkin):
         if cols == 2:
             per = self.menu_rows(m)
             first = max(0, min((m.cursor // per) * per - per, n - 2 * per)) if n > 2 * per else 0
-            f = self.fb(Y(12))
+            f = self.fb(Y(15))
             for k, i in enumerate(range(first, min(n, first + 2 * per))):
                 col, row = k // per, k % per
-                r = pygame.Rect(X(58 + col * 268), Y(196 + row * 42), X(256), Y(26))
+                r = pygame.Rect(X(58 + col * 268), Y(192 + row * 44), X(256), Y(30))
                 self._capsule(c, r, m.items[i].label, i == m.cursor, f)
                 self.hit(r, lambda i=i: m.activate(i))
             if n > 2 * per:
                 self.tx(c, "▼" if first + 2 * per < n else "▲", self.f(Y(11)), b["text"], W // 2, Y(416), align="center")
             return
-        n_vis = 8
+        n_vis = 7
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
-        f = self.fb(Y(12))
+        f = self.fb(Y(15))
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
-            r = pygame.Rect(X(58), Y(190 + k * 30), X(524), Y(24))
+            r = pygame.Rect(X(58), Y(190 + k * 34), X(524), Y(28))
             v = it.value() if it.value else (">" if it.submenu else "")
             v = f"< {v} >" if i == m.cursor and it.adjust else v
             self._capsule(c, r, it.label, i == m.cursor, f, right=v)
@@ -944,20 +944,20 @@ class IGrid(CableSkin):
             self.hit(r, lambda i=i: m.activate(i))
         if n > n_vis:
             self.tx(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(11)), b["text"], W - X(24), Y(452), align="right")
-        fk = self.fb(Y(11))
+        fk = self.fb(Y(13))
         self.tx(c, f"{self.k('SELECT')}: choose   {self.k('BACK')}: back   {self.k('EXIT')}: close", fk, b["text"], X(24), Y(452), shadow=b["gap"])
 
     def _foot(self, c, text):
-        f = self.fb(self.Y(11))
-        self.tx(c, self.fit(f, text, self.X(400)), f, self.b["text"], self.X(24), self.Y(452), shadow=self.b["gap"])
+        f = self.fb(self.Y(13))
+        self.tx(c, self.fit(f, text, self.X(400)), f, self.b["text"], self.X(24), self.Y(451), shadow=self.b["gap"])
 
     def _list_row(self, c, r, title, meta, on, f=None, fm=None):
         b, X, Y = self.b, self.X, self.Y
-        tile = pygame.Rect(r.x, r.y, X(70), r.h)
+        tile = pygame.Rect(r.x, r.y, X(84), r.h)
         pygame.draw.rect(c, b["tile"], tile)
         body = pygame.Rect(tile.right + X(3), r.y, r.w - tile.w - X(3), r.h)
         pygame.draw.rect(c, b["sel"] if on else b["cell"], body)
-        f, fm = f or self.fb(Y(13)), fm or self.fb(Y(11))
+        f, fm = f or self.fb(Y(16)), fm or self.fb(Y(14))
         ink = b["sel_ink"] if on else b["text"]
         self.tx(c, self.fit(fm, meta, tile.w - X(6)), fm, b["tile_ink"], tile.centerx, self.mid(tile, fm), align="center")
         self.tx(c, self.fit(f, title, body.w - X(16)), f, ink, body.x + X(8), self.mid(body, f))
@@ -980,7 +980,7 @@ class Passage(CableSkin):
     ATTENTION = "Notice"
     ROWS, ROW_PITCH = 5, 30
     LIST = (48, 252, 592, 180)
-    OD_ROWS = 6
+    OD_ROWS = 5
     # Measured: the silver page, the purple cell, the cream card and cursor,
     # the dark lettering, the lavender channel tile.
     NATIVE = {"bg": [205, 205, 215], "accent": [118, 100, 170], "accent2": [248, 240, 170],
@@ -1035,8 +1035,8 @@ class Passage(CableSkin):
     def _card(self, c, r):
         """The cream card with a cut top-left corner, as the box's."""
         b, Y = self.b, self.Y
-        pygame.draw.rect(c, b["card"], r, border_bottom_left_radius=Y(10), border_top_right_radius=Y(10))
-        pygame.draw.rect(c, mix(b["card"], (0, 0, 0), 0.3), r, 1, border_bottom_left_radius=Y(10), border_top_right_radius=Y(10))
+        pygame.draw.rect(c, b["card"], r, border_top_left_radius=Y(14), border_bottom_right_radius=Y(14))
+        pygame.draw.rect(c, mix(b["card"], (0, 0, 0), 0.3), r, 1, border_top_left_radius=Y(14), border_bottom_right_radius=Y(14))
 
     def _logo_tile(self, c, ch, x, y, size):
         """The channel's logo in a tile, else its number in a blue disc."""
@@ -1054,7 +1054,7 @@ class Passage(CableSkin):
         vx, vy, vw, vh = self.guide_video_box()
         strip = pygame.Rect(vx, vy + vh, vw, Y(20))
         pygame.draw.rect(c, b["maroon"], strip)
-        f = self.fb(Y(13))
+        f = self.fb(Y(14))
         if ch:
             self.tx(c, self.fit(f, f"{''.join(ch.name.upper().split())[:5]} • {ch.number}", X(190)), f, b["white"], strip.x + X(10), self.mid(strip, f))
         tab = pygame.Rect(strip.right - X(96), strip.y, X(96), strip.h)
@@ -1064,7 +1064,7 @@ class Passage(CableSkin):
     def _keybar(self, c, y, keys, active=None):
         """The A / B / C key bar: a coloured key chip and its word."""
         b, X, Y = self.b, self.X, self.Y
-        f = self.fb(Y(13))
+        f = self.fb(Y(15))
         for k, (letter, word, fn) in enumerate(keys):
             x = X(300 + k * 110)
             r = pygame.Rect(x - X(8), y - Y(4), X(104), Y(24))
@@ -1093,26 +1093,26 @@ class Passage(CableSkin):
         self._strip(c, sel)
         card = self.R(48, 28, 266, 214)
         self._card(c, card)
-        self._logo_tile(c, sel, card.x + X(14), card.y + Y(12), Y(44))
-        f_call, f_num = self.fb(Y(14)), self.fb(Y(12))
+        self._logo_tile(c, sel, card.x + X(14), card.y + Y(12), Y(48))
+        f_call, f_num = self.fb(Y(16)), self.fb(Y(14))
         if sel:
             self.tx(c, "".join(sel.name.upper().split())[:6], f_call, b["ink"], card.x + X(70), card.y + Y(14))
-            self.tx(c, str(sel.number), f_num, b["ink"], card.x + X(70), card.y + Y(32))
-        f_title, f_time, f_desc = self.fb(Y(14)), self.fb(Y(13)), self.f(Y(13))
+            self.tx(c, str(sel.number), f_num, b["ink"], card.x + X(70), card.y + Y(34))
+        f_title, f_time, f_desc = self.fb(Y(17)), self.fb(Y(16)), self.f(Y(15))
         title = cur.title if cur else (sel.name if sel else "")
-        self.tx(c, self.fit(f_title, title, card.w - X(28)), f_title, b["ink"], card.x + X(14), card.y + Y(70))
+        self.tx(c, self.fit(f_title, title, card.w - X(28)), f_title, b["ink"], card.x + X(14), card.y + Y(72))
         if cur:
-            self.tx(c, f"{ampm(cur.start, True)} – {ampm(cur.stop, True)}", f_time, b["ink"], card.x + X(14), card.y + Y(90))
-            y = card.y + Y(110)
+            self.tx(c, f"{ampm(cur.start, True)} – {ampm(cur.stop, True)}", f_time, b["ink"], card.x + X(14), card.y + Y(94))
+            y = card.y + Y(116)
             lead = f"{cur.rating}  " if cur.rating else ""
             for ln in self.wrap(f_desc, lead + (cur.description or ""), card.w - X(28), 5):
                 self.tx(c, ln, f_desc, b["ink"], card.x + X(14), y)
-                y += Y(17)
+                y += Y(19)
         elif sel:
-            self.tx(c, "No information available.", f_desc, b["ink"], card.x + X(14), card.y + Y(90))
+            self.tx(c, "No information available.", f_desc, b["ink"], card.x + X(14), card.y + Y(94))
         hdr = self.R(48, 252, 592, 22)
         pygame.draw.rect(c, b["hdr"], hdr)
-        fh = self.fb(Y(13))
+        fh = self.fb(Y(15))
         grid_x, grid_w = X(164), X(476)
         self._time_header(c, g, hdr, grid_x, grid_w, fh, b["white"], mix(b["hdr"], b["white"], 0.4), X(56),
                           space=True, day_fmt="{a}.{m}/{d}")
@@ -1131,12 +1131,12 @@ class Passage(CableSkin):
             fill = b["sel"] if on else b["maroon"] if ("movie" in cat or "film" in cat) else \
                 mix(b["cell"], b["white"], 0.12) if airing else b["cell"]
             pygame.draw.rect(cc, fill, r)
-        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(3), 14, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
+        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(3), 16, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
         # The list name as a chip beside the mark, the key bar at the right.
-        self.wordmark(c, X(48), Y(440), Y(13))
+        self.wordmark(c, X(48), Y(440), Y(16))
         name = g.category if g.category != "All" else "All"
-        f_list = self.fb(Y(12))
-        chip = pygame.Rect(X(170), Y(436), self.width(f_list, f"List: {name}") + X(20), Y(22))
+        f_list = self.fb(Y(13))
+        chip = pygame.Rect(X(190), Y(436), self.width(f_list, f"List: {name}") + X(20), Y(22))
         pygame.draw.rect(c, b["navy"] if g.focus == "category" else b["lav"], chip, border_radius=Y(4))
         self.tx(c, f"List: {name}", f_list, b["white"], chip.centerx, self.mid(chip, f_list), align="center")
         self.hit(chip, lambda: g.handle("THEMES"))
@@ -1152,24 +1152,32 @@ class Passage(CableSkin):
         tile = pygame.Rect(band.x, band.y, X(116), band.h)
         pygame.draw.rect(c, mix(b["page"], b["white"], 0.4), tile, border_top_left_radius=Y(8), border_bottom_left_radius=Y(8))
         self._logo_tile(c, ch, tile.x + X(8), tile.y + Y(8), Y(30))
-        fc = self.fb(Y(12))
+        fc = self.fb(Y(14))
         self.tx(c, "".join(ch.name.upper().split())[:5], fc, b["ink"], tile.x + X(48), tile.y + Y(10))
-        self.tx(c, str(ch.number), fc, b["ink"], tile.x + X(48), tile.y + Y(28))
+        self.tx(c, str(ch.number), fc, b["ink"], tile.x + X(48), tile.y + Y(30))
         clock = pygame.Rect(band.x + X(30), band.y - Y(20), X(80), Y(20))
         pygame.draw.rect(c, b["tab"], clock, border_top_left_radius=Y(6), border_top_right_radius=Y(6))
         self.tx(c, ampm(datetime.now(), True), fc, b["white"], clock.centerx, self.mid(clock, fc), align="center")
-        f_title, f_line = self.fb(Y(15)), self.fb(Y(12))
+        f_title, f_line = self.fb(Y(17)), self.fb(Y(14))
         x0 = tile.right + X(14)
         self.tx(c, self.fit(f_title, cur.title if cur else ch.name, band.right - X(150) - x0), f_title, b["white"], x0, band.y + Y(6))
         if cur:
             self.tx(c, f"{ampm(cur.start)} - {ampm(cur.stop)}", f_line, b["white"], band.right - X(14), band.y + Y(8), align="right")
             now = datetime.now(timezone.utc)
             frac = max(0.0, min(1.0, (now - cur.start).total_seconds() / max(1, (cur.stop - cur.start).total_seconds())))
-            line = pygame.Rect(x0 + X(40), band.y + Y(40), band.w - X(230), Y(8))
+            line = pygame.Rect(x0 + X(44), band.y + Y(42), band.w - X(240), Y(9))
             pygame.draw.rect(c, mix(b["band"], b["white"], 0.4), line, border_radius=Y(4))
             pygame.draw.rect(c, b["green"], (line.x, line.y, int(line.w * frac), line.h), border_radius=Y(4))
+            for k in (1, 2, 3):                                  # the quarter ticks the box drew on the bar
+                pygame.draw.rect(c, b["white"], (line.x + line.w * k // 4, line.y, 1, line.h))
             self.tx(c, ampm(cur.start), f_line, b["white"], line.x - X(6), line.y - Y(5), align="right")
             self.tx(c, ampm(cur.stop), f_line, b["white"], line.right + X(6), line.y - Y(5))
+            mark = pygame.Rect(0, line.y - Y(16), X(44), Y(14))    # the time on a tab at the bar's dot
+            mark.centerx = line.x + int(line.w * frac)
+            pygame.draw.rect(c, b["navy"], mark, border_radius=Y(3))
+            fm = self.fb(Y(10))
+            self.tx(c, ampm(datetime.now())[:-2], fm, b["white"], mark.centerx, self.mid(mark, fm), align="center")
+            pygame.draw.circle(c, b["white"], (mark.centerx, line.centery), Y(4))
         else:
             self.tx(c, "No information available", f_line, b["white"], x0, band.y + Y(30))
         hint = tag or (f"{self.k('INFO')} for more" if not full else "")
@@ -1206,8 +1214,8 @@ class Passage(CableSkin):
         self._page(c, (0, 0, W, H))
         head = self.R(0, 0, 320 if picture else 640, 40)
         vgrad(c, head, rgba(mix(b["page"], b["white"], 0.6)), rgba(b["page"]))
-        f = self.fb(Y(15))
-        self.tx(c, self.fit(f, title, head.w - X(60)), f, (30, 50, 140), X(48), Y(12))
+        f = self.fb(Y(17))
+        self.tx(c, self.fit(f, title, head.w - X(60)), f, (30, 50, 140), X(48), Y(11))
         if picture:
             self._picture(c)
             live = self.app.live
@@ -1215,12 +1223,12 @@ class Passage(CableSkin):
         card = pygame.Rect(0, head.bottom, head.w, Y(100) if picture else Y(60))
         pygame.draw.rect(c, b["cream"], card)
         if sub:
-            fs = self.f(Y(13))
+            fs = self.f(Y(15))
             y = card.y + Y(10)
             for ln in self.wrap(fs, sub, card.w - X(70), 4 if picture else 2):
                 self.tx(c, ln, fs, b["ink"], X(48), y)
-                y += Y(17)
-        self.wordmark(c, X(48), Y(440), Y(13))
+                y += Y(19)
+        self.wordmark(c, X(48), Y(440), Y(16))
 
     def _panel(self, c, r):
         b, Y = self.b, self.Y
@@ -1230,7 +1238,7 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         if on:
             pygame.draw.rect(c, b["navy"], r, border_radius=r.h // 2)
-        f, fm = f or self.fb(Y(13)), fm or self.f(Y(11))
+        f, fm = f or self.fb(Y(15)), fm or self.f(Y(13))
         ink = b["white"]
         mw = self.width(fm, meta) + X(12) if meta else 0
         self.tx(c, self.fit(f, title, r.w - mw - X(24)), f, ink, r.x + X(14), self.mid(r, f))
@@ -1240,7 +1248,7 @@ class Passage(CableSkin):
     def _button(self, c, r, label, on, f=None):
         b, Y = self.b, self.Y
         pygame.draw.rect(c, b["navy"] if on else b["lav"], r, border_radius=Y(4))
-        f = f or self.fb(Y(12))
+        f = f or self.fb(Y(14))
         self.tx(c, self.fit(f, label, r.w - Y(8)), f, b["white"], r.centerx, self.mid(r, f), align="center")
 
     def draw_menu(self, c, m):
@@ -1251,13 +1259,13 @@ class Passage(CableSkin):
         area = self.R(48, 252, 592, 180)
         self._panel(c, area)
         n = len(m.items)
-        rh = Y(26)
-        n_vis = 6
+        rh = Y(30)
+        n_vis = 5
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
-        f = self.fb(Y(13))
+        f = self.fb(Y(15))
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
-            r = pygame.Rect(area.x + X(10), area.y + Y(10) + k * rh, area.w - X(20), rh - Y(2))
+            r = pygame.Rect(area.x + X(10), area.y + Y(12) + k * rh, area.w - X(20), rh - Y(3))
             v = it.value() if it.value else (">" if it.submenu else "")
             v = f"< {v} >" if i == m.cursor and it.adjust else v
             self._list_row(c, r, it.label, v, i == m.cursor, f=f)
@@ -1272,8 +1280,8 @@ class Passage(CableSkin):
 
     def _foot(self, c, text):
         b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(11))
-        self.tx(c, self.fit(f, text, X(380)), f, b["ink"], X(200), Y(444))
+        f = self.f(Y(12))
+        self.tx(c, self.fit(f, text, X(360)), f, b["ink"], X(230), Y(443))
 
 
 class Wayfinder(CableSkin):
@@ -1286,7 +1294,7 @@ class Wayfinder(CableSkin):
     BOOT_WORDS = ("Starting...", "Loading channel listings...")
     ROWS, ROW_PITCH = 5, 37
     LIST = (40, 232, 600, 190)
-    OD_ROWS = 6
+    OD_ROWS = 5
     # Measured: the steel page, the royal cell, the gold cursor, the navy tile.
     NATIVE = {"bg": [178, 196, 222], "accent": [35, 75, 165], "accent2": [235, 190, 60],
               "text": [255, 255, 255], "chnum": [25, 50, 130]}
@@ -1347,7 +1355,7 @@ class Wayfinder(CableSkin):
             pygame.draw.rect(c, (255, 255, 255), tile, border_radius=Y(3))
             c.blit(logo, logo.get_rect(center=tile.center))
             x = tile.right + X(10)
-        f = self.fb(Y(14))
+        f = self.fb(Y(16))
         if ch:
             self.tx(c, self.fit(f, f"{ch.name}  {ch.number}", r.right - X(8) - x), f, b["text"], x, self.mid(r, f))
 
@@ -1356,7 +1364,7 @@ class Wayfinder(CableSkin):
         vx, vy, vw, vh = self.guide_video_box()
         strip = pygame.Rect(vx, vy + vh, vw, Y(18))
         pygame.draw.rect(c, b["navy"], strip)
-        f = self.fb(Y(12))
+        f = self.fb(Y(13))
         if ch:
             self.tx(c, self.fit(f, f"{''.join(ch.name.upper().split())[:5]} • {ch.number}", X(170)), f, b["text"], strip.x + X(10), self.mid(strip, f))
         self.tx(c, ampm(datetime.now(), True), f, b["text"], strip.right - X(10), self.mid(strip, f), align="right")
@@ -1367,8 +1375,8 @@ class Wayfinder(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         foot = pygame.Rect(0, Y(432), W, H - Y(432))
         pygame.draw.rect(c, b["foot"], foot)
-        self.wordmark(c, X(24), Y(444), Y(12))
-        f = self.fb(Y(12))
+        self.wordmark(c, X(24), Y(443), Y(13))
+        f = self.fb(Y(13))
         for k, (letter, word, fn) in enumerate(keys):
             x = X(250 + k * 150)
             cy = Y(452)
@@ -1399,21 +1407,21 @@ class Wayfinder(CableSkin):
         self._chan_band(c, self.R(40, 22, 268, 40), sel)
         card = self.R(40, 62, 268, 150)
         pygame.draw.rect(c, b["card"], card, border_bottom_left_radius=Y(6), border_bottom_right_radius=Y(6))
-        f_title, f_line, f_desc = self.fb(Y(14)), self.fb(Y(12)), self.f(Y(12))
+        f_title, f_line, f_desc = self.fb(Y(16)), self.fb(Y(14)), self.f(Y(14))
         title = cur.title if cur else (sel.name if sel else "")
         self.tx(c, self.fit(f_title, title, card.w - X(20)), f_title, b["card_ink"], card.x + X(10), card.y + Y(8))
         if cur:
             line = (f"{cur.rating}  " if cur.rating else "") + f"{ampm(cur.start, True)} - {ampm(cur.stop, True)}"
-            self.tx(c, line, f_line, b["card_ink"], card.x + X(10), card.y + Y(28))
-            y = card.y + Y(48)
+            self.tx(c, line, f_line, b["card_ink"], card.x + X(10), card.y + Y(30))
+            y = card.y + Y(52)
             for ln in self.wrap(f_desc, cur.description or "", card.w - X(20), 5):
                 self.tx(c, ln, f_desc, b["card_ink"], card.x + X(10), y)
-                y += Y(16)
+                y += Y(18)
         elif sel:
-            self.tx(c, "No information available.", f_line, b["card_ink"], card.x + X(10), card.y + Y(28))
+            self.tx(c, "No information available.", f_line, b["card_ink"], card.x + X(10), card.y + Y(30))
         hdr = self.R(40, 232, 600, 22)
         pygame.draw.rect(c, b["hdr"], hdr)
-        fh = self.fb(Y(13))
+        fh = self.fb(Y(15))
         grid_x, grid_w = X(152), X(488)
         self._time_header(c, g, hdr, grid_x, grid_w, fh, b["text"], mix(b["hdr"], b["text"], 0.35), X(48),
                           space=True, day_fmt="{A} {m}/{d}")
@@ -1430,7 +1438,7 @@ class Wayfinder(CableSkin):
 
         def cell(cc, r, airing, on, i, p):
             pygame.draw.rect(cc, b["sel"] if on else b["cell_hi"] if airing else b["cell"], r)
-        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(2), 13, tile, cell, lambda on: b["sel_ink"] if on else b["text"])
+        self._grid(c, g, grid_x, grid_w, top, pitch, rh, X(2), 15, tile, cell, lambda on: b["sel_ink"] if on else b["text"])
         name = g.category if g.category != "All" else "All Channels"
         self._foot_bar(c, [("A", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
                            ("B", "Find shows", None)], 0 if g.focus == "category" else None)
@@ -1444,7 +1452,7 @@ class Wayfinder(CableSkin):
         card = self.R(40, 408, 560, 60)
         self._band(c, strip, b["navy"], 235, radius=Y(6), border_bottom_left_radius=0, border_bottom_right_radius=0)
         self._band(c, card, b["card"], 240, radius=Y(8), border_top_left_radius=0, border_top_right_radius=0)
-        f_strip, f_title, f_line = self.fb(Y(12)), self.fb(Y(15)), self.f(Y(12))
+        f_strip, f_title, f_line = self.fb(Y(13)), self.fb(Y(17)), self.f(Y(14))
         self.tx(c, ampm(datetime.now(), True), f_strip, b["text"], strip.x + X(10), self.mid(strip, f_strip))
         self.tx(c, self.fit(f_strip, f"{ch.number} • {ch.name}", X(300)), f_strip, b["text"], strip.x + X(100), self.mid(strip, f_strip))
         logo = self.channel_logo(ch, X(70), Y(44))
@@ -1461,7 +1469,7 @@ class Wayfinder(CableSkin):
             y = card.y + Y(28)
             for ln in self.wrap(f_line, lead + (cur.description or ""), card.right - X(12) - x0, 2):
                 self.tx(c, ln, f_line, b["card_ink"], x0, y)
-                y += Y(15)
+                y += Y(16)
         else:
             self.tx(c, "No information available", f_line, b["card_ink"], x0, card.y + Y(28))
         hint = tag or (f"{self.k('INFO')} for more" if not full else "")
@@ -1490,16 +1498,16 @@ class Wayfinder(CableSkin):
         self._page(c, (0, 0, W, H))
         band = self.R(40, 22, 268 if picture else 560, 40)
         pygame.draw.rect(c, b["cell"], band, border_top_left_radius=Y(6), border_top_right_radius=Y(6))
-        f = self.fb(Y(15))
+        f = self.fb(Y(17))
         self.tx(c, self.fit(f, title, band.w - X(20)), f, b["text"], band.x + X(10), self.mid(band, f))
         card = pygame.Rect(band.x, band.bottom, band.w, Y(150) if picture else Y(60))
         pygame.draw.rect(c, b["card"], card, border_bottom_left_radius=Y(6), border_bottom_right_radius=Y(6))
         if sub:
-            fs = self.f(Y(12))
+            fs = self.f(Y(14))
             y = card.y + Y(8)
             for ln in self.wrap(fs, sub, card.w - X(20), 6 if picture else 2):
                 self.tx(c, ln, fs, b["card_ink"], card.x + X(10), y)
-                y += Y(16)
+                y += Y(18)
         if picture:
             self._picture(c)
             live = self.app.live
@@ -1512,7 +1520,7 @@ class Wayfinder(CableSkin):
     def _list_row(self, c, r, title, meta, on, f=None, fm=None):
         b, X, Y = self.b, self.X, self.Y
         pygame.draw.rect(c, b["sel"] if on else b["cell"], r)
-        f, fm = f or self.fb(Y(13)), fm or self.f(Y(11))
+        f, fm = f or self.fb(Y(15)), fm or self.f(Y(13))
         ink = b["sel_ink"] if on else b["text"]
         mw = self.width(fm, meta) + X(12) if meta else 0
         self.tx(c, self.fit(f, title, r.w - mw - X(16)), f, ink, r.x + X(8), self.mid(r, f))
@@ -1522,7 +1530,7 @@ class Wayfinder(CableSkin):
     def _button(self, c, r, label, on, f=None):
         b, Y = self.b, self.Y
         pygame.draw.rect(c, b["sel"] if on else b["navy"], r, border_radius=Y(4))
-        f = f or self.fb(Y(12))
+        f = f or self.fb(Y(14))
         self.tx(c, self.fit(f, label, r.w - Y(8)), f, b["sel_ink"] if on else b["text"], r.centerx, self.mid(r, f), align="center")
 
     def draw_menu(self, c, m):
@@ -1532,10 +1540,10 @@ class Wayfinder(CableSkin):
         self._page_top(c, "Main Menu" if m.title == "MAIN MENU" else m.title.title(), it.help if it and it.help else "")
         area = self.R(40, 232, 600, 190)
         n = len(m.items)
-        rh = Y(30)
+        rh = Y(32)
         n_vis = 6
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
-        f = self.fb(Y(13))
+        f = self.fb(Y(15))
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
             r = pygame.Rect(area.x, area.y + k * rh, area.w, rh - Y(3))
@@ -1553,8 +1561,8 @@ class Wayfinder(CableSkin):
 
     def _foot(self, c, text):
         b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(11))
-        self.tx(c, self.fit(f, text, X(330)), f, b["foot_ink"], X(250), Y(446))
+        f = self.f(Y(12))
+        self.tx(c, self.fit(f, text, X(330)), f, b["foot_ink"], X(250), Y(445))
 
 
 class Y1(CableSkin):
@@ -1761,21 +1769,21 @@ class Y1(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         self.dim(c, 170)
         if self._is_bar(m):
-            self.wordmark(c, X(20), Y(190), Y(20))
-            f = self.f(Y(17))
-            x, y = X(20), Y(226)
+            self.wordmark(c, X(20), Y(252), Y(22))
+            f = self.f(Y(20))
+            x, y = X(20), Y(290)
             for i, it in enumerate(m.items):
                 w = self.width(f, it.label)
                 if x + w > X(620):
                     break
-                r = pygame.Rect(x, y, w, Y(24))
+                r = pygame.Rect(x, y, w, Y(26))
                 on = i == m.cursor
                 self._underline(c, r, on, f, it.label, b["text"] if on else b["soft"])
                 self.hit(r, lambda i=i: m.activate(i))
-                x += w + X(22)
+                x += w + X(24)
             it = m.items[m.cursor] if 0 <= m.cursor < len(m.items) else None
             if it and it.help:
-                self._light(c, self.fit(self.f(Y(12)), it.help, X(600)), 12, b["soft"], X(20), Y(262))
+                self._light(c, self.fit(self.f(Y(12)), it.help, X(600)), 12, b["soft"], X(20), Y(330))
             return
         self._crumb(c, "Menu", m.title.title())
         n = len(m.items)
