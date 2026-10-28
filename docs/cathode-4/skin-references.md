@@ -274,3 +274,40 @@ the size down to fit before any ellipsis.
 - [722 interface versus 922 interface (YouTube)](https://youtu.be/Vn1g6w12vlE)
 - [Dish Network Guide Interface, 2009 (YouTube)](https://youtu.be/ZbZo97iS49I)
 - [DISH Network DVR Event Playback Over Menu, 2007 (YouTube)](https://youtu.be/piw4JH_iNkk)
+
+## The cable boxes (4.39)
+
+Four skins from one parametric page (`cathode/skins/cable.py`), after the
+leased cable guides. No video frames were measured for these (2026-10-28):
+the layouts are from memory of the boxes, and every geometry is in
+1280x720 pixels, shared. What each one keeps of its box:
+
+- **Calmcast i-Grid** (the Motorola DCT-era interactive guide, ~2006): a
+  navy (14,30,92) page, blue (38,66,158) cells with the alternate rows a
+  shade darker, grey-blue channel tiles with the number over the call
+  sign, a steel (150,165,200) time header with dark lettering, a yellow
+  (255,204,0) cursor with dark ink, the picture top-right with the chosen
+  programme described at its left, the list name and clock under that.
+  Main Menu: a list at the left, the picture and its help at the right.
+  Dead channel: "One Moment Please / This channel should be available
+  shortly / Ref code: S0a00".
+- **Passage** (the Scientific Atlanta-era guide, ~2004): charcoal (20,20,26)
+  page, slate (58,66,88) cells, a gold (236,184,40) cursor, the picture
+  top-left and the description at its right.
+- **Wayfinder HD** (the later Time Warner guide, ~2009): a silver
+  (226,229,234) page, white cells with grey rules, dark lettering, a blue
+  (22,92,196) cursor with white ink, a graphite (50,56,70) header and title
+  bar, a dark banner over the picture.
+- **Y1** (the 2014 Comcast box): black (10,10,12) pages, charcoal (36,36,40)
+  rounded cells, a white (236,236,240) cursor with dark ink, Barlow for its
+  light face, a blue (0,120,215) accent for progress lines; the Main Menu a
+  row of words across the top of the dimmed picture, the chosen one
+  underlined (LEFT/RIGHT walk it, the picture stays full). Dead channel:
+  "Something's not right / Code: XRE-03007".
+
+Shared: the lower-third banner (number and call sign in a cursor-coloured
+tile, title over hours, rating and genre, the clock, a progress line
+along the foot; INFO adds the synopsis and "Next:" above it), flat
+dialogs with a header bar, a flat keyboard, the boot as the mark over a
+loading line.
+

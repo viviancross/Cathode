@@ -7,14 +7,14 @@ program guide, a channel banner on every tune, browse, pause-live-TV, and a
 remote-control way of doing everything, in the style of a mid-2000s set-top
 box. Your Plex library is On Demand, and downloaded titles are My Recordings.
 
-**Version 4.38 (alpha)** · Windows, macOS, Linux
+**Version 4.39 (alpha)** · Windows, macOS, Linux
 
 <br clear="left">
 
 ## Looks
 
-Cathode has three skins, switchable any time under **Settings > Picture &
-Style > Skin**:
+Cathode has four families of skins, switchable any time under **Settings >
+Picture & Style > Skin**:
 
 - **Cathode Classic**: Cathode 3's retro-CRT look. Phosphor colour themes,
   pixel fonts, static when you change channel.
@@ -28,6 +28,12 @@ Style > Skin**:
   program cells, a gold frame, a grey banner, numbered menus, RIGHT to
   browse); SD after the 2005 receivers (grey page with the blue tab of
   pills, blue cells with a pale selection, a bare banner, 4:3).
+- **The cable boxes**: four after the guides the US cable companies leased
+  out. **Calmcast i-Grid** (2006: a navy grid, yellow cursor, the picture
+  top-right), **Passage** (2004: a charcoal grid, gold cursor, the picture
+  top-left), **Wayfinder HD** (2009: a white grid on silver, blue cursor, a
+  graphite title bar) and **Y1** (2014: black pages, a white cursor, the
+  Main Menu a row of words over the picture). All four draw 16:9.
 
 Each skin keeps its own colour theme and font. Every skin can use any colour
 theme, the colour editor, any font, and the CRT scanlines and vignette.
@@ -71,19 +77,19 @@ Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 
-Download `cathode-windows-4.38-portable.zip`, right-click it, **Extract All**,
+Download `cathode-windows-4.39-portable.zip`, right-click it, **Extract All**,
 and run **Cathode.exe**.
 
 ### Linux
 
 **AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-4.38.AppImage`, make it executable (file properties, or
+`cathode-linux-x86_64-4.39.AppImage`, make it executable (file properties, or
 `chmod +x`) and run it.
 
 **Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
 
 ```bash
-flatpak install --user cathode-linux-x86_64-4.38.flatpak
+flatpak install --user cathode-linux-x86_64-4.39.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
@@ -92,8 +98,8 @@ It fetches the freedesktop runtime from Flathub the first time. On the Deck,
 
 ### macOS
 
-Download the zip for your Mac (`cathode-macos-arm64-4.38.zip` for Apple
-Silicon, `cathode-macos-x86_64-4.38.zip` for Intel), unzip it, and move
+Download the zip for your Mac (`cathode-macos-arm64-4.39.zip` for Apple
+Silicon, `cathode-macos-x86_64-4.39.zip` for Intel), unzip it, and move
 **Cathode.app** to Applications. It isn't signed: the first time,
 right-click it and choose **Open** (or **Open Anyway** under System Settings
 > Privacy & Security).

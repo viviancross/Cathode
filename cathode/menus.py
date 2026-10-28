@@ -26,12 +26,17 @@ WELCOME_HELP = "Have your Tunarr or ErsatzTV address ready (or your provider's M
 
 # Beside each box's name on the wizard's first page, and what it is.
 LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
-              "plate": "2005, 4:3", "plate_hd": "2007, HD"}
+              "plate": "2005, 4:3", "plate_hd": "2007, HD",
+              "igrid": "2006, cable", "passage": "2004, cable", "wayfinder": "2009, cable HD", "y1": "2014, cable"}
 LOOK_HELP = {"classic": "Cathode's own look: a retro CRT, every theme.",
              "indirect": "A 1997 satellite box: purple pages, 4:3.",
              "indirect_hd": "A 2007 HD satellite box: the blue guide.",
              "plate": "A 2005 dish box: grey pages, blue pills, 4:3.",
-             "plate_hd": "A 2007 HD dish box: teal pages, gold cursor."}
+             "plate_hd": "A 2007 HD dish box: teal pages, gold cursor.",
+             "igrid": "A 2006 cable box: the navy grid, yellow cursor.",
+             "passage": "A 2004 cable box: charcoal grid, gold cursor, picture at the left.",
+             "wayfinder": "A 2009 HD cable box: a white grid on silver, blue cursor.",
+             "y1": "A 2014 cable box: black pages, white cursor, a menu bar."}
 
 DESCRIPTIONS.update({
     # Main Menu

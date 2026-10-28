@@ -21,7 +21,7 @@ def main():
     ap.add_argument("--config", "-c", metavar="FILE", default=paths.config_path())
     ap.add_argument("--windowed", "-w", action="store_true", help="start in a window")
     ap.add_argument("--channel", type=int, help="start on this channel number")
-    ap.add_argument("--skin", help="classic | plate | plate_hd | indirect | indirect_hd")
+    ap.add_argument("--skin", help="classic | plate | plate_hd | indirect | indirect_hd | igrid | passage | wayfinder | y1")
     ap.add_argument("--shot", metavar="PNG", help="save a frame after --seconds and exit")
     ap.add_argument("--seconds", type=float, default=5.0)
     ap.add_argument("--press", default="", metavar="T:BUTTON,...",

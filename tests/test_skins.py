@@ -263,7 +263,7 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
     def test_box_skins_cut_to_black_and_classic_keeps_static(self):
         classes = skin_classes()
         self.assertEqual(classes["classic"].tune_cover, "static")
-        for name in ("indirect", "indirect_hd", "plate", "plate_hd"):
+        for name in ("indirect", "indirect_hd", "plate", "plate_hd", "igrid", "passage", "wayfinder", "y1"):
             self.assertEqual(classes[name].tune_cover, "black", name)
 
     def test_sd_skins_are_four_by_three(self):

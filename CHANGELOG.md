@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.39
+
+- **Four cable-box skins.** Settings > Picture & Style > Skin gains the
+  guides the US cable companies leased out: **Calmcast i-Grid** (2006, the
+  navy Motorola-era grid with the yellow cursor, picture top-right),
+  **Passage** (2004, the charcoal Scientific Atlanta-era grid, gold cursor,
+  picture top-left), **Wayfinder HD** (2009, a white grid on silver, blue
+  cursor, graphite title bar) and **Y1** (2014, black pages, white cursor,
+  the Main Menu a row across the top of the dimmed picture; LEFT/RIGHT
+  walk it). One shared page draws every screen (guide, lower-third banner,
+  menus, On Demand, recordings, info, keyboard, system, playback, the
+  dead-channel card in each box's own words, boot); each skin names its
+  colours, its picture's side and its menu's shape. All four are 16:9, as
+  the HD boxes of each line were. Every colour theme and font applies.
+
 ## 4.38
 
 - **FLIRC wizard: skipping with the remote.** Pressing a button the FLIRC
