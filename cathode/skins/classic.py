@@ -872,12 +872,15 @@ class Classic(Skin):
         pygame.draw.rect(c, p["GUIDE_TIME_BG"], (pad, ruler_y, W - 2 * pad, rh))
         t.draw(c, "CHANNEL", f_small, p["CYAN"], pad + 8, ruler_y + (rh - t.ink(f_small)[1]) // 2)
         mins = guide.hours * 60
-        slots = mins // 30
+        slots = mins // 15
+        labels = [clock((start + timedelta(minutes=15 * i)).astimezone()).replace(" ", "") for i in range(slots)]
+        every = self.label_every(grid_w / slots, max(t.width(f_small, s) for s in labels))
         for i in range(slots):
             x = grid_x + int(i * grid_w / slots)
-            pygame.draw.line(c, p["GUIDE_BORDER"], (x, ruler_y), (x, ruler_y + rh))
-            label = clock((start + timedelta(minutes=30 * i)).astimezone())
-            t.draw(c, label, f_small, p["WHITE"], x + 6, ruler_y + (rh - t.ink(f_small)[1]) // 2)
+            tick = i % every == 0                       # a labelled column's rule runs the ruler's height
+            pygame.draw.line(c, p["GUIDE_BORDER"], (x, ruler_y + (0 if tick else rh - 8)), (x, ruler_y + rh))
+            if tick:
+                t.draw(c, labels[i], f_small, p["WHITE"], x + 5, ruler_y + (rh - t.ink(f_small)[1]) // 2)
 
         vis = guide.filtered()
         rows = vis[guide.top: guide.top + guide.rows]
@@ -1063,15 +1066,22 @@ class Classic(Skin):
             on_air = prog.start <= now < prog.stop
             ink = (p["SEL_TEXT"] if on_air else p["SEL_TEXT_DIM"]) if selected else \
                 p["WHITE"] if on_air else p["WHITE_DIM"]
-            pygame.draw.rect(c, bg, (px + 1, y + 2, pw - 2, rh - 4))
+            # The cell airing now sits in its own tint on every row, lit or not.
+            cell_bg = tuple(int(a * 0.8 + b * 0.2) for a, b in zip(bg[:3], p["CYAN"][:3])) + (255,) if on_air and not selected else bg
+            pygame.draw.rect(c, cell_bg, (px + 1, y + 2, pw - 2, rh - 4))
             pygame.draw.line(c, p["GUIDE_BORDER"], (px, y), (px, y + rh))
             if selected and prog.start <= sel < prog.stop:        # the chosen cell on the chosen row
                 pygame.draw.rect(c, p["YELLOW"], (px + 2, y + 3, pw - 4, rh - 6), 2)
+            tx = px + 5
             if on_air:
                 pygame.draw.rect(c, p["SEL_TEXT"] if selected else p["CYAN"], (px + 1, y + 2, 4, rh - 4))
-            if pw >= 8 + t.width(f_prog, "MMMM"):
-                t.draw(c, t.fit(f_prog, prog.title, pw - 10), f_prog, ink, px + 5,
-                       y + (rh - t.ink(f_prog)[1]) // 2)
+                tx += 4
+            f, lines = self.cell_text(prog.title, px + pw - 4 - tx, rh - 6, self.f, self.TYPE["meta"])
+            lh = t.ink(f)[1]
+            ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
+            for line in lines:
+                t.draw(c, line, f, ink, tx, ty)
+                ty += lh + 2
 
     def _arrow(self, c, cx, y, up):
         pts = [(cx - 12, y + 6), (cx + 12, y + 6), (cx, y - 6)] if up else \

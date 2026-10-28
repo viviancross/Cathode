@@ -434,10 +434,16 @@ class InDirectHD(BoxSkin):
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
         t.draw(c, f"{day:%a} {day.month}/{day.day}", fh, b["text"], X(105), hy)
-        slots = int(g.hours * 2)
+        slots = int(g.hours * 4)
         col = 885 / slots
+        labels = [ampm(start + timedelta(minutes=15 * i)) for i in range(slots)]
+        every = self.label_every(X(col), max(t.width(fh, s) for s in labels))
         for i in range(slots):
-            t.draw(c, ampm(start + timedelta(minutes=30 * i)), fh, b["text"], X(294 + col * i), hy)
+            if i:                                   # the quarter hours ticked along the header's foot
+                pygame.draw.rect(c, b["sky"] if i % every == 0 else mix(b["navy"], b["text"], 0.3),
+                                 (X(294 + col * i) - X(6), hdr.bottom - Y(8), X(2), Y(8)))
+            if i % every == 0:
+                t.draw(c, labels[i], fh, b["text"], X(294 + col * i), hy)
 
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
@@ -474,20 +480,30 @@ class InDirectHD(BoxSkin):
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(4), rh)
                 on = row_sel and p.start <= sel < p.stop
-                self._cell(c, cell, on)
+                self._cell(c, cell, on, airing=p.start <= now < p.stop)
                 ink, shadow = (b["sel_ink"], b["sel_shadow"]) if on else (b["text"], None)
-                x = cell.x + X(8)
+                x = cell.x + X(6)
                 if p.start < start:
-                    x += self._shadowed(c, "<", f_cell, ink if on else b["mark"], shadow, x, cy) + X(6)
+                    x += self._shadowed(c, "<", f_cell, ink if on else b["mark"], shadow, x, cy) + X(4)
                 more = p.stop > end
-                avail = cell.right - X(8) - x - (X(18) if more else 0)
-                if avail > X(30):
-                    self._shadowed(c, t.fit(f_cell, p.title, avail), f_cell, ink, shadow, x, cy)
+                avail = cell.right - X(6) - x - (X(16) if more else 0)
+                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.f(Y(s)), 30)
+                lh = t.ink(f)[1]
+                ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
+                for line in lines:
+                    self._shadowed(c, line, f, ink, shadow, x, ty)
+                    ty += lh + 2
                 if more:
-                    self._shadowed(c, ">", f_cell, ink if on else b["mark"], shadow, cell.right - X(8), cy,
+                    self._shadowed(c, ">", f_cell, ink if on else b["mark"], shadow, cell.right - X(6), cy,
                                    align="right")
             self.hit((X(96), y, X(1120), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                            setattr(g, "focus", "grid"), g.handle("SELECT")))
+        # The timeline: an amber rule down the grid at this minute.
+        off = (now - start).total_seconds() / 60
+        if 0 <= off <= mins and rows:
+            x = grid_x + int(off / mins * grid_w)
+            pygame.draw.rect(c, b["sel"], (x - 1, hdr.bottom, 3, Y(352 + 48 * (len(rows) - 1)) + Y(44) - hdr.bottom))
+            pygame.draw.polygon(c, b["sel"], [(x - Y(6), hdr.bottom - Y(7)), (x + Y(7), hdr.bottom - Y(7)), (x, hdr.bottom)])
 
         if not rows:
             cell = self.R(96, 352, 1170, 44)
@@ -515,10 +531,14 @@ class InDirectHD(BoxSkin):
             t.draw(c, key, fk, b["text"], chip.centerx, chip.y + (chip.h - t.ink(fk)[1]) // 2, align="center")
             x = chip.right + X(10) + t.draw(c, label + self.key_also(action), fl, b["text"], chip.right + X(10), ly) + X(36)
 
-    def _cell(self, c, cell, on):
+    def _cell(self, c, cell, on, airing=False):
+        """A teal cell; the chosen one amber; the one airing now a lighter
+        teal on every row."""
         b = self.b
         if on:
             self._amber(c, cell)
+        elif airing:
+            vgrad(c, cell, rgba(mix(b["cell_hi"], b["text"], 0.2)), rgba(mix(b["cell"], b["text"], 0.14)))
         else:
             vgrad(c, cell, rgba(b["cell_hi"]), rgba(b["cell"]))
 
@@ -1530,11 +1550,16 @@ class InDirect(InDirectHD):
         rows_all = g.filtered()
         page, pages = g.top // g.rows + 1, max(1, (len(rows_all) + g.rows - 1) // g.rows)
         self._shadowed(c, f"{page}/{pages}", f_small, b["soft"], b["shadow"], X(24), Y(30))
-        slots = int(g.hours * 2)
+        slots = int(g.hours * 4)
         col_w = 240 / slots
+        labels = [ampm(start + timedelta(minutes=15 * i)).upper() + "M" for i in range(slots)]
+        every = self.label_every(X(col_w), max(t.width(f_small, s) for s in labels))
+        if every > 1:                               # the quarter hours as 3:45A when AM won't fit
+            labels = [s[:-1] for s in labels]
+            every = self.label_every(X(col_w), max(t.width(f_small, s) for s in labels))
         for i in range(slots):
-            self._shadowed(c, ampm(start + timedelta(minutes=30 * i)).upper() + "M", f_small, b["text"],
-                           b["shadow"], X(55 + col_w * i), Y(30))
+            if i % every == 0:
+                self._shadowed(c, labels[i], f_small, b["text"], b["shadow"], X(55 + col_w * i), Y(30))
         # The rows: a channel tile, then bevelled page-coloured cells.
         rows = rows_all[g.top: g.top + g.rows]
         now = datetime.now(timezone.utc)
@@ -1573,14 +1598,20 @@ class InDirect(InDirectHD):
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(2), rh)
                 on = row_sel and p.start <= sel < p.stop
-                self._dss_cell(c, cell, on)
+                self._dss_cell(c, cell, on, airing=p.start <= now < p.stop)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
-                room = int((cell.w - X(8)) / self.SQUEEZE)
-                lines = [t.fit(f_cell, line, room) for line in t.wrap(f_cell, p.title, room, 2)]
+                f, lines = self.cell_text(p.title, cell.w - X(6), rh - Y(2), lambda s: self.fb(Y(s)), 12,
+                                          width=lambda f, s: int(t.width(f, s) * self.SQUEEZE), lead=0)
                 for k, line in enumerate(lines):
-                    self._shadowed(c, line, f_cell, ink, shadow, cell.x + X(4), y + Y(2) + k * Y(12))
+                    self._shadowed(c, line, f, ink, shadow, cell.x + X(3), y + Y(2) + k * t.ink(f)[1])
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                          setattr(g, "focus", "grid"), g.handle("SELECT")))
+        # The timeline: a teal rule down the grid at this minute.
+        off = (now - start).total_seconds() / 60
+        if 0 <= off <= mins and rows:
+            x = grid_x + int(off / mins * grid_w)
+            pygame.draw.rect(c, b["teal_dark"], (x - 1, Y(42), 2, len(rows) * Y(28) - Y(2)))
+            pygame.draw.polygon(c, b["teal_dark"], [(x - X(3), Y(38)), (x + X(4), Y(38)), (x, Y(42))])
         if not rows:
             cell = pygame.Rect(X(24), Y(42), X(273), Y(26))
             self._bevel(c, cell, b["page"])
@@ -1609,10 +1640,11 @@ class InDirect(InDirectHD):
                                None if on else b["shadow"], r.centerx, r.y + Y(1), align="center")
             self.hit(r, fn)
 
-    def _dss_cell(self, c, cell, on):
-        """A guide cell; the chosen one is light and casts a shadow."""
+    def _dss_cell(self, c, cell, on, airing=False):
+        """A guide cell; the chosen one is light and casts a shadow; the one
+        airing now is a shade lighter on every row."""
         b = self.b
-        self._bevel(c, cell, b["sel"] if on else b["page"])
+        self._bevel(c, cell, b["sel"] if on else mix(b["page"], b["text"], 0.14) if airing else b["page"])
         if on:
             pygame.draw.rect(c, b["shadow"], (cell.x + 3, cell.bottom, cell.w, 3))
             pygame.draw.rect(c, b["shadow"], (cell.right, cell.y + 3, 3, cell.h))

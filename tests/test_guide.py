@@ -15,7 +15,7 @@ from cathode.playlist import Channel  # noqa: E402
 from cathode.screens import guide as guide_mod  # noqa: E402
 from cathode.screens.guide import Guide  # noqa: E402
 
-NOW = datetime(2026, 10, 18, 12, 7, tzinfo=timezone.utc)      # base (half hour) = 12:00
+NOW = datetime(2026, 10, 18, 12, 7, tzinfo=timezone.utc)      # base (quarter hour) = 12:00
 
 
 class FakeApp:
@@ -76,10 +76,10 @@ class TestCellCursor(unittest.TestCase):
             g.handle("RIGHT")
         # Evening starts at 14:00, past the window's end: the window slides so it's the last column.
         self.assertEqual(g.sel_min, 120)
-        self.assertEqual(g.offset_min, 30)
-        self.assertEqual(g.window()[0], at(12, 30))
+        self.assertEqual(g.offset_min, 15)
+        self.assertEqual(g.window()[0], at(12, 15))
         g.handle("LEFT")
-        self.assertEqual((g.offset_min, g.sel_min), (30, 60))         # back to Later, no slide
+        self.assertEqual((g.offset_min, g.sel_min), (15, 60))         # back to Later, no slide
         g.handle("LEFT")
         g.handle("LEFT")
         self.assertEqual((g.offset_min, g.sel_min), (0, 0))           # the cell airing now: window back to now
@@ -109,9 +109,10 @@ class TestCellCursor(unittest.TestCase):
         g.handle("DOWN")                                              # no listings on Two
         self.assertIsNone(g.selected_program())
 
-    def test_a_row_without_listings_steps_by_half_hours(self):
+    def test_a_row_without_listings_steps_by_quarter_hours(self):
         g = self.g
         g.handle("DOWN")                                              # channel Two: no listings
+        g.handle("RIGHT")
         g.handle("RIGHT")
         self.assertEqual((g.offset_min, g.sel_min), (0, 30))
         g.handle("UP")                                                # back on One: the 12:30 cell is lit

@@ -194,6 +194,50 @@ class Text:
         s = s[:lo]
         return s.rstrip() + "..." if s else ""
 
+    def clip(self, font, s: str, max_w: int, width=None) -> str:
+        """The longest start of s that fits max_w, cut plain: no '...'
+        (in a grid the cut is plain to see, and the dots would cost the
+        letters that tell the shows apart). width: a measure other than
+        this face's own (condensed lettering)."""
+        width = width or self.width
+        if max_w <= 0:
+            return ""
+        if width(font, s) <= max_w:
+            return s
+        lo, hi = 0, len(s)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if width(font, s[:mid]) <= max_w:
+                lo = mid
+            else:
+                hi = mid - 1
+        return s[:lo].rstrip()
+
+    def lines(self, font, s: str, max_w: int, max_lines: int, width=None) -> tuple:
+        """([lines], whole): s word-wrapped into at most max_lines, a word
+        wider than the cell cut; whole is False when the last line had to
+        be clipped to hold the rest."""
+        width = width or self.width
+        words, lines, line = (s or "").split(), [], ""
+        for i, w in enumerate(words):
+            trial = f"{line} {w}".strip()
+            if width(font, trial) <= max_w:
+                line = trial
+                continue
+            if line:
+                lines.append(line)
+            if len(lines) == max_lines:
+                lines[-1] = self.clip(font, lines[-1] + " " + " ".join(words[i:]), max_w, width)
+                return lines, False
+            line = self.clip(font, w, max_w, width) if width(font, w) > max_w else w
+            if line != w:                   # a word cut: the rest can't follow it
+                if line:
+                    lines.append(line)
+                return lines, False
+        if line:
+            lines.append(line)
+        return lines, True
+
     def wrap(self, font, s: str, max_w: int, max_lines: int) -> list:
         """Word-wrap into at most max_lines; text that doesn't fit ends the
         last line with '...'."""
@@ -543,6 +587,46 @@ class Skin:
 
     def fb(self, size: int):
         return self.f(size, bold=True)
+
+    def cell_text(self, title: str, w: int, h: int, font_for, size: int, width=None, lead: int = 2) -> tuple:
+        """(font, [lines]) for a guide cell w by h: the whole title on one
+        line, the size stepping down to seven tenths; else whole on two
+        lines (where two fit the row), stepping down the same way; else at
+        `size`, two lines (one when two don't fit) with the end clipped.
+        A cell too narrow for three letters carries nothing: the cursor's
+        header names the programme. font_for(size) is the skin's face at
+        that size; width measures it (a condensed face measures its own).
+        lead: the gap between two lines."""
+        t = self.text
+        width = width or t.width
+        f = font_for(size)
+        if not title or w < width(f, "MMM"):
+            return f, []
+        if width(f, title) <= w:
+            return f, [title]
+        sizes = range(size - 1, int(size * 0.7) - 1, -1)
+        for s in sizes:
+            f = font_for(s)
+            if width(f, title) <= w:
+                return f, [title]
+        for s in (size,) + tuple(sizes):
+            f = font_for(s)
+            if 2 * t.ink(f)[1] + lead > h:
+                continue
+            lines, whole = t.lines(f, title, w, 2, width)
+            if whole:
+                return f, lines
+        f = font_for(size)
+        n = 2 if 2 * t.ink(f)[1] + lead <= h else 1
+        return f, t.lines(f, title, w, n, width)[0]
+
+    def label_every(self, col_w: int, label_w: int) -> int:
+        """How many columns apart the time ruler's labels sit: every column
+        when a label fits one, else every other, else every fourth."""
+        for n in (1, 2, 4):
+            if label_w + 6 <= col_w * n:
+                return n
+        return 4
 
     def hit(self, rect, fn):
         """Register a clickable region while drawing."""

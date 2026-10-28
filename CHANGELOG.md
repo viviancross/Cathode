@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.36
+
+- **The guide in quarter hours.** Every skin's grid now runs in 15-minute
+  columns (the ruler labels every column where its lettering fits, every
+  other where it doesn't), the cursor steps by the quarter hour on a row
+  without listings, and a tracking line marks the minute down every grid
+  (Classic had it; the Dish and DirecTV pages get one in their own colour).
+  The cell airing now sits in its own tint on every row, lit or not, so
+  what's on is plain without moving the cursor.
+- **Short programmes readable.** A guide cell too narrow for its title
+  tries the title smaller (to seven tenths), then on two lines, before
+  cutting it; cut titles are clipped plain rather than ending in "..."
+  (the dots cost the letters that tell the shows apart). A cell under
+  three letters wide carries nothing; the header names it on the cursor.
+- **Video Channels: a source's order and shuffle.** Each source has an
+  Order (as listed, reversed, by title) and a Shuffle switch; off, its
+  videos run in that order from the top at 4 AM, interleaved with the
+  channel's other sources as before. A big list's daily sample keeps the
+  list's order.
+- **Refresh schedule** on a video channel's page (where "Check sources
+  now" was): fetches the sources again, draws up today's running order
+  anew with your changes, and starts the channel over if it's on.
+
 ## 4.35
 
 - **Video Channels** (the Music channels of 4.34, grown up). A channel is

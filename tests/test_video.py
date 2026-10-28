@@ -135,6 +135,34 @@ class TestSchedule(unittest.TestCase):
         loose = vc.Schedule(chan(sources=("PLa",), min_seconds=0, skip_shorts=False, skip_live=False), listings(PLa=("Many", many)))
         self.assertEqual(len(loose.entries), 700)
 
+    def test_a_source_in_order_or_shuffled_and_a_refresh(self):
+        eps = episodes(5, "Bob")
+        day = datetime.now().date()
+
+        def ids(c):
+            return [e["id"] for e in vc.Schedule(c, listings(**{"@Bob": ("Bob", eps)}))._for(day)[0]]
+        c = chan(sources=("@Bob",))
+        c["sources"][0].update(shuffle=False)
+        self.assertEqual(ids(c), ["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"])          # as listed
+        c["sources"][0].update(order="reversed")
+        self.assertEqual(ids(c), ["Bob4", "Bob3", "Bob2", "Bob1", "Bob0"])
+        c["sources"][0].update(order="title")
+        self.assertEqual(ids(c), ["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"])          # "Episode 0 - Bob" ...
+        c["sources"][0].update(shuffle=True)
+        shuffled = ids(c)
+        self.assertEqual(sorted(shuffled), sorted(["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"]))
+        self.assertEqual(ids(c), shuffled)                                         # the same all day
+        c["seed"] = 12345                                                          # a refresh: drawn again
+        self.assertNotEqual(ids(c), shuffled)
+        # a big list's daily sample keeps the list's order when it isn't shuffled
+        many = songs(700, "Many")
+        c2 = chan(sources=("PLa",))
+        c2["sources"][0].update(shuffle=False)
+        order = [e["id"] for e in vc.Schedule(c2, listings(PLa=("Many", many)))._for(day)[0]]
+        self.assertEqual(len(order), vc.SAMPLE)
+        pos = {e["id"]: i for i, e in enumerate(many)}
+        self.assertEqual(order, sorted(order, key=pos.get))
+
 
 class TestGuide(unittest.TestCase):
     def test_episodes_get_their_own_programmes_and_songs_get_blocks(self):

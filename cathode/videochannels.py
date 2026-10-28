@@ -34,6 +34,7 @@ DAY_STARTS = 4                  # the broadcast day turns over at 4 AM, not midn
 LONG = 600                      # videos this long (median) get their own guide listings
 WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
 GUIDES = [("auto", "Auto"), ("video", "Per video"), ("blocks", "Half-hour blocks")]
+ORDERS = [("listed", "As listed"), ("reversed", "Reversed"), ("title", "By title")]
 MIN_SECONDS = [0, 30, 60, 120, 300, 600]
 MAX_SECONDS = [0, 1800, 3600, 7200, 10800, 14400, 28800]     # 0: any length
 
@@ -156,6 +157,7 @@ class Schedule:
         self.c = c
         self.cid = c["id"]
         self.sources = []           # [(url, weight, [entries])]
+        self.opts = {}              # url -> the source's settings (order, shuffle)
         self.dropped = set()
         min_s, max_s = c.get("min_seconds", 60), c.get("max_seconds", 0)
         for s in c.get("sources") or []:
@@ -174,6 +176,7 @@ class Schedule:
                     e["uploader"] = clean_name(lst.get("title", ""))
             if es:
                 self.sources.append((s["url"], max(0.0, float(s.get("weight", 1) or 0)), es))
+                self.opts[s["url"]] = s
         self._day = None
         self._order: list = []
         self._starts: list = []
@@ -191,12 +194,20 @@ class Schedule:
         if self._day == day:
             return self._order, self._starts
         samples, weights = [], []
+        seed = self.c.get("seed", 0)             # a refresh draws the day again
         for url, w, es in self.sources:
             es = [e for e in es if e["id"] not in self.dropped]
-            rnd = random.Random(f"{self.cid}:{url}:{day}")
-            if len(es) > SAMPLE:
-                es = rnd.sample(es, SAMPLE)
-            rnd.shuffle(es)
+            rnd = random.Random(f"{self.cid}:{url}:{day}" + (f":{seed}" if seed else ""))
+            if len(es) > SAMPLE:                 # a day's sample, kept in the list's order
+                es = [es[i] for i in sorted(rnd.sample(range(len(es)), SAMPLE))]
+            opt = self.opts.get(url, {})
+            order = opt.get("order", "listed")
+            if order == "reversed":
+                es.reverse()
+            elif order == "title":
+                es.sort(key=lambda e: e.get("title", "").lower())
+            if opt.get("shuffle", True):
+                rnd.shuffle(es)
             if es:
                 samples.append(es)
                 weights.append((w, sum(e["duration"] for e in es)))

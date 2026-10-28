@@ -382,10 +382,16 @@ class PlateHD(BoxSkin):
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
         day = start.astimezone()
         self.cb(c, f"{day:%a} {day:%b} {day.day}", fh, b["text"], X(64), hy)
-        slots = int(g.hours * 2)
-        cols = [X(251), X(583), X(917), X(1216)]       # the grid ends at the title-safe edge
+        slots = int(g.hours * 4)
+        col = (X(1216) - X(251)) / slots             # the grid ends at the title-safe edge
+        labels = [ampm(start + timedelta(minutes=15 * i)) for i in range(slots)]
+        every = self.label_every(col, max(t.width(fh, s) for s in labels) * 0.86)
         for i in range(slots):
-            self.cb(c, ampm(start + timedelta(minutes=30 * i)), fh, b["text"], (cols[i] + cols[i + 1]) // 2, hy, align="center")
+            x = X(251) + col * i
+            if i:                                   # a rule between the quarter hours, as the cells have
+                pygame.draw.rect(c, mix(b["hdr"], b["text"], 0.25 if i % every == 0 else 0.1), (int(x), hdr.y + Y(8), 2, hdr.h - Y(16)))
+            if i % every == 0:
+                self.cb(c, labels[i], fh, b["text"], int(x + col * every / 2), hy, align="center")
         rows = g.filtered()[g.top: g.top + g.rows]
         mins = g.hours * 60
         now = datetime.now(timezone.utc)
@@ -426,11 +432,22 @@ class PlateHD(BoxSkin):
                     pygame.draw.polygon(c, b["text"], [(cell.right - X(6), cell.centery), (cell.right - X(15), cell.centery - Y(9)),
                                                        (cell.right - X(15), cell.centery + Y(9))])
                 right = min(cell.right, X(1216))         # the lettering stays inside the title-safe area
-                if right - cell.x > X(40):
-                    self.cb(c, self.fit_cb(f_cell, p.title, right - cell.x - X(36)), f_cell, b["text"],
-                            (cell.x + right) // 2, cy, align="center")
+                l, r = cell.x + (X(18) if p.start < start else X(6)), right - (X(18) if p.stop > end else X(6))
+                f, lines = self.cell_text(p.title, r - l, rh - Y(6), lambda s: self.fb(Y(s)), 27,
+                                          width=lambda f, s: int(t.width(f, s) * 0.86))
+                lh = t.ink(f)[1]
+                ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
+                for line in lines:
+                    self.cb(c, line, f, b["text"], (l + r) // 2, ty, align="center")
+                    ty += lh + 2
             self.hit((0, y, W, rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                 setattr(g, "focus", "grid"), g.handle("SELECT")))
+        # The timeline: a gold rule down the grid at this minute.
+        off = (now - start).total_seconds() / 60
+        if 0 <= off <= mins and rows:
+            x = grid_x + int(off / mins * grid_w)
+            pygame.draw.rect(c, b["gold"], (x - 1, hdr.bottom, 3, Y(328) + len(rows) * Y(53) - Y(3) - hdr.bottom))
+            pygame.draw.polygon(c, b["gold"], [(x - Y(6), hdr.bottom - Y(7)), (x + Y(7), hdr.bottom - Y(7)), (x, hdr.bottom)])
         foot = Y(328) + g.rows * Y(53)            # the band under the last row: the keys
         fk = self.fb(Y(18))                        # the band the box's seven rows leave: as big as fits
         if H - foot >= t.ink(fk)[1] + Y(4):
@@ -1237,7 +1254,7 @@ class Plate(PlateHD):
         pygame.draw.rect(c, b["hdr"], self.R(597, 259, 43, 200))
         start, end = g.window()
         grid_x, grid_w = X(135), X(462)
-        slots = int(g.hours * 2)
+        slots = int(g.hours * 4)
         col = grid_w / slots
         fh = self.fb(Y(18))
         hy = hdr.y + (hdr.h - t.ink(fh)[1]) // 2
@@ -1246,12 +1263,15 @@ class Plate(PlateHD):
         ax = X(145)
         pygame.draw.polygon(c, b["text"], [(ax, hdr.y + Y(6)), (ax, hdr.bottom - Y(6)), (ax + X(7), hdr.centery)])
         rule = mix(b["hdr"], (0, 0, 0), 0.55)
+        labels = [ampm(start + timedelta(minutes=15 * i)).replace("am", " am").replace("pm", " pm") for i in range(slots)]
+        every = self.label_every(col, max(t.width(fh, s) for s in labels))
         for i in range(slots):
             x = grid_x + int(col * i)
             if i:
-                pygame.draw.rect(c, rule, (x - X(2), hdr.y + Y(2), X(2), hdr.h - Y(4)))
-            t.draw(c, ampm(start + timedelta(minutes=30 * i)).replace("am", " am").replace("pm", " pm"), fh, b["text"],
-                   x + int(col / 2), hy, align="center")
+                pygame.draw.rect(c, rule, (x - X(2), hdr.y + (Y(2) if i % every == 0 else hdr.h - Y(8)), X(2),
+                                           (hdr.h - Y(4)) if i % every == 0 else Y(6)))
+            if i % every == 0:
+                t.draw(c, labels[i], fh, b["text"], x + int(col * every / 2), hy, align="center")
         pygame.draw.rect(c, (0, 0, 0), self.R(0, 259, 597, 200))
 
         rows = g.filtered()[g.top: g.top + g.rows]
@@ -1279,27 +1299,31 @@ class Plate(PlateHD):
                     continue
                 cell = pygame.Rect(grid_x + int(a / mins * grid_w), y, int((e - a) / mins * grid_w) - X(3), rh)
                 on = row_sel and p.start <= sel < p.stop
-                self._cell(c, cell, on)
+                self._cell(c, cell, on, airing=p.start <= now < p.stop)
                 ink = b["sel_ink"] if on else b["cell_ink"]
                 mark = b["sel_ink"] if on else mix(b["text"], b["blue"], 0.12)
-                inset_l = inset_r = X(10)
+                inset_l = inset_r = X(5)
                 if p.start < start:
                     self._crescent(c, cell, mark, left=True)
-                    inset_l = X(18)
+                    inset_l = X(16)
                 if p.stop > end:
                     self._crescent(c, cell, mark, left=False)
-                    inset_r = X(18)
-                if cell.w > X(30):
-                    lines = [t.fit(f_cell, ln, cell.w - inset_l - inset_r)
-                             for ln in t.wrap(f_cell, p.title, cell.w - inset_l - inset_r, 2)]
-                    pitch = Y(17)
-                    ty = y + (rh - (len(lines) - 1) * pitch - t.ink(f_cell)[1]) // 2
-                    cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2
-                    for line in lines:
-                        t.draw(c, line, f_cell, ink, cx, ty, align="center")
-                        ty += pitch
+                    inset_r = X(16)
+                f, lines = self.cell_text(p.title, cell.w - inset_l - inset_r, rh - Y(4), lambda s: self.fb(Y(s)), 17)
+                lh = t.ink(f)[1]
+                ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
+                cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2
+                for line in lines:
+                    t.draw(c, line, f, ink, cx, ty, align="center")
+                    ty += lh + 2
             self.hit((0, y, X(597), rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                      setattr(g, "focus", "grid"), g.handle("SELECT")))
+        # The timeline: a rule down the grid at this minute, in the warning yellow.
+        off = (now - start).total_seconds() / 60
+        if 0 <= off <= mins and rows:
+            x = grid_x + int(off / mins * grid_w)
+            pygame.draw.rect(c, b["warn"], (x - 1, hdr.bottom, X(2), Y(261 + 46.7 * (len(rows) - 1)) + Y(42) - hdr.bottom))
+            pygame.draw.polygon(c, b["warn"], [(x - X(4), hdr.bottom - Y(5)), (x + X(5), hdr.bottom - Y(5)), (x, hdr.bottom)])
         if not rows:
             cell = pygame.Rect(0, Y(261), X(594), Y(42))
             self._cell(c, cell, False)
@@ -1350,12 +1374,15 @@ class Plate(PlateHD):
             surf = pygame.transform.flip(surf, True, False)
         c.blit(surf, (cell.x if left else cell.right - w, cell.y))
 
-    def _cell(self, c, cell, on):
+    def _cell(self, c, cell, on, airing=False):
+        """A cell: the box's blue, the chosen one pale; the one airing now
+        a lighter blue on every row."""
         b, Y = self.b, self.Y
         if on:
             pygame.draw.rect(c, b["sel"], cell)
         else:
-            pygame.draw.rect(c, b["blue"], cell)
+            fill = mix(b["blue"], b["text"], 0.22) if airing else b["blue"]
+            pygame.draw.rect(c, fill, cell)
             pygame.draw.rect(c, b["blue_hi"], (cell.x, cell.y, cell.w, Y(2)))
             pygame.draw.rect(c, b["blue_lo"], (cell.x, cell.bottom - Y(2), cell.w, Y(2)))
 

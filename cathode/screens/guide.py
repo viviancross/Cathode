@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from .. import remote as R
 from ..app import Screen
 
-SLOT = 30                   # minutes per LEFT/RIGHT step
+SLOT = 15                   # minutes per column, and per LEFT/RIGHT step without listings
 
 
 class Guide(Screen):
@@ -52,12 +52,12 @@ class Guide(Screen):
 
     @staticmethod
     def _base():
-        """Now, on the half hour: what offset_min and sel_min count from."""
+        """Now, on the quarter hour: what offset_min and sel_min count from."""
         now = datetime.now(timezone.utc)
         return now.replace(minute=(now.minute // SLOT) * SLOT, second=0, microsecond=0)
 
     def window(self):
-        """(start, end) of the visible time window, start on a half hour."""
+        """(start, end) of the visible time window, start on a quarter hour."""
         start = self._base() + timedelta(minutes=self.offset_min)
         return start, start + timedelta(hours=self.hours)
 
@@ -161,7 +161,7 @@ class Guide(Screen):
                 return
             target = min(beyond) if d > 0 else max(beyond)
         else:
-            target = self.sel_min + d * SLOT        # no listings: half-hour cells
+            target = self.sel_min + d * SLOT        # no listings: quarter-hour cells
         mins = self.hours * 60
         target = max(0, target)
         if target < self.offset_min:

@@ -2,6 +2,7 @@
 are saved straight away."""
 
 import os
+import time
 
 from . import autostart, remote as R
 from .screens.menu import DESCRIPTIONS, Item, Keyboard, Menu
@@ -881,12 +882,19 @@ def video_channel_page(app, cid):
         c[key] = not c.get(key, True)
         save(place=False)
 
-    def check():
-        app.toast("Fetching the sources again...", 60.0)
+    def refresh():
+        """The sources fetched again, today's running order drawn anew,
+        and the channel started over if it's on."""
+        c["seed"] = int(time.time())
+        cfg.save()
+        app.toast("Refreshing the schedule...", 60.0)
 
         def report():
             rows = vc.source_report(app, c)
-            app.toast("  ".join(f"{t or u}: {n}" for u, t, n, _w in rows) or "No sources yet.", 10.0)
+            app.toast("Schedule refreshed.  " + "  ".join(f"{t or u}: {n}" for u, t, n, _w in rows), 10.0)
+            ch = app.live.channel
+            if ch is not None and vc.is_video(ch) and vc.cid_of(ch) == cid and ch in app.channels:
+                app.live.tune(app.channels.index(ch))
         vc.load(app, done=report, cid=cid, fresh=True)
 
     def remove():
@@ -922,8 +930,9 @@ def video_channel_page(app, cid):
                   "starting in it. Auto: per video when the videos are long (episodes), blocks for songs."),
         Item("Lower-third", value=lambda: "On" if c.get("card", True) else "Off",
              adjust=lambda d: toggle("card"), help="The name card as each video starts and before it ends."),
-        Item("Check sources now", check,
-             help="Fetches every source's list of videos again and reports how many each has."),
+        Item("Refresh schedule", refresh,
+             help="Fetches every source's list again, draws up today's running order anew (your changes "
+                  "to the sources and their order included) and starts the channel over if it's on."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
     ]
 
@@ -989,6 +998,14 @@ def video_source_page(app, cid, i):
         s["weight"] = max(1, min(10, int(s.get("weight", 1) or 1) + d))
         done()
 
+    def order(d):
+        s["order"] = _cycle(vc.ORDERS, s.get("order", "listed"), d)
+        done()
+
+    def shuffle(d):
+        s["shuffle"] = not s.get("shuffle", True)
+        done()
+
     def move(d):
         j = i + d
         if 0 <= j < len(srcs):
@@ -1013,6 +1030,12 @@ def video_source_page(app, cid, i):
         Item("Link", edit, value=lambda: s["url"][-28:], help="The playlist, channel or @handle this source is."),
         Item("Weight", value=lambda: str(s.get("weight", 1)), adjust=weight,
              help="Its share of the airtime when the channel's weighting is Manual (1 to 10)."),
+        Item("Order", value=lambda: _label(vc.ORDERS, s.get("order", "listed")), adjust=order,
+             help="How its videos run before any shuffle: as the playlist or channel lists them "
+                  "(a channel: newest first), reversed (oldest first), or by title."),
+        Item("Shuffle", value=lambda: "On" if s.get("shuffle", True) else "Off", adjust=shuffle,
+             help="On: its videos in a fresh random order each day. Off: in the order above, "
+                  "from the top at 4 AM."),
         Item("Move up", lambda: move(-1), enabled=i > 0),
         Item("Move down", lambda: move(1), enabled=i < len(srcs) - 1),
         Item("Remove source", submenu=lambda: _confirm(app, "Remove source", remove, "Keep it")),
