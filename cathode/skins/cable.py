@@ -618,7 +618,7 @@ class CableSkin(BoxSkin):
                 draw_cell(c, cell, p.start <= now < p.stop, on, i, p)
                 ink = ink_for(on)
                 shadow = self.cell_shadow(on)
-                l, r = cell.x + X(5), min(cell.right, self.canvas[0] - X(4)) - X(5)
+                l, r = cell.x + X(self.CELL_PAD), min(cell.right, self.canvas[0] - X(4)) - X(5)
                 if p.start < start:
                     pygame.draw.polygon(c, ink, [(cell.x + X(3), cell.centery), (cell.x + X(8), cell.centery - Y(5)),
                                                  (cell.x + X(8), cell.centery + Y(5))])
@@ -636,7 +636,7 @@ class CableSkin(BoxSkin):
             self.hit((0, y, self.canvas[0], rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                              setattr(g, "focus", "grid"), g.handle("SELECT")))
         off = (now - start).total_seconds() / 60
-        if 0 <= off <= mins and rows:
+        if 0 <= off <= mins and rows and b.get("now_line"):     # a box that drew no line names none
             x = grid_x + int(off / mins * grid_w)
             pygame.draw.rect(c, b["now_line"], (x - 1, top - Y(2), X(2), len(rows) * pitch - (pitch - rh) + Y(2)))
         if not rows:
@@ -650,8 +650,11 @@ class CableSkin(BoxSkin):
         """The drop shadow under a cell's lettering, if the box drew one."""
         return None
 
-    def _time_header(self, c, g, hdr, grid_x, grid_w, f, ink, rule, day_x, space=False, day_fmt="{a} {m}/{d}"):
-        """The day at the left, the quarter hours over the grid."""
+    CELL_PAD = 5                    # a cell's lettering inset, in units
+
+    def _time_header(self, c, g, hdr, grid_x, grid_w, f, ink, rule, day_x, space=False, day_fmt="{a} {m}/{d}", centre=False):
+        """The day at the left, the quarter hours over the grid (centred in
+        their columns when `centre`)."""
         X, Y = self.X, self.Y
         start, _ = g.window()
         day = start.astimezone()
@@ -666,8 +669,11 @@ class CableSkin(BoxSkin):
             x = grid_x + col * i
             if (i + phase) % every == 0:
                 if i and rule:
-                    pygame.draw.rect(c, rule, (int(x) - 1, hdr.y + Y(4), max(1, X(1)), hdr.h - Y(8)))
-                self.tx(c, labels[i], f, ink, int(x) + X(6), hy)
+                    pygame.draw.rect(c, rule, (int(x) - 1, hdr.y + (0 if centre else Y(4)), max(1, X(1)), hdr.h - (0 if centre else Y(8))))
+                if centre:
+                    self.tx(c, labels[i], f, ink, int(x + col * every / 2), hy, align="center")
+                else:
+                    self.tx(c, labels[i], f, ink, int(x) + X(6), hy)
 
 
 class IGrid(CableSkin):
@@ -994,7 +1000,8 @@ class Passage(CableSkin):
     NO_SIGNAL = ("Not Available", "This channel is not available at this time.", "Please try again later.")
     BOOT_WORDS = ("Please wait...", "Acquiring channel data...")
     ATTENTION = "Notice"
-    ROWS, ROW_PITCH = 5, 30
+    ROWS, ROW_PITCH = 5, 29
+    CELL_PAD = 12
     LIST = (50, 216, 590, 194)
     OD_ROWS = 6
     # Measured off the frames: the silver page, the purple cell, the cream
@@ -1016,10 +1023,10 @@ class Passage(CableSkin):
         return {
             "page": page, "page_lo": mix(page, white, 0.55), "page_hi": mix(page, (0, 0, 0), 0.08),
             "card": cream, "card_edge": mix(cream, (0, 0, 0), 0.35), "ink": ink, "white": white, "text": ink,
-            "cell": cell, "lav": lav, "hdr": mix(cell, white, 0.08), "rule": mix(cell, white, 0.3),
-            "sel": dark, "sel_ink": cream, "sel_tile": mix(lav, (0, 0, 0), 0.45),
+            "cell": cell, "lav": lav, "hdr": (168, 157, 195), "rule": mix(cell, white, 0.3),
+            "sel": dark, "sel_ink": cream, "sel_tile": mix(lav, (0, 0, 0), 0.45), "gap": (61, 54, 85),
             "maroon": (118, 24, 62), "tab": (62, 52, 88), "navy": (40, 40, 110), "teal": (62, 132, 138),
-            "green": (84, 200, 60), "track": mix(cell, white, 0.4), "now_line": cell,
+            "green": (84, 200, 60), "track": mix(cell, white, 0.4), "now_line": None,
             "tile": (228, 228, 234), "tile_ink": mix(ink, (0, 0, 0), 0.3), "blue": (56, 90, 200),
             "panel": mix(cell, (0, 0, 0), 0.2), "col": mix(cell, (0, 0, 0), 0.05), "col_hdr": mix(lav, white, 0.2),
             "panel_ink": white, "panel_dim": mix(white, cell, 0.3), "list": (142, 157, 188), "list_ink": (40, 40, 110),
@@ -1052,27 +1059,40 @@ class Passage(CableSkin):
     # ── Pieces ────────────────────────────────────────────────────────────
 
     def _page(self, c, rect):
+        """The silver page as the frames shade it: dark just under the top,
+        brightest at mid height, darker again at the foot."""
         if self.hold_backdrop(rect, self._page):
             return
         rect = pygame.Rect(rect)
-        vgrad(c, rect, rgba(self.b["page_hi"]), rgba(self.b["page_lo"]))
-        glow = pygame.Surface(rect.size, pygame.SRCALPHA)
-        for k in range(6, 0, -1):                       # the frames' highlight, top left
-            pygame.draw.ellipse(glow, (255, 255, 255, 12), (-rect.w // 3, -rect.h // 2 - k * rect.h // 12,
-                                                             rect.w + k * rect.w // 8, rect.h + k * rect.h // 6))
-        c.blit(glow, rect.topleft)
+        Y = self.Y
+        stops = [(0, 234), (Y(40), 189), (Y(240), 255), (Y(480), 180)]
+        for (y0, g0), (y1, g1) in zip(stops, stops[1:]):
+            y0, y1 = rect.y + y0, rect.y + y1
+            if y1 > y0:
+                vgrad(c, (rect.x, y0, rect.w, y1 - y0), rgba((g0, g0, g0)), rgba((g1, g1, g1)))
 
     def guide_video_box(self):
         r = self.R(320, 0, 320, 200)
         return (r.x, r.y, r.w, r.h)
 
     def _card(self, c, r):
-        """The cream card: a tab with a big rounded top-left corner, square
-        where the header hangs off its foot and the picture meets it."""
-        b, Y = self.b, self.Y
-        pygame.draw.rect(c, b["card"], r, border_top_left_radius=Y(22))
-        pygame.draw.rect(c, b["card_edge"], r, 1, border_top_left_radius=Y(22))
-        pygame.draw.rect(c, (255, 255, 255), (r.x, r.bottom - 1, r.w, 1))
+        """The cream card: a tab with one big rounded top-left corner, cream
+        at the top running to olive at the foot, a soft shade inward from
+        its left edge, square where the header hangs off it and the picture
+        meets it."""
+        b, X, Y = self.b, self.X, self.Y
+        card = pygame.Surface(r.size, pygame.SRCALPHA)
+        vgrad(card, card.get_rect(), rgba(b["card"]), rgba(mix(b["card"], (0, 0, 0), 0.24)))
+        for i in range(X(10)):                                  # the shade inward from the left edge
+            k = 1 - i / X(10)
+            shade = pygame.Surface((1, r.h), pygame.SRCALPHA)
+            shade.fill((40, 40, 20, int(130 * k * k)))
+            card.blit(shade, (i, 0))
+        mask = pygame.Surface(r.size, pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_top_left_radius=Y(22))
+        card.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        c.blit(card, r.topleft)
+        pygame.draw.rect(c, mix(b["card"], (0, 0, 0), 0.45), r, 1, border_top_left_radius=Y(22))
 
     def _logo_disc(self, c, ch, x, y, size):
         """The channel's logo, else its number on a blue disc."""
@@ -1120,98 +1140,112 @@ class Passage(CableSkin):
         self.tx(c, "SEL", f, b["white"], x + X(10), cy - Y(4), align="center")
 
     def _keybar(self, c, y, keys, active=None):
-        """Keys along the foot: the chip, the word bold, the active one in a
-        navy box with a white edge."""
+        """Keys along the foot: the chip and the word in a wide bold; the
+        active one in a light box with a navy edge, as the frame draws it."""
         b, X, Y = self.b, self.X, self.Y
-        f = self.fb(Y(18))
+        f = self.wb(Y(14))
         for k, (letter, word, fn) in enumerate(keys):
             x = X(290 + k * 112)
-            box = pygame.Rect(x - X(12), y - Y(6), X(104), Y(34))
+            box = pygame.Rect(x - X(14), y - Y(5), X(96), Y(32))
             if active == k:
-                pygame.draw.rect(c, b["navy"], box, border_radius=Y(6))
-                pygame.draw.rect(c, b["white"], box, 1, border_radius=Y(6))
-            cy = y + Y(10)
+                pygame.draw.rect(c, mix(b["lav"], (255, 255, 255), 0.6), box, border_radius=Y(5))
+                pygame.draw.rect(c, b["navy"], box, max(1, Y(2)), border_radius=Y(5))
+            cy = y + Y(11)
             self._key(c, letter, x, cy)
-            self.tx(c, self.fit(f, word, X(70)), f, b["white"] if active == k else b["ink"], x + X(24), y)
+            self.tx(c, self.fit(f, word, X(62)), f, b["navy"] if active == k else b["ink"], x + X(24), y + Y(2))
             if fn:
                 self.hit(box, fn)
 
     # ── Guide ─────────────────────────────────────────────────────────────
 
     def draw_guide(self, c, g):
+        """The guide frame, pixel for pixel: the card x 53-316, y 45-223 with
+        the channel disc, call sign and number, title, hours, rating chip and
+        synopsis; the picture x 320-640, y 0-200 over the maroon strip; the
+        header y 223-248 with a light rule on top, the day in a wide bold at
+        the left and the half hours between white rules; five rows 26 tall
+        on a 29 pitch from y 254: the lavender column x 55-178 rounded at its
+        foot, the dark grid panel from x 178 with purple cells in 3px gaps
+        and a small radius at its top-left; the chosen row dark with cream
+        lettering; the mark and the keys along the foot."""
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._page(c, (0, 0, W, H))
         self._picture(c)
         sel, cur = g.selected(), g.selected_program()
         self._strip(c, sel)
-        card = self.R(50, 30, 266, 200)
+        card = self.R(53, 45, 263, 178)
         self._card(c, card)
-        self._logo_disc(c, sel, X(72), Y(52), Y(46))
+        self._logo_disc(c, sel, X(70), Y(56), Y(44))
         f_call, f_num = self.wb(Y(15)), self.wb(Y(13))
+        dark = mix(b["ink"], (0, 0, 0), 0.4)
         if sel:
-            self.tx(c, call(sel), f_call, b["ink"], X(128), Y(54))
-            self.tx(c, str(sel.number), f_num, b["ink"], X(128), Y(74))
+            self.tx(c, call(sel), f_call, dark, X(126), Y(58))
+            self.tx(c, str(sel.number), f_num, dark, X(126), Y(78))
         f_title, f_time, f_desc = self.f(Y(18)), self.wb(Y(14)), self.f(Y(16))
         title = cur.title if cur else (sel.name if sel else "")
-        self.tx(c, self.fit(f_title, title, X(240)), f_title, b["ink"], X(66), Y(110))
+        self.tx(c, self.fit(f_title, title, X(240)), f_title, dark, X(66), Y(108))
         if cur:
-            self.tx(c, f"{ampm(cur.start)} – {ampm(cur.stop)}", f_time, b["ink"], X(66), Y(129))
-            x0, y = X(66), Y(149)
+            self.tx(c, f"{ampm(cur.start)} \u2013 {ampm(cur.stop)}", f_time, dark, X(66), Y(128))
+            x0, y = X(66), Y(148)
             if cur.rating:
-                chip = pygame.Rect(x0, y + Y(2), self.width(self.fb(Y(12)), cur.rating) + X(8), Y(14))
+                fr = self.wb(Y(11))
+                chip = pygame.Rect(x0, y + Y(2), self.width(fr, cur.rating) + X(8), Y(14))
                 pygame.draw.rect(c, b["tab"], chip, border_radius=Y(2))
-                self.tx(c, cur.rating, self.fb(Y(12)), b["white"], chip.centerx, self.mid(chip, self.fb(Y(12))), align="center")
+                self.tx(c, cur.rating, fr, b["white"], chip.centerx, self.mid(chip, fr), align="center")
                 x0 = chip.right + X(6)
-            lines = self.wrap(f_desc, cur.description or "", X(250), 4)
+            lines = self.wrap(f_desc, cur.description or "", X(246), 4)
             if len(lines) > 3:
                 lines = lines[:3]
-                lines[-1] = self.fit(f_desc, lines[-1] + " ...", X(250))
+                lines[-1] = self.fit(f_desc, lines[-1] + " ...", X(246))
             for k, ln in enumerate(lines):
-                self.tx(c, ln, f_desc, b["ink"], x0 if k == 0 else X(66), y)
-                y += Y(19)
+                self.tx(c, ln, f_desc, dark, x0 if k == 0 else X(66), y)
+                y += Y(21)
         elif sel:
-            self.tx(c, "No information available.", f_desc, b["ink"], X(66), Y(149))
-        # The time header: the day in its own cell, the half hours between white rules.
-        hdr = self.R(50, 226, 590, 22)
+            self.tx(c, "No information available.", f_desc, dark, X(66), Y(148))
+        # The header, hung off the card's foot.
+        hdr = self.R(53, 223, 587, 25)
         pygame.draw.rect(c, b["hdr"], hdr)
-        pygame.draw.rect(c, mix(b["hdr"], (0, 0, 0), 0.3), (hdr.x, hdr.bottom - 1, hdr.w, 1))
-        fh = self.wb(Y(13))
-        grid_x, grid_w = X(185), X(455)
-        pygame.draw.rect(c, b["white"], (grid_x - X(3), hdr.y, 1, hdr.h))
-        self._time_header(c, g, hdr, grid_x, grid_w, fh, b["white"], b["white"], X(58), space=True, day_fmt="{a}.{m}/{d}")
-        top, pitch, rh = Y(250), Y(30), Y(30)
-        W_ = self.canvas[0]
+        pygame.draw.rect(c, mix(b["hdr"], (255, 255, 255), 0.5), (hdr.x, hdr.y, hdr.w, max(1, Y(2))))
+        fh = self.wb(Y(14))
+        grid_x, grid_w = X(181), X(459)
+        pygame.draw.rect(c, b["white"], (X(184), hdr.y + Y(2), 1, hdr.h - Y(2)))
+        self._time_header(c, g, hdr, grid_x, grid_w, fh, b["navy"], b["white"], X(60), space=True, day_fmt="{a}.{m}/{d}", centre=True)
+        top, pitch, rh = Y(254), Y(29), Y(26)
+        rows_n = g.rows
+        col = pygame.Rect(X(55), top, X(123), rows_n * pitch - (pitch - rh))
+        grid = pygame.Rect(X(178), top, W - X(178), rows_n * pitch - (pitch - rh))
+        # The column and the grid panel, cut to the frames' shapes.
+        sheet = pygame.Surface(c.get_size(), pygame.SRCALPHA)
+        pygame.draw.rect(sheet, b["lav"], col, border_bottom_left_radius=Y(14))
+        pygame.draw.rect(sheet, b["gap"], grid, border_top_left_radius=Y(6), border_bottom_left_radius=Y(6))
 
         def tile(cc, r, ch, on):
-            r = pygame.Rect(X(50), r.y, X(130), r.h)
-            pygame.draw.rect(cc, b["sel_tile"] if on else b["lav"], r)
-            pygame.draw.rect(cc, mix(b["lav"], (0, 0, 0), 0.4), (r.x, r.bottom - 2, r.w, 2))       # the rule under each
+            r = pygame.Rect(col.x, r.y, col.w, r.h)
+            if on:
+                pygame.draw.rect(cc, b["sel_tile"], r)
             ft = self.f(Y(17))
-            self.tx(cc, call(ch), ft, b["white"], r.x + X(18), self.mid(r, ft))
-            self.tx(cc, f"{ch.number:02d}" if ch.number < 100 else str(ch.number), ft, b["white"], r.right - X(12), self.mid(r, ft), align="right")
+            self.tx(cc, call(ch), ft, b["white"] if on else b["navy"], r.x + X(14), self.mid(r, ft))
+            self.tx(cc, f"{ch.number:02d}" if ch.number < 100 else str(ch.number), ft, b["white"] if on else b["navy"],
+                    r.right - X(10), self.mid(r, ft), align="right")
             if self.app.is_favorite(ch):
-                pygame.draw.polygon(cc, b["card"], [(r.x + X(4), r.y + Y(3)), (r.x + X(11), r.y + Y(3)), (r.x + X(4), r.y + Y(10))])
+                pygame.draw.polygon(cc, b["card"], [(r.x + X(3), r.y + Y(3)), (r.x + X(10), r.y + Y(3)), (r.x + X(3), r.y + Y(10))])
 
         def cell(cc, r, airing, on, i, p):
             cat = (p.category or "").lower() if p else ""
             fill = b["sel"] if on else b["maroon"] if ("movie" in cat or "film" in cat) else b["cell"]
             pygame.draw.rect(cc, fill, r)
-            pygame.draw.rect(cc, b["rule"], r, 1)                                                   # the light rule round each
-        # Drawn on a sheet and cut to the frames' shapes: the column and the
-        # grid are panels rounded at the left, not rows of tiles.
-        sheet = pygame.Surface(c.get_size(), pygame.SRCALPHA)
-        rows = self._grid(sheet, g, grid_x, grid_w, top, pitch, rh, 0, 17, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
-        h = max(1, len(rows)) * pitch
+        self._grid(sheet, g, grid_x, grid_w, top, pitch, rh, X(3), 17, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
         mask = pygame.Surface(c.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), (X(50), top, X(130), h), border_bottom_left_radius=Y(16))
-        pygame.draw.rect(mask, (255, 255, 255, 255), (grid_x - X(3), top, W_ - grid_x + X(3), h),
-                         border_top_left_radius=Y(12), border_bottom_left_radius=Y(12))
+        pygame.draw.rect(mask, (255, 255, 255, 255), col, border_bottom_left_radius=Y(14))
+        pygame.draw.rect(mask, (255, 255, 255, 255), grid, border_top_left_radius=Y(6), border_bottom_left_radius=Y(6))
         sheet.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         c.blit(sheet, (0, 0))
-        self.wordmark(c, X(46), Y(426), Y(16))
+        pygame.draw.rect(c, mix(b["lav"], (255, 255, 255), 0.3), (grid.x, grid.bottom, W - grid.x, max(1, Y(2))))
+        # The foot: the mark, and A Time / B Theme / C Search.
+        self.wordmark(c, X(46), Y(428), Y(14))
         name = g.category if g.category != "All" else "Theme"
-        self._keybar(c, Y(418), [("A", "Time", None), ("B", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
+        self._keybar(c, Y(420), [("A", "Time", None), ("B", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
                                  ("C", "Search", None)], 1 if g.focus == "category" else 0)
 
     def cell_lines(self, title, w, h, size):
@@ -1246,71 +1280,78 @@ class Passage(CableSkin):
         self.tx(c, call(ch), f, b["tile_ink"], r.x + X(122), r.y + Y(10))
         self.tx(c, str(ch.number), f, b["tile_ink"], r.x + X(122), r.y + Y(32))
 
-    def _tile_shape(self, c, band, ch):
-        """The frame's channel tile: light, rising into a rounded tab that
-        holds the clock, its right edge slanting down into the band."""
-        from pygame import gfxdraw
-        b, X, Y = self.b, self.X, self.Y
-        rise, r = Y(18), Y(12)
-        pts = [(0, band.y), (X(78), band.y), (X(78), band.y - rise), (X(160), band.y - rise)]
-        # The rounded top-right corner of the tab, then the slant to the band's foot.
-        import math
-        for k in range(1, 7):
-            ang = -math.pi / 2 + k * (math.pi / 2) / 6
-            pts.append((X(160) + int(r * math.cos(ang)) + 0, band.y - rise + r + int(r * math.sin(ang))))
-        pts += [(X(186), band.bottom), (0, band.bottom)]
-        gfxdraw.aapolygon(c, pts, b["tile"])
-        gfxdraw.filled_polygon(c, pts, b["tile"])
-        f = self.wb(Y(13))
-        self.tx(c, ampm(datetime.now(), True), f, b["tile_ink"], X(124), band.y - rise + Y(2), align="center")
-        self._logo_disc(c, ch, X(52), band.y + Y(14), Y(42))
-        fc = self.wb(Y(14))
-        self.tx(c, call(ch), fc, b["tile_ink"], X(122), band.y + Y(12))
-        self.tx(c, str(ch.number), fc, b["tile_ink"], X(122), band.y + Y(34))
-
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
+        """The banner frame, pixel for pixel: the band y 363-441, its title
+        strip dark purple to y 392 and its lower strip lavender; the light
+        channel tile x 0-178 from y 356, taller than the band, with the clock
+        on a grey strip, a dark rule under it and the logo, call sign and
+        number on white; the tile's right edge slanting down from x 176 to
+        x 203 across the band; the title in a wide bold, the hours, the
+        start and end times, the green line with its ticks, the navy time
+        tab with its pointer, the blue arrow; a shadow under it all."""
+        from pygame import gfxdraw
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         if full:
             self._full_banner(c, ch, cur, nxt)
             return
-        band = self.R(0, 367, 640, 70)
-        self._band(c, band, b["cell"])
-        # The band lightens toward the tile's slant, as the frame's does.
-        sweep = pygame.Surface((X(150), band.h), pygame.SRCALPHA)
-        for i in range(sweep.get_width()):
-            sweep.fill((255, 255, 255, int(70 * (1 - i / sweep.get_width()))), (i, 0, 1, band.h))
-        c.blit(sweep, (X(180), band.y))
-        pygame.draw.rect(c, mix(b["cell"], (255, 255, 255), 0.6), (X(180), band.y, self.canvas[0] - X(180), 1))
-        pygame.draw.rect(c, mix(b["cell"], (0, 0, 0), 0.35), (0, band.bottom - 1, self.canvas[0], 1))
-        self._tile_shape(c, band, ch)
-        f_title, f_hours, f_small = self.wb(Y(16)), self.f(Y(17)), self.f(Y(15))
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(270)), f_title, b["white"], X(195), band.y + Y(5))
+        band = self.R(0, 363, 640, 78)
+        title_h = Y(29)
+        dark, lav = mix(b["cell"], (0, 0, 0), 0.3), mix(b["cell"], (255, 255, 255), 0.45)
+        vgrad(c, (0, band.y, W, title_h), rgba(mix(dark, (0, 0, 0), 0.1)), rgba(mix(dark, (255, 255, 255), 0.08)))
+        vgrad(c, (0, band.y + title_h, W, band.h - title_h), rgba(lav), rgba(mix(lav, (255, 255, 255), 0.12)))
+        pygame.draw.rect(c, mix(dark, (0, 0, 0), 0.5), (0, band.y, W, max(1, Y(2))))
+        shadow = pygame.Surface((W, Y(6)), pygame.SRCALPHA)
+        for i in range(Y(6)):
+            shadow.fill((0, 0, 0, int(150 * (1 - i / Y(6)))), (0, i, W, 1))
+        c.blit(shadow, (0, band.bottom))
+        # The tile.
+        tile_top = Y(356)
+        pts = [(0, tile_top), (X(176), tile_top), (X(203), band.bottom), (0, band.bottom)]
+        tile = pygame.Surface((X(210), band.bottom - tile_top), pygame.SRCALPHA)
+        vgrad(tile, (0, 0, X(210), Y(24)), rgba((196, 196, 198)), rgba((206, 206, 208)))
+        pygame.draw.rect(tile, (40, 40, 44), (0, Y(24), X(210), max(1, Y(2))))
+        vgrad(tile, (0, Y(26), X(210), band.bottom - tile_top - Y(26)), rgba((252, 252, 253)), rgba((220, 220, 224)))
+        mask = pygame.Surface(tile.get_size(), pygame.SRCALPHA)
+        gfxdraw.aapolygon(mask, [(x, y - tile_top) for x, y in pts], (255, 255, 255, 255))
+        gfxdraw.filled_polygon(mask, [(x, y - tile_top) for x, y in pts], (255, 255, 255, 255))
+        tile.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        c.blit(tile, (0, tile_top))
+        ink = (30, 30, 34)
+        self.tx(c, ampm(datetime.now(), True), self.wb(Y(13)), ink, X(166), tile_top + Y(4), align="right")
+        logo = self.channel_logo(ch, X(50), Y(22))
+        if logo:
+            c.blit(logo, logo.get_rect(center=(X(84), Y(404))))
+        else:
+            self._logo_disc(c, ch, X(62), Y(392), Y(26))
+        self.tx(c, call(ch), self.f(Y(16)), ink, X(166), Y(383), align="right")
+        self.tx(c, str(ch.number), self.wb(Y(15)), ink, X(166), Y(404), align="right")
+        # The title strip.
+        f_title, f_hours, f_small = self.wb(Y(14)), self.f(Y(16)), self.f(Y(15))
+        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(300)), f_title, b["white"], X(196), band.y + Y(7))
         if cur:
-            self.tx(c, f"{ampm(cur.start)[:-1]} - {ampm(cur.stop)[:-1]}", f_hours, b["white"], X(603), band.y + Y(5), align="right")
+            self.tx(c, f"{ampm(cur.start)[:-1]} - {ampm(cur.stop)[:-1]}", f_hours, b["white"], X(603), band.y + Y(6), align="right")
             now = datetime.now(timezone.utc)
             frac = max(0.0, min(1.0, (now - cur.start).total_seconds() / max(1, (cur.stop - cur.start).total_seconds())))
-            line = pygame.Rect(X(240), band.y + Y(53), X(275), Y(8))
-            pygame.draw.rect(c, b["track"], line, border_radius=Y(4))
-            pygame.draw.rect(c, b["green"], (line.x, line.y, int(line.w * frac), line.h), border_radius=Y(4))
-            pygame.draw.rect(c, b["navy"], line, 1, border_radius=Y(4))
+            line = pygame.Rect(X(246), Y(421), X(266), Y(10))
+            pygame.draw.rect(c, mix(b["cell"], (0, 0, 0), 0.1), line, border_radius=Y(5))
+            pygame.draw.rect(c, b["green"], (line.x, line.y, max(Y(10), int(line.w * frac)), line.h), border_radius=Y(5))
+            pygame.draw.rect(c, mix(b["cell"], (0, 0, 0), 0.4), line, 1, border_radius=Y(5))
             for k in (1, 2, 3):
-                pygame.draw.rect(c, b["navy"], (line.x + line.w * k // 4, line.y - Y(1), 1, line.h + Y(2)))
-            self.tx(c, ampm(cur.start)[:-2], f_small, b["white"], X(195), band.y + Y(46))
-            self.tx(c, ampm(cur.stop)[:-2], f_small, b["white"], X(522), band.y + Y(46))
-            dot = (line.x + int(line.w * frac), line.centery)
-            pygame.draw.circle(c, b["white"], dot, Y(4))
-            mark = pygame.Rect(0, band.y + Y(27), X(52), Y(18))
-            mark.centerx = dot[0]
-            pygame.draw.rect(c, b["navy"], mark, border_radius=Y(4))
-            pygame.draw.polygon(c, b["navy"], [(dot[0] - X(5), mark.bottom - 1), (dot[0] + X(5), mark.bottom - 1), (dot[0], mark.bottom + Y(5))])
-            fm = self.fb(Y(13))
-            self.tx(c, ampm(datetime.now())[:-2], fm, b["white"], mark.centerx, self.mid(mark, fm), align="center")
-            pygame.draw.polygon(c, b["blue"], [(X(575), band.y + Y(50)), (X(575), band.y + Y(64)), (X(588), band.y + Y(57))])
+                pygame.draw.rect(c, mix(lav, (255, 255, 255), 0.3), (line.x + line.w * k // 4, line.y, max(1, X(2)), line.h))
+            self.tx(c, ampm(cur.start)[:-2], f_small, b["white"], X(196), Y(414))
+            self.tx(c, ampm(cur.stop)[:-2], f_small, b["white"], X(516), Y(414))
+            tab = pygame.Rect(0, Y(391), X(54), Y(17))
+            tab.centerx = line.x + int(line.w * frac)
+            pygame.draw.rect(c, b["navy"], tab, border_radius=Y(4))
+            pygame.draw.polygon(c, b["navy"], [(tab.centerx - X(5), tab.bottom - 1), (tab.centerx + X(5), tab.bottom - 1), (tab.centerx, tab.bottom + Y(6))])
+            fm = self.f(Y(14))
+            self.tx(c, ampm(datetime.now())[:-2], fm, b["white"], tab.centerx, self.mid(tab, fm), align="center")
+            pygame.draw.polygon(c, b["key_sel"], [(X(574), Y(420)), (X(574), Y(432)), (X(588), Y(426))])
         else:
-            self.tx(c, "No information available", f_small, b["white"], X(195), band.y + Y(36))
+            self.tx(c, "No information available", f_small, b["white"], X(196), Y(414))
         if tag:
-            self.tx(c, tag, f_small, b["card"], X(603), band.y + Y(28), align="right")
+            self.tx(c, tag, f_small, b["card"], X(603), Y(395), align="right")
         if self._tick is None or self._tick[0] <= time.monotonic():
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
 

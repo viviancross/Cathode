@@ -319,11 +319,21 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   that the time header and the channel column hang off; the column and
   the grid are panels rounded at the left (the column 16, the grid 12),
   the column's rows split by dark 2px rules, the cells by a light 1px
-  rule round each, not gapped tiles; the banner's light channel tile
-  rises into a rounded tab holding the clock and its right edge slants
-  down into the band, which lightens toward the slant and carries a
-  light rule along its top; the Browse column rounds its top-right
-  corner (18) and runs straight down into the band. Measured: a silver
+  rule round each, not gapped tiles (third pass, measured by scan line:
+  the card x 53-316, y 45-223, cream running to olive with a shade
+  inward from its left edge; the header y 223-248 with a light rule on
+  top and the labels centred in their half-hour cells; rows 26 tall on a
+  29 pitch from y 254, the column x 55-178 rounded 14 at its foot, the
+  dark (61,54,85) grid panel from x 178 with 3px gaps and a 6 radius at
+  its left corners, cell lettering inset 12; no now-line, the box drew
+  none; the page shaded dark at y 40, brightest at y 240, darker at the
+  foot); the banner's light channel tile x 0-178 starts at y 356, above
+  the band (y 363-441), with the clock on a grey strip, a dark rule under
+  it and the logo, call sign and number on white, its right edge slanting
+  from x 176 at the top to x 203 at the band's foot; the band's title
+  strip (29 tall) dark purple, its lower strip lavender, a dark rule on
+  top and a shadow beneath; the Browse column rounds its top-right corner
+  (18) and runs straight down into the band. Measured: a silver
   page (206,206,216 running lighter to the foot, a white glow top left);
   the cream (246,241,186) card x 50-316, y 30-226,
   the channel disc at (72,52) 46 wide, the call sign bold 17 and number
