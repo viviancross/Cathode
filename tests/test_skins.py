@@ -267,7 +267,7 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
             self.assertEqual(classes[name].tune_cover, "black", name)
 
     def test_sd_skins_are_four_by_three(self):
-        for name in ("indirect", "plate"):
+        for name in ("indirect", "plate", "igrid", "passage", "wayfinder"):
             w, h = skin_classes()[name].canvas
             self.assertAlmostEqual(w / h, 4 / 3, places=2)
 
@@ -276,7 +276,7 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
             app = FakeApp()
             skin = cls(app)
             box = skin.guide_video_box()
-            if box == "hidden":             # a full-page guide (the DSS had no picture window)
+            if box in ("hidden", "full"):   # a full-page guide (the DSS had none), or the picture behind it (Y1)
                 continue
             x, y, w, h = box
             W, H = skin.canvas

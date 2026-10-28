@@ -29,11 +29,14 @@ Picture & Style > Skin**:
   browse); SD after the 2005 receivers (grey page with the blue tab of
   pills, blue cells with a pale selection, a bare banner, 4:3).
 - **The cable boxes**: four after the guides the US cable companies leased
-  out. **Calmcast i-Grid** (2006: a navy grid, yellow cursor, the picture
-  top-right), **Passage** (2004: a charcoal grid, gold cursor, the picture
-  top-left), **Wayfinder HD** (2009: a white grid on silver, blue cursor, a
-  graphite title bar) and **Y1** (2014: black pages, a white cursor, the
-  Main Menu a row of words over the picture). All four draw 16:9.
+  out, drawn to their manuals' and demos' frames. **Calmcast i-Grid**
+  (2006: navy pages, a blue grid with steel channel tiles, a pale yellow
+  cursor, capsule menus, 4:3), **Passage** (2004: a silver page, a cream
+  card for the programme, a purple grid, the A / B / C key bar, condensed
+  lettering, 4:3), **Wayfinder** (2010: blue on blue, a white card, navy
+  tiles, a gold cursor, 4:3) and **Y1** (2014: everything over the dimmed
+  picture, a charcoal grid, a light face, blue for the chosen, the Main
+  Menu a row of words).
 
 Each skin keeps its own colour theme and font. Every skin can use any colour
 theme, the colour editor, any font, and the CRT scanlines and vignette.

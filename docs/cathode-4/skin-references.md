@@ -277,37 +277,93 @@ the size down to fit before any ellipsis.
 
 ## The cable boxes (4.39)
 
-Four skins from one parametric page (`cathode/skins/cable.py`), after the
-leased cable guides. No video frames were measured for these (2026-10-28):
-the layouts are from memory of the boxes, and every geometry is in
-1280x720 pixels, shared. What each one keeps of its box:
+Four skins (`cathode/skins/cable.py`) after the leased cable guides, drawn
+to frames gathered 2026-10-28. Geometry is in 640x480 units (the SD
+frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
 
-- **Calmcast i-Grid** (the Motorola DCT-era interactive guide, ~2006): a
-  navy (14,30,92) page, blue (38,66,158) cells with the alternate rows a
-  shade darker, grey-blue channel tiles with the number over the call
-  sign, a steel (150,165,200) time header with dark lettering, a yellow
-  (255,204,0) cursor with dark ink, the picture top-right with the chosen
-  programme described at its left, the list name and clock under that.
-  Main Menu: a list at the left, the picture and its help at the right.
-  Dead channel: "One Moment Please / This channel should be available
+- **Calmcast i-Grid**: the TV Guide i-Guide on Motorola DCT boxes, from the
+  DCT6412 "inside i-Guide" reference manual's screens (mlgc.com and
+  glwb.net host the PDF; 640x480 frames). Measured: a navy (16,38,98)
+  header 56 tall with the stacked "DIGITAL CABLE" mark at x 48, the clock
+  "7:03pm" at x 330 and the red TV GUIDE tile at x 335-390; the picture
+  x 400-640, y 0-180 (a 240x180 window); under the header a blue
+  (74,112,178 -> 46,86,156) info panel with the title in yellow
+  (255,240,120) at (48,64), "28 A&E" white at the right, "7-8p" and the
+  rating, the description in white 12px bold; a navy (12,30,80) time bar
+  y 228-250 with "Today", an icon, "7:00p | 7:30p | 8:00p" and an arrow;
+  four rows 42 tall on a 45 pitch from y 253: steel (166,186,218) channel
+  tiles x 0-128 with the number over the call sign in navy, blue
+  (30,70,150) cells, green (10,110,40) for sports and purple (90,30,130)
+  for movies, the chosen cell pale yellow (250,245,160) with navy
+  lettering, 3px dark gaps; a lighter blue band at the foot with rounded
+  lower corners (the box's ad strip; ours carries the keys). Banner: a
+  navy bar y 386-420 with the title in yellow and "48 SPIKE | 7:03pm" at
+  the right, over a lighter blue body with "7-7:30p" and the description,
+  rounded at the foot. Main Menu: the header, the chosen item's name and
+  help in the info panel ("Search Menu / Find programs by title, time, or
+  category"), two columns of capsule buttons (blue with a pale rim; the
+  chosen yellow) 26 tall on a 42 pitch from y 196 at x 58 and 326. Lists
+  (Favorites Setup, Digital Music): a grey tile and a navy row, the
+  chosen row yellow. Dialogs (Reminder Options, Enter Locks PIN): a
+  rounded navy box with a pale rim, the title in yellow. The box's dead
+  channel card: "One Moment Please / This channel should be available
   shortly / Ref code: S0a00".
-- **Passage** (the Scientific Atlanta-era guide, ~2004): charcoal (20,20,26)
-  page, slate (58,66,88) cells, a gold (236,184,40) cursor, the picture
-  top-left and the description at its right.
-- **Wayfinder HD** (the later Time Warner guide, ~2009): a silver
-  (226,229,234) page, white cells with grey rules, dark lettering, a blue
-  (22,92,196) cursor with white ink, a graphite (50,56,70) header and title
-  bar, a dark banner over the picture.
-- **Y1** (the 2014 Comcast box): black (10,10,12) pages, charcoal (36,36,40)
-  rounded cells, a white (236,236,240) cursor with dark ink, Barlow for its
-  light face, a blue (0,120,215) accent for progress lines; the Main Menu a
-  row of words across the top of the dimmed picture, the chosen one
-  underlined (LEFT/RIGHT walk it, the picture stays full). Dead channel:
-  "Something's not right / Code: XRE-03007".
-
-Shared: the lower-third banner (number and call sign in a cursor-coloured
-tile, title over hours, rating and genre, the clock, a progress line
-along the foot; INFO adds the synopsis and "Next:" above it), flat
-dialogs with a header bar, a flat keyboard, the boot as the mark over a
-loading line.
-
+- **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
+  Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
+  frames). Measured: a silver page (205,205,215 running lighter); a cream
+  (245,240,185) card x 48-314, y 28-242 with a cut top-left corner holding
+  a blue channel disc, the call sign and number, the title and hours in
+  bold, the rating and description in a condensed sans (drawn by
+  squeezing the bold face to 86%); the picture x 320-640, y 0-230 over a
+  maroon (125,22,62) strip "KXDJ * 1000" with the clock "12:30:03" in a
+  dark (60,50,90) tab at its right; a dark purple (75,65,120) time header
+  y 252-274 "Thu.11/21 | 8:00 pm | 8:30 pm | 9:00 pm"; five rows 28 tall
+  on a 30 pitch from y 277: lavender (150,140,195) channel tiles x 48-160
+  with the call sign at the left and the number at the right, purple
+  (118,100,170) cells with white lettering, movies maroon, the chosen
+  cell cream with dark lettering; the "PASSPORT echo" mark bottom-left
+  and the A Time / B Theme / C Search keys (a yellow triangle, blue
+  square, red circle) along the foot, the active one in a navy box.
+  Banner: a purple band y 404-466 with a light channel tile at the left
+  (logo, call sign, number), the title and hours in white, a progress
+  line with a green fill, a clock tab above the band's left. Dialogs: a
+  light grey card with a bold title, a maroon strip, a lavender list, the
+  chosen row navy (35,35,110). Settings pages: a light header strip with
+  the title in blue, a cream help panel, a dark lavender panel of rows.
+- **Wayfinder**: the Time Warner Navigator (Mystro / ODN), from a 2010
+  demo video of the box (youtu.be/mxfafVFcox8, 480x360 frames scaled to
+  640x480) and a 2008 photo. Measured: a steel-blue (178,196,222) page;
+  the channel's logo and name on a royal-blue (35,75,165) band x 40-308,
+  y 22-62 over a white card to y 212 with the title and hours in dark navy
+  bold and the description in dark; the picture x 320-640, y 0-206 over a
+  navy strip "MUS14 * 714  11:03 am"; a dark navy time header y 232-254
+  "TUE 5/25 | 11:00 am | 11:30 am | 12:00 pm" with an arrow; five rows 34
+  tall on a 37 pitch from y 258: navy (25,50,130) channel tiles x 40-150
+  with the call sign at the left and the number at the right, royal-blue
+  cells with white lettering, the chosen cell gold (235,190,60) with navy
+  lettering; a light foot strip y 432-480 with the TWC mark, "A ACCESS
+  MENU", "B FIND SHOWS" (a yellow triangle, a blue square) and the red TV
+  GUIDE tile at the right. Banner (the video's first frame): a navy strip
+  with the clock and "714 * Rock" over a white card with the title in
+  navy bold and the description. Search: a dark navy page of rows and a
+  keypad.
+- **Y1**: Comcast X1, from Comcast's own guide screenshot (xfinity.com
+  support, "X1 guide grid", 2014, 500x274) and a 2014 review's On Demand
+  and title pages (pc.net, 600x359), plus the 2014 welcome kit (Main Menu,
+  search, apps). Measured (in 1280x720): a black page over the dimmed
+  picture; "Guide / TV Listings" top-left (white, the second word blue),
+  a GUIDE pill and "Change View", the clock "9:09a / 73" top-right; a
+  time header "Today 8/4 | 9:00a | 9:30a ..." in small light lettering at
+  y 63-93; five rows 66 tall on a 72 pitch from y 99: channel logos on
+  black tiles x 0-190 with the number white at the right, charcoal
+  (38,38,42) cells with 3px black gaps and white 24px light lettering,
+  the chosen cell lighter (60,60,64) with a white rule along its top and
+  blue (80,160,230) lettering; the programme in a panel along the foot
+  (logo tile, title 28px, description, "6:00 - 10:00a / 860 NFLHD / HD CC"
+  at the right). Main Menu: the mark, then "Guide Saved On Demand Search
+  Apps" in a row at mid-height, the chosen word white with a blue
+  underline, the rest grey. On Demand: "On Demand" in blue, tabs in a row
+  (the chosen blue and underlined), rows of posters under headings. A
+  title: the name in 36px light, the poster framed orange (235,120,20)
+  when chosen, the facts in a Details column, the buttons in a row with
+  the chosen underlined. The face is thin (Barlow Medium stands in).

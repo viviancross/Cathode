@@ -3,17 +3,23 @@
 ## 4.39
 
 - **Four cable-box skins.** Settings > Picture & Style > Skin gains the
-  guides the US cable companies leased out: **Calmcast i-Grid** (2006, the
-  navy Motorola-era grid with the yellow cursor, picture top-right),
-  **Passage** (2004, the charcoal Scientific Atlanta-era grid, gold cursor,
-  picture top-left), **Wayfinder HD** (2009, a white grid on silver, blue
-  cursor, graphite title bar) and **Y1** (2014, black pages, white cursor,
-  the Main Menu a row across the top of the dimmed picture; LEFT/RIGHT
-  walk it). One shared page draws every screen (guide, lower-third banner,
-  menus, On Demand, recordings, info, keyboard, system, playback, the
-  dead-channel card in each box's own words, boot); each skin names its
-  colours, its picture's side and its menu's shape. All four are 16:9, as
-  the HD boxes of each line were. Every colour theme and font applies.
+  guides the US cable companies leased out, each drawn to frames of the
+  real one (its reference manual or a demo video; the sources are in
+  `docs/cathode-4/skin-references.md`): **Calmcast i-Grid** (2006, the
+  Motorola-era interactive guide: navy pages, the programme in a blue
+  panel beside the picture, steel channel tiles, a blue grid with a pale
+  yellow cursor, a Main Menu of capsule buttons, 4:3), **Passage** (2004,
+  the Scientific Atlanta-era guide: a silver page, a cream card for the
+  channel and programme, a maroon strip under the picture, lavender tiles,
+  a purple grid, the A / B / C key bar, condensed lettering, 4:3),
+  **Wayfinder** (2010, the Time Warner guide: blue on blue, the channel on
+  a blue band over a white card, navy tiles, a gold cursor, the key bar,
+  4:3) and **Y1** (2014, the Comcast box: everything over the dimmed
+  picture, a charcoal grid with black gaps, a light face, the chosen cell
+  lighter with a white rule and blue lettering, the programme in a panel
+  along the foot, a Main Menu of words in a row). Each has its own banner,
+  menus, pages, dialogs, dead-channel card and boot words; every colour
+  theme and font applies.
 
 ## 4.38
 
