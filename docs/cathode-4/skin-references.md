@@ -310,11 +310,22 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   shortly / Ref code: S0a00".
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
-  frames), drawn 1:1 to them (2026-10-28, second pass). The face is
-  Archivo Narrow (OFL, bundled: Regular and Bold instanced from the
-  variable font), the condensed sans the box lettered in. Measured: a
-  silver page (206,206,216 running lighter to the foot); the cream
-  (246,241,186) card x 50-316, y 30-230 with its left corners rounded,
+  frames), drawn 1:1 to them (2026-10-28, second pass). Two faces, as
+  the frames: rows, synopses and hints in Archivo Narrow (OFL, bundled:
+  Regular and Bold instanced from the variable font), the condensed sans
+  the box lettered in; headings, hours, the clock and the banner's title
+  in a wide bold (Helvetica Bold on the box; Liberation Sans Bold here).
+  The shapes: the card is a tab with one big rounded top-left corner
+  that the time header and the channel column hang off; the column and
+  the grid are panels rounded at the left (the column 16, the grid 12),
+  the column's rows split by dark 2px rules, the cells by a light 1px
+  rule round each, not gapped tiles; the banner's light channel tile
+  rises into a rounded tab holding the clock and its right edge slants
+  down into the band, which lightens toward the slant and carries a
+  light rule along its top; the Browse column rounds its top-right
+  corner (18) and runs straight down into the band. Measured: a silver
+  page (206,206,216 running lighter to the foot, a white glow top left);
+  the cream (246,241,186) card x 50-316, y 30-226,
   the channel disc at (72,52) 46 wide, the call sign bold 17 and number
   bold 15 at x 128, the title regular 18 at y 110, the hours bold 17 at
   129, the rating in a dark chip and the synopsis regular 16 from 149 on
