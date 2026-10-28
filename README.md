@@ -7,7 +7,7 @@ program guide, a channel banner on every tune, browse, pause-live-TV, and a
 remote-control way of doing everything, in the style of a mid-2000s set-top
 box. Your Plex library is On Demand, and downloaded titles are My Recordings.
 
-**Version 4.34 (alpha)** · Windows, macOS, Linux
+**Version 4.35 (alpha)** · Windows, macOS, Linux
 
 <br clear="left">
 
@@ -71,19 +71,19 @@ Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 
-Download `cathode-windows-4.34-portable.zip`, right-click it, **Extract All**,
+Download `cathode-windows-4.35-portable.zip`, right-click it, **Extract All**,
 and run **Cathode.exe**.
 
 ### Linux
 
 **AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-4.34.AppImage`, make it executable (file properties, or
+`cathode-linux-x86_64-4.35.AppImage`, make it executable (file properties, or
 `chmod +x`) and run it.
 
 **Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
 
 ```bash
-flatpak install --user cathode-linux-x86_64-4.34.flatpak
+flatpak install --user cathode-linux-x86_64-4.35.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
@@ -92,8 +92,8 @@ It fetches the freedesktop runtime from Flathub the first time. On the Deck,
 
 ### macOS
 
-Download the zip for your Mac (`cathode-macos-arm64-4.34.zip` for Apple
-Silicon, `cathode-macos-x86_64-4.34.zip` for Intel), unzip it, and move
+Download the zip for your Mac (`cathode-macos-arm64-4.35.zip` for Apple
+Silicon, `cathode-macos-x86_64-4.35.zip` for Intel), unzip it, and move
 **Cathode.app** to Applications. It isn't signed: the first time,
 right-click it and choose **Open** (or **Open Anyway** under System Settings
 > Privacy & Security).

@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 
 import pygame
 
-from . import musicchannels, ownchannels, paths, playlist as m3u, remote as R
+from . import ownchannels, paths, playlist as m3u, remote as R, videochannels
 from .config import Config
 from .epg import EPG
 from .logos import LogoStore
@@ -89,7 +89,10 @@ class App:
         self._cats = None           # category list, rebuilt when channels or guide change
         self.last_input = time.monotonic()
         self.weather = None
-        self.music = {}             # playlist id -> musicchannels.Schedule, once resolved
+        self.listings = {}          # a video channel source -> its fetched list (videochannels)
+        self.schedules = {}         # video channel id -> videochannels.Schedule
+        if videochannels.migrate(config):
+            config.save()
         self.pending_update = None  # install script to run once we've quit
         self.restarting = False     # quit, then start again (the menu's Restart Cathode)
         self.agent = config.user_agent  # the User-Agent the current playlist's provider answers to
@@ -433,12 +436,12 @@ class App:
             live.message = err
             self.invalidate()
             return
-        self.channels = musicchannels.add_to(ownchannels.add_to(chans, self.config), self.config)
+        self.channels = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
         self._cats = None
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         ownchannels.fill_guide(self.epg)
-        musicchannels.load(self)
+        videochannels.load(self)
         self.check_ytdl()
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
@@ -478,14 +481,14 @@ class App:
             return
         from .screens.live import LiveTV
         live = self.find(LiveTV)
-        had = [c for c in self.channels if not ownchannels.is_own(c) and not musicchannels.is_music(c)]
+        had = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_video(c)]
         before = {c.number for c in had}
         after = {c.number for c in chans}
         if before == after and [c.name for c in had] == [c.name for c in chans]:
             return
         current = live.channel.number if live and live.channel else None
-        self.channels = musicchannels.add_to(ownchannels.add_to(chans, self.config), self.config)
-        musicchannels.fill_guide(self.epg, self.channels, self.music)
+        self.channels = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
+        videochannels.rebuild(self)
         self._cats = None
         if live and current is not None:
             live.idx = live.number_to_idx(current)
@@ -498,11 +501,13 @@ class App:
         change, the channel playing kept (retuned to the first if it went)."""
         live = self.live
         current = live.channel.number if live and live.channel else None
-        plain = [c for c in self.channels if not ownchannels.is_own(c) and not musicchannels.is_music(c)]
-        self.channels = musicchannels.add_to(ownchannels.add_to(plain, self.config), self.config)
+        plain = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_video(c)]
+        self.channels = videochannels.add_to(ownchannels.add_to(plain, self.config), self.config)
         self._cats = None
         ownchannels.fill_guide(self.epg)
-        musicchannels.load(self)
+        videochannels.rebuild(self)
+        if not getattr(self, "video_loading", False):
+            videochannels.load(self)
         if live and current is not None and self.channels:
             idx = live.number_to_idx(current)
             if self.channels[idx].number != current:
@@ -582,10 +587,10 @@ class App:
             ids = ownchannels.real_ids(epg)
             print(f"[cathode] EPG loaded ({len(ids)} channels).")
             ownchannels.fill_guide(epg)
-            musicchannels.fill_guide(epg, self.channels, self.music)
+            videochannels.fill_guide(epg, self.channels, self.schedules, self.config)
             if url != self._epg_checked:        # once per guide: one that matches nothing says so
                 self._epg_checked = url
-                chans = [ch for ch in self.channels if not ownchannels.is_own(ch) and not musicchannels.is_music(ch)]
+                chans = [ch for ch in self.channels if not ownchannels.is_own(ch) and not videochannels.is_video(ch)]
                 missed = [ch for ch in chans if not epg.resolve_channel_id(ch.epg_id, ch.name)]
                 print(f"[cathode] guide covers {len(chans) - len(missed)} of {len(chans)} channels"
                       + (f"; e.g. not " + ", ".join(f"{ch.name} (epg id {ch.epg_id or 'none'})" for ch in missed[:3])

@@ -18,11 +18,9 @@ def _fits(default, v) -> bool:
     return isinstance(v, type(default))
 
 
-_MUSIC_PREFILL = [
-    "https://www.youtube.com/playlist?list=PLkqz3S84Tw-Qjyd_zHSVH_Xj6ge7yrgYI",   # I Want My '80s Videos! (Vevo)
-    "https://www.youtube.com/playlist?list=PL9tY0BWXOZFtv0mU4GO2j_jOB4512Qo1H",   # '90s Hits (Vevo)
-    "https://www.youtube.com/playlist?list=PL9tY0BWXOZFu4vlBOzIOmvT6wjYb2jNiV",   # 2K Pop (Vevo)
-]
+def _video_prefill():
+    from .videochannels import prefill
+    return prefill()
 
 
 @dataclass
@@ -162,9 +160,11 @@ class Config:
     # lineup. "auto" = after the lineup's last number, "off", or a number.
     own_channels: dict = field(default_factory=lambda: {"tvguide": "auto", "weather": "auto"})
     own_music: bool = True          # their background music
-    # Music channels: YouTube playlists, each a channel after Cathode's own
-    # (musicchannels). Pre-filled with official decade playlists.
-    music_playlists: list = field(default_factory=lambda: list(_MUSIC_PREFILL))
+    # Video channels (videochannels): YouTube playlists and channels mixed
+    # on a timeline, each a channel after Cathode's own. See new_channel()
+    # for an entry's fields. 4.34's music_playlists migrate into them.
+    video_channels: list = field(default_factory=_video_prefill)
+    music_playlists: list = field(default_factory=list)
     ytdl_checked: float = 0.0       # when yt-dlp was last checked for a newer release
 
     # Remappable hotkeys (action -> key / gamepad button). Empty = defaults.

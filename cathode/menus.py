@@ -75,7 +75,7 @@ DESCRIPTIONS.update({
     # System
     "Diagnostics": "Signal, stream and picture details.",
     "Audio output": "Which speakers or HDMI the sound uses.",
-    "Music channels": "YouTube playlists as channels of music videos, each on its own timeline.",
+    "Video Channels": "YouTube playlists and channels, mixed, as channels of videos on a timeline.",
     "Weather": "Local weather in the guide's header and on the Weather channel.",
     "Check for updates": "See if there's a newer Cathode.",
     "Check at start-up": "Look for a newer Cathode each time it opens.",
@@ -718,7 +718,7 @@ def channel_items(app):
                           submenu=lambda pl=pl: playlist_items(app, pl)))
     items.append(Item("Add a playlist...", lambda: add_playlist(app)))
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
-    items.append(Item("Music channels", submenu=lambda: music_channel_items(app)))
+    items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
@@ -775,50 +775,237 @@ def own_channel_items(app):
                   "in ~/.config/cathode/music to play that instead.")]
 
 
-def music_channel_items(app):
-    """The YouTube playlists that are music channels: SELECT edits a link
-    (empty removes the channel), one more is added at the foot, and yt-dlp
-    (what resolves them) can be brought up to date."""
-    from . import musicchannels, ytdl
+def video_channel_items(app):
+    """The video channels: each opens its own page (the maker); one more at
+    the foot; yt-dlp (what resolves them) brought up to date."""
+    from . import videochannels as vc, ytdl
     cfg = app.config
 
-    def name(url):
-        pl = ytdl.cached_playlist(url)
-        return musicchannels.clean_name(pl["title"]) if pl else "Music Videos"
+    def lineup(c):
+        return next((ch for ch in app.channels if vc.is_video(ch) and vc.cid_of(ch) == c["id"]), None)
 
-    def edit(i):
-        def got(text):
-            if text is None:
-                return
-            text = text.strip()
-            if text and text != Keyboard.URL_START:
-                cfg.music_playlists[i] = text
-            else:
-                cfg.music_playlists.pop(i)
-            cfg.save()
-            app.place_own_channels()
-        app.push(Keyboard(app, "Playlist link (empty removes the channel)", got,
-                          initial=cfg.music_playlists[i], url=True))
+    def name_of(c):
+        ch = lineup(c)
+        return c.get("name") or (ch.name if ch else "Video Channel")
+
+    def number_of(c):
+        ch = lineup(c)
+        return f"{ch.number:g}" if ch else ""
 
     def add():
         def got(text):
             text = (text or "").strip()
-            if text and text != Keyboard.URL_START:
-                cfg.music_playlists.append(text)
-                cfg.save()
-                app.place_own_channels()
-        app.push(Keyboard(app, "YouTube playlist link", got, url=True,
-                          hint="A YouTube playlist link, or just the list= part of one."))
-    items = [Item(name(url), lambda i=i: edit(i), value=lambda u=url: ytdl.playlist_id(u)[:16],
-                  help="A YouTube playlist as a channel: its videos on a timeline, the day's order shuffled "
-                       "by the date. SELECT edits the link; an empty link removes the channel.")
-             for i, url in enumerate(cfg.music_playlists)]
-    items.append(Item("Add a playlist...", add, help="Any YouTube playlist becomes a music channel."))
+            if not text:
+                return
+            c = vc.new_channel(text)
+            cfg.video_channels.append(c)
+            cfg.save()
+            app.place_own_channels()
+            app.top().refresh(video_channel_items(app))
+            app.top().open(text.upper(), video_channel_page(app, c["id"]))
+        app.push(Keyboard(app, "Channel name", got, hint="Then add its sources: playlists, channels, @handles."))
+    items = [Item(name_of(c), submenu=lambda c=c: video_channel_page(app, c["id"]), value=lambda c=c: number_of(c),
+                  help="A channel of videos on a timeline, from the sources it mixes. SELECT opens it.")
+             for c in cfg.video_channels]
+    items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
     items.append(Item("YouTube support", lambda: app.check_ytdl(manual=True),
                       value=lambda: f"yt-dlp {ytdl.version()}",
                       help="yt-dlp resolves the videos. YouTube changes break it now and then: SELECT fetches "
                            "the newest release (checked weekly on its own); it takes over at the next start."))
     return items
+
+
+def video_channel_page(app, cid):
+    """The channel maker: name, number, sources, how they mix, what's
+    skipped, how the guide lists it, the card, a check, removal."""
+    from . import videochannels as vc
+    cfg = app.config
+    c = vc.entry(cfg, cid)
+    if c is None:
+        return [Item("(this channel is gone)", enabled=False)]
+
+    def save(place=True):
+        cfg.save()
+        if place:
+            app.place_own_channels()
+        else:
+            vc.rebuild(app)
+        app.invalidate()
+
+    def set_name():
+        def got(text):
+            if text is None:
+                return
+            c["name"] = text.strip()
+            save()
+        app.push(Keyboard(app, "Channel name (empty = its first source's)", got, initial=c.get("name", "")))
+
+    def set_number():
+        def got(text):
+            if text is None:
+                return
+            text = text.strip()
+            try:
+                c["number"] = int(text) if text else "auto"
+            except ValueError:
+                app.toast("A channel number is a whole number.")
+                return
+            save()
+        want = c.get("number", "auto")
+        app.push(Keyboard(app, "Channel number (empty = automatic)", got,
+                          initial=str(want) if isinstance(want, int) else ""))
+
+    def number_value():
+        ch = next((ch for ch in app.channels if vc.is_video(ch) and vc.cid_of(ch) == cid), None)
+        at = f" {ch.number:g}" if ch else ""
+        return f"Auto{at}" if c.get("number", "auto") == "auto" else f"Channel{at}"
+
+    def cycle(key, options, d):
+        c[key] = _cycle(options, c.get(key, options[0][0]), d)
+        save(place=False)
+
+    def min_len(d):
+        opts = [(v, v) for v in vc.MIN_SECONDS]
+        c["min_seconds"] = _cycle(opts, c.get("min_seconds", 60), d)
+        save(place=False)
+
+    def toggle(key, d=0):
+        c[key] = not c.get(key, True)
+        save(place=False)
+
+    def check():
+        app.toast("Fetching the sources again...", 60.0)
+
+        def report():
+            rows = vc.source_report(app, c)
+            app.toast("  ".join(f"{t or u}: {n}" for u, t, n, _w in rows) or "No sources yet.", 10.0)
+        vc.load(app, done=report, cid=cid, fresh=True)
+
+    def remove():
+        cfg.video_channels[:] = [x for x in cfg.video_channels if x["id"] != cid]
+        save()
+        m = app.top()
+        m.back()
+        m.refresh(video_channel_items(app))
+    return [
+        Item("Name", set_name, value=lambda: c.get("name") or "(its first source's)",
+             help="The channel's name in the lineup and the guide. Empty: named for its first source."),
+        Item("Channel number", set_number, value=number_value,
+             help="Automatic (after the lineup's last number) or one you choose; a taken number moves to the next free."),
+        Item("Sources", submenu=lambda: video_source_items(app, cid), value=lambda: str(len(c.get("sources") or [])),
+             help="The playlists, channels and @handles this channel mixes."),
+        Item("Weighting", value=lambda: _label(vc.WEIGHTINGS, c.get("weighting", "auto")),
+             adjust=lambda d: cycle("weighting", vc.WEIGHTINGS, d),
+             help="Auto: each source's share of the airtime follows how much of it there is, no source under 5%. "
+                  "Equal: the same airtime each. Manual: the weights set on the sources."),
+        Item("Minimum length", value=lambda: (f"{c.get('min_seconds', 60)} s" if c.get("min_seconds", 60) else "Any"),
+             adjust=min_len, help="Videos shorter than this stay out of the day."),
+        Item("Skip Shorts", value=lambda: "On" if c.get("skip_shorts", True) else "Off",
+             adjust=lambda d: toggle("skip_shorts"), help="YouTube Shorts stay out of the day."),
+        Item("Skip live streams", value=lambda: "On" if c.get("skip_live", True) else "Off",
+             adjust=lambda d: toggle("skip_live"),
+             help="Streams and their recordings (hours long) stay out of the day."),
+        Item("Guide", value=lambda: _label(vc.GUIDES, c.get("guide", "auto")),
+             adjust=lambda d: cycle("guide", vc.GUIDES, d),
+             help="Per video: each video is a programme in the guide. Half-hour blocks: each block names the videos "
+                  "starting in it. Auto: per video when the videos are long (episodes), blocks for songs."),
+        Item("Lower-third", value=lambda: "On" if c.get("card", True) else "Off",
+             adjust=lambda d: toggle("card"), help="The name card as each video starts and before it ends."),
+        Item("Check sources now", check,
+             help="Fetches every source's list of videos again and reports how many each has."),
+        Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
+    ]
+
+
+def video_source_items(app, cid):
+    """A channel's sources: each opens its page; one more at the foot."""
+    from . import videochannels as vc
+    cfg = app.config
+    c = vc.entry(cfg, cid)
+    if c is None:
+        return [Item("(this channel is gone)", enabled=False)]
+    report = {u: (t, n, w) for u, t, n, w in vc.source_report(app, c)}
+
+    def label(s):
+        t, n, _w = report.get(s["url"], ("", 0, ""))
+        return t or s["url"]
+
+    def value(s):
+        t, n, w = report.get(s["url"], ("", 0, "not fetched yet"))
+        return f"{n} videos" if n else w
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if text and text != Keyboard.URL_START:
+                c.setdefault("sources", []).append({"url": text, "weight": 1})
+                cfg.save()
+                app.top().refresh(video_source_items(app, cid))
+                vc.load(app, cid=cid)
+        app.push(Keyboard(app, "Playlist link, channel link or @handle", got,
+                          hint="A YouTube playlist link or list id, a channel link, or @handle."))
+    items = [Item(label(s), submenu=lambda i=i: video_source_page(app, cid, i), value=lambda s=s: value(s),
+                  help="SELECT: its link, weight, order, removal.")
+             for i, s in enumerate(c.get("sources") or [])]
+    items.append(Item("Add a source...", add))
+    return items
+
+
+def video_source_page(app, cid, i):
+    from . import videochannels as vc
+    cfg = app.config
+    c = vc.entry(cfg, cid)
+    srcs = (c or {}).get("sources") or []
+    if c is None or i >= len(srcs):
+        return [Item("(this source is gone)", enabled=False)]
+    s = srcs[i]
+
+    def done():
+        cfg.save()
+        vc.rebuild(app)
+        app.invalidate()
+
+    def edit():
+        def got(text):
+            text = (text or "").strip()
+            if text and text != Keyboard.URL_START:
+                s["url"] = text
+                done()
+                vc.load(app, cid=cid)
+        app.push(Keyboard(app, "Playlist link, channel link or @handle", got, initial=s["url"]))
+
+    def weight(d):
+        s["weight"] = max(1, min(10, int(s.get("weight", 1) or 1) + d))
+        done()
+
+    def move(d):
+        j = i + d
+        if 0 <= j < len(srcs):
+            srcs[i], srcs[j] = srcs[j], srcs[i]
+            done()
+            m = app.top()
+            m.back()
+            m.refresh(video_source_items(app, cid))
+            m.open(label().upper(), video_source_page(app, cid, j))
+
+    def remove():
+        srcs.pop(i)
+        done()
+        m = app.top()
+        m.back()
+        m.refresh(video_source_items(app, cid))
+
+    def label():
+        rows = vc.source_report(app, c)
+        return (rows[i][1] if i < len(rows) else "") or s["url"]
+    return [
+        Item("Link", edit, value=lambda: s["url"][-28:], help="The playlist, channel or @handle this source is."),
+        Item("Weight", value=lambda: str(s.get("weight", 1)), adjust=weight,
+             help="Its share of the airtime when the channel's weighting is Manual (1 to 10)."),
+        Item("Move up", lambda: move(-1), enabled=i > 0),
+        Item("Move down", lambda: move(1), enabled=i < len(srcs) - 1),
+        Item("Remove source", submenu=lambda: _confirm(app, "Remove source", remove, "Keep it")),
+    ]
 
 
 def _bare(url):

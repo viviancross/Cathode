@@ -53,7 +53,7 @@ Ships beside 5.0 as `android-v5.0`, labelled a beta: one APK, arm64, Android 8+,
 |---|---|
 | Oct 27 to 28 | Strong8K from the zip (4.32). Decimal numbers, lineup refresh. Server API research, then guide posters with the rating and up-next bugs. |
 | Oct 29 to 31 | ~~Channel framework, TV Guide channel, Weather channel~~ (done Oct 27). Alpha 4.33 build. Music channels start. |
-| Nov 1 to 3 | ~~Music channels~~ (done Oct 27, 4.34). Phone companion and API. Music channels on the Deck, macOS and the Android box from their builds (yt-dlp in requirements; android-tv branch's buildozer.spec needs it added). |
+| Nov 1 to 3 | ~~Music channels~~ (done Oct 27, 4.34; grown into Video Channels with mixed sources Oct 28, 4.35). Phone companion and API. Music channels on the Deck, macOS and the Android box from their builds (yt-dlp in requirements; android-tv branch's buildozer.spec needs it added). |
 | Nov 4 to 6 | Editable channel lists. LAN discovery. Start over / watch later if the research allowed. Alpha 4.34. |
 | Nov 7 to 10 | Cold-install QA: Tunarr, ErsatzTV (Docker), keyboard, pad, Deck Game Mode. On Demand audio check. Fix round. Android signing and box pass two. Freeze at the end of Nov 10. |
 | Nov 11 | ~~Release notes, README with screenshots, LICENSE and notices check~~ (dropped Oct 27: personal use only, never released). Free for features or QA. |

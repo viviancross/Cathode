@@ -4,7 +4,7 @@ numbers, volume, previous channel, and the cover over a channel change."""
 import time
 from datetime import datetime, timezone
 
-from .. import musicchannels, ownchannels, remote as R
+from .. import ownchannels, remote as R, videochannels
 from ..app import Screen
 
 
@@ -44,8 +44,8 @@ class LiveTV(Screen):
         self._stall = None          # buffering with nothing to show: the watchdog
         self.page = None            # an own channel's picture (ownchannels.Page) while one is tuned
         self._page_timer = None
-        self.music = None           # a music channel's player (musicchannels.Player) while one is tuned
-        self.card = None            # the music channel's lower-third: {artist, song, label, until}
+        self.vplayer = None         # a video channel's player (videochannels.Player) while one is tuned
+        self.card = None            # the video channel's lower-third: {artist, song, label, until}
 
     # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
     # only once the presses stop: a server that starts a transcode per tune
@@ -119,9 +119,9 @@ class LiveTV(Screen):
             return
         ch = self.channels[idx]
         print(f"[cathode] Tuning to {ch}")
-        if self.music is not None:
-            self.music.stop()
-            self.music = None
+        if self.vplayer is not None:
+            self.vplayer.stop()
+            self.vplayer = None
         if ownchannels.is_own(ch):
             # No stream: the page draws itself, after the box's tuner-lock beat.
             self.page = ownchannels.make_page(ch, self.app)
@@ -134,10 +134,10 @@ class LiveTV(Screen):
         self.page = None
         ownchannels.stop_music()
         self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
-        if musicchannels.is_music(ch):
-            # A song from the timeline, resolved first (off the thread).
-            self.music = musicchannels.Player(self, ch)
-            self.music.start()
+        if videochannels.is_video(ch):
+            # The video due on the timeline, resolved first (off the thread).
+            self.vplayer = videochannels.Player(self, ch)
+            self.vplayer.start()
             return
         self.app.video.play(ch.url)
 
@@ -172,9 +172,9 @@ class LiveTV(Screen):
         self.suspended, self.standby = True, False
         self.page = None
         ownchannels.stop_music()
-        if self.music is not None:
-            self.music.stop()
-            self.music = None
+        if self.vplayer is not None:
+            self.vplayer.stop()
+            self.vplayer = None
         self.phase = "watch"
 
     def resume(self):
@@ -207,11 +207,11 @@ class LiveTV(Screen):
                     self.app.after(left, lambda i=self.idx: self.idx == i and self.phase == "cover" and self._reveal())
                 else:
                     self._reveal()
-        elif self.music is not None and kind in ("video_draining", "video_ended"):
-            # A music channel: a song that ends is followed by the next due;
+        elif self.vplayer is not None and kind in ("video_draining", "video_ended"):
+            # A video channel: a video that ends is followed by the next due;
             # one that fails is dropped from the day's order.
             if kind == "video_ended":
-                self.music.ended(data.get("reason", ""))
+                self.vplayer.ended(data.get("reason", ""))
         elif kind == "video_buffering":
             self.app.cancel(self._stall)
             self._stall = None

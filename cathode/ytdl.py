@@ -29,7 +29,10 @@ from .net import SSL as _SSL
 RELEASES = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
 ZIPAPP = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
 JS_RUNTIMES: dict = {}          # e.g. {"quickjs": {"path": "..."}} when YouTube needs one again
-PLAYLIST_TTL = 24 * 3600
+LISTING_TTL = 7 * 24 * 3600     # a source's list of videos is fetched again after a week
+PLAYLIST_TTL = LISTING_TTL
+LIMIT = 3000                    # the newest this many of a channel's uploads (a day's sample is 500)
+LISTING_V = 2                   # the listing's shape; an older cache is fetched again
 FORMAT = ("bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]"
           "/bestvideo[height<=1080]+bestaudio/best")
 _lock = threading.Lock()
@@ -92,39 +95,76 @@ def playlist_url(url: str) -> str:
     return u if "://" in u else f"https://www.youtube.com/playlist?list={u}"
 
 
-def cached_playlist(url: str) -> Optional[dict]:
-    """The playlist as last resolved, however old, or None."""
-    p = os.path.join(cache_dir(), f"pl-{re.sub(r'[^A-Za-z0-9_-]', '_', playlist_id(url))}.json")
+def source_url(s: str) -> str:
+    """What a source as typed resolves as: '@handle' or a channel link is
+    its videos tab (Shorts have their own, so they stay out); a bare list
+    id or a playlist link is the playlist; anything else as given."""
+    s = s.strip()
+    if s.startswith("@"):
+        return f"https://www.youtube.com/{s}/videos"
+    if "://" not in s:
+        return playlist_url(s)
+    if re.search(r"youtube\.com/(@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?$", s):
+        return s.rstrip("/") + "/videos"
+    return s
+
+
+def source_key(s: str) -> str:
+    """The cache name for a source."""
+    u = source_url(s)
+    m = re.search(r"[?&]list=([^&]+)", u)
+    key = m.group(1) if m else re.sub(r"^https?://(www\.)?", "", u)
+    return re.sub(r"[^A-Za-z0-9_@.-]", "_", key)[:80]
+
+
+def _cache_path(s: str) -> str:
+    return os.path.join(cache_dir(), f"src-{source_key(s)}.json")
+
+
+def cached_listing(s: str) -> Optional[dict]:
+    """The source's list as last fetched, however old, or None."""
     try:
-        with open(p, encoding="utf-8") as f:
+        with open(_cache_path(s), encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return None
 
 
-def playlist(url: str, max_age: float = PLAYLIST_TTL) -> dict:
-    """{"id", "title", "fetched", "entries": [{"id", "title", "duration", "uploader"}]},
-    from the cache while it's fresh, else resolved flat (one request, no
-    per-video lookups) and cached."""
-    pid = playlist_id(url)
-    p = os.path.join(cache_dir(), f"pl-{re.sub(r'[^A-Za-z0-9_-]', '_', pid)}.json")
-    old = cached_playlist(url)
-    if old and time.time() - old.get("fetched", 0) < max_age:
+def listing(s: str, max_age: float = LISTING_TTL) -> dict:
+    """{"title", "fetched", "entries": [{"id", "title", "duration", "uploader", "short"?}]}
+    for a source, from the cache while it's fresh, else fetched flat (ids,
+    titles and lengths only, a hundred a request) and cached."""
+    old = cached_listing(s)
+    if old and time.time() - old.get("fetched", 0) < max_age and old.get("v") == LISTING_V:
         return old
-    with _ydl(extract_flat=True) as y:
-        r = y.extract_info(playlist_url(url), download=False)
-    entries = [{"id": e["id"], "title": e.get("title") or "", "duration": float(e.get("duration") or 0),
-                "uploader": e.get("uploader") or e.get("channel") or ""}
-               for e in (r.get("entries") or []) if e.get("id")]
-    out = {"id": pid, "title": r.get("title") or (old or {}).get("title", ""),
-           "fetched": time.time(), "entries": entries}
+    url = source_url(s)
+    extra = {"playlist_items": f"1-{LIMIT}"} if "list=" not in url else {}
+    with _ydl(extract_flat=True, **extra) as y:
+        r = y.extract_info(url, download=False)
+    entries = []
+    for e in r.get("entries") or []:
+        if not e.get("id"):
+            continue
+        d = {"id": e["id"], "title": e.get("title") or "", "duration": float(e.get("duration") or 0),
+             "uploader": e.get("uploader") or e.get("channel") or ""}
+        if "/shorts/" in (e.get("url") or ""):
+            d["short"] = True
+        if e.get("live_status") in ("is_live", "was_live", "post_live", "is_upcoming"):
+            d["live"] = True            # a stream, or what one left behind
+        entries.append(d)
+    out = {"v": LISTING_V, "title": r.get("title") or (old or {}).get("title", ""), "fetched": time.time(),
+           "entries": entries}
     if not entries and old:
         return old                  # a bad answer keeps the last good list
+    p = _cache_path(s)
     tmp = p + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(out, f)
     os.replace(tmp, p)
     return out
+
+
+cached_playlist, playlist = cached_listing, listing      # 4.34's names
 
 
 def stream(video_id: str) -> dict:

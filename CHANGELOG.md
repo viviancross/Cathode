@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.35
+
+- **Video Channels** (the Music channels of 4.34, grown up). A channel is
+  now any mix of YouTube playlists, channels and @handles. Each source's
+  list of videos is fetched weekly; each broadcast day (from 4 AM) draws a
+  sample of up to 500 of them by the date and interleaves the sources by
+  weight: Auto (each source's share of the running time, no source under
+  5%), Equal, or Manual per source. Videos under a minute, Shorts and
+  live streams (and what they leave behind) stay out, each adjustable. Long-form channels get a programme per video in
+  the guide; music channels keep the half-hour blocks (Auto picks, or
+  choose). The lower-third names the uploader and the video, or the artist
+  and the song. Settings > Channels > Video Channels is the maker: name,
+  channel number, sources (add, edit, weight, reorder, remove), weighting,
+  minimum length, Shorts, guide style, lower-third, "Check sources now",
+  Remove channel. A fresh install has the three decade playlists and
+  "bideogaymin" (fourteen gaming channels mixed); 4.34's music playlists
+  carry over as one-source channels.
+
 ## 4.34
 
 - **Restart Cathode** in the main menu, next to Exit: closes and starts
