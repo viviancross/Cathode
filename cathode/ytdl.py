@@ -33,9 +33,19 @@ LISTING_TTL = 7 * 24 * 3600     # a source's list of videos is fetched again aft
 PLAYLIST_TTL = LISTING_TTL
 LIMIT = 3000                    # the newest this many of a channel's uploads (a day's sample is 500)
 LISTING_V = 2                   # the listing's shape; an older cache is fetched again
-FORMAT = ("bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]"
-          "/bestvideo[height<=1080]+bestaudio/best")
+MAX_HEIGHT = 1080               # config.video_quality, set by the player before it resolves
 _lock = threading.Lock()
+
+
+def fmt(height: int = 0) -> str:
+    """yt-dlp's format choice: H.264 up to `height` tall (MAX_HEIGHT when 0)
+    with AAC audio, else anything that tall, else what there is."""
+    h = height or MAX_HEIGHT
+    return (f"bestvideo[height<={h}][vcodec^=avc1]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={h}]+bestaudio/best[height<={h}]/best")
+
+
+FORMAT = fmt()
 _streams: dict = {}             # video id -> resolved stream, until it expires
 _mod = None
 
@@ -175,9 +185,9 @@ def stream(video_id: str) -> dict:
     be played (removed, blocked, private)."""
     with _lock:
         s = _streams.get(video_id)
-        if s and s["expires"] - time.time() > 120:
+        if s and s["expires"] - time.time() > 120 and s.get("height") == MAX_HEIGHT:
             return s
-    with _ydl(format=FORMAT) as y:
+    with _ydl(format=fmt()) as y:
         v = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
     rf = v.get("requested_formats") or [v]
     expires = time.time() + 5 * 3600
@@ -187,7 +197,7 @@ def stream(video_id: str) -> dict:
     s = {"video": rf[0]["url"], "audio": rf[1]["url"] if len(rf) > 1 else None,
          "headers": dict(rf[0].get("http_headers") or {}), "expires": expires,
          "title": v.get("title") or "", "uploader": v.get("uploader") or v.get("channel") or "",
-         "duration": float(v.get("duration") or 0)}
+         "duration": float(v.get("duration") or 0), "height": MAX_HEIGHT}
     with _lock:
         if len(_streams) > 64:
             _streams.clear()

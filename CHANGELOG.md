@@ -9,6 +9,9 @@
   plays from its top instead of from the offset that resolving and opening
   it cost; the next is due at its stop regardless (a late start loses its
   tail, not the next one's head), so lateness doesn't pile up.
+- **Video quality** under Settings > System > Video Channels: the tallest
+  picture a video plays in (1080p, 720p, 480p, 360p). Videos that stop to
+  buffer want a lower one; 720p takes about half of 1080p's bandwidth.
 
 ## 4.37
 

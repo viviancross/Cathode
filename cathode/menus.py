@@ -874,6 +874,14 @@ def video_channel_items(app):
                   help="A channel of videos on a timeline, from the sources it mixes. SELECT opens it.")
              for c in cfg.video_channels]
     items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
+    heights = [(h, f"{h}p") for h in (1080, 720, 480, 360)]
+
+    def quality(d):
+        cfg.video_quality = _cycle(heights, int(cfg.video_quality or 1080), d)
+        cfg.save()
+    items.append(Item("Video quality", value=lambda: _label(heights, int(cfg.video_quality or 1080)), adjust=quality,
+                      help="The tallest picture a video plays in. If videos stop to buffer, go lower: 720p takes "
+                           "about half the bandwidth of 1080p. Takes effect at the next video."))
     items.append(Item("YouTube support", lambda: app.check_ytdl(manual=True),
                       value=lambda: f"yt-dlp {ytdl.version()}",
                       help="yt-dlp resolves the videos. YouTube changes break it now and then: SELECT fetches "

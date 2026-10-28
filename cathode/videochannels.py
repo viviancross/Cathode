@@ -466,6 +466,7 @@ class Player:
             self.live.on_video("video_ended", reason="nothing to play")
             return
         e = cur["entry"]
+        ytdl.MAX_HEIGHT = int(app.config.video_quality or 1080)
 
         def work():
             try:

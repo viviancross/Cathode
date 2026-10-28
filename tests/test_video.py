@@ -264,6 +264,18 @@ class TestMaker(unittest.TestCase):
         self.assertEqual(menus.video_source_page(app, cid, 9)[0].enabled, False)
 
 
+class TestQuality(unittest.TestCase):
+    def test_the_format_follows_the_cap(self):
+        self.assertIn("[height<=720][vcodec^=avc1]", ytdl.fmt(720))
+        self.assertTrue(ytdl.fmt(480).endswith("/best[height<=480]/best"))
+        old = ytdl.MAX_HEIGHT
+        try:
+            ytdl.MAX_HEIGHT = 360
+            self.assertIn("height<=360", ytdl.fmt())
+        finally:
+            ytdl.MAX_HEIGHT = old
+
+
 class FakeVideo2:
     def __init__(self):
         self.played, self.stopped = [], 0
