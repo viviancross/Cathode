@@ -869,6 +869,14 @@ def video_channel_page(app, cid):
         c["min_seconds"] = _cycle(opts, c.get("min_seconds", 60), d)
         save(place=False)
 
+    def max_len(d):
+        opts = [(v, v) for v in vc.MAX_SECONDS]
+        c["max_seconds"] = _cycle(opts, c.get("max_seconds", 0), d)
+        save(place=False)
+
+    def hours(secs):
+        return "Any" if not secs else f"{secs // 60} min" if secs < 3600 else f"{secs / 3600:g} h"
+
     def toggle(key, d=0):
         c[key] = not c.get(key, True)
         save(place=False)
@@ -900,11 +908,14 @@ def video_channel_page(app, cid):
                   "Equal: the same airtime each. Manual: the weights set on the sources."),
         Item("Minimum length", value=lambda: (f"{c.get('min_seconds', 60)} s" if c.get("min_seconds", 60) else "Any"),
              adjust=min_len, help="Videos shorter than this stay out of the day."),
+        Item("Maximum length", value=lambda: hours(c.get("max_seconds", 0)), adjust=max_len,
+             help="Videos longer than this stay out of the day (a day-long upload, say)."),
         Item("Skip Shorts", value=lambda: "On" if c.get("skip_shorts", True) else "Off",
              adjust=lambda d: toggle("skip_shorts"), help="YouTube Shorts stay out of the day."),
         Item("Skip live streams", value=lambda: "On" if c.get("skip_live", True) else "Off",
-             adjust=lambda d: toggle("skip_live"),
-             help="Streams and their recordings (hours long) stay out of the day."),
+             adjust=lambda d: (toggle("skip_live"), vc.load(app, cid=cid)),
+             help="On: a channel's streams and their recordings (hours long) stay out of the day. "
+                  "Off: its Streams tab is fetched and mixed in with its videos."),
         Item("Guide", value=lambda: _label(vc.GUIDES, c.get("guide", "auto")),
              adjust=lambda d: cycle("guide", vc.GUIDES, d),
              help="Per video: each video is a programme in the guide. Half-hour blocks: each block names the videos "

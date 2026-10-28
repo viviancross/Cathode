@@ -100,6 +100,8 @@ def source_url(s: str) -> str:
     its videos tab (Shorts have their own, so they stay out); a bare list
     id or a playlist link is the playlist; anything else as given."""
     s = s.strip()
+    if s.endswith("#live"):                 # a channel's streams tab, beside its videos
+        return source_url(s[:-5]).replace("/videos", "/streams")
     if s.startswith("@"):
         return f"https://www.youtube.com/{s}/videos"
     if "://" not in s:
@@ -149,7 +151,7 @@ def listing(s: str, max_age: float = LISTING_TTL) -> dict:
              "uploader": e.get("uploader") or e.get("channel") or ""}
         if "/shorts/" in (e.get("url") or ""):
             d["short"] = True
-        if e.get("live_status") in ("is_live", "was_live", "post_live", "is_upcoming"):
+        if e.get("live_status") in ("is_live", "was_live", "post_live", "is_upcoming") or url.endswith("/streams"):
             d["live"] = True            # a stream, or what one left behind
         entries.append(d)
     out = {"v": LISTING_V, "title": r.get("title") or (old or {}).get("title", ""), "fetched": time.time(),

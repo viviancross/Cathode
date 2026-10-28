@@ -41,7 +41,8 @@ class TestConfig(unittest.TestCase):
     def test_a_fresh_config_has_the_prefill(self):
         cfg = Config("")
         self.assertEqual([len(c["sources"]) for c in cfg.video_channels], [1, 1, 1, 14])
-        self.assertEqual(cfg.video_channels[3]["name"], "bideogaymin")
+        self.assertEqual((cfg.video_channels[3]["name"], cfg.video_channels[3]["max_seconds"]), ("bideogaymin", 14400))
+        self.assertEqual(cfg.video_channels[0]["max_seconds"], 0)
         self.assertFalse(vc.migrate(cfg))                   # nothing to change
 
     def test_music_playlists_of_4_34_migrate(self):
@@ -109,6 +110,7 @@ class TestSchedule(unittest.TestCase):
         many[0]["duration"] = 30                            # too short
         many[1]["short"] = True                             # a Short
         many[2]["live"] = True                              # a stream's recording
+        many[3]["duration"] = 20000                         # a day-long upload
         s = vc.Schedule(chan(sources=("PLa",)), listings(PLa=("Many", many)))
         order, _ = s._for(datetime.now().date())
         self.assertEqual(len(order), vc.SAMPLE)
@@ -116,6 +118,15 @@ class TestSchedule(unittest.TestCase):
         self.assertNotIn("Ma0", [e["id"] for e in order])
         self.assertNotIn("Ma1", [e["id"] for e in order])
         self.assertNotIn("Ma2", [e["id"] for e in order])
+        self.assertIn("Ma3", [e["id"] for e in s.entries])  # any length, by default
+        capped = vc.Schedule(chan(sources=("PLa",), max_seconds=14400), listings(PLa=("Many", many)))
+        self.assertNotIn("Ma3", [e["id"] for e in capped.entries])
+        # live streams back in: the streams tab's entries join the videos'
+        both = vc.Schedule(chan(sources=("@Bob",), skip_live=False),
+                           listings(**{"@Bob": ("Bob", episodes(3, "Bob")),
+                                       "@Bob#live": ("Bob", [dict(e, id="L" + e["id"], live=True) for e in episodes(2, "Bob")])}))
+        self.assertEqual(len(both.entries), 5)
+        self.assertEqual(ytdl.source_url("@Bob#live"), "https://www.youtube.com/@Bob/streams")
         other, _ = s._for(datetime.now().date() + timedelta(days=1))
         self.assertNotEqual([e["id"] for e in order], [e["id"] for e in other])     # another day, another sample
         s.drop(order[0]["id"])

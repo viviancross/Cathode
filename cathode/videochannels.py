@@ -35,13 +35,14 @@ LONG = 600                      # videos this long (median) get their own guide 
 WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
 GUIDES = [("auto", "Auto"), ("video", "Per video"), ("blocks", "Half-hour blocks")]
 MIN_SECONDS = [0, 30, 60, 120, 300, 600]
+MAX_SECONDS = [0, 1800, 3600, 7200, 10800, 14400, 28800]     # 0: any length
 
 # A fresh install's channels: the three decade playlists and bideogaymin.
 PREFILL = [
     {"name": "", "sources": ["https://www.youtube.com/playlist?list=PLkqz3S84Tw-Qjyd_zHSVH_Xj6ge7yrgYI"]},  # I Want My '80s Videos!
     {"name": "", "sources": ["https://www.youtube.com/playlist?list=PL9tY0BWXOZFtv0mU4GO2j_jOB4512Qo1H"]},  # '90s Hits
     {"name": "", "sources": ["https://www.youtube.com/playlist?list=PL9tY0BWXOZFu4vlBOzIOmvT6wjYb2jNiV"]},  # 2K Pop
-    {"name": "bideogaymin", "sources": [
+    {"name": "bideogaymin", "max_seconds": 14400, "sources": [
         "@ScottTheWoz", "@Caddicarus", "@LGR", "@GameGrumps", "@TheGrumps", "@BringusStudios", "@JonBringus",
         "@NitroRad", "@StopSkeletonsFromFighting", "@PlanetClue", "@Billiam", "@GamingHistorian",
         "@IronPineapple", "@brutalmoose"]},
@@ -52,8 +53,8 @@ def new_channel(name: str = "", sources=()) -> dict:
     """A channel's settings entry with every field at its default."""
     return {"id": uuid.uuid4().hex[:8], "name": name, "number": "auto",
             "sources": [{"url": s, "weight": 1} if isinstance(s, str) else dict(s) for s in sources],
-            "weighting": "auto", "min_seconds": 60, "skip_shorts": True, "skip_live": True, "guide": "auto",
-            "card": True}
+            "weighting": "auto", "min_seconds": 60, "max_seconds": 0, "skip_shorts": True, "skip_live": True,
+            "guide": "auto", "card": True}
 
 
 def fix(c: dict) -> dict:
@@ -64,7 +65,12 @@ def fix(c: dict) -> dict:
 
 
 def prefill() -> list:
-    return [new_channel(c["name"], c["sources"]) for c in PREFILL]
+    out = []
+    for c in PREFILL:
+        d = new_channel(c["name"], c["sources"])
+        d.update({k: v for k, v in c.items() if k not in ("name", "sources")})
+        out.append(d)
+    return out
 
 
 def migrate(config):
@@ -73,8 +79,7 @@ def migrate(config):
     old = getattr(config, "music_playlists", None) or []
     before = [dict(c) for c in (config.video_channels or [])]
     if old:
-        config.video_channels = [new_channel("", [u]) for u in old] + [
-            new_channel(c["name"], c["sources"]) for c in PREFILL[3:]]
+        config.video_channels = [new_channel("", [u]) for u in old] + prefill()[3:]
         config.music_playlists = []
     config.video_channels = [fix(c) for c in (config.video_channels or [])]
     return bool(old) or config.video_channels != before
@@ -152,13 +157,17 @@ class Schedule:
         self.cid = c["id"]
         self.sources = []           # [(url, weight, [entries])]
         self.dropped = set()
-        min_s = c.get("min_seconds", 60)
+        min_s, max_s = c.get("min_seconds", 60), c.get("max_seconds", 0)
         for s in c.get("sources") or []:
             lst = listings.get(s["url"])
             if not lst:
                 continue
-            es = [e for e in lst.get("entries") or [] if e.get("id") and e.get("duration", 0) > 0
-                  and e["duration"] >= min_s and not (c.get("skip_shorts", True) and e.get("short"))
+            entries = list(lst.get("entries") or [])
+            if not c.get("skip_live", True):            # the channel's streams tab, fetched beside its videos
+                entries += (listings.get(s["url"] + "#live") or {}).get("entries") or []
+            es = [e for e in entries if e.get("id") and e.get("duration", 0) > 0
+                  and e["duration"] >= min_s and (not max_s or e["duration"] <= max_s)
+                  and not (c.get("skip_shorts", True) and e.get("short"))
                   and not (c.get("skip_live", True) and e.get("live"))]
             for e in es:
                 if not e.get("uploader"):        # a channel's own list names no uploader
@@ -346,14 +355,18 @@ def load(app, done=None, cid: Optional[str] = None, fresh: bool = False):
     def work():
         for c in chans:
             for s in c.get("sources") or []:
-                try:
-                    lst = ytdl.listing(s["url"], max_age=0 if fresh else ytdl.LISTING_TTL)
-                except Exception as e:
-                    print(f"[video] {s['url']}: {e!r}")
-                    lst = ytdl.cached_listing(s["url"])
-                if lst:
-                    app.post(_source_loaded, app, s["url"], lst)
-                    time.sleep(1.0)
+                keys = [s["url"]]
+                if not c.get("skip_live", True) and ytdl.source_url(s["url"]).endswith("/videos"):
+                    keys.append(s["url"] + "#live")
+                for key in keys:
+                    try:
+                        lst = ytdl.listing(key, max_age=0 if fresh else ytdl.LISTING_TTL)
+                    except Exception as e:
+                        print(f"[video] {key}: {e!r}")
+                        lst = ytdl.cached_listing(key)
+                    if lst:
+                        app.post(_source_loaded, app, key, lst)
+                        time.sleep(1.0)
         app.post(_loaded, app, done)
     threading.Thread(target=work, daemon=True).start()
 
