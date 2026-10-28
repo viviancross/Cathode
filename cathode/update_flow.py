@@ -92,6 +92,7 @@ def open_check(app):
                     return
                 script = updater.write_apply_script(path, updater.install_dir(), _updates_dir())
             except Exception as e:
+                print(f"[update] failed: {e!r}")
                 app.post(done, "The update failed:", str(e))
                 return
             app.pending_update = script

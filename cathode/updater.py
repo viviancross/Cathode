@@ -123,6 +123,7 @@ def install_flatpak(bundle: str, timeout: float = 900):
         raise UpdateError(f"Couldn't run flatpak on the host: {e}")
     if r.returncode:
         lines = [ln.strip() for ln in (r.stderr + "\n" + r.stdout).splitlines() if ln.strip()]
+        print(f"[update] flatpak install exited {r.returncode}:" + "".join(chr(10) + ln for ln in lines[-12:]))
         raise UpdateError(lines[-1] if lines else f"flatpak install exited {r.returncode}.")
 
 
