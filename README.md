@@ -7,7 +7,7 @@ program guide, a channel banner on every tune, browse, pause-live-TV, and a
 remote-control way of doing everything, in the style of a mid-2000s set-top
 box. Your Plex library is On Demand, and downloaded titles are My Recordings.
 
-**Version 4.36 (alpha)** · Windows, macOS, Linux
+**Version 4.37 (alpha)** · Windows, macOS, Linux
 
 <br clear="left">
 
@@ -71,19 +71,19 @@ Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 
-Download `cathode-windows-4.36-portable.zip`, right-click it, **Extract All**,
+Download `cathode-windows-4.37-portable.zip`, right-click it, **Extract All**,
 and run **Cathode.exe**.
 
 ### Linux
 
 **AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-4.36.AppImage`, make it executable (file properties, or
+`cathode-linux-x86_64-4.37.AppImage`, make it executable (file properties, or
 `chmod +x`) and run it.
 
 **Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
 
 ```bash
-flatpak install --user cathode-linux-x86_64-4.36.flatpak
+flatpak install --user cathode-linux-x86_64-4.37.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
@@ -92,8 +92,8 @@ It fetches the freedesktop runtime from Flathub the first time. On the Deck,
 
 ### macOS
 
-Download the zip for your Mac (`cathode-macos-arm64-4.36.zip` for Apple
-Silicon, `cathode-macos-x86_64-4.36.zip` for Intel), unzip it, and move
+Download the zip for your Mac (`cathode-macos-arm64-4.37.zip` for Apple
+Silicon, `cathode-macos-x86_64-4.37.zip` for Intel), unzip it, and move
 **Cathode.app** to Applications. It isn't signed: the first time,
 right-click it and choose **Open** (or **Open Anyway** under System Settings
 > Privacy & Security).
@@ -145,7 +145,9 @@ them under **Settings > Channels**.
 
 Media keys (play/pause, stop, rewind, fast-forward, mute, volume) do what they
 say. In menus, number keys pick rows (on Plate Network's Main Menu, tiles). Remap
-anything under **Settings > Remote control**.
+anything under **Settings > Remote control**. A FLIRC USB receiver learns any
+IR remote there too (**FLIRC receiver**: a walk-through, one button at a time;
+see `docs/remotes/flirc.md`).
 
 ### On Demand and My Recordings
 

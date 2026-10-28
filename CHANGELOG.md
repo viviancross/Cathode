@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.37
+
+- **A FLIRC wizard.** Settings > Remote control > FLIRC receiver teaches a
+  FLIRC USB receiver any remote: a walk-through asks for every button in
+  turn (by the chosen remote's own names), RIGHT skips one; Record one
+  button, Forget a button, Test the buttons (each names itself: watch the
+  TV too, and forget a button it answers), built-in profiles off, erase.
+  Runs Flirc's own `flirc_util` (installed with its software; in the
+  Flatpak, the host's); `"flirc_util"` in config.json names it elsewhere.
+  `docs/remotes/flirc.md` has the steps, the Sony page now uses it.
+
 ## 4.36
 
 - **The guide in quarter hours.** Every skin's grid now runs in 15-minute

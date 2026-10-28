@@ -70,6 +70,7 @@ DESCRIPTIONS.update({
     "Start with the computer": "Open Cathode when you sign in.",
     # Remote control
     "Remote": "Name the buttons as your remote prints them.",
+    "FLIRC receiver": "Teach a FLIRC USB receiver any remote, button by button.",
     "Keyboard keys": "Change which key does what.",
     "Controller buttons": "Change which pad button does what.",
     "Reset to defaults": "Put every button back as it came.",
@@ -562,9 +563,73 @@ def remote_items(app):
     return [
         Item("Button guide", submenu=lambda: button_guide_items(app), help="What every button does, on this box."),
         Item("Remote", value=lambda: _label(remotes, app.config.remote), adjust=set_remote),
+        Item("FLIRC receiver", submenu=lambda: flirc_items(app)),
         Item("Keyboard keys", submenu=lambda: binding_items(app, "key")),
         Item("Controller buttons", submenu=lambda: binding_items(app, "pad")),
         Item("Reset to defaults", submenu=lambda: _confirm(app, "Reset every button", reset, "Keep my buttons")),
+    ]
+
+
+# The walk-through's order: what every remote has first, the TV's own
+# buttons (volume) last, where a TV remote's user skips them.
+FLIRC_ORDER = [R.UP, R.DOWN, R.LEFT, R.RIGHT, R.SELECT, R.BACK, R.EXIT, R.MENU, R.GUIDE, R.INFO, R.OPTIONS,
+               R.CH_UP, R.CH_DOWN, R.PREV, R.PAUSE, R.STOP, R.REW, R.FF, R.FAV, R.BROWSE, R.LIST, R.THEMES,
+               R.FORMAT, R.SUBTITLE, *R.DIGITS, R.VOL_UP, R.VOL_DOWN, R.MUTE]
+
+
+def _flirc_pretty(a):
+    return a[5:] if a.startswith("DIGIT") else _pretty(a)
+
+
+def flirc_steps(app, actions):
+    """[(prompt, flirc_util args)] recording each action's key, named as the
+    chosen remote names the button. Actions without a typeable key are left out."""
+    from . import flirc
+    steps = []
+    for a in actions:
+        key = flirc.key_for(app.remote.keys, a)
+        if not key:
+            continue
+        prof = R.REMOTES.get(app.config.remote, R.REMOTES[""])[1]
+        name = prof.get(a) or (a if prof and not a.startswith("DIGIT") else "")   # a named remote: its own words
+        who = f"Press {name}" if name else "Press the button"
+        steps.append((f"{who} for {_flirc_pretty(a)}", ["record_api", "0", str(flirc.HID[key])]))
+    return steps
+
+
+def flirc_items(app):
+    from .flirc import Flirc
+    from .screens.flircwiz import FlircTest, FlircWizard
+
+    def done(n, skipped):
+        app.toast(f"{n} recorded" + (f", {len(skipped)} skipped" if skipped else ""), 4)
+
+    def walk():
+        app.push(FlircWizard(app, flirc_steps(app, FLIRC_ORDER), done))
+
+    def one_items():
+        return [Item(_flirc_pretty(a), (lambda a=a: app.push(FlircWizard(app, flirc_steps(app, [a]), done))))
+                for a in FLIRC_ORDER]
+
+    def delete():
+        app.push(FlircWizard(app, [("Press the button to forget", ["delete"])],
+                             lambda n, s: app.toast("Forgotten" if n else "Nothing forgotten")))
+
+    def test():
+        app.push(FlircTest(app, {a: _flirc_pretty(a) for a in FLIRC_ORDER}))
+
+    def simple(args, said):
+        Flirc(app).run(args, lambda ok, text: app.toast(said if ok else text, 4))
+    return [
+        Item("Set up every button", walk,
+             help="First put the remote in a mode your TV ignores (SAT/CABLE, DVD). Then press each button as it's asked for; RIGHT skips one."),
+        Item("Record one button", submenu=one_items, help="Teach the FLIRC one button, or move a job to another button."),
+        Item("Forget a button", delete, help="Press a button and the FLIRC forgets it: for one the TV answers too."),
+        Item("Test the buttons", test, help="Press buttons; each names itself. If the TV reacts to one, forget it and use another."),
+        Item("Turn off built-in profiles", lambda: simple(["profiles", "disable"], "Built-in profiles off"),
+             help="The FLIRC also answers remotes it knows (Fire TV, Harmony, Media Center). Off, only your recorded buttons type."),
+        Item("Erase the FLIRC", submenu=lambda: _confirm(app, "Erase every button", lambda: simple(["format"], "FLIRC erased"),
+                                                        "Keep them")),
     ]
 
 

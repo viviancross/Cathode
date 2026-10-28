@@ -17,11 +17,13 @@ top) and leave it there. Everything below is recorded in that mode.
 
 ## 2. Record the buttons
 
-In the FLIRC software, choose **Controllers > Full Keyboard**. For each row,
-click the key on the on-screen keyboard, then press the button on the
-remote.
+**MENU > Settings > Remote control > Remote: Sony RM-Y195** first, so the
+wizard asks for the buttons by the Sony's names. Then **FLIRC receiver > Set
+up every button** and press each button it asks for (the RIGHT key skips
+one; skip VOL+, VOL- and MUTING: the TV does the volume). See
+[flirc.md](flirc.md) for the wizard. The plan it follows:
 
-| RM-Y195 button | Key to record | What it does in Cathode |
+| RM-Y195 button | Key it records | What it does in Cathode |
 |---|---|---|
 | 0-9 | 0-9 | Channel numbers |
 | ENTER | Enter | Select; tunes a typed number |
@@ -45,21 +47,23 @@ remote.
 | PICTURE MODE | A | Picture format |
 | MTS/SAP | S | Subtitles |
 
-Watch the TV while you record:
+(The same table works by hand in the Flirc software, **Controllers > Full
+Keyboard**: click the key, press the button.)
+
+Then **FLIRC receiver > Test the buttons**, and watch the TV:
 
 - If a button makes the TV react as well (for example TV/VIDEO switches the
   TV's input, or SLEEP sets its sleep timer), it is still sending a TV code
-  in SAT/CABLE mode. Leave it unrecorded, and give its job to a spare button
-  under Cathode's **Settings > Remote control > Keyboard keys**.
+  in SAT/CABLE mode. **Forget a button** drops it from the FLIRC; give its
+  job to a spare button with **Record one button**.
 - The play, stop and search buttons may only send in **VCR/DVD** mode. If
-  the FLIRC software doesn't see one in SAT/CABLE mode, you can record it in
-  VCR/DVD mode, or skip it. On Demand plays fine without them: the centre
-  button pauses, left/right search and RESET stops.
-- If one press registers twice, raise the FLIRC's inter-key delay in its
-  advanced settings.
+  the wizard doesn't see one in SAT/CABLE mode, record it in VCR/DVD mode
+  (Record one button), or skip it. On Demand plays fine without them: the
+  centre button pauses, left/right search and RESET stops.
+- If one press registers twice, raise the FLIRC's inter-key delay in the
+  Flirc software's advanced settings.
 
-## 3. Tell Cathode
+## 3. The hints
 
-**MENU > Settings > Remote control > Remote: Sony RM-Y195.** The hints on
-screen then name the Sony's buttons (ENTER, DISPLAY, RESET, TV/VIDEO...)
-instead of Cathode's.
+With the Remote set to Sony RM-Y195, the hints on screen name the Sony's
+buttons (ENTER, DISPLAY, RESET, TV/VIDEO...) instead of Cathode's.

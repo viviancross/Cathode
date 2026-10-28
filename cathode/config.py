@@ -171,6 +171,7 @@ class Config:
     key_bindings: dict = field(default_factory=dict)
     gamepad_bindings: dict = field(default_factory=dict)
     remote: str = ""               # a remote in remote.REMOTES: hints use its button names
+    flirc_util: str = ""           # path to flirc_util when it isn't where Cathode looks
 
     # Network
     user_agent: str = "Cathode/1.0 IPTV"
