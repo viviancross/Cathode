@@ -617,6 +617,7 @@ class CableSkin(BoxSkin):
                 on = row_sel and p.start <= sel < p.stop
                 draw_cell(c, cell, p.start <= now < p.stop, on, i, p)
                 ink = ink_for(on)
+                shadow = self.cell_shadow(on)
                 l, r = cell.x + X(5), min(cell.right, self.canvas[0] - X(4)) - X(5)
                 if p.start < start:
                     pygame.draw.polygon(c, ink, [(cell.x + X(3), cell.centery), (cell.x + X(8), cell.centery - Y(5)),
@@ -630,7 +631,7 @@ class CableSkin(BoxSkin):
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1)) // 2
                 for line in lines:
-                    self.tx(c, line, f, ink, l, ty)
+                    self.tx(c, line, f, ink, l, ty, shadow=shadow)
                     ty += lh + 1
             self.hit((0, y, self.canvas[0], rh), lambda i=i: (setattr(g, "cursor", g.top + i),
                                                              setattr(g, "focus", "grid"), g.handle("SELECT")))
@@ -644,6 +645,10 @@ class CableSkin(BoxSkin):
             self.tx(c, self.fit(f_cell, self.empty_guide(g), cell.w - X(20)), f_cell, ink_for(False), cell.x + X(10),
                     self.mid(cell, f_cell))
         return rows
+
+    def cell_shadow(self, on):
+        """The drop shadow under a cell's lettering, if the box drew one."""
+        return None
 
     def _time_header(self, c, g, hdr, grid_x, grid_w, f, ink, rule, day_x, space=False, day_fmt="{a} {m}/{d}"):
         """The day at the left, the quarter hours over the grid."""
@@ -718,6 +723,9 @@ class IGrid(CableSkin):
         fs = self.f(max(7, int(size * 0.42)))
         t.draw(c, self.MARK_TAG, fs, ink, x, y + h + size // 4)
         return w
+
+    def cell_shadow(self, on):
+        return None if on else self.b["gap"]
 
     def _tile(self, c, x, y, size):
         """The red tile at the header's right, in the mark's place."""
@@ -1035,6 +1043,9 @@ class Passage(CableSkin):
     def _card(self, c, r):
         """The cream card with a cut top-left corner, as the box's."""
         b, Y = self.b, self.Y
+        drop = pygame.Surface((r.w, r.h), pygame.SRCALPHA)
+        pygame.draw.rect(drop, (0, 0, 0, 70), drop.get_rect(), border_top_left_radius=Y(14), border_bottom_right_radius=Y(14))
+        c.blit(drop, (r.x + Y(3), r.y + Y(4)))
         pygame.draw.rect(c, b["card"], r, border_top_left_radius=Y(14), border_bottom_right_radius=Y(14))
         pygame.draw.rect(c, mix(b["card"], (0, 0, 0), 0.3), r, 1, border_top_left_radius=Y(14), border_bottom_right_radius=Y(14))
 
@@ -1406,6 +1417,9 @@ class Wayfinder(CableSkin):
         self._strip(c, sel)
         self._chan_band(c, self.R(40, 22, 268, 40), sel)
         card = self.R(40, 62, 268, 150)
+        drop = pygame.Surface((card.w, card.h), pygame.SRCALPHA)
+        pygame.draw.rect(drop, (0, 0, 0, 60), drop.get_rect(), border_bottom_left_radius=Y(6), border_bottom_right_radius=Y(6))
+        c.blit(drop, (card.x + Y(3), card.y + Y(4)))
         pygame.draw.rect(c, b["card"], card, border_bottom_left_radius=Y(6), border_bottom_right_radius=Y(6))
         f_title, f_line, f_desc = self.fb(Y(16)), self.fb(Y(14)), self.f(Y(14))
         title = cur.title if cur else (sel.name if sel else "")
@@ -1427,6 +1441,7 @@ class Wayfinder(CableSkin):
                           space=True, day_fmt="{A} {m}/{d}")
         pygame.draw.polygon(c, b["text"], [(W - X(8), hdr.centery), (W - X(14), hdr.centery - Y(5)), (W - X(14), hdr.centery + Y(5))])
         top, pitch, rh = Y(258), Y(37), Y(34)
+        pygame.draw.rect(c, b["hdr"], (X(40), hdr.bottom, W - X(40), g.rows * pitch))    # navy between the cells
 
         def tile(cc, r, ch, on):
             r = pygame.Rect(X(40), r.y, X(110), r.h)
@@ -1651,6 +1666,7 @@ class Y1(CableSkin):
         grid_x, grid_w = X(98), X(542)
         self._time_header(c, g, hdr, grid_x, grid_w, fh, b["soft"], None, X(20), day_fmt="Today {m}/{d}")
         top, pitch, rh = Y(66), Y(48), Y(44)
+        pygame.draw.rect(c, (0, 0, 0), (0, top - Y(2), W, g.rows * pitch))               # black between the cells
 
         def tile(cc, r, ch, on):
             r = pygame.Rect(0, r.y, X(96), r.h)
