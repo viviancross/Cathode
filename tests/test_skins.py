@@ -266,6 +266,18 @@ class TestEverySkinDrawsEveryScreen(unittest.TestCase):
         for name in ("indirect", "indirect_hd", "plate", "plate_hd", "igrid", "passage"):
             self.assertEqual(classes[name].tune_cover, "black", name)
 
+    def test_the_cable_boxes_chrome_is_drawn_not_cut(self):
+        """Every sprite the cable skins blit renders from chrome.py at its
+        declared size; the asset folders hold only the brand marks."""
+        import os
+        from cathode.skins import chrome
+        from cathode.paths import asset
+        for skin, table in chrome.CHROME.items():
+            for name, (size, ops) in table.items():
+                self.assertEqual(chrome.render(size, ops).get_size(), size, f"{skin}/{name}")
+            self.assertFalse(set(os.listdir(asset("skins", skin))) - {"cumcast.png", "tvgrid.png", "mark.png"}, skin)
+        self.assertEqual(chrome.render((240, 180), chrome.passage_card(240, 180)).get_size(), (240, 180))
+
     def test_sd_skins_are_four_by_three(self):
         for name in ("indirect", "plate", "igrid", "passage"):
             w, h = skin_classes()[name].canvas

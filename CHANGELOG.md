@@ -2,6 +2,16 @@
 
 ## 4.41
 
+- **The cable boxes' chrome is drawn.** Every page, band, row, key and
+  dialog the Passage and i-Grid skins blit is now drawn by
+  `cathode/skins/chrome.py` from a table of strokes measured off the
+  boxes' manual frames (rendered at four times the size and scaled down,
+  so edges and rounded corners come out clean), instead of cut from the
+  frames' scans. The frames' pixels are out of the repo; only the brand
+  marks (cumcast, TV GRID, PASSAGE echo) stay as bitmaps. The i-Grid time
+  bar loses the frame's listings icon, Passage's mark box its arrow;
+  Passage's dead-channel card is drawn to fit its words, its Browse box
+  is lettered by the skin, and its volume band has both rounded ends.
 - **Wayfinder and Y1 are gone.** The two cable skins drawn without clean
   frames (the 2010 Time Warner guide from a demo video, the 2014 Comcast
   box from screenshots) never got past a re-coloured body: their item

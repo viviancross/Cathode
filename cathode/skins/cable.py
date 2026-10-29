@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
+from . import chrome
+
 from ..paths import asset
 
 from .box import BoxSkin, mix, nice, readable, rgba, vgrad
@@ -114,14 +116,14 @@ class CableSkin(BoxSkin):
     _sprites = {}
 
     def _sprite(self, name):
-        """A piece of the box's frames (assets/skins/<skin>): a page or band
-        with its text taken out, a row or key cut from it. Cast in the
-        theme's page colour when the theme isn't the native one."""
+        """A piece of the box's chrome: drawn by skins/chrome.py, or (the
+        brand marks) a bitmap in assets/skins/<skin>. Cast in the theme's
+        page colour when the theme isn't the native one."""
         cast = None if self.theme_key() == "native" else tuple(self.b["page"][:3])
         key = (self.name, name, cast)
         img = CableSkin._sprites.get(key)
         if img is None:
-            img = pygame.image.load(asset("skins", self.name, name))
+            img = chrome.sprite(self.name, name) or pygame.image.load(asset("skins", self.name, name))
             if cast:
                 img = img.copy()
                 img.fill((*cast, 255), special_flags=pygame.BLEND_RGB_MULT)   # ponytail: a colour cast, not a retinted frame
@@ -753,7 +755,7 @@ class IGrid(CableSkin):
         }
 
     def wordmark(self, c, x, y, size, ink=None):
-        """The cumcast lockup (assets/skins/igrid/cumcast.png: the lowercase
+        """The cumcast lockup (chrome.py cumcast.png: the lowercase
         word with its red crescent), its crescent `size` tall; `ink` is
         ignored, the lockup keeps its colours."""
         img = self._sprite("cumcast.png")
@@ -817,7 +819,7 @@ class IGrid(CableSkin):
         pygame.draw.rect(c, b["panel"], (0, y, W, H - y), border_bottom_left_radius=Y(18), border_bottom_right_radius=Y(18))
 
     def draw_guide(self, c, g):
-        """The guide on the frame itself (assets/skins/igrid/guide.png): the
+        """The guide on the frame itself (chrome.py guide.png): the
         header, info panel, time bar, channel tiles and the foot band are
         the frame's; the picture shows through its window; the programme,
         the hours, the rows and cells and the hints are lettered over it."""
@@ -882,7 +884,7 @@ class IGrid(CableSkin):
     # ── Live: the banner along the foot ───────────────────────────────────
 
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
-        """The banner band cut from the frame (assets/skins/igrid/banner.png,
+        """The banner band cut from the frame (chrome.py banner.png,
         y 352 down): the title in yellow on the title bar with the channel
         and the clock at its right, the hours and synopsis on the body."""
         W, H = self.canvas
@@ -948,7 +950,7 @@ class IGrid(CableSkin):
         self._capsule(c, r, label, on, f)
 
     def _page_top(self, c, title, sub="", picture=True, rows=False):
-        """A page on the frame (assets/skins/igrid/page.png; list.png with
+        """A page on the frame (chrome.py page.png; list.png with
         the section bar and rows when `rows`): the clock on the header, the
         title in yellow and the help on the info panel, the picture in the
         window (the box kept it on every page)."""
@@ -1025,7 +1027,7 @@ class IGrid(CableSkin):
     # ── The info page, the search page, dialogs ───────────────────────────
 
     def _info_page(self, c, title, line2, line3, rating, lines, back):
-        """The info frame (assets/skins/igrid/info.png): the title in yellow
+        """The info frame (chrome.py info.png): the title in yellow
         with two lines under it on the info panel, the text on the panel
         below, the frame's back key with its word."""
         W, H = self.canvas
@@ -1078,7 +1080,7 @@ class IGrid(CableSkin):
                          [lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)])
 
     def draw_keyboard(self, c, kb):
-        """The search frame (assets/skins/igrid/search.png): the prompt and
+        """The search frame (chrome.py search.png): the prompt and
         the typed text on the info panel, the keys as rows of boxes on the
         frame's six rows, the chosen one yellow."""
         b, X, Y = self.b, self.X, self.Y
@@ -1119,7 +1121,7 @@ class IGrid(CableSkin):
                 self.hit(rect, lambda r_=r_, col=col, cell=cell: (setattr(kb, "row", r_), setattr(kb, "col", col), kb._press(cell)))
 
     def _dialog(self, c, title, lines, buttons=(), focus=0, wide=531):
-        """The frame's dialog (assets/skins/igrid/dialog.png, nine-sliced):
+        """The frame's dialog (chrome.py dialog.png, nine-sliced):
         the title in yellow, the lines in white, capsule buttons at the
         foot."""
         W, H = self.canvas
@@ -1341,7 +1343,7 @@ class Passage(CableSkin):
     # ── The mark: the frame's own 'PASSPORT echo' lockup ──────────────────
 
     def wordmark(self, c, x, y, size, ink=None):
-        """The PASSAGE echo lockup (assets/skins/passage/mark.png, drawn at
+        """The PASSAGE echo lockup (chrome.py mark.png, drawn at
         twice the frames' size: 16 is the frames' own, 34 tall), scaled to
         `size`; `ink` is ignored, the lockup keeps its colours."""
         h = int(34 * size / 16)
@@ -1497,7 +1499,7 @@ class Passage(CableSkin):
     def draw_guide(self, c, g):
         """The guide on the frame itself: the page, card, time header,
         channel column, grid panel, mark and foot are the Passport Echo
-        frame's own pixels (assets/skins/passage/guide.png) with its text
+        frame's own pixels (chrome.py guide.png) with its text
         taken out; the picture shows through the window; the channel tile,
         call sign and number, title, hours, rating and synopsis, the day
         and half hours, the rows and cells, and the keys are lettered over
@@ -1615,7 +1617,7 @@ class Passage(CableSkin):
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         """The banner on the frame itself: the band and the channel tile
         with its slant are the Passport Echo frame's own pixels
-        (assets/skins/passage/banner.png, y 357-447); the clock, logo, call
+        (chrome.py banner.png, y 357-447); the clock, logo, call
         sign and number on the tile, the title and hours on the title
         strip, the start and end times, the green line with its ticks and
         the navy time tab with its pointer are lettered and drawn over it
@@ -1673,7 +1675,7 @@ class Passage(CableSkin):
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
 
     def _full_banner(self, c, ch, cur, nxt, left=0):
-        """INFO's banner, the Browse frame's band (assets/skins/passage/
+        """INFO's banner, the Browse frame's band (chrome.py
         browse.png, y 366 down): the title in the wide bold, the hours at the
         right, the rating chip and the synopsis in the condensed face."""
         W, H = self.canvas
@@ -1719,6 +1721,7 @@ class Passage(CableSkin):
         self.tx(c, call(ch), self.f(Y(20)), ink, X(104), Y(108), align="center")
         self.tx(c, str(ch.number), self.wb(Y(17)), ink, X(104), Y(128), align="center")
         self.tx(c, ampm(datetime.now(), True), self.f(Y(20)), ink, X(65), Y(335))
+        self.tx(c, "Browse", self.wb(Y(18)), (70, 60, 100), X(72), Y(298), align="center")
         self.hit(self.R(45, 265, 44, 40), lambda: br.handle("LEFT"))
         self.hit(self.R(91, 265, 44, 40), lambda: br.handle("RIGHT"))
         self._full_banner(c, ch, cur, nxt)
@@ -1733,7 +1736,7 @@ class Passage(CableSkin):
         self.tx(c, digits + "-" * (3 - len(digits)), f, b["white"], r.centerx, self.mid(r, f), align="center")
 
     def _volume(self, c, cx, cy):
-        """The frame's volume bar (assets/skins/passage/volume.png): the word
+        """The frame's volume bar (chrome.py volume.png): the word
         in the wide bold, red blocks lit along the trough."""
         b, X, Y = self.b, self.X, self.Y
         v = self.app.video
@@ -1748,7 +1751,7 @@ class Passage(CableSkin):
     # ── Dialogs: the light card with the maroon band ──────────────────────
 
     def _dialog(self, c, title, lines, buttons=(), focus=0, wide=440, rows=None, cursor=-1, hints=None):
-        """The frame's dialog (assets/skins/passage/dialog.png, stretched as
+        """The frame's dialog (chrome.py dialog.png, stretched as
         nine slices to its rows): the title in the wide bold, the first line
         on the maroon band, the rest (or `rows`, the chosen one on the
         frame's navy row) on the lavender body, the key hints at the foot."""
@@ -1780,7 +1783,7 @@ class Passage(CableSkin):
         return r
 
     def draw_options(self, c, m):
-        """The frame's Options popup (assets/skins/passage/options.png, its
+        """The frame's Options popup (chrome.py options.png, its
         tab lettered with the menu's own title), the chosen row on the
         frame's cream band."""
         b, X, Y = self.b, self.X, self.Y
@@ -1806,7 +1809,7 @@ class Passage(CableSkin):
             self.hit(band, lambda k=k: m.activate(k))
 
     def draw_program_info(self, c, info):
-        """The More Information frame (assets/skins/passage/info.png): the
+        """The More Information frame (chrome.py info.png): the
         guide's card with the channel, title, hours, rating and the first
         lines of the synopsis; the panel under the band with the rest."""
         W, H = self.canvas
@@ -1861,25 +1864,30 @@ class Passage(CableSkin):
         self._dialog(c, "Remote Setup", ["Waiting for a button...", cap.prompt])
 
     def _signal_loss(self, c):
-        """The frame's blocked-programme card (assets/skins/passage/
-        blocked.png) on black, with Cathode's own words."""
+        """The frame's blocked-programme card (chrome.passage_card,
+        drawn to its words) on black, with Cathode's own words."""
         self._message_card(c, self.NO_SIGNAL[0], self.NO_SIGNAL[1:])
 
     def _message_card(self, c, title, lines):
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         c.fill((0, 0, 0, 255))
-        card = self._sprite("blocked.png")
+        f = self.f(Y(20))
+        w = X(240)
+        rows = [ln for line in lines for ln in self.wrap(f, line, w - X(40), 2)]
+        h = Y(50) + Y(24) * len(rows) + Y(30)                    # the card drawn to its words
+        key = ("passage", f"card{w}x{h}", None)
+        card = CableSkin._sprites.get(key)
+        if card is None:
+            card = CableSkin._sprites[key] = chrome.render((w, h), chrome.passage_card(w, h))
         r = card.get_rect(center=(W // 2, H // 2))
         c.blit(card, r.topleft)
         ft = self.wb(Y(16))
         self.tx(c, self.fit(ft, title, r.w - X(40)), ft, b["white"], r.centerx, r.y + Y(10), align="center")
-        f = self.f(Y(20))
         y = r.y + Y(50)
-        for line in lines:
-            for ln in self.wrap(f, line, r.w - X(40), 2):
-                self.tx(c, ln, f, (30, 30, 34), r.centerx, y, align="center")
-                y += Y(24)
+        for ln in rows:
+            self.tx(c, ln, f, (30, 30, 34), r.centerx, y, align="center")
+            y += Y(24)
 
     def _message(self, c, msg):
         self._message_card(c, self.ATTENTION, [msg])
@@ -1923,7 +1931,7 @@ class Passage(CableSkin):
         return (r.x, r.y, r.w, r.h)
 
     def _page_top(self, c, title, sub="", picture=True, heading=""):
-        """The settings page on the frame (assets/skins/passage/page.png):
+        """The settings page on the frame (chrome.py page.png):
         the title in the wide bold on the header strip, the heading and
         help on the cream panel, the picture in the window (page_wide.png
         runs the strip and panel across when there's none)."""
@@ -2046,7 +2054,7 @@ class Passage(CableSkin):
             self.tx(c, "\u25b2", fs, b["navy"], X(300), area.y - Y(12))
 
     def draw_ondemand(self, c, s):
-        """On Demand on the DVR list frame (assets/skins/passage/od.png): the
+        """On Demand on the DVR list frame (chrome.py od.png): the
         mark, the picture over the strip, the list panel, the details panel,
         the keys."""
         W, H = self.canvas
@@ -2159,7 +2167,7 @@ class Passage(CableSkin):
         return [["CLEAR", "DEL"], "ABCDEF", "GHIJKL", "MNOPQR", "STUVWX", "YZ1234", "567890", ["SPACE"], ["DONE", "CANCEL"]]
 
     def draw_keyboard(self, c, kb):
-        """The Search frame (assets/skins/passage/search.png): the prompt on
+        """The Search frame (chrome.py search.png): the prompt on
         the card, the field on the bar, the letters in the wide bold on the
         lavender panel (the cursor a navy box), the tip in the results
         panel, Done and Cancel along the foot."""
