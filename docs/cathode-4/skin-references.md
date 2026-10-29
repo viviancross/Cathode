@@ -279,13 +279,13 @@ the size down to fit before any ellipsis.
 
 Two skins (`cathode/skins/cable.py`) after the leased cable guides, drawn
 to frames gathered 2026-10-28. Geometry is in 640x480 units (the frames'
-own pixels). Since 4.41 the chrome is drawn, not cut: `cathode/skins/
+own pixels). Since 4.40 the chrome is drawn, not cut: `cathode/skins/
 chrome.py` holds each sprite as a table of strokes (fills, gradients,
 rims, holes, polygons, lettering) at the frames' measurements, rendered
 at 4x and scaled down; the notes below on cutting the frames describe how
 those measurements were taken, and only the brand marks remain bitmaps in
 `assets/skins/`. Wayfinder (2010 Time Warner) and Y1 (2014 Comcast X1) were
-drawn procedurally from a demo video and screenshots and removed in 4.41:
+drawn procedurally from a demo video and screenshots and removed in 4.40:
 without clean frames they never got past a re-coloured body.
 
 - **Cumcast i-Grid** (Calmcast until 4.39): the TV Guide i-Guide on Motorola DCT boxes, from the

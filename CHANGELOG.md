@@ -1,6 +1,6 @@
 # Changelog
 
-## 4.41
+## 4.40
 
 - **The cable boxes' chrome is drawn.** Every page, band, row, key and
   dialog the Passage and i-Grid skins blit is now drawn by
@@ -32,8 +32,6 @@
   the streaming-app look the product calls an anti-reference. The cable
   boxes are Cumcast i-Grid and Passage. A saved `skin` of `wayfinder` or
   `y1` falls back to Classic.
-
-## 4.40
 
 - **The frame skins' brands are Cathode's own.** i-Grid's header carries
   the **cumcast** lockup (the lowercase word with its red crescent) and a
