@@ -32,6 +32,13 @@
   personal use) at the frames' sizes, the chosen row's dark tile and
   the active key's box cut from the frame; half-hour columns 137 wide
   with the fourth running off the edge, as the box's did.
+- **Passage's other pages are the frames too**: the settings page
+  (Main Menu, Settings, System Information), On Demand (the DVR list
+  frame), Program Information and On Demand items (the More Information
+  frame), Browse and INFO's band, the dialog, the Options popup, the
+  volume bar, the Search page with its letter grid, the blocked-programme
+  card for a dead channel or a notice, and the screensaver's mark box. The
+  frames' own words are erased; Cathode's go on in their place.
 
 ## 4.38
 

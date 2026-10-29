@@ -1070,6 +1070,38 @@ class Passage(CableSkin):
             Passage._sprites[key] = img
         return img
 
+    def _nine(self, c, img, r, cut):
+        """A sprite stretched to `r` as nine slices: `cut` is (left, top,
+        right, bottom), the margins kept at their own size."""
+        l, t, rt, bt = cut
+        w, h = img.get_size()
+        mw, mh = w - l - rt, h - t - bt
+        dw, dh = r.w - l - rt, r.h - t - bt
+        for (sx, sy, sw, sh), (dx, dy, tw, th) in (
+                ((0, 0, l, t), (r.x, r.y, l, t)), ((l, 0, mw, t), (r.x + l, r.y, dw, t)), ((l + mw, 0, rt, t), (r.right - rt, r.y, rt, t)),
+                ((0, t, l, mh), (r.x, r.y + t, l, dh)), ((l, t, mw, mh), (r.x + l, r.y + t, dw, dh)), ((l + mw, t, rt, mh), (r.right - rt, r.y + t, rt, dh)),
+                ((0, t + mh, l, bt), (r.x, r.bottom - bt, l, bt)), ((l, t + mh, mw, bt), (r.x + l, r.bottom - bt, dw, bt)),
+                ((l + mw, t + mh, rt, bt), (r.right - rt, r.bottom - bt, rt, bt))):
+            if sw > 0 and sh > 0 and tw > 0 and th > 0:
+                piece = img.subsurface((sx, sy, sw, sh))
+                c.blit(piece if (sw, sh) == (tw, th) else pygame.transform.smoothscale(piece, (tw, th)), (dx, dy))
+
+    def _hint(self, c, key, word, x, y, ink=None):
+        """A key and its word along a foot: the SEL disc or an A / B / C icon
+        cut from the frames at (x, y), the word beside it in the condensed
+        face. Returns the right edge."""
+        b, X, Y = self.b, self.X, self.Y
+        if key in ("SEL", "A", "B", "C"):
+            icon = self._sprite("sel.png" if key == "SEL" else f"key_{key.lower()}.png")
+            c.blit(icon, (x, y))
+            w = icon.get_width()
+        else:
+            self._key(c, key, x, y + Y(15))
+            w = X(24)
+        f = self.f(Y(20))
+        self.tx(c, word, f, ink or b["ink"], x + w + X(6), y + Y(8))
+        return x + w + X(6) + self.width(f, word)
+
     # ── The mark: the frame's own 'PASSPORT echo' lockup ──────────────────
 
     def wordmark(self, c, x, y, size, ink=None):
@@ -1139,13 +1171,14 @@ class Passage(CableSkin):
             f = self.wb(max(8, int(size * (size - size // 8) / self.width(f, num))))
         self.tx(c, num, f, (255, 255, 255), x + size // 2, y + (size - self.text.cap(f)) // 2, align="center")
 
-    def _strip(self, c, ch, frame=False):
+    def _strip(self, c, ch, frame=False, top=None):
         """The maroon strip under the picture: the channel in the wide bold
-        at its left, the clock in its dark slanted tab. On the guide the
-        strip is the frame's own; elsewhere it's drawn."""
+        at its left, the clock in its dark slanted tab. On the frames the
+        strip is their own (`top` where a frame hangs it lower); elsewhere
+        it's drawn."""
         b, X, Y = self.b, self.X, self.Y
         vx, vy, vw, vh = self.guide_video_box()
-        strip = pygame.Rect(vx, vy + vh, vw, Y(22))
+        strip = pygame.Rect(vx, vy + vh if top is None else top, vw, Y(22))
         tab = pygame.Rect(strip.right - X(140), strip.y, X(140), strip.h)
         if not frame:
             pygame.draw.rect(c, b["maroon"], strip)
@@ -1184,7 +1217,7 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         f = self.f(Y(25))
         ink = mix(b["ink"], (0, 0, 0), 0.4)
-        xs = (283, 386, 506) if len(keys) == 3 else tuple(283 + k * 112 for k in range(len(keys)))
+        xs = {3: (283, 386, 506), 2: (386, 506), 1: (506,)}.get(len(keys)) or tuple(283 + k * 112 for k in range(len(keys)))
         for k, (letter, word, fn) in enumerate(keys):
             x = X(xs[k])
             box = pygame.Rect(x - X(9), y, X(96), Y(46))
@@ -1375,62 +1408,57 @@ class Passage(CableSkin):
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
 
     def _full_banner(self, c, ch, cur, nxt, left=0):
-        """INFO's banner (the Browse frame's band): the title over the rating
-        chip and the synopsis, the hours at the right."""
+        """INFO's banner, the Browse frame's band (assets/skins/passage/
+        browse.png, y 366 down): the title in the wide bold, the hours at the
+        right, the rating chip and the synopsis in the condensed face."""
         W, H = self.canvas
-        b, X, Y = self.b, self.X, self.Y
-        band = pygame.Rect(left, Y(367), W - left, H - Y(367))
-        self._band(c, band, b["cell"])
-        pygame.draw.rect(c, mix(b["cell"], (255, 255, 255), 0.6), (band.x, band.y, band.w, 1))
-        f_title, f_hours, f_desc = self.wb(Y(16)), self.f(Y(17)), self.f(Y(16))
-        x0 = band.x + X(62)
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(330)), f_title, b["white"], x0, band.y + Y(5))
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        img = self._sprite("browse.png")
+        c.blit(img.subsurface((0, Y(366), W, H - Y(366))), (0, Y(366)))
+        f_title, f_hours, f_desc = self.wb(Y(17)), self.f(Y(19)), self.f(Y(20))
+        x0 = X(62)
+        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(400)), f_title, b["white"], x0, Y(372))
         if cur:
-            self.tx(c, f"{ampm(cur.start)} – {ampm(cur.stop)}", f_hours, b["white"], W - X(58), band.y + Y(5), align="right")
-            x, y = x0, band.y + Y(30)
+            self.tx(c, f"{ampm(cur.start)} \u2013 {ampm(cur.stop)}", f_hours, b["white"], X(580), Y(372), align="right")
+            x, y = x0, Y(398)
             if cur.rating:
-                fr = self.fb(Y(13))
-                chip = pygame.Rect(x, y + Y(1), self.width(fr, cur.rating) + X(10), Y(16))
-                pygame.draw.rect(c, b["tab"], chip, border_radius=Y(2))
-                self.tx(c, cur.rating, fr, b["white"], chip.centerx, self.mid(chip, fr), align="center")
+                fr = self.wb(Y(14))
+                chip = pygame.Rect(x, y + Y(1), self.width(fr, cur.rating) + X(10), Y(17))
+                pygame.draw.rect(c, (30, 30, 50), chip, border_radius=Y(2))
+                self.tx(c, cur.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
                 x = chip.right + X(8)
-            lines = self.wrap(f_desc, cur.description or "", W - X(58) - x0, 3)
+            lines = self.wrap(f_desc, cur.description or "", X(580) - x0, 3)
             for k, ln in enumerate(lines):
                 self.tx(c, ln, f_desc, b["white"], x if k == 0 else x0, y)
-                y += Y(19)
-            if nxt and y < band.bottom - Y(20):
-                self.tx(c, self.fit(f_desc, f"Next: {nxt.title}", W - X(58) - x0), f_desc, b["card"], x0, y)
+                y += Y(22)
+            if nxt and y < H - Y(24):
+                self.tx(c, self.fit(f_desc, f"Next: {nxt.title}", X(580) - x0), f_desc, b["card"], x0, y)
         else:
-            self.tx(c, "No information available", f_desc, b["white"], x0, band.y + Y(30))
+            self.tx(c, "No information available", f_desc, b["white"], x0, Y(398))
         if self._tick is None or self._tick[0] <= time.monotonic():
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
 
     def draw_browse(self, c, br):
-        """The Browse frame: a light column at the left with the channel's
-        disc, call sign and number, '< Browse >' in a white box, the clock;
-        the full banner along the foot."""
+        """The Browse frame itself: the light column with the channel's tile,
+        call sign and number, the frame's own '< Browse >' box and the
+        clock; the band along the foot."""
         if not br.channel:
             return
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
+        ch = br.channel
         cur, nxt = br.program()
-        col = self.R(0, 20, 137, 347)
-        vgrad(c, col, rgba(mix(b["tile"], (255, 255, 255), 0.6)), rgba(b["tile"]), radius=Y(18))
-        pygame.draw.rect(c, b["tile"], (col.x, col.y, Y(18), col.h))                         # square at the screen's edge
-        pygame.draw.rect(c, b["tile"], (col.x, col.bottom - Y(18), col.w, Y(18)))            # square where the band meets it
-        self._chan_tile(c, br.channel, pygame.Rect(col.x, col.y + Y(24), col.w, Y(110)), big=True)
-        f = self.fb(Y(17))
-        box = pygame.Rect(col.x + X(10), col.y + Y(224), col.w - X(6), Y(36))
-        pygame.draw.rect(c, b["white"], box, border_radius=Y(4))
-        pygame.draw.rect(c, mix(b["tile"], (0, 0, 0), 0.3), box, 1, border_radius=Y(4))
-        self.tx(c, "Browse", f, b["navy"], box.centerx, self.mid(box, f), align="center")
-        for dx, pts in ((box.x + X(6), [(box.x + X(6), box.centery), (box.x + X(14), box.centery - Y(6)), (box.x + X(14), box.centery + Y(6))]),
-                        (box.right, [(box.right - X(6), box.centery), (box.right - X(14), box.centery - Y(6)), (box.right - X(14), box.centery + Y(6))])):
-            pygame.draw.polygon(c, b["blue"], pts)
-        self.tx(c, ampm(datetime.now(), True), f, b["tile_ink"], col.x + X(14), col.y + Y(302))
-        self._full_banner(c, br.channel, cur, nxt)
+        c.blit(self._sprite("browse.png"), (0, 0))
+        ink = (30, 30, 34)
+        self._logo_disc(c, ch, X(80), Y(55), Y(48))
+        self.tx(c, call(ch), self.f(Y(20)), ink, X(104), Y(108), align="center")
+        self.tx(c, str(ch.number), self.wb(Y(17)), ink, X(104), Y(128), align="center")
+        self.tx(c, ampm(datetime.now(), True), self.f(Y(20)), ink, X(65), Y(335))
+        self.hit(self.R(45, 265, 44, 40), lambda: br.handle("LEFT"))
+        self.hit(self.R(91, 265, 44, 40), lambda: br.handle("RIGHT"))
+        self._full_banner(c, ch, cur, nxt)
         tag = f"{self.k('SELECT')} to watch" + (f"  (+{br.ahead})" if br.ahead else "")
-        self.tx(c, tag, self.f(Y(14)), b["card"], W - X(58), H - Y(22), align="right")
+        self.tx(c, tag, self.f(Y(18)), b["card"], X(580), H - Y(24), align="right")
 
     def _digits(self, c, digits):
         b, X, Y = self.b, self.X, self.Y
@@ -1440,95 +1468,156 @@ class Passage(CableSkin):
         self.tx(c, digits + "-" * (3 - len(digits)), f, b["white"], r.centerx, self.mid(r, f), align="center")
 
     def _volume(self, c, cx, cy):
-        """The frame's volume bar: a grey rounded band, red blocks lit."""
+        """The frame's volume bar (assets/skins/passage/volume.png): the word
+        in the wide bold, red blocks lit along the trough."""
         b, X, Y = self.b, self.X, self.Y
         v = self.app.video
-        r = self.R(0, 420, 640, 36)
-        self._band(c, r, b["tile"])
-        f = self.fb(Y(17))
-        self.tx(c, "Mute" if v.muted else "Volume", f, b["maroon"] if v.muted else b["tile_ink"], X(100), self.mid(r, f))
-        bar = pygame.Rect(X(170), r.y + Y(8), X(420), Y(20))
-        pygame.draw.rect(c, mix(b["tile"], (0, 0, 0), 0.12), bar, border_radius=Y(10))
-        pygame.draw.rect(c, mix(b["tile"], (0, 0, 0), 0.3), bar, 1, border_radius=Y(10))
-        n = 30
+        c.blit(self._sprite("volume.png"), (0, Y(400)))
+        f = self.wb(Y(17))
+        self.tx(c, "Mute" if v.muted else "Volume", f, b["movie"] if v.muted else b["navy"], X(52), Y(416))
+        n = 33
         lit = 0 if v.muted else round(n * v.volume / 100)
         for i in range(n):
-            x = bar.x + X(8) + i * (bar.w - X(16)) // n
-            pygame.draw.rect(c, b["maroon"] if i < lit else mix(b["tile"], (0, 0, 0), 0.25), (x, bar.y + Y(4), X(5), bar.h - Y(8)))
+            pygame.draw.rect(c, (120, 4, 4) if i < lit else (158, 158, 160), (X(162 + 14 * i), Y(413), X(7), Y(18)))
 
     # ── Dialogs: the light card with the maroon band ──────────────────────
 
     def _dialog(self, c, title, lines, buttons=(), focus=0, wide=440, rows=None, cursor=-1, hints=None):
-        """The frame's dialog: a light card, the title bold and centred, a
-        maroon band for the first line, a lavender body for the rest (or
-        `rows`, the chosen one navy with the arrows), the key hints at the
-        foot."""
+        """The frame's dialog (assets/skins/passage/dialog.png, stretched as
+        nine slices to its rows): the title in the wide bold, the first line
+        on the maroon band, the rest (or `rows`, the chosen one on the
+        frame's navy row) on the lavender body, the key hints at the foot."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(16))
+        img = self._sprite("dialog.png")
+        f = self.f(Y(21))
         first, rest = (lines[0], lines[1:]) if lines else ("", [])
-        body = rows if rows is not None else [w for line in rest for w in self.wrap(f, line, X(wide - 80), 3)]
-        r = pygame.Rect(0, 0, X(wide), Y(34) + Y(24) + max(1, len(body)) * Y(29) + Y(42))
+        body = rows if rows is not None else [w for line in rest for w in self.wrap(f, line, X(wide - 100), 3)]
+        n = max(1, len(body))
+        r = pygame.Rect(0, 0, X(max(429, wide)), Y(70) + n * Y(28) + Y(46))
         r.center = (W // 2, H // 2)
-        pygame.draw.rect(c, b["dlg"], r, border_radius=Y(10))
-        pygame.draw.rect(c, b["dlg_edge"], r, 1, border_radius=Y(10))
-        ft = self.wb(Y(15))
-        self.tx(c, self.fit(ft, title, r.w - X(30)), ft, b["dlg_head_ink"], r.centerx, r.y + Y(9), align="center")
-        band = pygame.Rect(r.x + X(8), r.y + Y(34), r.w - X(16), Y(24))
-        pygame.draw.rect(c, b["maroon"], band, border_top_left_radius=Y(4), border_top_right_radius=Y(4))
-        fb = self.fb(Y(14))
-        self.tx(c, self.fit(fb, first, band.w - X(20)), fb, b["white"], band.centerx, self.mid(band, fb), align="center")
-        lav = pygame.Rect(band.x, band.bottom, band.w, max(1, len(body)) * Y(29) + Y(10))
-        pygame.draw.rect(c, b["lav"], lav)
-        pygame.draw.rect(c, b["dlg_edge"], lav, 1)
-        y = lav.y + Y(6)
+        self._nine(c, img, r, (X(16), Y(70), X(16), Y(46)))
+        ft = self.wb(Y(17))
+        self.tx(c, self.fit(ft, title, r.w - X(40)), ft, (20, 20, 20), r.centerx, r.y + Y(12), align="center")
+        fb = self.f(Y(20))
+        self.tx(c, self.fit(fb, first, r.w - X(40)), fb, b["white"], r.centerx, r.y + Y(44), align="center")
+        sel = self._sprite("dlg_sel.png")
         for k, ln in enumerate(body):
-            row = pygame.Rect(lav.x, y, lav.w, Y(27))
+            row = pygame.Rect(r.x + X(12), r.y + Y(70) + k * Y(28), r.w - X(24), Y(28))
             on = k == cursor
             if on:
-                pygame.draw.rect(c, b["navy"], row)
-                pygame.draw.polygon(c, b["key_a"], [(row.x + X(30), row.centery - Y(2)), (row.x + X(38), row.centery - Y(2)), (row.x + X(34), row.centery - Y(8))])
-                pygame.draw.polygon(c, b["key_a"], [(row.x + X(30), row.centery + Y(2)), (row.x + X(38), row.centery + Y(2)), (row.x + X(34), row.centery + Y(8))])
-            self.tx(c, self.fit(f, ln, row.w - X(80)), f, b["white"] if on else b["dlg_ink"], row.x + X(62), self.mid(row, f))
-            y += Y(29)
+                c.blit(sel if row.w == sel.get_width() else pygame.transform.smoothscale(sel, (row.w, sel.get_height())), (row.x, row.y + 1))
+            self.tx(c, self.fit(f, ln, row.w - X(70)), f, b["white"] if on else b["dlg_ink"], row.x + X(58), row.y + Y(7))
         hints = hints or ([("SEL", "Select")] + [("C", "Cancel")] if buttons or rows is not None else [("C", "Close")])
-        fy = r.bottom - Y(30)
-        fh = self.f(Y(16))
+        fy = r.bottom - Y(38)
         for k, (key, word) in enumerate(hints):
-            x = r.x + X(40) if k == 0 else r.right - X(40) - X(16) - self.width(fh, word) - X(18)
-            if key == "SEL":
-                self._sel_chip(c, x, fy + Y(9))
-                self.tx(c, word, fh, b["dlg_ink"], x + X(28), fy)
-            else:
-                self._key(c, key, x, fy + Y(9))
-                self.tx(c, word, fh, b["dlg_ink"], x + X(26), fy)
+            self._hint(c, key, word, r.x + X(50) if k == 0 else r.x + r.w - X(140), fy, ink=b["dlg_ink"])
         return r
 
     def draw_options(self, c, m):
+        """The frame's Options popup (assets/skins/passage/options.png, its
+        tab lettered with the menu's own title), the chosen row on the
+        frame's cream band."""
+        b, X, Y = self.b, self.X, self.Y
         labels = []
         for it in m.items:
             v = it.value() if it.value else ""
             labels.append(f"{it.label}:  {v}" if v else it.label)
-        r = self._dialog(c, m.title.title(), ["Highlight a setting, then press SEL."], rows=labels, cursor=m.cursor)
-        for k in range(len(labels)):
-            row = pygame.Rect(r.x + X(8), r.y + Y(64) + k * Y(29), r.w - X(16), Y(27))
-            self.hit(row, lambda k=k: m.activate(k))
+        img = self._sprite("options.png")
+        f = self.f(Y(20))
+        n = max(1, len(labels))
+        w = min(X(380), max(X(140), max(self.width(f, lab) for lab in labels) + X(50)))
+        r = pygame.Rect(X(228), Y(220), w, Y(30) + n * Y(26) + Y(6))
+        self._nine(c, img, r, (X(24), Y(42), X(12), Y(22)))
+        ft = self.wb(Y(13))
+        self.tx(c, self.fit(ft, m.title.title(), X(60)), ft, b["white"], r.x + X(12), r.y + Y(5))
+        sel = self._sprite("opt_sel.png")
+        for k, lab in enumerate(labels):
+            band = pygame.Rect(r.x - X(2), r.y + Y(30) + k * Y(26), r.w + X(2), Y(24))
+            on = k == m.cursor
+            if on:
+                self._nine(c, sel, band, (X(30), 0, X(12), 0))
+            self.tx(c, self.fit(f, lab, r.w - X(44)), f, b["navy"] if on else b["white"], r.x + X(30), band.y + Y(4))
+            self.hit(band, lambda k=k: m.activate(k))
 
     def draw_program_info(self, c, info):
-        lines = info.lines()
-        self._dialog(c, info.title, lines[:1] + lines[1:])
+        """The More Information frame (assets/skins/passage/info.png): the
+        guide's card with the channel, title, hours, rating and the first
+        lines of the synopsis; the panel under the band with the rest."""
+        W, H = self.canvas
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        ch, p = info.channel, info.program
+        c.blit(self._sprite("info.png"), (0, 0))
+        self._picture(c)
+        self._strip(c, ch, frame=True)
+        ink = mix(b["ink"], (0, 0, 0), 0.7)
+        self._logo_disc(c, ch, X(62), Y(48), Y(50))
+        f_wide = self.wb(Y(17))
+        self.tx(c, call(ch), f_wide, ink, X(125), Y(52))
+        self.tx(c, str(ch.number), f_wide, ink, X(125), Y(72))
+        f_title, f_time, f_desc = self.f(Y(24)), self.wb(Y(18)), self.f(Y(22))
+        self.tx(c, self.fit(f_title, p.title if p else ch.name, X(245)), f_title, ink, X(65), Y(106))
+        more = []
+        if p:
+            self.tx(c, f"{ampm(p.start)} \u2013 {ampm(p.stop)}", f_time, ink, X(65), Y(130))
+            x0, y = X(65), Y(150)
+            if p.rating:
+                fr = self.wb(Y(15))
+                chip = pygame.Rect(x0 - X(3), y, max(X(18), self.width(fr, p.rating) + X(6)), Y(17))
+                pygame.draw.rect(c, (20, 20, 20), chip, border_radius=Y(2))
+                self.tx(c, p.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
+                x0 = chip.right + X(5)
+            lines = self.wrap(f_desc, p.description or "", X(245), 12)
+            for k, ln in enumerate(lines[:3]):
+                self.tx(c, ln, f_desc, ink, x0 if k == 0 else X(65), y)
+                y += Y(20)
+            facts = "   ".join(x for x in (p.category, p.episode) if x)
+            if facts:
+                more.append(facts)
+            if len(lines) > 3:
+                more.append(p.description or "")
+            elif not facts:
+                more.append("No further information.")
+        else:
+            self.tx(c, "No information is available for this time.", f_desc, ink, X(65), Y(150))
+        self.tx(c, "More Information", self.wb(Y(16)), b["navy"], X(346), Y(230), align="center")
+        fm = self.f(Y(21))
+        y = Y(258)
+        for line in more:
+            for ln in self.wrap(fm, line, X(540), 5):
+                if y > Y(380):
+                    break
+                self.tx(c, ln, fm, b["navy"], X(78), y)
+                y += Y(24)
+        self._hint(c, "C", "Close", X(506), Y(414))
+        self.hit(self.R(500, 410, 120, 36), lambda: info.handle("BACK"))
 
     def draw_capture(self, c, cap):
         self._dialog(c, "Remote Setup", ["Waiting for a button...", cap.prompt])
 
     def _signal_loss(self, c):
+        """The frame's blocked-programme card (assets/skins/passage/
+        blocked.png) on black, with Cathode's own words."""
+        self._message_card(c, self.NO_SIGNAL[0], self.NO_SIGNAL[1:])
+
+    def _message_card(self, c, title, lines):
+        W, H = self.canvas
+        b, X, Y = self.b, self.X, self.Y
         c.fill((0, 0, 0, 255))
-        title, l1, l2 = self.NO_SIGNAL
-        self._dialog(c, title, [l1, l2])
+        card = self._sprite("blocked.png")
+        r = card.get_rect(center=(W // 2, H // 2))
+        c.blit(card, r.topleft)
+        ft = self.wb(Y(16))
+        self.tx(c, self.fit(ft, title, r.w - X(40)), ft, b["white"], r.centerx, r.y + Y(10), align="center")
+        f = self.f(Y(20))
+        y = r.y + Y(50)
+        for line in lines:
+            for ln in self.wrap(f, line, r.w - X(40), 2):
+                self.tx(c, ln, f, (30, 30, 34), r.centerx, y, align="center")
+                y += Y(24)
 
     def _message(self, c, msg):
-        c.fill((0, 0, 0, 255))
-        self._dialog(c, self.ATTENTION, ["Please read the message below.", msg])
+        self._message_card(c, self.ATTENTION, [msg])
 
     def draw_toast(self, c, msg):
         b, X, Y = self.b, self.X, self.Y
@@ -1554,75 +1643,72 @@ class Passage(CableSkin):
     # ── Pages: the General Settings frame ─────────────────────────────────
 
     def menu_video_box(self, menu):
-        return self.guide_video_box()
+        return self.page_video_box(menu)
+
+    def page_video_box(self, screen):
+        """The settings frame's window; the DVR frame's for On Demand (its
+        window runs to y 216); the guide's for the rest."""
+        name = getattr(screen, "name", "")
+        if name in ("menu", "settings", "diagnostics", "options", "capture"):
+            r = self.R(350, 0, 290, 189)
+        elif name == "ondemand":
+            r = self.R(320, 0, 320, 216)
+        else:
+            r = self.R(320, 0, 320, 200)
+        return (r.x, r.y, r.w, r.h)
 
     def _page_top(self, c, title, sub="", picture=True, heading=""):
-        """The settings page's top: the light header strip with the title in
-        navy, the cream panel with the heading and help, the picture."""
+        """The settings page on the frame (assets/skins/passage/page.png):
+        the title in the wide bold on the header strip, the heading and
+        help on the cream panel, the picture in the window (page_wide.png
+        runs the strip and panel across when there's none)."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
-        self._page(c, (0, 0, W, H))
-        right = X(320) if picture else W
-        head = pygame.Rect(0, 0, right, Y(66))
-        vgrad(c, head, rgba(mix(b["page"], (255, 255, 255), 0.7)), rgba(b["page"]))
-        f = self.wb(Y(15))
-        self.tx(c, self.fit(f, title, right - X(80)), f, b["navy"], X(60), Y(42))
-        panel = pygame.Rect(0, head.bottom, right, Y(124) if picture else Y(70))
-        pygame.draw.rect(c, mix(b["card"], (240, 225, 165), 0.5), panel)
-        y = panel.y + Y(14)
+        c.blit(self._sprite("page.png" if picture else "page_wide.png"), (0, 0))
+        right = X(350) if picture else W
+        ink = mix(b["ink"], (0, 0, 0), 0.7)
+        f = self.wb(Y(17))
+        self.tx(c, self.fit(f, title, right - X(120)), f, b["navy"], X(97), Y(46))
+        y = Y(80)
         if heading:
-            fh = self.wb(Y(13))
-            self.tx(c, self.fit(fh, heading, right - X(76)), fh, mix(b["ink"], (0, 0, 0), 0.4), X(58), y)
-            y += Y(20)
+            fh = self.wb(Y(16))
+            for ln in self.wrap(fh, heading, right - X(80), 2):
+                self.tx(c, ln, fh, ink, X(57), y)
+                y += Y(20)
         if sub:
-            fs = self.f(Y(15))
-            for ln in self.wrap(fs, sub, right - X(76), 4 if picture else 2):
-                self.tx(c, ln, fs, mix(b["ink"], (0, 0, 0), 0.4), X(58), y)
-                y += Y(18)
+            fs = self.f(Y(20))
+            for ln in self.wrap(fs, sub, right - X(80), max(1, (Y(186) - y) // Y(22))):
+                self.tx(c, ln, fs, ink, X(57), y)
+                y += Y(22)
         if picture:
-            self._picture(c)
-            live = self.app.live
-            self._strip(c, live.channel if live else None)
+            self.hole(c, self.page_video_box(None))
 
     def _panel(self, c, r):
-        """The dark purple list panel, rounded at the left, its column header band."""
-        b, X, Y = self.b, self.X, self.Y
-        pygame.draw.rect(c, b["panel"], r, border_top_left_radius=Y(14), border_bottom_left_radius=Y(14))
+        """The list panel is the frame's own."""
 
     def _col_header(self, c, y, word):
         b, X, Y = self.b, self.X, self.Y
-        band = pygame.Rect(X(50), y, X(220), Y(24))
-        pygame.draw.rect(c, b["col_hdr"], band, border_top_left_radius=Y(6))
-        pygame.draw.rect(c, b["cell"], (band.right, y, self.canvas[0] - band.right, Y(24)))
-        f = self.wb(Y(13))
-        self.tx(c, word, f, b["navy"], band.x + X(30), self.mid(band, f))
+        self.tx(c, self.fit(self.wb(Y(16)), word, X(180)), self.wb(Y(16)), b["navy"], X(80), y + Y(6))
 
     def _foot(self, c, text):
-        b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(16))
-        self.tx(c, self.fit(f, text, X(300)), f, b["ink"], X(96), Y(420))
+        self._hint(c, "SEL", text, self.X(58), self.Y(414))
         self._foot_clock(c)
 
     def _foot_clock(self, c):
+        """The clock on the frame's dark tab at the foot's right."""
         b, X, Y = self.b, self.X, self.Y
-        tab = self.R(440, 414, 200, 24)
-        pygame.draw.polygon(c, b["tab"], [(tab.x + X(14), tab.y), (tab.right, tab.y), (tab.right, tab.bottom), (tab.x, tab.bottom)])
-        f = self.wb(Y(14))
-        self.tx(c, datetime.now().strftime("%I:%M:%S%p").lstrip("0").lower(), f, b["white"], tab.x + X(40), self.mid(tab, f))
+        self.tx(c, datetime.now().strftime("%I:%M:%S%p").lstrip("0").lower(), self.wb(Y(16)), b["white"], X(466), Y(418))
 
     def _list_row(self, c, r, title, meta, on, f=None, fm=None):
+        """A row of the list panel: the chosen one on the frame's navy pill
+        (its arrows with it), the value in the right column."""
         b, X, Y = self.b, self.X, self.Y
-        f, fm = f or self.f(Y(17)), fm or self.f(Y(15))
+        f, fm = f or self.f(Y(21)), fm or self.f(Y(19))
         if on:
-            pill = pygame.Rect(r.x, r.y, min(r.w, X(236)), r.h)
-            pygame.draw.rect(c, b["navy"], pill, border_radius=r.h // 2)
-        self.tx(c, self.fit(f, title, X(196)), f, b["white"], r.x + X(50), self.mid(r, f))
+            c.blit(self._sprite("pill.png"), (X(60), r.y))
+        self.tx(c, self.fit(f, title, X(150)), f, b["white"], X(110), r.y + Y(6))
         if meta:
-            self.tx(c, self.fit(fm, meta, r.w - X(260)), fm, b["white"] if on else b["panel_dim"], r.x + X(250), self.mid(r, fm))
-        if on:
-            cx = r.x + X(226)
-            pygame.draw.polygon(c, b["white"], [(cx - X(8), r.centery), (cx - X(3), r.centery - Y(5)), (cx - X(3), r.centery + Y(5))])
-            pygame.draw.polygon(c, b["white"], [(cx + X(8), r.centery), (cx + X(3), r.centery - Y(5)), (cx + X(3), r.centery + Y(5))])
+            self.tx(c, self.fit(fm, meta, X(330)), fm, b["white"] if on else b["panel_dim"], X(300), r.y + Y(7))
 
     def _button(self, c, r, label, on, f=None):
         b, Y = self.b, self.Y
@@ -1633,114 +1719,100 @@ class Passage(CableSkin):
     def draw_menu(self, c, m):
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
-        it = m.items[m.cursor] if 0 <= m.cursor < len(m.items) else None
+        cur = m.items[m.cursor] if 0 <= m.cursor < len(m.items) else None
         title = "Main Menu" if m.title == "MAIN MENU" else m.title.title()
-        self._page_top(c, "General Settings" if title != "Main Menu" else "Main Menu", it.help if it and it.help else "",
-                       heading=f"{title}: {it.label}" if it else title)
+        self._page_top(c, "General Settings" if title != "Main Menu" else "Main Menu", cur.help if cur and cur.help else "",
+                       heading=f"{title}: {cur.label}" if cur else title)
         self._col_header(c, Y(192), title)
-        area = self.R(50, 216, 590, 194)
-        self._panel(c, area)
-        pygame.draw.rect(c, b["col"], (area.x, area.y, X(220), area.h), border_bottom_left_radius=Y(14))
         n = len(m.items)
-        rh = Y(27)
         n_vis = 6
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
         for k, i in enumerate(range(first, min(n, first + n_vis))):
             it = m.items[i]
-            r = pygame.Rect(area.x + X(10), area.y + Y(14) + k * rh, area.w - X(20), rh - Y(2))
-            v = it.value() if it.value else ("" if not it.submenu else "")
+            r = pygame.Rect(X(60), Y(248) + k * Y(27), X(232), Y(26))
+            v = it.value() if it.value else ""
             on = i == m.cursor
             self._list_row(c, r, it.label, v, on)
             if not it.enabled and not on:
-                veil = pygame.Surface((X(236), r.h), pygame.SRCALPHA)
+                veil = pygame.Surface(r.size, pygame.SRCALPHA)
                 veil.fill((*b["panel"], 120))
                 c.blit(veil, r.topleft)
-            self.hit(r, lambda i=i: m.activate(i))
-        f = self.f(Y(16))
-        self._sel_chip(c, X(62), Y(429))
-        self.tx(c, "Change" if it and it.adjust else "Select", f, b["ink"], X(96), Y(420))
-        self._key(c, "C", X(230), Y(429))
-        self.tx(c, "Back" if len(getattr(m, "pages", [1])) > 1 else "Exit", f, b["ink"], X(256), Y(420))
+            self.hit(pygame.Rect(r.x, r.y, X(570), r.h), lambda i=i: m.activate(i))
+        self._hint(c, "SEL", "Change" if cur and cur.adjust else "Select", X(58), Y(414))
+        self._hint(c, "C", "Back" if len(getattr(m, "pages", [1])) > 1 else "Exit", X(220), Y(413))
         self._foot_clock(c)
         if n > n_vis:
-            self.tx(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(13)), b["white"], area.right - X(16), area.bottom - Y(20), align="right")
-
-    # On Demand and the recordings: the DVR list frame.
+            self.tx(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(17)), b["white"], X(624), Y(388), align="right")
 
     def _od_buttons(self, c, labels, focus, hits):
         keys = [(letter, label, fn) for letter, label, fn in zip("ABC", labels, hits or [None] * len(labels))]
-        self._keybar(c, self.Y(413), keys, focus if 0 <= focus < len(keys) else None)
+        self._keybar(c, self.Y(403), keys, focus if 0 <= focus < len(keys) else None)
 
     def _rows(self, c, s, area, rows, sel, top, n_vis):
+        """The list's rows, 37 apart between the frame's rules, the chosen
+        one on the frame's teal band; the details in the teal panel."""
         b, X, Y = self.b, self.X, self.Y
-        f = self.fb(Y(17))
+        f = self.f(Y(21))
         rh = Y(37)
         for k, i in enumerate(range(top, min(len(rows), top + n_vis))):
             row = rows[i]
             r = pygame.Rect(area.x, area.y + k * rh, X(270), rh)
             on = i == sel
             if on:
-                pygame.draw.rect(c, b["teal"], (area.x, r.y, self.canvas[0] - area.x, rh))
-                pygame.draw.polygon(c, b["key_a"], [(r.x + X(16), r.centery - Y(2)), (r.x + X(28), r.centery - Y(2)), (r.x + X(22), r.centery - Y(9))])
-                pygame.draw.polygon(c, b["key_a"], [(r.x + X(16), r.centery + Y(2)), (r.x + X(28), r.centery + Y(2)), (r.x + X(22), r.centery + Y(9))])
-            else:
-                pygame.draw.rect(c, mix(b["list"], (255, 255, 255), 0.35), (r.x + X(10), r.bottom - 1, r.w - X(20), 1))
-            self.tx(c, self.fit(f, nice(row.get("title", "")), r.w - X(60)), f, b["white"] if on else b["list_ink"], r.x + X(44), self.mid(r, f))
+                c.blit(self._sprite("od_sel.png"), (X(50), r.y))
+            self.tx(c, self.fit(f, nice(row.get("title", "")), X(205)), f, b["white"] if on else b["navy"], X(95), r.y + Y(14))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
         cur = rows[sel] if 0 <= sel < len(rows) else None
-        detail = pygame.Rect(X(320), Y(268), X(320), Y(132))
-        pygame.draw.rect(c, b["teal"], detail)
         if cur:
-            fd = self.f(Y(16))
-            y = detail.y + Y(12)
-            for ln in [cur.get("meta", "")] + self.wrap(fd, cur.get("summary", "") or "", detail.w - X(28), 4):
+            fd = self.f(Y(20))
+            y = max(Y(283), area.y + (sel - top) * rh + rh + Y(8))    # under the band when the list's end pushes it lower
+            for ln in [cur.get("meta", "")] + self.wrap(fd, cur.get("summary", "") or "", X(290), 3):
                 if ln:
-                    self.tx(c, self.fit(fd, ln, detail.w - X(28)), fd, b["white"], detail.x + X(14), y)
-                    y += Y(19)
-        fs = self.f(Y(13))
+                    self.tx(c, self.fit(fd, ln, X(290)), fd, b["white"], X(335), y)
+                    y += Y(24)
+        fs = self.f(Y(17))
         if top + n_vis < len(rows):
-            self.tx(c, "▼", fs, b["list_ink"], area.x + X(258), area.bottom - Y(16))
+            self.tx(c, "\u25bc", fs, b["navy"], X(300), area.bottom - Y(18))
         if top:
-            self.tx(c, "▲", fs, b["list_ink"], area.x + X(258), area.y + Y(2))
+            self.tx(c, "\u25b2", fs, b["navy"], X(300), area.y - Y(12))
 
     def draw_ondemand(self, c, s):
+        """On Demand on the DVR list frame (assets/skins/passage/od.png): the
+        mark, the picture over the strip, the list panel, the details panel,
+        the keys."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
-        self._page(c, (0, 0, W, H))
-        head = pygame.Rect(0, 0, X(320), Y(100))
-        vgrad(c, head, rgba(mix(b["page"], (255, 255, 255), 0.7)), rgba(b["page"]))
-        self.wordmark(c, X(60), Y(52), Y(16))
-        self._picture(c)
+        c.blit(self._sprite("od.png"), (0, 0))
+        self.hole(c, self.page_video_box(s))
         live = self.app.live
-        self._strip(c, live.channel if live else None)
-        fh = self.fb(Y(15))
+        self._strip(c, live.channel if live else None, frame=True, top=Y(216))
+        fh = self.wb(Y(16))
         head_word = "My Recordings" if rec else (s.crumb() if len(s.stack) > 1 else "On Demand")
-        self.tx(c, self.fit(fh, head_word, X(250)), fh, b["navy"], X(60), Y(80))
+        self.tx(c, self.fit(fh, head_word, X(250)), fh, b["navy"], X(60), Y(100))
         area = self.R(50, 125, 270, 275)
-        pygame.draw.rect(c, b["list"], area, border_top_left_radius=Y(14), border_bottom_left_radius=Y(14))
         if s.mode == "auth":
-            fl = self.fb(Y(16))
-            y = area.y + Y(40)
+            fl = self.f(Y(21))
+            y = area.y + Y(50)
             for line in ("On a phone or computer, go to", s.auth_link or "plex.tv/link", "and enter this code:"):
-                self.tx(c, line, fl, b["list_ink"], area.centerx, y, align="center")
-                y += Y(26)
+                self.tx(c, line, fl, b["navy"], area.centerx, y, align="center")
+                y += Y(28)
             if s.auth_code:
-                self.tx(c, s.auth_code, self.fb(Y(40)), b["list_ink"], area.centerx, y + Y(6), align="center")
-            self._keybar(c, Y(413), [("C", "Cancel", s.back)], 0)
+                self.tx(c, s.auth_code, self.wb(Y(36)), b["navy"], area.centerx, y + Y(10), align="center")
+            self._keybar(c, Y(403), [("C", "Cancel", s.back)], 0)
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
-        top = max(0, min(s.sel - n_vis // 2, len(rows) - n_vis))
+        top = max(0, min(s.sel - 2, len(rows) - n_vis))     # the chosen row in the third slot, between the strip and the details, as the frame
         if s.view == "wall":
             self._wall(c, s, area.inflate(-X(10), -Y(10)))
         else:
-            self._rows(c, s, pygame.Rect(area.x, area.y + Y(30), area.w, area.h - Y(40)), rows, s.sel, top, n_vis)
+            self._rows(c, s, pygame.Rect(X(50), Y(164), X(270), Y(222)), rows, s.sel, top, n_vis)
         side = self.od_side(s)
         self._od_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, [fn for _, fn in side])
-        fs = self.f(Y(13))
-        self.tx(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(632), Y(462), align="right")
+        fs = self.f(Y(17))
+        self.tx(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(632), Y(458), align="right")
         if s.status:
-            self.tx(c, self.fit(fs, s.status, X(300)), fs, b["ink"], X(50), Y(462))
+            self.tx(c, self.fit(fs, s.status, X(300)), fs, b["ink"], X(50), Y(458))
 
     def od_side(self, s):
         if s.mode != "browse":
@@ -1751,41 +1823,54 @@ class Passage(CableSkin):
                 ("Done", s.back)]
 
     def draw_iteminfo(self, c, info):
+        """An On Demand item on the More Information frame: the title and
+        facts on the card, the poster and summary in the panel, the keys."""
         from ..screens.iteminfo import hms
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         d = info.detail
+        c.blit(self._sprite("info.png"), (0, 0))
+        self._picture(c)
+        live = self.app.live
+        self._strip(c, live.channel if live else None, frame=True)
+        ink = mix(b["ink"], (0, 0, 0), 0.7)
         meta = d.get("subtitle") or d.get("meta", "")
-        facts = "   ".join(s for s in (meta, f"Length {hms(d['duration'])}" if d.get("duration") else "",
-                                      f"Resume at {hms(d['offset'])}" if (d.get("offset") or 0) > 5 else "") if s)
-        self._page_top(c, "Program Information", facts, picture=False, heading=d.get("title", ""))
-        area = self.R(50, 160, 590, 240)
-        pygame.draw.rect(c, b["teal"], area, border_top_left_radius=Y(14), border_bottom_left_radius=Y(14))
-        art_r = pygame.Rect(area.x + X(16), area.y + Y(14), X(96), Y(144))
-        pygame.draw.rect(c, b["white"], art_r.inflate(X(4), Y(4)))
-        pygame.draw.rect(c, b["panel"], art_r)
+        f_title, f_desc = self.f(Y(24)), self.f(Y(22))
+        self.tx(c, self.fit(self.wb(Y(17)), "On Demand", X(240)), self.wb(Y(17)), ink, X(65), Y(52))
+        for k, ln in enumerate(self.wrap(f_title, d.get("title", ""), X(245), 2)):
+            self.tx(c, ln, f_title, ink, X(65), Y(80) + k * Y(26))
+        facts = [x for x in (meta, f"Length {hms(d['duration'])}" if d.get("duration") else "",
+                             f"Resume at {hms(d['offset'])}" if (d.get("offset") or 0) > 5 else "") if x]
+        y = Y(136)
+        for line in facts[:4]:
+            self.tx(c, self.fit(f_desc, line, X(245)), f_desc, ink, X(65), y)
+            y += Y(20)
+        self.tx(c, "More Information", self.wb(Y(16)), b["navy"], X(346), Y(230), align="center")
+        art_r = pygame.Rect(X(70), Y(258), X(84), Y(126))
         art = self.logo(d.get("poster", ""), art_r.w, art_r.h, headers=d.get("poster_headers") or None)
+        x0 = X(78)
         if art:
+            pygame.draw.rect(c, b["white"], art_r.inflate(X(4), Y(4)))
             c.blit(art, art.get_rect(center=art_r.center))
-        fd = self.f(Y(16))
-        y = area.y + Y(14)
-        x0 = art_r.right + X(18)
-        for line in self.wrap(fd, d.get("summary", "") or "No description available.", area.right - X(16) - x0, 9):
-            self.tx(c, line, fd, b["white"], x0, y)
-            y += Y(19)
+            x0 = art_r.right + X(16)
+        fm = self.f(Y(21))
+        y = Y(258)
+        for line in self.wrap(fm, d.get("summary", "") or "No description available.", X(620) - x0, 5):
+            self.tx(c, line, fm, b["navy"], x0, y)
+            y += Y(24)
         names = info.buttons()
         words = [self.button_words(info.label(n)) for n in names]
         hits = [lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)]
-        self._keybar(c, Y(413), [(l, w, fn) for l, w, fn in zip("ABC", words[:3], hits[:3])], info.focus if info.focus < 3 else None)
+        self._keybar(c, Y(403), [(l, w, fn) for l, w, fn in zip("ABC", words[:3], hits[:3])], info.focus if info.focus < 3 else None)
         if len(words) > 3:                          # the rest as a second row of plain words, the chosen one navy
-            f = self.fb(Y(15))
+            f = self.f(Y(19))
             x = X(60)
             for k in range(3, len(words)):
                 w = self.width(f, words[k]) + X(20)
                 r = pygame.Rect(x, Y(452), w, Y(22))
                 if k == info.focus:
                     pygame.draw.rect(c, b["navy"], r, border_radius=Y(6))
-                self.tx(c, words[k], f, b["white"] if k == info.focus else b["ink"], r.centerx, self.mid(r, f), align="center")
+                self.tx(c, words[k], f, b["white"] if k == info.focus else b["ink"], r.centerx, r.y + Y(4), align="center")
                 self.hit(r, hits[k])
                 x += w + X(10)
 
@@ -1793,69 +1878,81 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         self._page_top(c, "General Settings", "Signal, picture and the software this box runs.", heading="System Information")
         self._col_header(c, Y(192), "System")
-        area = self.R(50, 216, 590, 194)
-        self._panel(c, area)
-        f = self.f(Y(15))
-        y = area.y + Y(12)
+        f = self.f(Y(19))
+        y = Y(226)
         rows = [("Signal strength", f"{d.signal()}"), ("Signal quality", f"{d.quality()}")] + d.rows()
-        pitch = min(Y(21), (area.h - Y(20)) // max(1, len(rows)))
+        pitch = min(Y(21), (Y(180)) // max(1, len(rows)))
         for label, value in rows:
-            self.tx(c, label, f, b["panel_dim"], area.x + X(230), y, align="right")
-            self.tx(c, self.fit(f, str(value), X(330)), f, b["white"], area.x + X(246), y)
+            self.tx(c, label, f, b["panel_dim"], X(280), y, align="right")
+            self.tx(c, self.fit(f, str(value), X(330)), f, b["white"], X(296), y)
             y += pitch
         from ..menus import open_button_guide
-        self._key(c, "A", X(62), Y(429))
-        self.tx(c, "Help", self.f(Y(16)), b["ink"], X(88), Y(420))
+        self._hint(c, "A", "Help", X(58), Y(414))
         self.hit(self.R(56, 412, 90, 30), lambda: open_button_guide(self.app))
-        self._key(c, "C", X(230), Y(429))
-        self.tx(c, "Exit", self.f(Y(16)), b["ink"], X(256), Y(420))
-        self.hit(self.R(224, 412, 90, 30), lambda: d.handle("BACK"))
+        self._hint(c, "C", "Exit", X(220), Y(413))
+        self.hit(self.R(218, 412, 90, 30), lambda: d.handle("BACK"))
         self._foot_clock(c)
 
+    def keyboard_rows(self, layer):
+        """The frame's letter grid: NEW and BACK over six rows of six, space
+        beneath; Done and Cancel are the keys along the foot."""
+        return [["CLEAR", "DEL"], "ABCDEF", "GHIJKL", "MNOPQR", "STUVWX", "YZ1234", "567890", ["SPACE"], ["DONE", "CANCEL"]]
+
     def draw_keyboard(self, c, kb):
-        """The Search frame: the keyword field over the letter grid, the
-        rows of letters at the left of the dark panel."""
+        """The Search frame (assets/skins/passage/search.png): the prompt on
+        the card, the field on the bar, the letters in the wide bold on the
+        lavender panel (the cursor a navy box), the tip in the results
+        panel, Done and Cancel along the foot."""
         b, X, Y = self.b, self.X, self.Y
-        self._page_top(c, "Search for Shows", kb.prompt, picture=True, heading="Search" if kb.prompt.lower().startswith("search") else "Enter Text")
-        area = self.R(50, 216, 590, 194)
-        self._panel(c, area)
-        field = pygame.Rect(area.x + X(16), area.y + Y(8), area.w - X(32), Y(22))
-        ff = self.fb(Y(16))
-        label = "Title:" if kb.prompt.lower().startswith("search") else "Text:"
-        lw = self.tx(c, label, ff, b["white"], field.x, self.mid(field, ff))
+        c.blit(self._sprite("search.png"), (0, 0))
+        self._picture(c)
+        live = self.app.live
+        self._strip(c, live.channel if live else None, frame=True)
+        ink = mix(b["ink"], (0, 0, 0), 0.7)
+        search = kb.prompt.lower().startswith("search")
+        self.tx(c, "Search for Shows" if search else "Enter Text", self.wb(Y(17)), ink, X(65), Y(106))
+        fp = self.f(Y(20))
+        y = Y(130)
+        for ln in self.wrap(fp, kb.prompt, X(245), 4):
+            self.tx(c, ln, fp, ink, X(65), y)
+            y += Y(22)
+        ff = self.wb(Y(16))
+        label = "Title:" if search else "Text:"
+        lw = self.tx(c, label, ff, b["navy"], X(78), Y(230))
         shown = kb.value[:kb.caret]
-        while shown and self.width(ff, shown) > field.w - lw - X(40):
+        while shown and self.width(ff, shown) > X(300):
             shown = shown[1:]
-        x = field.x + lw + X(8) + self.tx(c, shown, ff, b["card"], field.x + lw + X(8), self.mid(field, ff))
-        pygame.draw.rect(c, b["card"], (x + X(2), field.y + Y(4), X(2), field.h - Y(8)))
+        x = X(78) + lw + X(6)
+        x += self.tx(c, shown, ff, b["movie"], x, Y(230))
+        pygame.draw.rect(c, b["movie"], (x + X(2), Y(229), X(2), Y(16)))
+        ft = self.f(Y(18))
+        self.tx(c, self.fit(ft, kb.tip(), X(400)), ft, b["white"], X(215), Y(262))
         grid = kb.grid()
-        fk = self.fb(Y(15))
-        words = {"DEL": "Back", "SPACE": "Space", "SHIFT": "a-z" if kb.layer == "ABC" else "A-Z",
-                 "SYM": "ABC" if kb.layer == "sym" else "Sym", "DONE": "Done", "CANCEL": "Cancel", "CLEAR": "New"}
-        kx, ky = area.x + X(16), field.bottom + Y(8)
-        kw, kh, pitch = X(22), Y(20), Y(23)
-        for r, row in enumerate(grid):
-            last = r == len(grid) - 1
+        fk = self.wb(Y(15))
+        lav = (104, 104, 150)
+        pitch = Y(19) if len(grid) <= 9 else Y(17)
+        for r_, row in enumerate(grid):
+            if r_ == len(grid) - 1:                 # Done and Cancel: the keys along the foot
+                continue
+            y = Y(262) + r_ * pitch
             for col, cell in enumerate(row):
-                on = (r, col) == (kb.row, kb.col)
-                if last:
-                    rect = pygame.Rect(kx + col * X(100), ky + r * pitch + Y(4), X(92), kh)
-                    self._button(c, rect, words[cell], on)
+                on = (r_, col) == (kb.row, kb.col)
+                if cell in ("CLEAR", "DEL"):
+                    word, cx = ("NEW", X(94)) if cell == "CLEAR" else ("BACK", X(162))
+                    rect = pygame.Rect(cx - X(24), y - Y(2), X(48), Y(17))
+                elif cell == "SPACE":
+                    word, cx = "space", X(136)
+                    rect = pygame.Rect(cx - X(24), y - Y(2), X(48), Y(17))
                 else:
-                    if len(cell) == 1:
-                        rect = pygame.Rect(kx + col * (kw + X(4)), ky + r * pitch, kw, kh)
-                    else:
-                        widths = {"DEL": 60, "SPACE": 80, "SHIFT": 56, "SYM": 56}
-                        x0 = kx + sum(X(widths[k] + 4) for k in row[:col])
-                        rect = pygame.Rect(x0, ky + r * pitch, X(widths[cell]), kh)
-                    if on:
-                        pygame.draw.rect(c, b["card"], rect, border_radius=Y(3))
-                    label = cell.upper() if len(cell) == 1 else words[cell]
-                    self.tx(c, label, fk, b["ink"] if on else b["white"], rect.centerx, self.mid(rect, fk), align="center")
-                self.hit(rect, lambda r=r, col=col, cell=cell: (setattr(kb, "row", r), setattr(kb, "col", col),
-                                                                kb._press(cell)))
-        self.tx(c, self.fit(self.f(Y(13)), kb.tip(), X(360)), self.f(Y(13)), b["ink"], X(56), Y(462))
-        self._foot_clock(c)
+                    word, cx = cell.upper(), X(83 + 21 * col)
+                    rect = pygame.Rect(cx - X(9), y - Y(2), X(18), Y(17))
+                if on:
+                    pygame.draw.rect(c, b["navy"], rect, border_radius=Y(2))
+                self.tx(c, word, fk, b["white"] if on else lav, cx, y, align="center")
+                self.hit(rect, lambda r_=r_, col=col, cell=cell: (setattr(kb, "row", r_), setattr(kb, "col", col), kb._press(cell)))
+        last = kb.row == len(grid) - 1
+        keys = [("A", "Done", lambda: kb._press("DONE")), ("C", "Cancel", lambda: kb._press("CANCEL"))]
+        self._keybar(c, Y(403), keys, (0 if kb.col == 0 else 1) if last else None)
 
     def draw_playback(self, c, pb):
         """The banner's band with the title over the green line and its
@@ -1922,12 +2019,12 @@ class Passage(CableSkin):
         self.tx(c, f"-{mm}:{ss:02d}" if behind >= 1 else "Live", self.f(Y(15)), b["white"], line.right + X(8), band.y + Y(10))
 
     def draw_screensaver(self, c, ss):
+        """The frame's mark on its light box, drifting on black."""
         W, H = self.canvas
         c.fill((0, 0, 0, 255))
-        size = self.Y(30)
-        w = self.measure(self.wordmark, size)
-        x, y = ss.position(w, int(size * 1.6), W, H)
-        self.wordmark(c, x, y, size, ink=(200, 200, 210))
+        box = self._sprite("markbox.png")
+        x, y = ss.position(box.get_width(), box.get_height(), W, H)
+        c.blit(box, (x, y))
 
     def _boot_page(self, c):
         W, H = self.canvas

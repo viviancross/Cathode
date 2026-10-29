@@ -347,8 +347,36 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   Akzidenz-Grotesk BQ Condensed (the author's installed copy, bundled for
   personal use; at 24 its widths match the frame's lettering exactly,
   where Archivo Narrow had to be squeezed), with Liberation Sans Bold for
-  the wide bold. Earlier passes, kept for the record: drawn 1:1 to the
-  frames (2026-10-28, second pass). Two faces, as
+  the wide bold. The pages, likewise on their frames (same day): `page.png`
+  is the General Settings frame (p013-1: header strip, cream panel, window
+  x 350-639 y 0-189, column header band y 192-216, list panel y 216-410
+  with its lighter left column to x 290, foot hints, clock tab from x 440;
+  `page_wide.png` runs the strip and panel across) with `pill.png` the
+  chosen row's navy pill (x 60-292, 26 tall; rows 27 apart from y 248, six
+  showing, titles condensed 21 at x 110, values at x 300), `sel.png` the
+  SEL disc and `blocked.png` the window's blocked-programme card (a dead
+  channel or a notice, on black, with Cathode's words); `od.png` the DVR
+  list frame (p029-2: the mark box y 42-92, window x 320-640 y 0-216, the
+  strip at y 217-237, list panel x 50-320 y 125-400 with rules 37 apart
+  from y 163, the teal details panel x 320-640 y 275-400) with
+  `od_sel.png` the chosen row's teal band (kept in the third slot) and
+  `markbox.png` the mark on its box (the screensaver); `info.png` the More
+  Information frame (p029-3: the guide's card, the band y 225-248 and the
+  lavender panel to y 405; Program Information and On Demand items);
+  `browse.png` the Browse frame (p016-2: the column x 0-148 with its own
+  '< Browse >' box, the band from y 366: title wide bold 17 at (62,372),
+  hours right at 580, rating chip and synopsis condensed 20 from y 398 on
+  22; INFO's banner is the band alone); `dialog.png` (p022-2, 429x230:
+  title, maroon band, rows of 28 from y 70, hints; stretched as nine
+  slices) with `dlg_sel.png` its navy row; `volume.png` (p015-1: the band
+  y 404-441, blocks 7 wide 14 apart from x 162, red lit); `search.png`
+  (p026-2: the card, the field bar y 225-248, the lavender letter panel to
+  x 200 lettered live in the wide bold 15 on a 21 x 19 grid from (83,262),
+  NEW/BACK above and space beneath, Done and Cancel along the foot, the
+  results panel for the tip) with `search_sel.png`; `options.png` (p023-2:
+  the popup x 228-368 with its tab lettered with the menu's title, rows 26
+  apart) with `opt_sel.png` its cream band. Earlier passes, kept for the
+  record: drawn 1:1 to the frames (2026-10-28, second pass). Two faces, as
   the frames: rows, synopses and hints in Archivo Narrow (OFL, bundled:
   Regular and Bold instanced from the variable font), the condensed sans
   the box lettered in; headings, hours, the clock and the banner's title
