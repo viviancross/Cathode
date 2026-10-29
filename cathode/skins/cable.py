@@ -1731,7 +1731,7 @@ class Passage(CableSkin):
         self._logo_disc(c, ch, X(80), Y(55), Y(48))
         self.tx(c, call(ch), self.f(Y(20)), ink, X(104), Y(108), align="center")
         self.tx(c, str(ch.number), self.wb(Y(17)), ink, X(104), Y(128), align="center")
-        self.tx(c, ampm(datetime.now(), True), self.f(Y(20)), ink, X(65), Y(335))
+        self.tx(c, ampm(datetime.now(), True), self.f(Y(20)), ink, X(72), Y(344), align="center")
         self.tx(c, "Browse", self.wb(Y(18)), (70, 60, 100), X(72), Y(298), align="center")
         self.hit(self.R(45, 265, 44, 40), lambda: br.handle("LEFT"))
         self.hit(self.R(91, 265, 44, 40), lambda: br.handle("RIGHT"))
@@ -1988,7 +1988,7 @@ class Passage(CableSkin):
         (its arrows with it), the value in the right column."""
         b, X, Y = self.b, self.X, self.Y
         f, fm = f or self.f(Y(21)), fm or self.f(Y(19))
-        inside = r.w < X(300)                       # the wall's title row: the value inside the pill
+        inside = r.h <= Y(22)                       # the wall's title row (20 tall): the value inside the pill
         if on:
             pill = self._sprite("pill.png")
             c.blit(pill, (X(60), r.y))
@@ -2128,11 +2128,12 @@ class Passage(CableSkin):
         meta = d.get("subtitle") or d.get("meta", "")
         f_title, f_desc = self.f(Y(24)), self.f(Y(22))
         self.tx(c, self.fit(self.wb(Y(17)), "On Demand", X(240)), self.wb(Y(17)), ink, X(65), Y(52))
-        for k, ln in enumerate(self.wrap(f_title, d.get("title", ""), X(245), 2)):
+        title_lines = self.wrap(f_title, d.get("title", ""), X(245), 2)
+        for k, ln in enumerate(title_lines):
             self.tx(c, ln, f_title, ink, X(65), Y(80) + k * Y(26))
         facts = [x for x in (meta, f"Length {hms(d['duration'])}" if d.get("duration") else "",
                              f"Resume at {hms(d['offset'])}" if (d.get("offset") or 0) > 5 else "") if x]
-        y = Y(136)
+        y = Y(84) + len(title_lines) * Y(26)                     # right under the title, however many lines
         for line in facts[:4]:
             self.tx(c, self.fit(f_desc, line, X(245)), f_desc, ink, X(65), y)
             y += Y(20)
@@ -2158,9 +2159,9 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         self._page_top(c, "System Information", "Signal, picture and the software this box runs.")
         f = self.f(Y(19))
-        y = Y(226)
+        y = Y(236)                                               # clear of the panel's rim
         rows = [("Signal strength", f"{d.signal()}"), ("Signal quality", f"{d.quality()}")] + d.rows()
-        pitch = min(Y(21), (Y(180)) // max(1, len(rows)))
+        pitch = min(Y(21), Y(160) // max(1, len(rows)))
         for label, value in rows:
             self.tx(c, label, f, b["list_ink"], X(280), y, align="right")
             self.tx(c, self.fit(f, str(value), X(330)), f, b["white"], X(296), y)
