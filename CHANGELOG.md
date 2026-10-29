@@ -22,9 +22,16 @@
   theme and font applies.
 - **Passage drawn 1:1** to the Passport Echo manual's frames: the guide,
   banner, Browse column, INFO banner, settings pages, On Demand list,
-  dialogs and volume bar follow the measured frames, and it letters in
-  **Archivo Narrow** (OFL, newly bundled; also a Font choice for every
-  skin), the condensed face the box used.
+  dialogs and volume bar follow the measured frames. **Archivo Narrow**
+  (OFL) is newly bundled as a Font choice for every skin.
+- **Passage's guide and banner are the frames themselves**: their page,
+  card, time header, channel column, grid panel, mark, key icons and
+  banner band are the manual frames' own pixels with the text taken out
+  (`assets/skins/passage/`), lettered over in the box's condensed face
+  (Akzidenz-Grotesk Condensed, from the author's own installed copy;
+  personal use) at the frames' sizes, the chosen row's dark tile and
+  the active key's box cut from the frame; half-hour columns 137 wide
+  with the fourth running off the edge, as the box's did.
 
 ## 4.38
 

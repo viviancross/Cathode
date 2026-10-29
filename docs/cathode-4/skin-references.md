@@ -310,7 +310,45 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   shortly / Ref code: S0a00".
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
-  frames), drawn 1:1 to them (2026-10-28, second pass). Two faces, as
+  frames). Fourth pass (2026-10-29): the guide and the banner are drawn
+  on the frames themselves. `assets/skins/passage/guide.png` is the guide
+  frame (p021-1) with its text erased region by region (each row filled
+  from a clean column, the card by a separable column x row model so its
+  left shade survives, the chosen row's dark block run through with the
+  column's gradient, the grid panel plain purple with its light 2px row
+  lines redrawn on the uniform 29 pitch), the picture window clear;
+  `banner.png` is rows 357-447 of the banner frame (p016-1, scaled 614x460
+  to 640x480) likewise erased, the arrow kept; `col_sel.png` the chosen
+  row's dark tile, `key_box.png` the active key's light box, `key_a/b/c.png`
+  the key icons and `mark.png` the lockup, keyed from their background.
+  Over them: the glossy channel tile (a rounded square, light blue to
+  blue-purple, the number big in the wide bold) at x 62, y 48, 50 wide;
+  call sign and number wide bold 17 at x 125, cap tops y 52 and 72; the
+  title condensed 24 at (65,106), the hours wide bold 18 at y 130, the
+  black rating chip and synopsis condensed 22 from y 150 on a 20 pitch;
+  the day and half hours wide bold 18 centred between the frame's
+  grooves (x 184, 321, 458, 595: 137 a half hour, grid x 185, 548 wide
+  for two hours, the fourth column off the edge, its label not drawn);
+  rows 27 tall on a 29 pitch from y 255, call signs condensed 24 at x 68
+  with the number right-aligned at 168, cell lettering condensed 24 inset
+  12, each cell a light 2px line at its left, movies maroon (151,20,64),
+  the chosen cell dark (54,48,84) with cream lettering; the channel on the
+  maroon strip wide bold 17 at (332,205), the clock condensed 20 at x 520;
+  the key icons at x 283/386/506 with their words condensed 25 at +36,
+  the active box at x-9. The banner: the clock wide bold 16 right-aligned
+  at 166 (cap top 363), the logo 48x32 centred at (84,409) or the tile,
+  call sign condensed 20 and number wide bold 17 right-aligned at 166 (y
+  392, 416); the title wide bold 17 at (203,368), the hours condensed 19
+  right-aligned at 598, the times condensed 20 at x 202 and 520 (y 413),
+  the line x 243-513, y 418-428 (green bright-to-dark, a dark track, light
+  quarter ticks, dark outline, light bottom edge), the time tab 50x22 at
+  y 389 in (34,48,138) with a light inner top line, dark bottom edge and
+  a pointer to the line, its time wide bold 16. The face is
+  Akzidenz-Grotesk BQ Condensed (the author's installed copy, bundled for
+  personal use; at 24 its widths match the frame's lettering exactly,
+  where Archivo Narrow had to be squeezed), with Liberation Sans Bold for
+  the wide bold. Earlier passes, kept for the record: drawn 1:1 to the
+  frames (2026-10-28, second pass). Two faces, as
   the frames: rows, synopses and hints in Archivo Narrow (OFL, bundled:
   Regular and Bold instanced from the variable font), the condensed sans
   the box lettered in; headings, hours, the clock and the banner's title

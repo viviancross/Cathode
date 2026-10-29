@@ -23,6 +23,7 @@ or sponsored by any of these projects or their authors.
 | Liberation Sans (Regular, Bold, Italic) | Red Hat, Inc.; digitized data Google (Arimo) | SIL OFL 1.1 | https://github.com/liberationfonts/liberation-fonts |
 | Barlow (Medium, Bold) | The Barlow Project Authors (Jeremy Tribby) | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/barlow |
 | Archivo Narrow (Regular, Bold; static instances of the variable font) | Omnibus-Type | SIL OFL 1.1 | https://github.com/google/fonts/tree/main/ofl/archivonarrow |
+| Akzidenz-Grotesk BQ Condensed (`AkzidenzGroteskBQ-Cnd.ttf`; the Passage skin's face) | Berthold | Commercial; the author's own licensed copy, personal use only, not for redistribution | https://www.bertholdtypes.com |
 
 Notes:
 - **CC BY / CC BY-SA** require attribution (given above). CC BY-SA additionally
