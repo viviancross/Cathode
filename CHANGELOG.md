@@ -12,6 +12,19 @@
   bar loses the frame's listings icon, Passage's mark box its arrow;
   Passage's dead-channel card is drawn to fit its words, its Browse box
   is lettered by the skin, and its volume band has both rounded ends.
+- **A critique pass on the two skins.** Passage's key bar is words, each
+  with the button's name as the device in hand calls it (no more A / B / C
+  chips that collide with a pad's own letters); its keyboard letters in
+  navy at a readable size with SPACE inside the panel; its On Demand panel
+  holds seven rows under a heading slot, the link code inside it, the
+  wall's year inside its pill, the chosen row between the strip and the
+  details; the playback bar lights Play/Pause when no key is chosen (what
+  SELECT presses); every dialog says what to press; one clock format;
+  "Lists" for the guide's category key; Main Menu named once. i-Grid's
+  list pages paint only the rows they use, number the settings rows on
+  their tiles with the value at the right, span the keyboard across the
+  page, drop the BACK block where Done is among the capsules, title My
+  Recordings in its band, show a volume band a TV can read.
 - **Wayfinder and Y1 are gone.** The two cable skins drawn without clean
   frames (the 2010 Time Warner guide from a demo video, the 2014 Comcast
   box from screenshots) never got past a re-coloured body: their item

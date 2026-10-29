@@ -10,7 +10,7 @@ skin-references.md names the sources):
 - Passage (2004): the Scientific Atlanta-era guide. A silver page, a cream
   card top-left with the channel and the programme, the picture top-right
   over a maroon channel strip; lavender channel tiles, purple cells, the
-  cursor cream; the A / B / C key bar along the foot; condensed lettering.
+  cursor cream; a key bar of words along the foot; condensed lettering.
 
 Both draw 4:3 at 640x480, their frames' own pixels; geometry is written in
 640x480 units (X() and Y() scale it to the canvas)."""
@@ -249,13 +249,14 @@ class CableSkin(BoxSkin):
 
     # ── Dialogs ───────────────────────────────────────────────────────────
 
-    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=420):
-        """The box's card: a title bar, the lines, buttons at the foot."""
+    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=420, hint=""):
+        """The box's card: a title bar, the lines, buttons at the foot, or
+        a key line saying what to press."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         f = self.f(Y(14))
         wrapped = [w for line in lines for w in self.wrap(f, line, X(wide - 40), 3)]
-        r = pygame.Rect(0, 0, X(wide), Y(30) + Y(14) + len(wrapped) * Y(20) + (Y(44) if buttons else Y(10)))
+        r = pygame.Rect(0, 0, X(wide), Y(30) + Y(14) + len(wrapped) * Y(20) + (Y(44) if buttons else Y(28) if hint else Y(10)))
         r.center = (W // 2, H // 2)
         pygame.draw.rect(c, b["dlg"], r, border_radius=Y(6))
         pygame.draw.rect(c, b["dlg_edge"], r, 2, border_radius=Y(6))
@@ -272,19 +273,38 @@ class CableSkin(BoxSkin):
             x0 = r.centerx - (len(buttons) * bw + (len(buttons) - 1) * X(10)) // 2
             for k, label in enumerate(buttons):
                 self._button(c, pygame.Rect(x0 + k * (bw + X(10)), r.bottom - Y(36), bw, Y(24)), label, k == focus)
+        elif hint:
+            fk = self.f(Y(12))
+            self.tx(c, hint, fk, b["dlg_ink"], r.centerx, r.bottom - Y(22), align="center")
         return r
+
+    def kname(self, action, plain) -> str:
+        """The device's name for a button, else the box's plain word for it."""
+        name = self.k(action)
+        return plain if name == action else name
+
+    def hint_signal(self) -> str:
+        return f"{self.kname('CH_UP', 'CH+')} / {self.kname('CH_DOWN', 'CH-')}: another channel"
+
+    def hint_ok(self) -> str:
+        return f"{self.k('SELECT')}: OK"
 
     def _signal_loss(self, c):
         c.fill((0, 0, 0, 255))
         title, l1, l2 = self.NO_SIGNAL
-        self._dialog(c, title, [l1, l2])
+        self._dialog(c, title, [l1, l2], hint=self.hint_signal())
 
     def _message(self, c, msg):
         c.fill((0, 0, 0, 255))
-        self._dialog(c, self.ATTENTION, [msg])
+        self._dialog(c, self.ATTENTION, [msg], hint=self.hint_ok())
 
     def draw_capture(self, c, cap):
         self._dialog(c, "Remote Setup", [cap.prompt, "Waiting..."])
+
+    def _tfocus(self, pb):
+        """The transport key lit: the one the cursor is on, else Play/Pause,
+        which is what SELECT presses."""
+        return pb.tfocus if getattr(pb, "tfocus", None) is not None else 2
 
     def draw_program_info(self, c, info):
         self._dialog(c, info.title, info.lines())
@@ -565,7 +585,7 @@ class CableSkin(BoxSkin):
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(r.x + X(70) + k * X(78), r.bottom - Y(30), X(70), Y(22))
-            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
+            self._tbtn(c, br, kind, k == self._tfocus(pb))
             self.hit(br, fn)
             rects.append(br)
         self.idle_row(c, pb, rects, Y(4))
@@ -770,6 +790,18 @@ class IGrid(CableSkin):
     def label_every(self, col_w, label_w):
         return max(2, super().label_every(col_w, label_w))      # the box labelled the half hours
 
+    def _volume(self, c, cx, cy):
+        b, X, Y = self.b, self.X, self.Y
+        v = self.app.video
+        r = self.R(24, 24, 400, 44)
+        self._band(c, r, b["band"], radius=Y(4))
+        f = self.fb(Y(17))
+        self.tx(c, "Mute" if v.muted else "Volume", f, b["sel"] if v.muted else b["band_ink"], r.x + X(14), self.mid(r, f))
+        bar = pygame.Rect(r.x + X(110), r.y + Y(15), X(270), Y(14))
+        pygame.draw.rect(c, b["track"], bar)
+        if not v.muted:
+            pygame.draw.rect(c, b["sel"], (bar.x, bar.y, int(bar.w * v.volume / 100), bar.h))
+
     def _od_buttons(self, c, labels, focus, hits):
         """Capsules along the foot band, right-aligned, narrowed to fit, the
         face shrunk before a word would be cut."""
@@ -949,14 +981,16 @@ class IGrid(CableSkin):
     def _button(self, c, r, label, on, f=None):
         self._capsule(c, r, label, on, f)
 
-    def _page_top(self, c, title, sub="", picture=True, rows=False):
+    def _page_top(self, c, title, sub="", picture=True, rows=False, n_rows=6):
         """A page on the frame (chrome.py page.png; list.png with
-        the section bar and rows when `rows`): the clock on the header, the
-        title in yellow and the help on the info panel, the picture in the
-        window (the box kept it on every page)."""
+        the section bar and `n_rows` of its six rows when `rows`): the
+        clock on the header, the title in yellow and the help on the info
+        panel, the picture in the window (the box kept it on every page)."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         c.blit(self._sprite("list.png" if rows else "page.png"), (0, 0))
+        if rows and n_rows < 6:                                  # the rows the page has nothing for: plain page
+            pygame.draw.rect(c, b["navy"], (0, Y(226 + 35 * n_rows), W, Y(433 - 226 - 35 * n_rows)))
         pic = self._picture(c)
         self._header(c, pic.x)
         f = self.fb(Y(18))
@@ -987,7 +1021,7 @@ class IGrid(CableSkin):
         title = "Main Menu" if m.title == "MAIN MENU" else m.title.title()
         n = len(m.items)
         cols = self.menu_cols(m)
-        self._page_top(c, title, (it.label + ": " + it.help) if it and it.help else (it.label if it else ""), rows=cols == 1)
+        self._page_top(c, title, it.help if it and it.help else "", rows=cols == 1, n_rows=min(n, 6))
         if cols == 2:
             per = self.menu_rows(m)
             first = max(0, min((m.cursor // per) * per - per, n - 2 * per)) if n > 2 * per else 0
@@ -1011,7 +1045,7 @@ class IGrid(CableSkin):
             r = pygame.Rect(X(153), Y(226 + k * 35), X(487), Y(32))
             v = it.value() if it.value else (">" if it.submenu else "")
             v = f"< {v} >" if i == m.cursor and it.adjust else v
-            self._list_row(c, r, it.label, v, i == m.cursor, f)
+            self._list_row(c, r, it.label, v, i == m.cursor, f, tile=str(i + 1))
             if not it.enabled and i != m.cursor:
                 veil = pygame.Surface(r.size, pygame.SRCALPHA)
                 veil.fill((*b["navy"], 110))
@@ -1049,8 +1083,10 @@ class IGrid(CableSkin):
                     break
                 self.tx(c, ln, fd, b["text"], X(48), y, shadow=b["gap"])
                 y += Y(23)
-        self.hit(self.R(56, 372, 48, 48), back)
-        self.tx(c, f"{self.k('BACK')}: go back to the previous screen", self.fb(Y(15)), b["text"], X(48), Y(419), shadow=b["gap"])
+        if back:                                                 # the frame's BACK key, when nothing else leaves the page
+            c.blit(self._sprite("back_key.png"), (X(60), Y(379)))
+            self.hit(self.R(56, 376, 48, 48), back)
+            self.tx(c, f"{self.k('BACK')}: go back to the previous screen", self.fb(Y(15)), b["text"], X(48), Y(419), shadow=b["gap"])
 
     def draw_program_info(self, c, info):
         ch, p = info.channel, info.program
@@ -1071,7 +1107,7 @@ class IGrid(CableSkin):
         facts = [x for x in (f"Length {hms(d['duration'])}" if d.get("duration") else "",
                              f"Resume at {hms(d['offset'])}" if (d.get("offset") or 0) > 5 else "") if x]
         self._info_page(c, d.get("title", ""), meta, "   ".join(facts), "", [d.get("summary", "") or "No description available."],
-                        lambda: info.handle("BACK"))
+                        None)                                                # Done is among the capsules
         art = self.logo(d.get("poster", ""), X(60), Y(90), headers=d.get("poster_headers") or None)
         if art:
             c.blit(art, art.get_rect(topright=(X(388), Y(98))))
@@ -1110,9 +1146,9 @@ class IGrid(CableSkin):
         for r_, row in enumerate(grid[:6]):
             y = Y(226 + r_ * 35)
             n = len(row)
-            w = (X(487) - (n - 1) * X(4)) // n
+            w = (X(560) - (n - 1) * X(4)) // n
             for col, cell in enumerate(row):
-                rect = pygame.Rect(X(153) + col * (w + X(4)), y, w, Y(32))
+                rect = pygame.Rect(X(40) + col * (w + X(4)), y, w, Y(32))
                 on = (r_, col) == (kb.row, kb.col)
                 pygame.draw.rect(c, b["sel"] if on else b["cell"], rect, border_radius=Y(3))
                 pygame.draw.rect(c, mix(b["cell"], (255, 255, 255), 0.45), rect, 1, border_radius=Y(3))
@@ -1120,16 +1156,16 @@ class IGrid(CableSkin):
                 self.tx(c, label, fk if len(cell) == 1 else fw, b["sel_ink"] if on else b["text"], rect.centerx, self.mid(rect, fk if len(cell) == 1 else fw), align="center")
                 self.hit(rect, lambda r_=r_, col=col, cell=cell: (setattr(kb, "row", r_), setattr(kb, "col", col), kb._press(cell)))
 
-    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=531):
+    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=531, hint=""):
         """The frame's dialog (chrome.py dialog.png, nine-sliced):
-        the title in yellow, the lines in white, capsule buttons at the
-        foot."""
+        the title in yellow, the lines in white, capsule buttons or a key
+        line at the foot."""
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         f = self.fb(Y(15))
         wrapped = [w for line in lines for w in self.wrap(f, line, X(wide - 60), 3)]
         n = max(1, len(wrapped))
-        r = pygame.Rect(0, 0, X(max(531, wide)), Y(44) + n * Y(21) + (Y(58) if buttons else Y(16)))
+        r = pygame.Rect(0, 0, X(max(531, wide)), Y(44) + n * Y(21) + (Y(58) if buttons else Y(38) if hint else Y(16)))
         r.center = (W // 2, H // 2)
         self._nine(c, self._sprite("dialog.png"), r, (X(20), Y(20), X(20), Y(20)))
         ft = self.fb(Y(16))
@@ -1143,6 +1179,8 @@ class IGrid(CableSkin):
             x0 = r.centerx - (len(buttons) * bw + (len(buttons) - 1) * X(14)) // 2
             for k, label in enumerate(buttons):
                 self._capsule(c, pygame.Rect(x0 + k * (bw + X(14)), r.bottom - Y(46), bw, Y(28)), label, k == focus)
+        elif hint:
+            self.tx(c, hint, self.fb(Y(13)), b["title"], r.centerx, r.bottom - Y(30), align="center", shadow=b["gap"])
         return r
 
     def draw_options(self, c, m):
@@ -1194,24 +1232,28 @@ class IGrid(CableSkin):
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(X(110) + k * X(72), Y(420), X(64), Y(24))
-            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
+            self._tbtn(c, br, kind, k == self._tfocus(pb))
             self.hit(br, fn)
             rects.append(br)
         self.idle_row(c, pb, rects, Y(12))
 
-    def _list_row(self, c, r, title, meta, on, f=None, fm=None):
-        """A row of the list page: the meta (a number, a value) on the steel
-        tile cut from the frame at the left, the title on the row, the
-        chosen row the frame's yellow one."""
+    def _list_row(self, c, r, title, meta, on, f=None, fm=None, tile=None):
+        """A row of the list page: the meta (a number) on the steel tile at
+        the left, the title on the row, the chosen row the frame's yellow
+        one. With `tile` (a row number), the meta is a value at the row's
+        right instead."""
         b, X, Y = self.b, self.X, self.Y
-        tile = self._sprite("tile.png")
-        c.blit(tile, (X(2), r.y))
+        c.blit(self._sprite("tile.png"), (X(2), r.y))
         if on:
             c.blit(self._sprite("row_sel.png"), (X(153), r.y))
         f, fm = f or self.fb(Y(16)), fm or self.fb(Y(15))
         ink = b["sel_ink"] if on else b["text"]
-        self.tx(c, self.fit(fm, meta, X(136)), fm, b["tile_ink"], X(76), r.y + Y(8), align="center")
-        self.tx(c, self.fit(f, title, X(440)), f, ink, X(160), r.y + Y(7), shadow=None if on else b["gap"])
+        self.tx(c, self.fit(fm, meta if tile is None else tile, X(136)), fm, b["tile_ink"], X(76), r.y + Y(8), align="center")
+        vw = 0
+        if tile is not None and meta:
+            vw = self.width(fm, meta) + X(24)
+            self.tx(c, meta, fm, ink if on else b["title"], X(620), r.y + Y(8), align="right", shadow=None if on else b["gap"])
+        self.tx(c, self.fit(f, title, X(440) - vw), f, ink, X(160), r.y + Y(7), shadow=None if on else b["gap"])
 
     def _rows(self, c, s, area, rows, sel, top, n_vis):
         """On Demand's rows on the frame's six."""
@@ -1223,16 +1265,17 @@ class IGrid(CableSkin):
             self.hit(pygame.Rect(X(2), r.y, self.canvas[0] - X(2), r.h), lambda i=i: (setattr(s, "sel", i), s.select()))
         f = self.fb(Y(12))
         if top + n_vis < len(rows):
-            self.tx(c, "\u25bc", f, b["text"], X(620), Y(438), align="right")
+            self.tx(c, "\u25bc", f, b["text"], X(632), Y(417), align="right")
         if top:
-            self.tx(c, "\u25b2", f, b["text"], X(620), Y(208), align="right")
+            self.tx(c, "\u25b2", f, b["text"], X(632), Y(208), align="right")
 
     def draw_ondemand(self, c, s):
         b, X, Y = self.b, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
         title = "My Recordings" if rec else "On Demand"
         sub = "By date" if rec else (s.crumb() if len(s.stack) > 1 else "Movies and shows from your Plex server")
-        self._page_top(c, title, sub, rows=s.mode != "auth" and s.view != "wall")
+        rows_, n_vis_ = s.rows, self.ondemand_page(s)
+        self._page_top(c, title, sub, rows=s.mode != "auth" and s.view != "wall", n_rows=min(len(rows_), n_vis_))
         area = self.R(*self.LIST)
         if s.mode == "auth":
             y = area.y + Y(30)
@@ -1249,7 +1292,7 @@ class IGrid(CableSkin):
         if s.view == "wall":
             self._wall(c, s, area)
         else:
-            self._section(c, s.crumb() if len(s.stack) > 1 else title, f"{s.sel + 1} of {len(rows)}")
+            self._section(c, title if rec else (s.crumb() if len(s.stack) > 1 else title), f"{s.sel + 1} of {len(rows)}")
             self._rows(c, s, area, rows, s.sel, top, n_vis)
         side = self.od_side(s)
         self._od_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, [fn for _, fn in side])
@@ -1269,8 +1312,8 @@ class Passage(CableSkin):
     the channel disc, call sign, title, hours and synopsis; the picture
     top-right over the maroon channel strip with the clock in its dark
     tab; a purple time header, lavender channel tiles, purple cells, the
-    chosen row dark with cream lettering; the mark and the A / B / C key
-    bar along the foot. The banner is the frame's purple band with the
+    chosen row dark with cream lettering; the mark and the key bar of
+    words along the foot. The banner is the frame's purple band with the
     light channel tile, the clock tab and the green progress line."""
     name = "passage"
     label = "Passage"
@@ -1284,7 +1327,8 @@ class Passage(CableSkin):
     CELL_PAD = 12
     CELL_ARROWS = False
     LIST = (50, 216, 590, 194)
-    OD_ROWS = 6
+    OD_ROWS = 7
+    WALL = (3, 2)                   # posters, not stamps: three a row in the list panel
     # Measured off the frames: the silver page, the purple cell, the cream
     # card, the dark lettering, the lavender channel tile.
     NATIVE = {"bg": [206, 206, 216], "accent": [118, 103, 168], "accent2": [246, 241, 186],
@@ -1316,7 +1360,6 @@ class Passage(CableSkin):
             "field": white, "field_ink": ink, "foot_ink": ink,
             "dlg": mix(page, white, 0.25), "dlg_edge": mix(page, (0, 0, 0), 0.4), "dlg_head": mix(page, white, 0.25),
             "dlg_head_ink": mix(ink, (0, 0, 0), 0.4), "dlg_ink": (30, 30, 90), "boot_ink": ink,
-            "key_a": (242, 200, 30), "key_b": (44, 92, 204), "key_c": (214, 40, 40), "key_sel": (40, 90, 200),
         }
 
     def wb(self, size):
@@ -1325,20 +1368,17 @@ class Passage(CableSkin):
         return self.text.font("LiberationSans-Bold.ttf", size)
 
     def _hint(self, c, key, word, x, y, ink=None):
-        """A key and its word along a foot: the SEL disc or an A / B / C icon
-        cut from the frames at (x, y), the word beside it in the condensed
-        face. Returns the right edge."""
+        """A key's word along a foot: the button's name, as the device in
+        hand calls it, small in the wide bold, the word beside it in the
+        condensed face. `key` is the action (SELECT, BACK...) or '' for a
+        word alone. Returns the right edge."""
         b, X, Y = self.b, self.X, self.Y
-        if key in ("SEL", "A", "B", "C"):
-            icon = self._sprite("sel.png" if key == "SEL" else f"key_{key.lower()}.png")
-            c.blit(icon, (x, y))
-            w = icon.get_width()
-        else:
-            self._key(c, key, x, y + Y(15))
-            w = X(24)
         f = self.f(Y(20))
-        self.tx(c, word, f, ink or b["ink"], x + w + X(6), y + Y(8))
-        return x + w + X(6) + self.width(f, word)
+        name = self.k(key) if key else ""
+        if name:
+            x += self.tx(c, name, self.wb(Y(12)), b["navy"], x, y + Y(13)) + X(6)
+        self.tx(c, word, f, ink or b["ink"], x, y + Y(8))
+        return x + self.width(f, word)
 
     # ── The mark: the frame's own 'PASSPORT echo' lockup ──────────────────
 
@@ -1430,69 +1470,40 @@ class Passage(CableSkin):
         if ch:
             self.tx(c, self.fit(f, f"{call(ch)} \u2022 {ch.number}", X(150)), f, b["white"], strip.x + X(12), strip.y + Y(5))
         fc = self.f(Y(20))
-        self.tx(c, datetime.now().strftime("%I:%M:%S").lstrip("0"), fc, b["white"], tab.x + X(20), strip.y + Y(4))
-
-    def _key(self, c, letter, x, cy):
-        """The A / B / C key chip: a yellow triangle, a blue square, a red disc."""
-        b, X, Y = self.b, self.X, self.Y
-        colour = {"A": b["key_a"], "B": b["key_b"], "C": b["key_c"]}[letter]
-        if letter == "A":
-            pygame.draw.polygon(c, colour, [(x, cy + Y(8)), (x + X(18), cy + Y(8)), (x + X(9), cy - Y(8))])
-        elif letter == "B":
-            pygame.draw.rect(c, colour, (x + X(1), cy - Y(8), X(16), Y(16)), border_radius=Y(3))
-        else:
-            pygame.draw.circle(c, colour, (x + X(9), cy), Y(8))
-        f = self.fb(Y(11))
-        self.tx(c, letter, f, (20, 20, 20) if letter == "A" else b["white"], x + X(9), cy - Y(5) + (Y(2) if letter == "A" else 0), align="center")
-
-    def _sel_chip(self, c, x, cy):
-        """The SEL key: a blue disc lettered SEL."""
-        b, X, Y = self.b, self.X, self.Y
-        pygame.draw.circle(c, b["key_sel"], (x + X(10), cy), Y(9))
-        f = self.fb(Y(8))
-        self.tx(c, "SEL", f, b["white"], x + X(10), cy - Y(4), align="center")
+        self.tx(c, ampm(datetime.now(), True), fc, b["white"], tab.x + X(20), strip.y + Y(4))
 
     def _keybar(self, c, y, keys, active=None):
-        """Keys along the foot, cut from the frame: the yellow A triangle,
-        blue B square and red C disc, the word beside each in the condensed
-        face, the active one on the frame's light box (stretched to a long
-        word) with its navy edge and shadow. Up to three keys sit where the
-        frame put them; more run as words alone, packed from the right, the
-        face shrunk until they fit. `y` is the box's top (the guide's is 403)."""
+        """Words along the foot, packed from the right in the condensed
+        face: each (action, word, fn), the button's name small before the
+        word when it stands for a button (SELECT, BACK...; '' for a key the
+        cursor reaches); the active one on the frame's light box with its
+        navy edge and shadow, the face shrunk until the row fits. `y` is
+        the box's top (the guide's is 403)."""
         b, X, Y = self.b, self.X, self.Y
         ink = mix(b["ink"], (0, 0, 0), 0.4)
         n = len(keys)
-        icons = n <= 3
-        lead = X(45) if icons else X(14)        # the box's edge to its word: past the key icon
-        pad = X(21)                              # clear past the word, the box's rim in it (the frame's Time box)
-        gap = X(10)
+        pad, gap = X(16), X(10)
+        fn_ = self.wb(Y(12))
+        names = [self.k(a) if a else "" for a, _, _ in keys]
         for size in (25, 22, 20, 18):
             f = self.f(Y(size))
-            words = [self.fit(f, word, X(96) if icons else X(130)) for _, word, _ in keys]
-            widths = [lead + self.width(f, w) + pad for w in words]
-            if sum(widths) + gap * (n - 1) <= X(560):
+            words = [self.fit(f, w, X(150)) for _, w, _ in keys]
+            widths = [pad + (self.width(fn_, nm) + X(6) if nm else 0) + self.width(f, w) + pad for nm, w in zip(names, words)]
+            if sum(widths) + gap * (n - 1) <= X(570):
                 break
-        if icons and all(w <= X(103) for w in widths):     # the frame's slots, 103 apart
-            xs = [X(v) for v in {3: (283, 386, 506), 2: (386, 506), 1: (506,)}[n]]
-            widths = [max(X(96), w) for w in widths]
-        else:
-            x, xs = X(620) - sum(widths) - gap * (n - 1), []
-            for w in widths:
-                xs.append(x + X(9))
-                x += w + gap
+        x = X(628) - sum(widths) - gap * (n - 1)
         ty = y + Y(17) + (Y(25) - Y(size)) // 2
-        for k, (letter, word, fn) in enumerate(keys):
-            x = xs[k]
-            box = pygame.Rect(x - X(9), y, widths[k], Y(46))
+        for k, (_, word, fn) in enumerate(keys):
+            box = pygame.Rect(x, y, widths[k], Y(46))
             if active == k:
                 self._nine(c, self._sprite("key_box.png"), box, (X(14), 0, X(14), 0))
-            if icons and letter in ("A", "B", "C"):
-                c.blit(self._sprite(f"key_{letter.lower()}.png"), (x, y + Y(11 if letter == "A" else 10)))
-            elif icons and letter:
-                self._key(c, letter, x + X(4), y + Y(26))
-            self.tx(c, words[k], f, ink, box.x + lead, ty)
+            tx = box.x + pad
+            if names[k]:
+                tx += self.tx(c, names[k], fn_, b["navy"], tx, ty + Y(5)) + X(6)
+            self.tx(c, words[k], f, ink, tx, ty)
             if fn:
                 self.hit(box, fn)
+            x += widths[k] + gap
 
     # ── Guide ─────────────────────────────────────────────────────────────
 
@@ -1577,10 +1588,10 @@ class Passage(CableSkin):
         self._grid(c, g, grid_x, grid_w, top, pitch, rh, 0, 24, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
         c.set_clip(None)
         # The foot: the mark, then the frame's keys with Cathode's actions: A a day on, B the list, C details.
-        name = g.category if g.category != "All" else "Theme"
-        self._keybar(c, Y(403), [("A", "Next Day", lambda: g.handle("FF")),
-                                 ("B", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
-                                 ("C", "Info", lambda: g.handle("INFO"))], 1 if g.focus == "category" else 0)
+        name = g.category if g.category != "All" else "Lists"
+        self._keybar(c, Y(403), [("FF", "Next Day", lambda: g.handle("FF")),
+                                 ("THEMES", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
+                                 ("INFO", "Info", lambda: g.handle("INFO"))], 1 if g.focus == "category" else None)
 
     def cell_lines(self, title, w, h, size):
         return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width)
@@ -1750,7 +1761,7 @@ class Passage(CableSkin):
 
     # ── Dialogs: the light card with the maroon band ──────────────────────
 
-    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=440, rows=None, cursor=-1, hints=None):
+    def _dialog(self, c, title, lines, buttons=(), focus=0, wide=440, rows=None, cursor=-1, hints=None, hint=""):
         """The frame's dialog (chrome.py dialog.png, stretched as
         nine slices to its rows): the title in the wide bold, the first line
         on the maroon band, the rest (or `rows`, the chosen one on the
@@ -1776,7 +1787,8 @@ class Passage(CableSkin):
             if on:
                 c.blit(sel if row.w == sel.get_width() else pygame.transform.smoothscale(sel, (row.w, sel.get_height())), (row.x, row.y + 1))
             self.tx(c, self.fit(f, ln, row.w - X(70)), f, b["white"] if on else b["dlg_ink"], row.x + X(58), row.y + Y(7))
-        hints = hints or ([("SEL", "Select")] + [("C", "Cancel")] if buttons or rows is not None else [("C", "Close")])
+        if hints is None:
+            hints = [("SELECT", "Select"), ("BACK", "Cancel")] if buttons or rows is not None else [("BACK", "Close")]
         fy = r.bottom - Y(38)
         for k, (key, word) in enumerate(hints):
             self._hint(c, key, word, r.x + X(50) if k == 0 else r.x + r.w - X(140), fy, ink=b["dlg_ink"])
@@ -1790,7 +1802,7 @@ class Passage(CableSkin):
         labels = []
         for it in m.items:
             v = it.value() if it.value else ""
-            labels.append(f"{it.label}:  {v}" if v else it.label)
+            labels.append(f"{it.label}: {v}" if v else it.label)
         img = self._sprite("options.png")
         f = self.f(Y(20))
         n = max(1, len(labels))
@@ -1801,7 +1813,7 @@ class Passage(CableSkin):
         self.tx(c, self.fit(ft, m.title.title(), X(60)), ft, b["white"], r.x + X(12), r.y + Y(5))
         sel = self._sprite("opt_sel.png")
         for k, lab in enumerate(labels):
-            band = pygame.Rect(r.x - X(2), r.y + Y(30) + k * Y(26), r.w + X(2), Y(24))
+            band = pygame.Rect(r.x + X(4), r.y + Y(30) + k * Y(26), r.w - X(4), Y(24))
             on = k == m.cursor
             if on:
                 self._nine(c, sel, band, (X(30), 0, X(12), 0))
@@ -1857,23 +1869,23 @@ class Passage(CableSkin):
                     break
                 self.tx(c, ln, fm, b["navy"], X(78), y)
                 y += Y(24)
-        self._hint(c, "C", "Close", X(506), Y(414))
+        self._hint(c, "BACK", "Close", X(506), Y(414))
         self.hit(self.R(500, 410, 120, 36), lambda: info.handle("BACK"))
 
     def draw_capture(self, c, cap):
-        self._dialog(c, "Remote Setup", ["Waiting for a button...", cap.prompt])
+        self._dialog(c, "Remote Setup", ["Waiting for a button...", cap.prompt], hints=[])
 
     def _signal_loss(self, c):
         """The frame's blocked-programme card (chrome.passage_card,
         drawn to its words) on black, with Cathode's own words."""
-        self._message_card(c, self.NO_SIGNAL[0], self.NO_SIGNAL[1:])
+        self._message_card(c, self.NO_SIGNAL[0], self.NO_SIGNAL[1:], self.hint_signal())
 
-    def _message_card(self, c, title, lines):
+    def _message_card(self, c, title, lines, hint=""):
         W, H = self.canvas
         b, X, Y = self.b, self.X, self.Y
         c.fill((0, 0, 0, 255))
         f = self.f(Y(20))
-        w = X(240)
+        w = X(280)
         rows = [ln for line in lines for ln in self.wrap(f, line, w - X(40), 2)]
         h = Y(50) + Y(24) * len(rows) + Y(30)                    # the card drawn to its words
         key = ("passage", f"card{w}x{h}", None)
@@ -1888,9 +1900,11 @@ class Passage(CableSkin):
         for ln in rows:
             self.tx(c, ln, f, (30, 30, 34), r.centerx, y, align="center")
             y += Y(24)
+        if hint:                                                 # the key line on the card's grey foot
+            self.tx(c, hint, self.f(Y(15)), b["navy"], r.centerx, r.bottom - Y(19), align="center")
 
     def _message(self, c, msg):
-        self._message_card(c, self.ATTENTION, [msg])
+        self._message_card(c, self.ATTENTION, [msg], self.hint_ok())
 
     def draw_toast(self, c, msg):
         b, X, Y = self.b, self.X, self.Y
@@ -1899,6 +1913,7 @@ class Passage(CableSkin):
         w = max(self.width(f, ln) for ln in lines) + X(40)
         r = pygame.Rect((self.canvas[0] - w) // 2, Y(60) if self.over_picture() else Y(200), w, Y(10) + len(lines) * Y(20))
         pygame.draw.rect(c, b["tab"], r, border_radius=Y(6))
+        pygame.draw.rect(c, mix(b["tab"], (255, 255, 255), 0.4), r, 1, border_radius=Y(6))
         for k, ln in enumerate(lines):
             self.tx(c, ln, f, b["white"], r.centerx, r.y + Y(5) + k * Y(20), align="center")
 
@@ -1959,31 +1974,30 @@ class Passage(CableSkin):
     def _panel(self, c, r):
         """The list panel is the frame's own."""
 
-    def _col_header(self, c, y, word):
-        b, X, Y = self.b, self.X, self.Y
-        self.tx(c, self.fit(self.wb(Y(16)), word, X(180)), self.wb(Y(16)), b["navy"], X(80), y + Y(6))
-
     def _foot(self, c, text):
-        self._hint(c, "SEL", text, self.X(58), self.Y(414))
+        self._hint(c, "SELECT", text, self.X(58), self.Y(414))
         self._foot_clock(c)
 
     def _foot_clock(self, c):
         """The clock on the frame's dark tab at the foot's right."""
         b, X, Y = self.b, self.X, self.Y
-        self.tx(c, datetime.now().strftime("%I:%M:%S%p").lstrip("0").lower(), self.wb(Y(16)), b["white"], X(466), Y(418))
+        self.tx(c, ampm(datetime.now(), True), self.wb(Y(16)), b["white"], X(466), Y(418))
 
     def _list_row(self, c, r, title, meta, on, f=None, fm=None):
         """A row of the list panel: the chosen one on the frame's navy pill
         (its arrows with it), the value in the right column."""
         b, X, Y = self.b, self.X, self.Y
         f, fm = f or self.f(Y(21)), fm or self.f(Y(19))
+        inside = r.w < X(300)                       # the wall's title row: the value inside the pill
         if on:
             pill = self._sprite("pill.png")
             c.blit(pill, (X(60), r.y))
-            if not meta:                            # nothing to step through: the arrows covered by the pill's body
+            if not meta or inside:                  # nothing to step through: the arrows covered by the pill's body
                 c.blit(pill, (X(266), r.y + Y(5)), pygame.Rect(X(100), Y(5), X(23), Y(16)))
-        self.tx(c, self.fit(f, title, X(150)), f, b["white"], X(110), r.y + Y(6))
-        if meta:
+        self.tx(c, self.fit(f, title, X(120) if inside and meta else X(150)), f, b["white"], X(110), r.y + Y(6))
+        if meta and inside:
+            self.tx(c, self.fit(fm, meta, X(70)), fm, b["white"] if on else b["navy"], X(284), r.y + Y(7), align="right")
+        elif meta:
             self.tx(c, self.fit(fm, meta, X(330)), fm, b["white"] if on else b["panel_dim"], X(300), r.y + Y(7))
 
     def _button(self, c, r, label, on, f=None):
@@ -1997,9 +2011,7 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         cur = m.items[m.cursor] if 0 <= m.cursor < len(m.items) else None
         title = "Main Menu" if m.title == "MAIN MENU" else m.title.title()
-        self._page_top(c, "General Settings" if title != "Main Menu" else "Main Menu", cur.help if cur and cur.help else "",
-                       heading=f"{title}: {cur.label}" if cur else title)
-        self._col_header(c, Y(192), title)
+        self._page_top(c, title, cur.help if cur and cur.help else "", heading=cur.label if cur else "")
         n = len(m.items)
         n_vis = 6
         first = max(0, min(m.cursor - n_vis + 1, n - n_vis)) if n > n_vis else 0
@@ -2014,15 +2026,14 @@ class Passage(CableSkin):
                 veil.fill((*b["panel"], 120))
                 c.blit(veil, r.topleft)
             self.hit(pygame.Rect(r.x, r.y, X(570), r.h), lambda i=i: m.activate(i))
-        self._hint(c, "SEL", "Change" if cur and cur.adjust else "Select", X(58), Y(414))
-        self._hint(c, "C", "Back" if len(getattr(m, "pages", [1])) > 1 else "Exit", X(220), Y(413))
+        x = self._hint(c, "SELECT", "Change" if cur and cur.adjust else "Select", X(58), Y(414))
+        self._hint(c, "BACK", "Back" if len(getattr(m, "pages", [1])) > 1 else "Exit", max(X(220), x + X(30)), Y(414))
         self._foot_clock(c)
         if n > n_vis:
             self.tx(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(17)), b["white"], X(624), Y(388), align="right")
 
     def _od_buttons(self, c, labels, focus, hits):
-        letters = "ABC" if len(labels) <= 3 else [""] * len(labels)
-        keys = [(letter, label, fn) for letter, label, fn in zip(letters, labels, hits or [None] * len(labels))]
+        keys = [("", label, fn) for label, fn in zip(labels, hits or [None] * len(labels))]
         self._keybar(c, self.Y(403), keys, focus if 0 <= focus < len(keys) else None)
 
     def _rows(self, c, s, area, rows, sel, top, n_vis):
@@ -2065,26 +2076,28 @@ class Passage(CableSkin):
         self.hole(c, self.page_video_box(s))
         live = self.app.live
         self._strip(c, live.channel if live else None, frame=True, top=Y(216))
+        area = self.R(50, 127, 270, 259)                           # the panel's seven rows under its heading slot
+        if s.mode == "auth":                                     # the rules under the words: the panel plain
+            vgrad(c, (X(56), Y(106), X(264), Y(284)), rgba((128, 152, 158)), rgba((180, 190, 192)))
         fh = self.wb(Y(16))
         head_word = "My Recordings" if rec else (s.crumb() if len(s.stack) > 1 else "On Demand")
-        self.tx(c, self.fit(fh, head_word, X(250)), fh, b["navy"], X(60), Y(100))
-        area = self.R(50, 125, 270, 275)
+        self.tx(c, self.fit(fh, head_word, X(250)), fh, b["navy"], X(62), Y(106))
         if s.mode == "auth":
             fl = self.f(Y(21))
-            y = area.y + Y(50)
+            y = area.y + Y(30)
             for line in ("On a phone or computer, go to", s.auth_link or "plex.tv/link", "and enter this code:"):
                 self.tx(c, line, fl, b["navy"], area.centerx, y, align="center")
                 y += Y(28)
             if s.auth_code:
                 self.tx(c, s.auth_code, self.wb(Y(36)), b["navy"], area.centerx, y + Y(10), align="center")
-            self._keybar(c, Y(403), [("C", "Cancel", s.back)], 0)
+            self._keybar(c, Y(403), [("", "Cancel", s.back)], 0)
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
-        top = max(0, min(s.sel - 2, len(rows) - n_vis))     # the chosen row in the third slot, between the strip and the details, as the frame
+        top = max(0, min(s.sel - 3, len(rows) - n_vis))     # the chosen row in the fourth slot, between the strip and the details, as the frame
         if s.view == "wall":
             self._wall(c, s, area.inflate(-X(10), -Y(10)))
         else:
-            self._rows(c, s, pygame.Rect(X(50), Y(164), X(270), Y(222)), rows, s.sel, top, n_vis)
+            self._rows(c, s, area, rows, s.sel, top, n_vis)
         side = self.od_side(s)
         self._od_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, [fn for _, fn in side])
         fs = self.f(Y(17))
@@ -2139,13 +2152,11 @@ class Passage(CableSkin):
         names = info.buttons()
         words = [self.button_words(info.label(n)) for n in names]
         hits = [lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)]
-        letters = "ABC" if len(words) <= 3 else [""] * len(words)
-        self._keybar(c, Y(403), [(l, w, fn) for l, w, fn in zip(letters, words, hits)], info.focus if 0 <= info.focus < len(words) else None)
+        self._keybar(c, Y(403), [("", w, fn) for w, fn in zip(words, hits)], info.focus if 0 <= info.focus < len(words) else None)
 
     def draw_diagnostics(self, c, d):
         b, X, Y = self.b, self.X, self.Y
-        self._page_top(c, "General Settings", "Signal, picture and the software this box runs.", heading="System Information")
-        self._col_header(c, Y(192), "System")
+        self._page_top(c, "System Information", "Signal, picture and the software this box runs.")
         f = self.f(Y(19))
         y = Y(226)
         rows = [("Signal strength", f"{d.signal()}"), ("Signal quality", f"{d.quality()}")] + d.rows()
@@ -2155,9 +2166,9 @@ class Passage(CableSkin):
             self.tx(c, self.fit(f, str(value), X(330)), f, b["white"], X(296), y)
             y += pitch
         from ..menus import open_button_guide
-        self._hint(c, "A", "Help", X(58), Y(414))
+        self._hint(c, "", "Help", X(58), Y(414))
         self.hit(self.R(56, 412, 90, 30), lambda: open_button_guide(self.app))
-        self._hint(c, "C", "Exit", X(220), Y(413))
+        self._hint(c, "BACK", "Exit", X(220), Y(414))
         self.hit(self.R(218, 412, 90, 30), lambda: d.handle("BACK"))
         self._foot_clock(c)
 
@@ -2196,30 +2207,29 @@ class Passage(CableSkin):
         ft = self.f(Y(18))
         self.tx(c, self.fit(ft, kb.tip(), X(400)), ft, b["white"], X(215), Y(262))
         grid = kb.grid()
-        fk = self.wb(Y(15))
-        lav = (104, 104, 150)
-        pitch = Y(19) if len(grid) <= 9 else Y(17)
+        fk = self.wb(Y(16))
+        pitch = Y(17)
         for r_, row in enumerate(grid):
             if r_ == len(grid) - 1:                 # Done and Cancel: the keys along the foot
                 continue
-            y = Y(262) + r_ * pitch
+            y = Y(256) + r_ * pitch
             for col, cell in enumerate(row):
                 on = (r_, col) == (kb.row, kb.col)
                 if cell in ("CLEAR", "DEL"):
                     word, cx = ("NEW", X(94)) if cell == "CLEAR" else ("BACK", X(162))
-                    rect = pygame.Rect(cx - X(24), y - Y(2), X(48), Y(17))
+                    rect = pygame.Rect(cx - X(26), y - Y(2), X(52), Y(17))
                 elif cell == "SPACE":
-                    word, cx = "space", X(136)
-                    rect = pygame.Rect(cx - X(24), y - Y(2), X(48), Y(17))
+                    word, cx = "SPACE", X(136)
+                    rect = pygame.Rect(cx - X(26), y - Y(2), X(52), Y(17))
                 else:
                     word, cx = cell.upper(), X(83 + 21 * col)
-                    rect = pygame.Rect(cx - X(9), y - Y(2), X(18), Y(17))
+                    rect = pygame.Rect(cx - X(10), y - Y(2), X(20), Y(17))
                 if on:
                     pygame.draw.rect(c, b["navy"], rect, border_radius=Y(2))
-                self.tx(c, word, fk, b["white"] if on else lav, cx, y, align="center")
+                self.tx(c, word, fk, b["white"] if on else b["navy"], cx, y, align="center")
                 self.hit(rect, lambda r_=r_, col=col, cell=cell: (setattr(kb, "row", r_), setattr(kb, "col", col), kb._press(cell)))
         last = kb.row == len(grid) - 1
-        keys = [("A", "Done", lambda: kb._press("DONE")), ("C", "Cancel", lambda: kb._press("CANCEL"))]
+        keys = [("", "Done", lambda: kb._press("DONE")), ("", "Cancel", lambda: kb._press("CANCEL"))]
         self._keybar(c, Y(403), keys, (0 if kb.col == 0 else 1) if last else None)
 
     def draw_playback(self, c, pb):
@@ -2256,7 +2266,7 @@ class Passage(CableSkin):
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
             br = pygame.Rect(X(195) + k * X(72), band.y + Y(27), X(64), Y(18))
-            self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
+            self._tbtn(c, br, kind, k == self._tfocus(pb))
             self.hit(br, fn)
             rects.append(br)
         self.idle_row(c, pb, rects, Y(9))
@@ -2306,11 +2316,11 @@ class Passage(CableSkin):
         self._boot_page(c)
         size = Y(30)
         mw = self.measure(self.wordmark, size)
-        self.wordmark(c, (W - mw) // 2, Y(150), size)
+        self.wordmark(c, (W - mw) // 2, Y(205) if scene == "logo" else Y(110), size)
         if scene == "logo":
             return
         g = getattr(self.app, "guide_progress", None)
-        r = self._dialog(c, "Please Wait", [self.BOOT_WORDS[1], "Press any button to skip."], hints=[("C", "Skip")])
+        r = self._dialog(c, "Please Wait", [self.BOOT_WORDS[1], "Press any button to skip."], hints=[("", "Skip")])
         bar = pygame.Rect(r.x + X(40), r.bottom - Y(60), r.w - X(80), Y(10))
         if g is not None and g >= 0:
             self.progress(c, bar, max(g, min(1.0, age / 3.0)), b["track"], b["green"])
