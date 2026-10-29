@@ -115,7 +115,7 @@ class Config:
     audio_device: str = ""         # mpv audio-device (blank = auto)
 
     # Appearance
-    skin: str = "classic"          # classic | plate | plate_hd | indirect | indirect_hd | igrid | passage | wayfinder | y1
+    skin: str = "classic"          # classic | plate | plate_hd | indirect | indirect_hd | igrid | passage
     # Each box skin's own look choices (Classic uses font/theme/custom_palette):
     skin_fonts: dict = field(default_factory=dict)    # skin -> font key
     skin_themes: dict = field(default_factory=dict)   # skin -> theme ("native", a theme, "custom")

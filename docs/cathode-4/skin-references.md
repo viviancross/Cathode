@@ -277,9 +277,11 @@ the size down to fit before any ellipsis.
 
 ## The cable boxes (4.39)
 
-Four skins (`cathode/skins/cable.py`) after the leased cable guides, drawn
-to frames gathered 2026-10-28. Geometry is in 640x480 units (the SD
-frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
+Two skins (`cathode/skins/cable.py`) after the leased cable guides, drawn
+to frames gathered 2026-10-28. Geometry is in 640x480 units (the frames'
+own pixels). Wayfinder (2010 Time Warner) and Y1 (2014 Comcast X1) were
+drawn procedurally from a demo video and screenshots and removed in 4.41:
+without clean frames they never got past a re-coloured body.
 
 - **Cumcast i-Grid** (Calmcast until 4.39): the TV Guide i-Guide on Motorola DCT boxes, from the
   DCT6412 "inside i-Guide" reference manual's screens (mlgc.com and
@@ -507,40 +509,3 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   for the first line, a lavender body with the lines in navy, the chosen
   row navy with yellow arrows, SEL / C hints at the foot. Volume: a light
   rounded band with red blocks lit.
-- **Wayfinder**: the Time Warner Navigator (Mystro / ODN), from a 2010
-  demo video of the box (youtu.be/mxfafVFcox8, 480x360 frames scaled to
-  640x480) and a 2008 photo. Measured: a steel-blue (178,196,222) page;
-  the channel's logo and name on a royal-blue (35,75,165) band x 40-308,
-  y 22-62 over a white card to y 212 with the title and hours in dark navy
-  bold and the description in dark; the picture x 320-640, y 0-206 over a
-  navy strip "MUS14 * 714  11:03 am"; a dark navy time header y 232-254
-  "TUE 5/25 | 11:00 am | 11:30 am | 12:00 pm" with an arrow; five rows 34
-  tall on a 37 pitch from y 258: navy (25,50,130) channel tiles x 40-150
-  with the call sign at the left and the number at the right, royal-blue
-  cells with white lettering, the chosen cell gold (235,190,60) with navy
-  lettering; a light foot strip y 432-480 with the TWC mark, "A ACCESS
-  MENU", "B FIND SHOWS" (a yellow triangle, a blue square) and the red TV
-  GUIDE tile at the right. Banner (the video's first frame): a navy strip
-  with the clock and "714 * Rock" over a white card with the title in
-  navy bold and the description. Search: a dark navy page of rows and a
-  keypad.
-- **Y1**: Comcast X1, from Comcast's own guide screenshot (xfinity.com
-  support, "X1 guide grid", 2014, 500x274) and a 2014 review's On Demand
-  and title pages (pc.net, 600x359), plus the 2014 welcome kit (Main Menu,
-  search, apps). Measured (in 1280x720): a black page over the dimmed
-  picture; "Guide / TV Listings" top-left (white, the second word blue),
-  a GUIDE pill and "Change View", the clock "9:09a / 73" top-right; a
-  time header "Today 8/4 | 9:00a | 9:30a ..." in small light lettering at
-  y 63-93; five rows 66 tall on a 72 pitch from y 99: channel logos on
-  black tiles x 0-190 with the number white at the right, charcoal
-  (38,38,42) cells with 3px black gaps and white 24px light lettering,
-  the chosen cell lighter (60,60,64) with a white rule along its top and
-  blue (80,160,230) lettering; the programme in a panel along the foot
-  (logo tile, title 28px, description, "6:00 - 10:00a / 860 NFLHD / HD CC"
-  at the right). Main Menu: the mark, then "Guide Saved On Demand Search
-  Apps" in a row at mid-height, the chosen word white with a blue
-  underline, the rest grey. On Demand: "On Demand" in blue, tabs in a row
-  (the chosen blue and underlined), rows of posters under headings. A
-  title: the name in 36px light, the poster framed orange (235,120,20)
-  when chosen, the facts in a Details column, the buttons in a row with
-  the chosen underlined. The face is thin (Barlow Medium stands in).

@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.41
+
+- **Wayfinder and Y1 are gone.** The two cable skins drawn without clean
+  frames (the 2010 Time Warner guide from a demo video, the 2014 Comcast
+  box from screenshots) never got past a re-coloured body: their item
+  pages ran off the screen, their menus carried empty cards, and Y1 was
+  the streaming-app look the product calls an anti-reference. The cable
+  boxes are Cumcast i-Grid and Passage. A saved `skin` of `wayfinder` or
+  `y1` falls back to Classic.
+
 ## 4.40
 
 - **The frame skins' brands are Cathode's own.** i-Grid's header carries

@@ -702,8 +702,8 @@ def skin_classes() -> dict:
     from .classic import Classic
     from .indirect import InDirect, InDirectHD
     from .plate import Plate, PlateHD
-    from .cable import IGrid, Passage, Wayfinder, Y1
-    return {c.name: c for c in (Classic, InDirect, InDirectHD, Plate, PlateHD, IGrid, Passage, Wayfinder, Y1)}
+    from .cable import IGrid, Passage
+    return {c.name: c for c in (Classic, InDirect, InDirectHD, Plate, PlateHD, IGrid, Passage)}
 
 
 def load_skin(name: str, app) -> Skin:
