@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.40
+
+- **The frame skins' brands are Cathode's own.** i-Grid's header carries
+  the **cumcast** lockup (the lowercase word with its red crescent) and a
+  **TV GRID** badge where the box's operator and listings brands sat, and
+  its boot page and screensaver show the lockup; the skin is now **Cumcast
+  i-Grid**. Passage's mark reads **PASSAGE echo**, lettered in the frames'
+  style over the frame's own arrow and echo swoosh, on the guide, the On
+  Demand strip, the screensaver's box and the boot page (drawn at twice
+  the frames' size, so the boot page is crisp).
+- **Polish on the two frame skins.** i-Grid: the chosen list row is the
+  frame's pale yellow (it had been cut from its olive edge), the item
+  page's five buttons shrink their face instead of cutting their words,
+  Options rows line up at the left, the list pages' heading starts at the
+  left. Passage: the key box stretches to a long word (Cancel no longer
+  runs under its rim), more than three keys run as one packed row of
+  words (the item page's five actions), the guide's keys do Cathode things
+  (A Next Day, B the list, C Info), the System Information labels are dark
+  on the light panel, the chosen row's arrows show only on a row with a
+  value to step through.
+
 ## 4.39
 
 - **Four cable-box skins.** Settings > Picture & Style > Skin gains the

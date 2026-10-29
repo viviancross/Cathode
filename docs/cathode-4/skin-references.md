@@ -281,7 +281,7 @@ Four skins (`cathode/skins/cable.py`) after the leased cable guides, drawn
 to frames gathered 2026-10-28. Geometry is in 640x480 units (the SD
 frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
 
-- **Calmcast i-Grid**: the TV Guide i-Guide on Motorola DCT boxes, from the
+- **Cumcast i-Grid** (Calmcast until 4.39): the TV Guide i-Guide on Motorola DCT boxes, from the
   DCT6412 "inside i-Guide" reference manual's screens (mlgc.com and
   glwb.net host the PDF; 640x480 frames). Measured: a navy (16,38,98)
   header 56 tall with the stacked "DIGITAL CABLE" mark at x 48, the clock
@@ -336,6 +336,28 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   the six rows; `dialog.png` (p022-3, 531 x 137, nine-sliced): the title
   yellow, lines white, capsule buttons. On Demand's buttons are capsules
   along the foot band at y 444. The clock on every header is Cathode's.
+- **The brands redrawn as parodies, and a polish pass** (2026-10-29, later):
+  the manual's DIGITAL CABLE and TV GUIDE lockups are erased from every
+  i-Grid page (row-filled from x 250 over x 40-396, y 26-84) and
+  `cumcast.png` (118 x 32: "cumcast" in Futura Book with a stroke for
+  weight, white, a red (214,30,36) crescent round the c, from
+  C:\Windows\Fonts\futuran.TTF) goes on at (46,41) with `tvgrid.png` (a
+  62 x 50 red badge, TV over GRID in Liberation Sans Bold) at (328,30);
+  `wordmark()` scales the cumcast lockup for the boot page and screensaver.
+  `row_sel.png` is re-cut from the frame's column 420 (the pale yellow
+  (255,255,155) row; the first cut had sampled its olive edge). The list
+  pages' heading starts at x 48 (the frame's heart gone). Passage's
+  `mark.png` is now "PASSAGE echo" at twice the frames' size (397 x 68):
+  PASSAGE in Avante (an Avant Garde clone, C:\Windows\Fonts\avante.TTF)
+  caps 12 tall, navy (44,66,150), 4 apart, then the frame's own arrow and
+  echo swoosh cropped from the original mark (x 98-190, 2x); the old mark
+  is erased from guide.png (its origin (42,416)), od.png ((59,44)) and
+  markbox.png ((59,2)) by running each row between two clean columns, and
+  `Passage._mark()` draws the new one there at half size. The key bar's
+  box runs 21 past its word (as the frame's Time box), the frame's three
+  slots (103 apart) are used only when every box fits them, more than
+  three keys run as words packed from x 620 with the face shrunk until
+  they fit. The guide's keys: A Next Day (FF), B the list (THEMES), C Info.
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
   frames). Fourth pass (2026-10-29): the guide and the banner are drawn

@@ -2,7 +2,7 @@
 leased out, drawn to frames of the real ones (docs/cathode-4/
 skin-references.md names the sources):
 
-- Calmcast i-Grid (2006): the Motorola-era interactive guide. A navy
+- Cumcast i-Grid (2006): the Motorola-era interactive guide. A navy
   header with the mark, clock and a red tile; the picture top-right with
   the programme described in a blue panel beside it; steel channel tiles,
   blue cells, a pale yellow cursor with navy lettering; a Main Menu of
@@ -717,11 +717,12 @@ class CableSkin(BoxSkin):
 
 
 class IGrid(CableSkin):
-    """Calmcast i-Grid: the 2006 interactive guide of the Motorola boxes, to
-    the frames in the box's reference manual (640x480)."""
+    """Cumcast i-Grid: the 2006 interactive guide of the Motorola boxes, to
+    the frames in the box's reference manual (640x480), the cumcast lockup
+    and the TV GRID badge where the box's operator and listings brands sat."""
     name = "igrid"
-    label = "Calmcast i-Grid"
-    MARK, MARK_TAG = "i-Grid", "CALMCAST"
+    label = "Cumcast i-Grid"
+    MARK, MARK_TAG = "i-Grid", "CUMCAST"
     NO_SIGNAL = ("One Moment Please", "This channel should be available shortly.", "Ref code: S0a00")
     BOOT_WORDS = ("Please wait...", "Loading program guide...")
     ROWS, ROW_PITCH = 4, 45
@@ -761,16 +762,13 @@ class IGrid(CableSkin):
         }
 
     def wordmark(self, c, x, y, size, ink=None):
-        """'i-Grid' bold over a rule, CALMCAST small under it: after the
-        stacked 'DIGITAL CABLE' lockup."""
-        b, t = self.b, self.text
-        ink = ink or b["text"]
-        f = self.fb(size)
-        w = t.draw(c, self.MARK, f, ink, x, y)
-        h = t.ink(f)[1]
-        pygame.draw.rect(c, ink, (x, y + h + max(1, size // 10), w, max(1, size // 12)))
-        fs = self.f(max(7, int(size * 0.42)))
-        t.draw(c, self.MARK_TAG, fs, ink, x, y + h + size // 4)
+        """The cumcast lockup (assets/skins/igrid/cumcast.png: the lowercase
+        word with its red crescent), its crescent `size` tall; `ink` is
+        ignored, the lockup keeps its colours."""
+        img = self._sprite("cumcast.png")
+        k = size / img.get_height()
+        w, h = max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k))
+        c.blit(img if (w, h) == img.get_size() else pygame.transform.smoothscale(img, (w, h)), (x, y))
         return w
 
     def cell_shadow(self, on):
@@ -780,14 +778,18 @@ class IGrid(CableSkin):
         return max(2, super().label_every(col_w, label_w))      # the box labelled the half hours
 
     def _od_buttons(self, c, labels, focus, hits):
-        """Capsules along the foot band, right-aligned, narrowed to fit."""
+        """Capsules along the foot band, right-aligned, narrowed to fit, the
+        face shrunk before a word would be cut."""
         X, Y = self.X, self.Y
         n = max(1, len(labels))
-        bw = min(X(130), (X(584) - (n - 1) * X(8)) // n)
-        x = X(620) - n * bw - (n - 1) * X(8)
+        gap = X(8 if n <= 4 else 5)
+        bw = min(X(130), (X(600) - (n - 1) * gap) // n)
+        x = X(620) - n * bw - (n - 1) * gap
+        f = next((self.fb(Y(s)) for s in (13, 12, 11) if all(self.width(self.fb(Y(s)), l) <= bw - X(20) for l in labels)),
+                 self.fb(Y(11)))
         for k, label in enumerate(labels):
-            r = pygame.Rect(x + k * (bw + X(8)), Y(444), bw, Y(22))
-            self._capsule(c, r, label, k == focus, self.fb(Y(13)))
+            r = pygame.Rect(x + k * (bw + gap), Y(444), bw, Y(22))
+            self._capsule(c, r, label, k == focus, f)
             if hits and hits[k]:
                 self.hit(r, hits[k])
 
@@ -801,8 +803,12 @@ class IGrid(CableSkin):
         t.draw(c, "GRID", f, (255, 255, 255), r.centerx, r.y + size // 8 + t.ink(f)[1], align="center")
 
     def _header(self, c, right):
-        """The header is the frame's own; the clock goes on it."""
+        """The header is the frame's own, the cumcast lockup and the TV GRID
+        badge on it where the box's operator and listings brands sat; the
+        clock goes between them."""
         b, X, Y = self.b, self.X, self.Y
+        c.blit(self._sprite("cumcast.png"), (X(46), Y(41)))
+        c.blit(self._sprite("tvgrid.png"), (X(328), Y(30)))
         self.tx(c, ampm(datetime.now()), self.fb(Y(18)), b["text"], X(320), Y(37), align="right")
 
     def guide_video_box(self):
@@ -931,17 +937,19 @@ class IGrid(CableSkin):
     def menu_video_box(self, menu):
         return self.guide_video_box()
 
-    def _capsule(self, c, r, label, on, f=None, right=""):
-        """A capsule cut from the frame (yellow when chosen), stretched to r."""
+    def _capsule(self, c, r, label, on, f=None, right="", left=False):
+        """A capsule cut from the frame (yellow when chosen), stretched to r;
+        the label centred, or at the left with `right` (a value) at the right."""
         b, X, Y = self.b, self.X, self.Y
         img = self._sprite("cap_sel.png" if on else "cap.png")
         self._nine(c, img, pygame.Rect(r.x - X(2), r.y - Y(4), r.w + X(4), r.h + Y(8)), (X(18), 0, X(18), 0))
         f = f or self.fb(Y(15))
         ink = b["sel_ink"] if on else b["text"]
         rw = self.width(f, right) + X(16) if right else 0
-        if right:
+        if right or left:
             self.tx(c, self.fit(f, label, r.w - rw - X(28)), f, ink, r.x + X(14), self.mid(r, f))
-            self.tx(c, right, f, ink, r.right - X(14), self.mid(r, f), align="right")
+            if right:
+                self.tx(c, right, f, ink, r.right - X(14), self.mid(r, f), align="right")
         else:
             self.tx(c, self.fit(f, label, r.w - X(20)), f, ink, r.centerx, self.mid(r, f), align="center")
 
@@ -968,11 +976,11 @@ class IGrid(CableSkin):
                 y += Y(22)
 
     def _section(self, c, left, right=""):
-        """The section bar's words (list.png): a heading after the frame's
-        heart, a note at the right."""
+        """The section bar's words (list.png): a heading at the left, a note
+        at the right."""
         b, X, Y = self.b, self.X, self.Y
         f = self.fb(Y(16))
-        self.tx(c, self.fit(f, left, X(300)), f, b["text"], X(86), Y(203), shadow=b["gap"])
+        self.tx(c, self.fit(f, left, X(300)), f, b["text"], X(48), Y(203), shadow=b["gap"])
         if right:
             self.tx(c, right, f, b["title"], X(596), Y(203), align="right", shadow=b["gap"])
 
@@ -1161,7 +1169,7 @@ class IGrid(CableSkin):
             on = k == m.cursor
             v = it.value() if it.value else ""
             v = f"< {v} >" if v and on and it.adjust else v
-            self._capsule(c, row, it.label, on, f, right=v)
+            self._capsule(c, row, it.label, on, f, right=v, left=True)
             self.hit(row, lambda k=k: m.activate(k))
 
     def draw_playback(self, c, pb):
@@ -1342,12 +1350,17 @@ class Passage(CableSkin):
     # ── The mark: the frame's own 'PASSPORT echo' lockup ──────────────────
 
     def wordmark(self, c, x, y, size, ink=None):
-        """The lockup cut from the frame (190 x 34 at size 16), scaled to
+        """The PASSAGE echo lockup (assets/skins/passage/mark.png, drawn at
+        twice the frames' size: 16 is the frames' own, 34 tall), scaled to
         `size`; `ink` is ignored, the lockup keeps its colours."""
+        h = int(34 * size / 16)
+        return self._mark(c, x, y - h // 4, size / 32)
+
+    def _mark(self, c, x, y, k=0.5):
+        """The lockup with its top left at (x, y), the 2x sprite scaled by k."""
         img = self._sprite("mark.png")
-        k = size / 16
-        w, h = max(1, int(img.get_width() * k)), max(1, int(img.get_height() * k))
-        c.blit(img if (w, h) == img.get_size() else pygame.transform.smoothscale(img, (w, h)), (x, y - h // 4))
+        w, h = max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k))
+        c.blit(img if (w, h) == img.get_size() else pygame.transform.smoothscale(img, (w, h)), (x, y))
         return w
 
     # ── Pieces ────────────────────────────────────────────────────────────
@@ -1449,22 +1462,42 @@ class Passage(CableSkin):
     def _keybar(self, c, y, keys, active=None):
         """Keys along the foot, cut from the frame: the yellow A triangle,
         blue B square and red C disc, the word beside each in the condensed
-        face, the active one on the frame's light box with its navy edge
-        and shadow. `y` is the box's top (the guide's is 403)."""
+        face, the active one on the frame's light box (stretched to a long
+        word) with its navy edge and shadow. Up to three keys sit where the
+        frame put them; more run as words alone, packed from the right, the
+        face shrunk until they fit. `y` is the box's top (the guide's is 403)."""
         b, X, Y = self.b, self.X, self.Y
-        f = self.f(Y(25))
         ink = mix(b["ink"], (0, 0, 0), 0.4)
-        xs = {3: (283, 386, 506), 2: (386, 506), 1: (506,)}.get(len(keys)) or tuple(283 + k * 112 for k in range(len(keys)))
+        n = len(keys)
+        icons = n <= 3
+        lead = X(45) if icons else X(14)        # the box's edge to its word: past the key icon
+        pad = X(21)                              # clear past the word, the box's rim in it (the frame's Time box)
+        gap = X(10)
+        for size in (25, 22, 20, 18):
+            f = self.f(Y(size))
+            words = [self.fit(f, word, X(96) if icons else X(130)) for _, word, _ in keys]
+            widths = [lead + self.width(f, w) + pad for w in words]
+            if sum(widths) + gap * (n - 1) <= X(560):
+                break
+        if icons and all(w <= X(103) for w in widths):     # the frame's slots, 103 apart
+            xs = [X(v) for v in {3: (283, 386, 506), 2: (386, 506), 1: (506,)}[n]]
+            widths = [max(X(96), w) for w in widths]
+        else:
+            x, xs = X(620) - sum(widths) - gap * (n - 1), []
+            for w in widths:
+                xs.append(x + X(9))
+                x += w + gap
+        ty = y + Y(17) + (Y(25) - Y(size)) // 2
         for k, (letter, word, fn) in enumerate(keys):
-            x = X(xs[k])
-            box = pygame.Rect(x - X(9), y, X(96), Y(46))
+            x = xs[k]
+            box = pygame.Rect(x - X(9), y, widths[k], Y(46))
             if active == k:
-                c.blit(self._sprite("key_box.png"), box.topleft)
-            if letter in ("A", "B", "C"):
+                self._nine(c, self._sprite("key_box.png"), box, (X(14), 0, X(14), 0))
+            if icons and letter in ("A", "B", "C"):
                 c.blit(self._sprite(f"key_{letter.lower()}.png"), (x, y + Y(11 if letter == "A" else 10)))
-            else:
+            elif icons and letter:
                 self._key(c, letter, x + X(4), y + Y(26))
-            self.tx(c, self.fit(f, word, X(70)), f, ink, x + X(36), y + Y(17))
+            self.tx(c, words[k], f, ink, box.x + lead, ty)
             if fn:
                 self.hit(box, fn)
 
@@ -1483,6 +1516,7 @@ class Passage(CableSkin):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         c.blit(self._sprite("guide.png"), (0, 0))
+        self._mark(c, X(42), Y(416))
         self._picture(c)
         sel, cur = g.selected(), g.selected_program()
         self._strip(c, sel, frame=True)
@@ -1547,10 +1581,11 @@ class Passage(CableSkin):
                 pygame.draw.rect(cc, b["movie"], (r.x + X(2), r.y, r.w - X(2), r.h))
             pygame.draw.rect(cc, b["line"], (r.x, r.y, X(2), r.h))
         self._grid(c, g, grid_x, grid_w, top, pitch, rh, 0, 24, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
-        # The foot: the mark is the frame's; A Time / B Theme / C Search.
+        # The foot: the mark, then the frame's keys with Cathode's actions: A a day on, B the list, C details.
         name = g.category if g.category != "All" else "Theme"
-        self._keybar(c, Y(403), [("A", "Time", None), ("B", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
-                                 ("C", "Search", None)], 1 if g.focus == "category" else 0)
+        self._keybar(c, Y(403), [("A", "Next Day", lambda: g.handle("FF")),
+                                 ("B", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
+                                 ("C", "Info", lambda: g.handle("INFO"))], 1 if g.focus == "category" else 0)
 
     def cell_lines(self, title, w, h, size):
         return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width)
@@ -1942,7 +1977,10 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         f, fm = f or self.f(Y(21)), fm or self.f(Y(19))
         if on:
-            c.blit(self._sprite("pill.png"), (X(60), r.y))
+            pill = self._sprite("pill.png")
+            c.blit(pill, (X(60), r.y))
+            if not meta:                            # nothing to step through: the arrows covered by the pill's body
+                c.blit(pill, (X(266), r.y + Y(5)), pygame.Rect(X(100), Y(5), X(23), Y(16)))
         self.tx(c, self.fit(f, title, X(150)), f, b["white"], X(110), r.y + Y(6))
         if meta:
             self.tx(c, self.fit(fm, meta, X(330)), fm, b["white"] if on else b["panel_dim"], X(300), r.y + Y(7))
@@ -1982,7 +2020,8 @@ class Passage(CableSkin):
             self.tx(c, f"{first + 1}-{min(n, first + n_vis)} of {n}", self.f(Y(17)), b["white"], X(624), Y(388), align="right")
 
     def _od_buttons(self, c, labels, focus, hits):
-        keys = [(letter, label, fn) for letter, label, fn in zip("ABC", labels, hits or [None] * len(labels))]
+        letters = "ABC" if len(labels) <= 3 else [""] * len(labels)
+        keys = [(letter, label, fn) for letter, label, fn in zip(letters, labels, hits or [None] * len(labels))]
         self._keybar(c, self.Y(403), keys, focus if 0 <= focus < len(keys) else None)
 
     def _rows(self, c, s, area, rows, sel, top, n_vis):
@@ -2021,6 +2060,7 @@ class Passage(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         rec = bool(s.level) and s.level.get("key") == "recordings"
         c.blit(self._sprite("od.png"), (0, 0))
+        self._mark(c, X(59), Y(44))
         self.hole(c, self.page_video_box(s))
         live = self.app.live
         self._strip(c, live.channel if live else None, frame=True, top=Y(216))
@@ -2098,18 +2138,8 @@ class Passage(CableSkin):
         names = info.buttons()
         words = [self.button_words(info.label(n)) for n in names]
         hits = [lambda k=k, n=n: (setattr(info, "focus", k), info.press(n)) for k, n in enumerate(names)]
-        self._keybar(c, Y(403), [(l, w, fn) for l, w, fn in zip("ABC", words[:3], hits[:3])], info.focus if info.focus < 3 else None)
-        if len(words) > 3:                          # the rest as a second row of plain words, the chosen one navy
-            f = self.f(Y(19))
-            x = X(60)
-            for k in range(3, len(words)):
-                w = self.width(f, words[k]) + X(20)
-                r = pygame.Rect(x, Y(452), w, Y(22))
-                if k == info.focus:
-                    pygame.draw.rect(c, b["navy"], r, border_radius=Y(6))
-                self.tx(c, words[k], f, b["white"] if k == info.focus else b["ink"], r.centerx, r.y + Y(4), align="center")
-                self.hit(r, hits[k])
-                x += w + X(10)
+        letters = "ABC" if len(words) <= 3 else [""] * len(words)
+        self._keybar(c, Y(403), [(l, w, fn) for l, w, fn in zip(letters, words, hits)], info.focus if 0 <= info.focus < len(words) else None)
 
     def draw_diagnostics(self, c, d):
         b, X, Y = self.b, self.X, self.Y
@@ -2120,7 +2150,7 @@ class Passage(CableSkin):
         rows = [("Signal strength", f"{d.signal()}"), ("Signal quality", f"{d.quality()}")] + d.rows()
         pitch = min(Y(21), (Y(180)) // max(1, len(rows)))
         for label, value in rows:
-            self.tx(c, label, f, b["panel_dim"], X(280), y, align="right")
+            self.tx(c, label, f, b["list_ink"], X(280), y, align="right")
             self.tx(c, self.fit(f, str(value), X(330)), f, b["white"], X(296), y)
             y += pitch
         from ..menus import open_button_guide
@@ -2262,6 +2292,7 @@ class Passage(CableSkin):
         box = self._sprite("markbox.png")
         x, y = ss.position(box.get_width(), box.get_height(), W, H)
         c.blit(box, (x, y))
+        self._mark(c, x + self.X(59), y + self.Y(2))
 
     def _boot_page(self, c):
         W, H = self.canvas
