@@ -39,6 +39,13 @@
   volume bar, the Search page with its letter grid, the blocked-programme
   card for a dead channel or a notice, and the screensaver's mark box. The
   frames' own words are erased; Cathode's go on in their place.
+- **i-Grid on its manual's frames** the same way (`assets/skins/igrid/`):
+  the guide (header, info panel, time bar, channel tiles, the foot band
+  where the box ran an advert), the banner band, the capsule menu, the
+  list pages (settings, On Demand, with the frame's steel tiles and yellow
+  row), the info page (Program Information, On Demand items), the search
+  page, the dialog, Options and the playback bar. Half-hour columns 156
+  wide with the fourth off the edge, no now-line, no cell arrows.
 
 ## 4.38
 

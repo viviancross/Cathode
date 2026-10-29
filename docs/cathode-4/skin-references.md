@@ -308,6 +308,34 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   rounded navy box with a pale rim, the title in yellow. The box's dead
   channel card: "One Moment Please / This channel should be available
   shortly / Ref code: S0a00".
+- **i-Grid on the frames themselves** (2026-10-29): `assets/skins/igrid/`
+  holds the DCT6412 i-Guide manual's frames with their words erased.
+  `guide.png` (p011-2): the page with its rounded corners, header (the
+  clock lettered at x 320, cap top 37, bold 18), window x 400-640 y 0-196,
+  info panel (title yellow bold 20 at (48,95), channel right at 385, hours
+  at y 120, rating right, synopsis bold 16 at y 146 and 168), the time
+  bar y 196-222 (the list's name at x 40-126, the half hours bold 16
+  centred in 156-wide columns from x 128, four columns for two hours, the
+  fourth off the edge), rows 41 tall on a 45 pitch from y 226 (tiles x
+  2-125 steel (146,186,221), number bold 17 and call sign bold 14; cells
+  navy (0,38,77), kids blue (1,80,147), sports green (1,113,1), movies
+  purple (86,12,135), the chosen one yellow (255,249,164), each with a
+  light 1px edge, 3px black gaps), the foot band from y 405 (the box's
+  advert erased; the key hints lettered at y 430). `banner.png` (p015-0,
+  y 352 down): title yellow bold 19 at (48,362), the channel right at 482
+  with a rule at 498 and the clock right at 600, hours at (48,397), the
+  synopsis from y 423. `page.png` (p025-0) for the capsule menu with
+  `cap.png` / `cap_sel.png` nine-sliced (capsules 262 x 30 at x 48 and
+  325, rows 42 apart from y 222); `list.png` (p023-0) for list pages: the
+  section bar y 196-222 (heading after the frame's heart at x 86, a note
+  right-aligned at 596), six rows 32 tall on a 35 pitch from y 226 with
+  `tile.png` (x 2-150) and `row_sel.png` (x 153-640); `info.png` (p015-1):
+  the info panel's three lines, the text panel y 196-365 (bold 16 on 23),
+  the frame's back key at (56,372) with its hint; `search.png` (p014-1):
+  the prompt and field on the info panel, the keys as rows of boxes on
+  the six rows; `dialog.png` (p022-3, 531 x 137, nine-sliced): the title
+  yellow, lines white, capsule buttons. On Demand's buttons are capsules
+  along the foot band at y 444. The clock on every header is Cathode's.
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
   frames). Fourth pass (2026-10-29): the guide and the banner are drawn
