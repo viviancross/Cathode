@@ -712,7 +712,7 @@ class CableSkin(BoxSkin):
                     cx = int(x + col * every / 2)
                     if cx + self.width(f, labels[i]) // 2 <= hdr.right:       # a label that would run off the edge isn't drawn
                         self.tx(c, labels[i], f, ink, cx, hy, align="center")
-                else:
+                elif int(x) + X(6) + self.width(f, labels[i]) <= hdr.right:   # nor one past the header's end
                     self.tx(c, labels[i], f, ink, int(x) + X(6), hy)
 
 
@@ -1549,7 +1549,7 @@ class Passage(CableSkin):
         elif sel:
             self.tx(c, "No information available.", f_desc, ink, X(65), Y(150))
         # The header: the day at the left, the half hours centred between the frame's grooves.
-        hdr = self.R(53, 223, 587, 26)
+        hdr = self.R(53, 223, 573, 26)                   # to the panel's rounded end at 632
         grid_x, grid_w = X(185), X(548)
         self._time_header(c, g, hdr, grid_x, grid_w, self.wb(Y(18)), b["navy"], None, X(67), space=True,
                           day_fmt="{a}.{m}/{d}", centre=True)
@@ -1580,7 +1580,9 @@ class Passage(CableSkin):
             elif "movie" in cat or "film" in cat:
                 pygame.draw.rect(cc, b["movie"], (r.x + X(2), r.y, r.w - X(2), r.h))
             pygame.draw.rect(cc, b["line"], (r.x, r.y, X(2), r.h))
+        c.set_clip(pygame.Rect(0, 0, X(628), H))         # the fourth column stops at the panel's end
         self._grid(c, g, grid_x, grid_w, top, pitch, rh, 0, 24, tile, cell, lambda on: b["sel_ink"] if on else b["white"])
+        c.set_clip(None)
         # The foot: the mark, then the frame's keys with Cathode's actions: A a day on, B the list, C details.
         name = g.category if g.category != "All" else "Theme"
         self._keybar(c, Y(403), [("A", "Next Day", lambda: g.handle("FF")),
@@ -2087,7 +2089,7 @@ class Passage(CableSkin):
         side = self.od_side(s)
         self._od_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, [fn for _, fn in side])
         fs = self.f(Y(17))
-        self.tx(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(632), Y(458), align="right")
+        self.tx(c, f"{s.sel + 1} of {len(rows)}", fs, b["ink"], X(626), Y(458), align="right")
         if s.status:
             self.tx(c, self.fit(fs, s.status, X(300)), fs, b["ink"], X(50), Y(458))
 

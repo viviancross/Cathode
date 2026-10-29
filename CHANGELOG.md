@@ -20,6 +20,20 @@
   (A Next Day, B the list, C Info), the System Information labels are dark
   on the light panel, the chosen row's arrows show only on a row with a
   value to step through.
+- **Clean edges on the frame skins.** i-Grid's pages fill the screen to
+  square corners (the manual's rounded, scan-fringed page edge is gone;
+  the picture window is the only hole), its banner band runs edge to
+  edge and its dialog's corners are smooth. Passage's frames lose the
+  scan's fringe along their four edges, and the panels the manual cut off
+  at the right edge (the guide's grid, the pages' detail area, On Demand's
+  detail panel and chosen band, the information and search panels) end
+  inside the screen with rounded corners and their rim; the guide's grid
+  and time header stop at that end.
+- **Video Channels play like a playlist.** When a video ends (or its slot
+  runs out) the next starts from its top, however late the handover is
+  (a slow resolve, a stream that ran long) or early (one that ran short);
+  it no longer joins the next video partway in. Tuning in still joins the
+  video due at its offset.
 
 ## 4.39
 

@@ -449,8 +449,12 @@ class Player:
         s = getattr(self.app, "schedules", {}).get(self.cid)
         return s if s and s.entries else None
 
-    def start(self):
-        """Play what's due now (resolving it first, off the thread)."""
+    def start(self, cont: bool = False):
+        """Play what's due now (resolving it first, off the thread). With
+        `cont` the last video just ended or hit its stop: the one after it
+        plays from its top, however late (a slow resolve, a stream that ran
+        long) or early (one that ran short) the handover is, so a channel
+        plays like a playlist; only tuning in joins a video at its offset."""
         from . import ytdl
         self.gen += 1
         gen = self.gen
@@ -459,9 +463,12 @@ class Player:
         if sched is None:
             if not getattr(app, "video_loading", False):
                 load(app)
-            app.after(2.0, lambda: gen == self.gen and self.start())
+            app.after(2.0, lambda: gen == self.gen and self.start(cont))
             return
-        cur = sched.at(datetime.now(timezone.utc))
+        now = datetime.now(timezone.utc)
+        cur = sched.at(self.cur["stop"] + timedelta(seconds=1)) if cont and self.cur else None
+        if cur is None or now >= cur["stop"]:      # nothing after it, or that one is over too: whatever is due
+            cur = sched.at(now)
         if cur is None:
             self.live.on_video("video_ended", reason="nothing to play")
             return
@@ -475,7 +482,7 @@ class Player:
                 print(f"[video] {e['id']} {e.get('title', '')!r} can't play ({ex.__class__.__name__}): skipped")
                 app.post(self._skip, gen, e["id"])
                 return
-            app.post(self._play, gen, cur, s)
+            app.post(self._play, gen, cur, s, cont)
         threading.Thread(target=work, daemon=True).start()
 
     def _drop(self, video_id):
@@ -490,15 +497,16 @@ class Player:
         if gen != self.gen:
             return
         self._drop(video_id)
-        self.start()
+        self.cur = None
+        self.start(cont=True)
 
-    def _play(self, gen, cur, s):
+    def _play(self, gen, cur, s, cont=False):
         if gen != self.gen:
             return
         e = cur["entry"]
         offset = max(0.0, (datetime.now(timezone.utc) - cur["start"]).total_seconds())
-        if offset < GRACE:
-            offset = 0.0        # due just now (resolving and opening took the seconds): the top, not a cut head
+        if cont or offset < GRACE:
+            offset = 0.0        # a handover, or due just now (resolving and opening took the seconds): the top, not a cut head
         self.cur = cur
         self.app.video.play(s["video"], headers=s.get("headers"), start=offset, audio=s.get("audio"))
         artist, title = parse_title(e["title"], e.get("uploader", ""))
@@ -514,7 +522,7 @@ class Player:
             self._timer = self.app.after(left - CARD_SECONDS, lambda: gen == self.gen and self._card_again())
         # The next is due at the stop whatever this one has left (a late start
         # ends late): its tail goes, so the lateness doesn't pile up video by video.
-        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self.start())
+        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self.start(cont=True))
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
@@ -537,7 +545,8 @@ class Player:
             if left > 5:
                 print(f"[video] {self.cur['entry']['id']} ended early ({reason}, {left:.0f} s left): dropped")
                 self._drop(self.cur["entry"]["id"])
-        self.start()
+                self.cur = None                 # the order closed up: whatever is due now, from its top
+        self.start(cont=True)
 
     def stop(self):
         self.gen += 1

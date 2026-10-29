@@ -358,6 +358,19 @@ frames' own pixels; Y1's 1280x720 canvas stretches the units 2 x 1.5).
   slots (103 apart) are used only when every box fits them, more than
   three keys run as words packed from x 620 with the face shrunk until
   they fit. The guide's keys: A Next Day (FF), B the list (THEMES), C Info.
+- **Edges** (2026-10-29, later still): i-Grid's pages are opaque to the
+  screen's corners: the page's old rounded edge is eroded 3 px and its
+  colours carried outward (a ring a pass, each pixel the mean of its
+  filled neighbours), only the window x 400-640 y 20-196 stays a hole;
+  the banner band likewise from its top row down; the dialog keeps its
+  10 px corners, anti-aliased at 4x. Passage's frames: the outer 3 px
+  (5 at the right) of every edge are copied from the pixel inward, and
+  the panels the manual cut at x 640 end at 632 with 10 px rounded
+  corners and a 2 px rim in the panel's own rim colour (guide y 223-401,
+  page y 194-412, od y 275-392, info y 223-406, search y 223-404; the page
+  beyond them is the row below the panel shifted by the page's shade at
+  x 24); od_sel.png is 582 wide with a 6 px rounded end. The guide clips
+  its grid at x 628 and its header at 626.
 - **Passage**: Passport Echo on Scientific Atlanta boxes, from the Aptiv
   Passport Echo viewer's manual (hellotds.com hosts the PDF; 640x480
   frames). Fourth pass (2026-10-29): the guide and the banner are drawn

@@ -335,6 +335,45 @@ class TestTuning(unittest.TestCase):
         finally:
             ytdl.stream = ytdl_stream
 
+    def test_after_a_video_ends_the_next_plays_from_its_top_however_late(self):
+        import time
+        ytdl_stream = ytdl.stream
+        ytdl.stream = lambda vid: {"video": f"V/{vid}", "audio": f"A/{vid}", "headers": {}, "expires": time.time() + 3600}
+        real_dt = vc.datetime
+        try:
+            live = LiveTV(self.app)
+            live.tune(1)
+            for _ in range(50):
+                if self.calls:
+                    break
+                time.sleep(0.02)
+            fn, a, k = self.calls.pop(0)
+            fn(*a, **k)
+            p = live.vplayer
+            nxt = self.app.schedules[self.cid].at(p.cur["stop"] + timedelta(seconds=1))
+            late = nxt["start"] + timedelta(seconds=vc.GRACE + 40)   # the stream ran a minute past the handover
+
+            class Late(real_dt):
+                @classmethod
+                def now(cls, tz=None):
+                    return late if tz else late.replace(tzinfo=None)
+            vc.datetime = Late
+            live.phase = "watch"
+            live.on_video("video_ended", reason="eof")
+            for _ in range(50):
+                if self.calls:
+                    break
+                time.sleep(0.02)
+            fn, a, k = self.calls.pop(0)
+            fn(*a, **k)
+            url, audio, start = self.app.video.played[-1]
+            self.assertEqual(url, f"V/{nxt['entry']['id']}", "the one after it")
+            self.assertEqual(start, 0, "from its top, not a minute in")
+            live.tune(0)
+        finally:
+            ytdl.stream = ytdl_stream
+            vc.datetime = real_dt
+
 
 if __name__ == "__main__":
     unittest.main()
