@@ -45,6 +45,10 @@ LOGO = "https://spelunkr.tv/brand/pixel/png/{}-64.png"
 FILES = "https://archive.org/download/{}/{}"
 ENGINE = 5                          # the engine _engine follows
 REFRESH = 5 * 60                    # the lineup, fetched again this often (the site's own poll)
+# A tune's patience: archive.org hands over a file's index before its first
+# frame, up to 40 MB on the channels of taped broadcasts (1.6 MB typical),
+# which on a slower line outlasts the usual tune timeout.
+TUNE_WAIT = 45.0
 SCHEDULES: dict = {}                # channel id -> Schedule, from the last lineup loaded
 
 
@@ -61,6 +65,10 @@ def ship(config) -> bool:
 
 def is_shipped(pl: dict) -> bool:
     return pl.get("playlist_url") == URL
+
+
+def is_spelunkr(ch) -> bool:
+    return ch.url.startswith(SCHEME + PREFIX)
 
 
 # ── Fetching ─────────────────────────────────────────────────────────────

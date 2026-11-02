@@ -133,7 +133,11 @@ class LiveTV(Screen):
             return
         self.page = None
         ownchannels.stop_music()
-        self._timeout = self.app.after(self.app.config.tune_timeout, self._timed_out)
+        from .. import spelunkr
+        wait = self.app.config.tune_timeout
+        if spelunkr.is_spelunkr(ch):
+            wait = max(wait, spelunkr.TUNE_WAIT)     # archive.org's index first: not a dead channel yet
+        self._timeout = self.app.after(wait, self._timed_out)
         if videochannels.is_video(ch):
             # The video due on the timeline, resolved first (off the thread).
             self.vplayer = videochannels.Player(self, ch)

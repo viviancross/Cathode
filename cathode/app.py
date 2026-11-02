@@ -442,6 +442,7 @@ class App:
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         ownchannels.fill_guide(self.epg)
+        videochannels.rebuild(self)         # Spelunkr's schedules and guide now, not after YouTube's lists
         videochannels.load(self)
         self.check_ytdl()
         live.channels_loaded()

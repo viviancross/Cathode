@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.42
+
+- **Spelunkr channels tune on slower lines.** A channel showed the stand-by
+  card instead of its show: archive.org hands over a file's index before
+  the first frame (up to 40 MB on the taped-broadcast channels), which
+  outlasted the 12-second tune timeout, and the stall rule then reloaded
+  the file, starting the index over. A Spelunkr tune now waits up to 45
+  seconds before the stand-by card, a stall waits for mpv's cache instead
+  of reloading, and Spelunkr's schedules and guide are ready as soon as
+  the lineup is, without waiting on the video channels' YouTube lists.
+
 ## 4.41
 
 - **Spelunkr comes with Cathode.** Its 33 channels of forgotten Internet

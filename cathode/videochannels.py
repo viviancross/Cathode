@@ -464,7 +464,8 @@ class Player:
 
     @property
     def sched(self) -> Optional[Schedule]:
-        s = getattr(self.app, "schedules", {}).get(self.cid)
+        from . import spelunkr
+        s = getattr(self.app, "schedules", {}).get(self.cid) or spelunkr.SCHEDULES.get(self.cid)
         return s if s and s.entries else None
 
     def start(self, cont: bool = False):
@@ -473,7 +474,6 @@ class Player:
         plays from its top, however late (a slow resolve, a stream that ran
         long) or early (one that ran short) the handover is, so a channel
         plays like a playlist; only tuning in joins a video at its offset."""
-        from . import ytdl
         self.gen += 1
         gen = self.gen
         app = self.app
@@ -491,11 +491,16 @@ class Player:
             self.live.on_video("video_ended", reason="nothing to play")
             return
         e = cur["entry"]
-        ytdl.MAX_HEIGHT = int(app.config.video_quality or 1080)
+        print(f"[video] {self.ch.name}: {e.get('title', '')!r} due, {('at ' + format((now - cur['start']).total_seconds(), '.0f') + ' s') if not cont else 'from its top'}")
 
         def work():
             try:
-                s = {"video": e["url"]} if e.get("url") else ytdl.stream(e["id"])     # a Spelunkr file plays as it is
+                if e.get("url"):        # a Spelunkr file plays as it is: no yt-dlp in the way
+                    s = {"video": e["url"]}
+                else:
+                    from . import ytdl
+                    ytdl.MAX_HEIGHT = int(app.config.video_quality or 1080)
+                    s = ytdl.stream(e["id"])
             except Exception as ex:
                 print(f"[video] {e['id']} {e.get('title', '')!r} can't play ({ex.__class__.__name__}): skipped")
                 app.post(self._skip, gen, e["id"])
@@ -589,6 +594,9 @@ class Player:
         e = (self.cur or {}).get("entry") or {}
         if e.get("kind"):
             if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
+                if reason == "stalled":         # archive.org slow for a moment: mpv fills its cache; a reload
+                    print(f"[spelunkr] {e.get('title')!r} waiting on archive.org")    # would fetch the index again
+                    return
                 if reason != "eof" and e["kind"] != "card":
                     print(f"[spelunkr] {e.get('title')!r} stopped ({reason}): trying it again")
                     self.app.after(15.0, lambda gen=self.gen: gen == self.gen and self.start())
