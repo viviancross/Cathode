@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.42
+
+- **No stutter while the video channels load.** At every launch each
+  YouTube list that landed rebuilt every video channel's schedule and two
+  days of guide listings on the UI thread (about a tenth of a second each,
+  a second apart), and the first pass over Spelunkr's 33 channels froze it
+  for over two seconds. That work now runs off the UI thread, one build at
+  a time, and only the finished schedules and listings are swapped in; a
+  reloaded guide takes the last listings at once. Measured at 60 fps over
+  the launch: the longest frame went from 892 ms to 51 ms.
+
 ## 4.41
 
 - **Spelunkr channels tune on slower lines.** A channel showed the stand-by

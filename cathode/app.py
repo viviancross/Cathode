@@ -599,7 +599,9 @@ class App:
             ids = ownchannels.real_ids(epg)
             print(f"[cathode] EPG loaded ({len(ids)} channels).")
             ownchannels.fill_guide(epg)
-            videochannels.fill_guide(epg, self.channels, self.schedules, self.config)
+            for eid, progs in getattr(self, "video_programmes", {}).items():
+                epg.set_programs(eid, progs)        # the video channels' last listings, at once
+            videochannels.rebuild(self)             # and fresh ones, worked out off this thread
             if url != self._epg_checked:        # once per guide: one that matches nothing says so
                 self._epg_checked = url
                 chans = [ch for ch in self.channels if not ownchannels.is_own(ch) and not videochannels.is_video(ch)]

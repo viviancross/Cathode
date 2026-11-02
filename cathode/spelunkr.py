@@ -157,6 +157,12 @@ def channels() -> list:
         scheds[cid] = Schedule(cid, c.get("name") or c["id"], tls, family)
         out.append(Channel(number=c["dial"], name=c.get("name") or c["id"], url=SCHEME + cid,
                            epg_id=epg_id(cid), group=family, logo=LOGO.format(c["id"])))
+    now = datetime.now(timezone.utc)
+    for s in scheds.values():           # the cycles on now, built here off the UI thread
+        try:
+            s.at(now)
+        except Exception as e:
+            print(f"[spelunkr] {s.cid}: {e!r}")
     SCHEDULES.clear()
     SCHEDULES.update(scheds)
     print(f"[spelunkr] {len(out)} channels, lineup of {lineup.get('generatedAt', '?')}")
@@ -500,6 +506,9 @@ class Timeline:
                                 self.ads.get("start"), self.ads.get("decades"))
         self.ad_carry, self.deck_carry = {}, {}
         self.fwd, self.back, self.built = [], [], {}
+        # The guide's listings are worked out off the UI thread while the
+        # player asks what's on: the lazily built cycles take turns.
+        self._lock = threading.RLock()
 
     # one cycle's entries, as the site's Ba/R0 build them
     def _cycle(self, k, cycle_start=None, season_at=None):
@@ -616,10 +625,11 @@ class Timeline:
 
     def at(self, t):
         """(entry, start ms, k, i) on at t ms."""
-        k = self._index(t)
-        s, offs, es = self.cycle(k)
-        i = max(0, bisect_right(offs, t - s) - 1)
-        return es[i], s + offs[i], k, i
+        with self._lock:
+            k = self._index(t)
+            s, offs, es = self.cycle(k)
+            i = max(0, bisect_right(offs, t - s) - 1)
+            return es[i], s + offs[i], k, i
 
 
 class Schedule:

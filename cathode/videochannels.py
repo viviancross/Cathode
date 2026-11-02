@@ -296,9 +296,17 @@ def guide_style(c: dict, sched: Schedule) -> str:
 
 
 def fill_guide(epg, chans: list, schedules: dict, config=None, now=None, hours: int = 48):
-    """Each video channel's listings: a programme per video for long-form
-    channels, half-hour blocks naming the videos that start in them for
-    the rest."""
+    """Each video channel's listings into the guide (programmes())."""
+    for eid, progs in programmes(chans, schedules, now, hours).items():
+        epg.set_programs(eid, progs)
+
+
+def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
+    """epg id -> each video channel's listings: a programme per video for
+    long-form channels, half-hour blocks naming the videos that start in
+    them for the rest. Touches nothing but the schedules: safe off the UI
+    thread."""
+    out = {}
     now = now or datetime.now(timezone.utc)
     t0 = now.replace(minute=30 if now.minute >= 30 else 0, second=0, microsecond=0) - timedelta(hours=1)
     end = t0 + timedelta(hours=hours)
@@ -339,7 +347,8 @@ def fill_guide(epg, chans: list, schedules: dict, config=None, now=None, hours: 
                     cur = sched.at(u)
                 progs.append(Program(channel_id=ch.epg_id, title=ch.name, start=a, stop=b, category="Music",
                                      description=("Videos. " + "  ".join(names)) if names else "Videos."))
-        epg.set_programs(ch.epg_id, progs)
+        out[ch.epg_id] = progs
+    return out
 
 
 # ── Titles ───────────────────────────────────────────────────────────────
@@ -404,32 +413,74 @@ def _source_loaded(app, url: str, lst: dict):
 
 def _loaded(app, done):
     app.video_loading = False
-    rebuild(app)
-    for cid, s in app.schedules.items():
-        c = s.c
-        if not s.sources:
-            continue
-        print(f"[video] {c.get('name') or cid}: " + ", ".join(
-            f"{clean_name(app.listings[u].get('title', ''))} ({len(es)})" for u, _w, es in s.sources))
+    rebuild(app, report=True)
     if done:
         done()
 
 
-def rebuild(app):
-    """Schedules from the listings in hand; channel names and the guide after."""
+def rebuild(app, report: bool = False):
+    """Schedules from the listings in hand, channel names and the guide
+    after. The working out (a day's order from a channel of 3000 videos,
+    two days of listings, Spelunkr's 33 channels) runs off the UI thread:
+    on it, each source landing at launch was a visible stutter. The UI
+    thread only swaps the result in. One build at a time; any asked for
+    while one runs make one more after it."""
+    if getattr(app, "post", None) is None:          # no event loop (tests): in line
+        _apply(app, *_build(list(app.config.video_channels), dict(app.listings), list(app.channels)), report)
+        return
+    if getattr(app, "_vc_busy", False):
+        app._vc_again = True
+        app._vc_report = getattr(app, "_vc_report", False) or report
+        return
+    app._vc_busy, app._vc_again = True, False
+    args = (list(app.config.video_channels), dict(app.listings), list(app.channels))
+
+    def work():
+        try:
+            built = _build(*args)
+        except Exception as e:
+            print(f"[video] schedules: {e!r}")
+            built = None
+        app.post(_built, app, built, report)
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _build(cfg_channels: list, listings: dict, chans: list):
     from . import spelunkr
-    app.schedules = {c["id"]: Schedule(c, app.listings) for c in app.config.video_channels}
-    app.schedules.update(spelunkr.SCHEDULES)
+    schedules = {c["id"]: Schedule(c, listings) for c in cfg_channels}
+    schedules.update(spelunkr.SCHEDULES)
+    return schedules, programmes(chans, schedules), listings
+
+
+def _built(app, built, report):
+    app._vc_busy = False
+    if built:
+        _apply(app, *built, report)
+    if app._vc_again:
+        again = getattr(app, "_vc_report", False)
+        app._vc_report = False
+        rebuild(app, again)
+
+
+def _apply(app, schedules: dict, progs: dict, listings: dict, report: bool = False):
+    app.schedules = schedules
+    app.video_programmes = progs        # (a guide reloaded later takes these again)
     for ch in app.channels:
         if is_video(ch):
             c = entry(app.config, cid_of(ch))
             if c and not c.get("name"):
                 for s in c.get("sources") or []:
-                    lst = app.listings.get(s["url"])
+                    lst = listings.get(s["url"])
                     if lst and lst.get("title"):
                         ch.name = clean_name(lst["title"])
                         break
-    fill_guide(app.epg, app.channels, app.schedules, app.config)
+    for eid, ps in progs.items():
+        app.epg.set_programs(eid, ps)
+    if report:
+        for cid, s in schedules.items():
+            if s.sources:
+                print(f"[video] {s.c.get('name') or cid}: " + ", ".join(
+                    f"{clean_name(listings[u].get('title', ''))} ({len(es)})" for u, _w, es in s.sources))
     app.invalidate()
 
 
