@@ -91,7 +91,8 @@ class App:
         self.weather = None
         self.listings = {}          # a video channel source -> its fetched list (videochannels)
         self.schedules = {}         # video channel id -> videochannels.Schedule
-        if videochannels.migrate(config):
+        from . import spelunkr
+        if spelunkr.ship(config) | videochannels.migrate(config):
             config.save()
         self.pending_update = None  # install script to run once we've quit
         self.restarting = False     # quit, then start again (the menu's Restart Cathode)
@@ -445,7 +446,7 @@ class App:
         self.check_ytdl()
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
-        self.after(self.EPG_REFRESH, lambda gen=self._lineup_gen: gen == self._lineup_gen and self.refresh_lineup())
+        self.after(self.lineup_every(), lambda gen=self._lineup_gen: gen == self._lineup_gen and self.refresh_lineup())
         if not self.config.key_tip_shown and self.remote and not self.shot:
             # Once ever: which keys do what, the first time channels play.
             self.config.key_tip_shown = True
@@ -455,6 +456,13 @@ class App:
             self.toast("   ".join(self.press_hint(a) for a in (R.GUIDE, R.MENU, R.INFO, R.OPTIONS))
                        + "   Channels: Up/Down", 9.0)
         self.load_epg()
+
+    def lineup_every(self) -> float:
+        """How often the lineup is fetched again: Spelunkr's every five
+        minutes (as the site polls it: new channels, new versions), the
+        rest with the guide."""
+        from . import spelunkr
+        return spelunkr.REFRESH if self.config.playlist_url == spelunkr.URL else self.EPG_REFRESH
 
     def refresh_lineup(self):
         """Fetch the playlist again, quietly: a channel added or removed on
@@ -476,12 +484,15 @@ class App:
     def _lineup_refreshed(self, gen, url, chans):
         if gen != self._lineup_gen or url != self.config.playlist_url:
             return                          # the playlist changed under it
-        self.after(self.EPG_REFRESH, lambda: gen == self._lineup_gen and self.refresh_lineup())
+        self.after(self.lineup_every(), lambda: gen == self._lineup_gen and self.refresh_lineup())
         if not chans:
             return
+        from . import spelunkr
+        if url == spelunkr.URL:
+            videochannels.rebuild(self)     # new versions on the air, the guide rolled on
         from .screens.live import LiveTV
         live = self.find(LiveTV)
-        had = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_video(c)]
+        had = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_made(c)]
         before = {c.number for c in had}
         after = {c.number for c in chans}
         if before == after and [c.name for c in had] == [c.name for c in chans]:
@@ -501,7 +512,7 @@ class App:
         change, the channel playing kept (retuned to the first if it went)."""
         live = self.live
         current = live.channel.number if live and live.channel else None
-        plain = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_video(c)]
+        plain = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_made(c)]
         self.channels = videochannels.add_to(ownchannels.add_to(plain, self.config), self.config)
         self._cats = None
         ownchannels.fill_guide(self.epg)

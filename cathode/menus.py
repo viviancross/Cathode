@@ -1455,8 +1455,9 @@ def weather_items(app):
 def handles_menu_button(app, action) -> bool:
     """MENU from anywhere that doesn't use it opens the main menu."""
     if action == R.MENU and not isinstance(app.top(), (Menu, Keyboard)):
-        if not app.config.playlist_url and not app.config.playlists:
-            open_welcome(app)           # nothing set up yet: straight to setting it up
+        from . import spelunkr
+        if not app.config.playlist_url and not [p for p in app.config.playlists if not spelunkr.is_shipped(p)]:
+            open_welcome(app)           # nothing set up yet (Spelunkr comes with it): straight to setting it up
         else:
             open_main(app)
         return True

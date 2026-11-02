@@ -88,7 +88,14 @@ def migrate(config):
 
 
 def is_video(ch) -> bool:
+    """Played by the Player: a video channel, or a Spelunkr channel."""
     return ch.url.startswith(SCHEME)
+
+
+def is_made(ch) -> bool:
+    """A video channel made in the settings (placed after the lineup), not
+    one of the lineup's own (a Spelunkr channel)."""
+    return is_video(ch) and not cid_of(ch).startswith("spelunkr.")
 
 
 def cid_of(ch) -> str:
@@ -109,7 +116,7 @@ def add_to(chans: list, config, names: Optional[dict] = None) -> list:
     the titles resolved so far, the rest are named for their first source's
     cache, or 'Video Channel' until then."""
     from . import ytdl
-    out = [c for c in chans if not is_video(c)]
+    out = [c for c in chans if not is_made(c)]
     if not out:
         return out
     taken = {c.number for c in out}
@@ -307,10 +314,17 @@ def fill_guide(epg, chans: list, schedules: dict, config=None, now=None, hours: 
             cur, n = sched.at(t0), 0
             while cur and cur["start"] < end and n < 4000:
                 e = cur["entry"]
-                artist, title = parse_title(e["title"], e.get("uploader", ""))
-                progs.append(Program(channel_id=ch.epg_id, title=title, start=cur["start"], stop=cur["stop"],
-                                     category="Video", description=f"From {artist or e.get('uploader', '')}, "
-                                     f"{max(1, round(e['duration'] / 60))} min."))
+                if e.get("kind"):       # Spelunkr: its shows, each running on over the breaks after it
+                    if e["kind"] == "show" or not progs:
+                        progs.append(Program(channel_id=ch.epg_id, title=e["title"], start=cur["start"], stop=cur["stop"],
+                                             category=c.get("category", "Video"), description=e.get("desc", "")))
+                    else:
+                        progs[-1].stop = cur["stop"]
+                else:
+                    artist, title = parse_title(e["title"], e.get("uploader", ""))
+                    progs.append(Program(channel_id=ch.epg_id, title=title, start=cur["start"], stop=cur["stop"],
+                                         category="Video", description=f"From {artist or e.get('uploader', '')}, "
+                                         f"{max(1, round(e['duration'] / 60))} min."))
                 cur = sched.at(cur["stop"] + timedelta(seconds=0.5))
                 n += 1
         else:
@@ -393,6 +407,8 @@ def _loaded(app, done):
     rebuild(app)
     for cid, s in app.schedules.items():
         c = s.c
+        if not s.sources:
+            continue
         print(f"[video] {c.get('name') or cid}: " + ", ".join(
             f"{clean_name(app.listings[u].get('title', ''))} ({len(es)})" for u, _w, es in s.sources))
     if done:
@@ -401,7 +417,9 @@ def _loaded(app, done):
 
 def rebuild(app):
     """Schedules from the listings in hand; channel names and the guide after."""
+    from . import spelunkr
     app.schedules = {c["id"]: Schedule(c, app.listings) for c in app.config.video_channels}
+    app.schedules.update(spelunkr.SCHEDULES)
     for ch in app.channels:
         if is_video(ch):
             c = entry(app.config, cid_of(ch))
@@ -477,7 +495,7 @@ class Player:
 
         def work():
             try:
-                s = ytdl.stream(e["id"])
+                s = {"video": e["url"]} if e.get("url") else ytdl.stream(e["id"])     # a Spelunkr file plays as it is
             except Exception as ex:
                 print(f"[video] {e['id']} {e.get('title', '')!r} can't play ({ex.__class__.__name__}): skipped")
                 app.post(self._skip, gen, e["id"])
@@ -505,20 +523,29 @@ class Player:
             return
         e = cur["entry"]
         offset = max(0.0, (datetime.now(timezone.utc) - cur["start"]).total_seconds())
-        if cont or offset < GRACE:
+        if (cont or offset < GRACE) and not e.get("kind"):
             offset = 0.0        # a handover, or due just now (resolving and opening took the seconds): the top, not a cut head
-        self.cur = cur
-        self.app.video.play(s["video"], headers=s.get("headers"), start=offset, audio=s.get("audio"))
-        artist, title = parse_title(e["title"], e.get("uploader", ""))
+        self.cur = cur          # (Spelunkr keeps the network's clock: always the true offset)
+        if e.get("kind") == "card":                     # a Spelunkr bumper: its music, its slides on the lower third
+            if e.get("url"):
+                self.app.video.play(e["url"], start=offset + e.get("in", 0))
+            else:
+                self.app.video.stop()
+                if self.live.phase == "cover":      # nothing will start to reveal it: the card is the picture
+                    self.live._reveal()
+            self._slides(gen, e, offset)
+        else:
+            self.app.video.play(s["video"], headers=s.get("headers"), start=offset + e.get("in", 0), audio=s.get("audio"))
+        artist, title = (self.ch.name, e["title"]) if e.get("kind") else parse_title(e["title"], e.get("uploader", ""))
         c = entry(self.app.config, self.cid) or {}
-        if c.get("card", True):
+        if c.get("card", True) and e.get("kind", "show") == "show":
             self.live.card = {"artist": artist, "song": title, "label": "", "until": time.monotonic() + CARD_SECONDS}
             self.app.after(CARD_SECONDS + 0.05, self.app.invalidate)
         print(f"[video] {self.ch.name}: {artist} - {title} from {offset:.0f} s of {e['duration']:.0f}")
         left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
         self.app.cancel(self._timer)
         self.app.cancel(self._stop_timer)
-        if left > CARD_SECONDS + 2 and c.get("card", True):
+        if left > CARD_SECONDS + 2 and c.get("card", True) and e.get("kind", "show") == "show":
             self._timer = self.app.after(left - CARD_SECONDS, lambda: gen == self.gen and self._card_again())
         # The next is due at the stop whatever this one has left (a late start
         # ends late): its tail goes, so the lateness doesn't pile up video by video.
@@ -526,10 +553,27 @@ class Player:
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
-        if nxt and nxt["entry"]["id"] != e["id"]:
+        if nxt and nxt["entry"]["id"] != e["id"] and not nxt["entry"].get("url"):
             delay = max(0.5, left - AHEAD)
             self.app.after(delay, lambda: gen == self.gen and threading.Thread(
                 target=lambda: _resolve_quietly(nxt["entry"]["id"]), daemon=True).start())
+
+    def _slides(self, gen, e, offset):
+        """A bumper's slides on the lower third, each for its time, from
+        `offset` seconds into the break."""
+        base = time.monotonic() - offset
+        t = e.get("lead_ms", 0) / 1000
+        for text, ms in zip(e.get("slides") or [], e.get("slide_ms") or []):
+            a, b, t = t, t + ms / 1000, t + ms / 1000
+            if base + b <= time.monotonic():
+                continue
+            card = {"artist": self.ch.name, "song": "", "label": text, "until": base + b}
+            self.app.after(max(0.0, base + a - time.monotonic()), lambda card=card: gen == self.gen and self._show(card))
+
+    def _show(self, card):
+        self.live.card = card
+        self.app.invalidate()
+        self.app.after(max(0.05, card["until"] - time.monotonic() + 0.05), self.app.invalidate)
 
     def _card_again(self):
         if self.live.card:
@@ -539,7 +583,18 @@ class Player:
 
     def ended(self, reason: str):
         """The video's stream ended: the next is due (eof), or this one
-        failed and is dropped from the order."""
+        failed and is dropped from the order. On Spelunkr the network's
+        clock says what's next: a file that ends early waits for its stop,
+        one that fails is tried again at its offset."""
+        e = (self.cur or {}).get("entry") or {}
+        if e.get("kind"):
+            if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
+                if reason != "eof" and e["kind"] != "card":
+                    print(f"[spelunkr] {e.get('title')!r} stopped ({reason}): trying it again")
+                    self.app.after(15.0, lambda gen=self.gen: gen == self.gen and self.start())
+                return
+            self.start(cont=True)
+            return
         if self.cur and reason != "eof" and self.sched:
             left = (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds()
             if left > 5:

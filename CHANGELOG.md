@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.41
+
+- **Spelunkr comes with Cathode.** Its 33 channels of forgotten Internet
+  Archive video (spelunkr.tv: Saturday Morning, Primetime, Computer
+  Chronicles, Rubber Hose and the rest) are a saved playlist on every
+  install, at their dial numbers, with the guide written from the
+  network's own data and descriptions. A channel airs what the site airs
+  at the same moment: the network's scheduling engine is ported
+  (`cathode/spelunkr.py`), bumpers, commercial breaks cut from vintage
+  tapes and marathon Up Next cards included, and its show changes match
+  the site's guide to a fraction of a second. Shows and commercials play
+  straight from archive.org; a bumper is its slides on the lower third
+  over its music. The lineup is fetched again every five minutes, as the
+  site does: a new channel joins the dial and a new version of a channel
+  takes over at its moment.
+- **The cable guides' timeline is back.** Cumcast i-Grid and Passage draw
+  the rule down the grid at this minute again, with a pointer at its top
+  (i-Grid's in its cursor yellow, Passage's in gold), edged dark so it
+  reads across the chosen cell too.
+
 ## 4.40
 
 - **The cable boxes' chrome is drawn.** Every page, band, row, key and

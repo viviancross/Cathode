@@ -131,6 +131,7 @@ class Config:
     profiles: dict = field(default_factory=dict)
     # Saved playlists/networks: [{name, playlist_url, epg_url}, ...]
     playlists: list = field(default_factory=list)
+    spelunkr_shipped: bool = False  # Spelunkr added to the playlists once (spelunkr.ship)
 
     # Window
     start_fullscreen: bool = True  # -w on the command line overrides it

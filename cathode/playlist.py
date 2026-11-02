@@ -139,6 +139,9 @@ def _chno(raw, auto: int):
 def load(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
     """Load an M3U playlist from a file path or URL, or a line through a
     provider's API (an xtream:// address)."""
+    if source.startswith("spelunkr://"):
+        from . import spelunkr
+        return spelunkr.channels()
     if source.startswith("xtream://"):
         from . import servers
         line = servers.parse_xtream_api(source)

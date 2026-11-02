@@ -688,7 +688,10 @@ class CableSkin(BoxSkin):
         off = (now - start).total_seconds() / 60
         if 0 <= off <= mins and rows and b.get("now_line"):     # a box that drew no line names none
             x = grid_x + int(off / mins * grid_w)
-            pygame.draw.rect(c, b["now_line"], (x - 1, top - Y(2), X(2), len(rows) * pitch - (pitch - rh) + Y(2)))
+            h = len(rows) * pitch - (pitch - rh) + Y(2)
+            pygame.draw.rect(c, b["gap"], (x - 2, top - Y(2), X(2) + 2, h))       # a dark edge: it reads on the cursor too
+            pygame.draw.rect(c, b["now_line"], (x - 1, top - Y(2), X(2), h))
+            pygame.draw.polygon(c, b["now_line"], [(x - Y(6), top - Y(10)), (x + Y(6), top - Y(10)), (x, top - Y(2))])
         if not rows:
             cell = pygame.Rect(grid_x, top, grid_w - gap, rh)
             draw_cell(c, cell, False, False, 0, None)
@@ -766,7 +769,7 @@ class IGrid(CableSkin):
             "panel": mix(cell, (255, 255, 255), 0.12), "panel_ink": text, "panel_dim": mix(text, cell, 0.3),
             "capsule": mix(cell, navy, 0.2), "capsule_rim": mix(cell, (255, 255, 255), 0.45),
             "red": (220, 30, 40), "green": (1, 113, 1), "purple": (86, 12, 135), "kids": (1, 80, 147),
-            "band": navy, "band_ink": text, "track": mix(navy, (255, 255, 255), 0.3), "now_line": None,
+            "band": navy, "band_ink": text, "track": mix(navy, (255, 255, 255), 0.3), "now_line": sel,
             "row": cell, "row_ink": text, "btn": mix(cell, navy, 0.2), "btn_ink": text,
             "field": mix(navy, (0, 0, 0), 0.4), "field_ink": text, "foot_ink": mix(text, cell, 0.2),
             "dlg": mix(navy, cell, 0.4), "dlg_edge": mix(cell, (255, 255, 255), 0.45), "dlg_head": mix(navy, (0, 0, 0), 0.3),
@@ -1352,7 +1355,7 @@ class Passage(CableSkin):
             "sel": mix(cell, (0, 0, 0), 0.5), "sel_ink": cream, "sel_tile": mix(lav, (0, 0, 0), 0.45), "gap": (61, 54, 85),
             "line": mix(cell, white, 0.4), "movie": (151, 20, 64), "tab_blue": (34, 48, 138),
             "maroon": (118, 24, 62), "tab": (62, 52, 88), "navy": (6, 22, 78), "teal": (62, 132, 138),
-            "green": (84, 200, 60), "track": mix(cell, (0, 0, 0), 0.3), "now_line": None,
+            "green": (84, 200, 60), "track": mix(cell, (0, 0, 0), 0.3), "now_line": (240, 200, 40),
             "tile": (228, 228, 234), "tile_ink": mix(ink, (0, 0, 0), 0.3), "blue": (56, 90, 200),
             "panel": mix(cell, (0, 0, 0), 0.2), "col": mix(cell, (0, 0, 0), 0.05), "col_hdr": mix(lav, white, 0.2),
             "panel_ink": white, "panel_dim": mix(white, cell, 0.3), "list": (142, 157, 188), "list_ink": (40, 40, 110),
