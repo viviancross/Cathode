@@ -1,6 +1,6 @@
 # Changelog
 
-## 4.42
+## 4.41
 
 - **Spelunkr channels tune on slower lines.** A channel showed the stand-by
   card instead of its show: archive.org hands over a file's index before
@@ -10,8 +10,6 @@
   seconds before the stand-by card, a stall waits for mpv's cache instead
   of reloading, and Spelunkr's schedules and guide are ready as soon as
   the lineup is, without waiting on the video channels' YouTube lists.
-
-## 4.41
 
 - **Spelunkr comes with Cathode.** Its 33 channels of forgotten Internet
   Archive video (spelunkr.tv: Saturday Morning, Primetime, Computer
