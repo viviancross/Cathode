@@ -9,6 +9,7 @@ sleeps until something happens and draws only when something changed.
 import heapq
 import itertools
 import os
+import sys
 import threading
 import time
 from functools import partial
@@ -61,6 +62,12 @@ class App:
 
     def __init__(self, config: Config, fullscreen: bool = False, size=(1280, 720),
                  start_channel: Optional[int] = None):
+        # Work on other threads (the video channels' schedules, yt-dlp) is
+        # pure Python and holds the interpreter lock for 5 ms at a time by
+        # default; this thread gives the lock up dozens of times a frame
+        # (each mpv and GL call) and waited that long to get it back, so
+        # frames ran late and mpv dropped them. Half a millisecond instead.
+        sys.setswitchinterval(0.0005)
         self.config = config
         self.fullscreen = fullscreen
         self.size = size

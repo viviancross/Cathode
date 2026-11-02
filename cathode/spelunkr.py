@@ -154,7 +154,11 @@ def channels() -> list:
     for c, tls in by.values():
         cid = PREFIX + c["id"]
         family = (c.get("family") or "").replace("-", " ").title().replace("Tv ", "TV ") or NAME
-        scheds[cid] = Schedule(cid, c.get("name") or c["id"], tls, family)
+        old = SCHEDULES.get(cid)
+        if old is not None and [t.v for t in old.timelines] == sorted(t.v for t in tls):
+            scheds[cid] = old           # nothing new on it: the same schedule, its guide listings kept
+        else:
+            scheds[cid] = Schedule(cid, c.get("name") or c["id"], tls, family)
         out.append(Channel(number=c["dial"], name=c.get("name") or c["id"], url=SCHEME + cid,
                            epg_id=epg_id(cid), group=family, logo=LOGO.format(c["id"])))
     now = datetime.now(timezone.utc)
@@ -643,6 +647,7 @@ class Schedule:
         self.sources = []           # (the video channels' log line lists their sources)
         self.timelines = sorted(timelines, key=lambda tl: tl.v)
         self.dropped = set()
+        self.guide_memo = None      # (window, listings): videochannels.programmes keeps them here
 
     @property
     def entries(self) -> list:

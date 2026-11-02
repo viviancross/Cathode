@@ -316,6 +316,10 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
         sched = schedules.get(cid_of(ch))
         if not sched or not sched.entries:
             continue
+        memo = getattr(sched, "guide_memo", None)       # a Spelunkr schedule keeps its listings
+        if memo and memo[0] == (t0, hours, len(sched.dropped)):     # until the half hour turns
+            out[ch.epg_id] = memo[1]
+            continue
         c = sched.c
         progs = []
         if guide_style(c, sched) == "video":
@@ -348,6 +352,8 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
                 progs.append(Program(channel_id=ch.epg_id, title=ch.name, start=a, stop=b, category="Music",
                                      description=("Videos. " + "  ".join(names)) if names else "Videos."))
         out[ch.epg_id] = progs
+        if hasattr(sched, "guide_memo"):
+            sched.guide_memo = ((t0, hours, len(sched.dropped)), progs)
     return out
 
 
@@ -406,9 +412,23 @@ def load(app, done=None, cid: Optional[str] = None, fresh: bool = False):
     threading.Thread(target=work, daemon=True).start()
 
 
+THROTTLE = 5.0                  # while the lists land: a rebuild at most this often
+
+
 def _source_loaded(app, url: str, lst: dict):
     app.listings[url] = lst
-    rebuild(app)
+    if getattr(app, "after", None) is None:
+        rebuild(app)
+        return
+    if getattr(app, "_vc_soon", False):
+        return                          # one is already due: it takes this list too
+    app._vc_soon = True
+    wait = max(0.0, getattr(app, "_vc_last", 0.0) + THROTTLE - time.monotonic())
+
+    def due():
+        app._vc_soon = False
+        rebuild(app)
+    app.after(wait, due)
 
 
 def _loaded(app, done):
@@ -433,6 +453,7 @@ def rebuild(app, report: bool = False):
         app._vc_report = getattr(app, "_vc_report", False) or report
         return
     app._vc_busy, app._vc_again = True, False
+    app._vc_last = time.monotonic()
     args = (list(app.config.video_channels), dict(app.listings), list(app.channels))
 
     def work():

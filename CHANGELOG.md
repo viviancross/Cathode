@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.43
+
+- **Smooth pictures while schedules are worked out.** Spelunkr (and any
+  channel) stuttered after launch or a playlist switch: mpv dropped frames
+  the render loop handed it late, because the video channels' rebuilds on
+  another thread held the interpreter lock for 5 ms at a time and the UI
+  thread waited that long every time it gave it up (dozens of times a
+  frame). The lock now changes hands every half millisecond, Spelunkr's
+  guide listings are kept until the half hour turns (they were worked out
+  again, bumpers and all, on every rebuild), and the rebuilds while the
+  YouTube lists land come at most every five seconds. Over a simulated
+  launch at 60 fps: frames late for a 29.97 fps picture went from 42
+  (worst 170 ms) to none (worst 23 ms).
+
 ## 4.42
 
 - **No stutter while the video channels load.** At every launch each
