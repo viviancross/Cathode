@@ -243,20 +243,41 @@ def _pa_shadow(x, y, w, h, radius=0, depth=10, alpha=150):
             ("hgrad", (x, y, depth, h), (*PA_SHADE, alpha), (*PA_SHADE, 0), radius)]
 
 
+def _tv(x, y, w):
+    """Cathode's own mark, the set of assets/cathode.png in strokes, w wide:
+    the aerials, the cabinet, the colour bars, the knobs."""
+    u = w / 256
+
+    def box(a, b, c, d):
+        return (x + a * u, y + b * u, c * u, d * u)
+
+    def dot(a, b, r):
+        return (x + a * u, y + b * u, r * u)
+
+    def aerial(a, b):
+        return ("line", (x + (a + b) / 2 * u, y + 62 * u, x + a * u, y + b * u), (185, 185, 195), 6 * u)
+    bars = ((190, 190, 190), (205, 205, 25), (25, 190, 205), (30, 195, 60), (205, 35, 205), (205, 25, 25), (25, 25, 205))
+    return ([aerial(78, 18), aerial(188, 22),
+             ("circle", dot(78, 18, 9), (215, 215, 225)), ("circle", dot(188, 22, 9), (215, 215, 225)),
+             ("fill", box(52, 216, 34, 22), (26, 26, 32)), ("fill", box(170, 216, 34, 22), (26, 26, 32)),
+             ("fill", box(24, 60, 208, 164), (42, 42, 50), (4, 4, 4, 4)),
+             ("fill", box(42, 78, 148, 130), (12, 12, 16), (2, 2, 2, 2))]
+            + [("fill", box(48 + 19.5 * i, 84, 19.5, 84), bar) for i, bar in enumerate(bars)]
+            + [("fill", box(48, 170, 136, 32), (48, 44, 96)),
+               ("circle", dot(208, 104, 13), (120, 120, 132)), ("circle", dot(208, 104, 9), (42, 42, 50)),
+               ("circle", dot(208, 138, 13), (120, 120, 132)), ("circle", dot(208, 138, 9), (42, 42, 50)),
+               ("circle", dot(207, 172, 5), (60, 225, 235))])
+
+
 def _pa_card(x=46, y=33, w=274, h=190, radius=(24, 0, 0, 0)):
     """The cream card: a dark outline, the cream lit at the top, an inner
-    shadow along its top, left and right, and the echo swoosh."""
+    shadow along its top, left and right, and Cathode's set in its corner."""
     return ([("fill", (x, y, w, h), (96, 96, 72), radius),
              ("grad", (x + 3, y + 3, w - 3, h - 3), PA_CREAM, (224, 213, 129), _r(radius, 3)),
              ("hgrad", (x + w - 14, y + 3, 14, h - 3), (*PA_SHADE, 0), (*PA_SHADE, 120))]
             + _pa_shadow(x + 3, y + 3, w - 3, h - 3, _r(radius, 3), 12, 190) + [
-            ("grad", (x + 3, y + h - 8, w - 3, 8), (*PA_SHADE, 0), (*PA_SHADE, 90)),
-            ("circle", (283, 70, 22), (60, 100, 185)),                   # the swoosh: two crescents and a ball
-            ("circle", (288, 67, 21), (224, 221, 145)),
-            ("circle", (288, 76, 13), (130, 170, 225)),
-            ("circle", (292, 74, 12), (224, 221, 145)),
-            ("circle", (301, 93, 6), (40, 80, 190)),
-            ("circle", (299, 91, 2), (200, 220, 255))])
+            ("grad", (x + 3, y + h - 8, w - 3, 8), (*PA_SHADE, 0), (*PA_SHADE, 90))]
+            + _tv(262, 44, 46))
 
 
 def _pa_strip(y=200, maroon=(89, 19, 30), tab=(156, 144, 188)):

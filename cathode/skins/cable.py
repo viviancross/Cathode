@@ -1313,8 +1313,8 @@ class IGrid(CableSkin):
 
 
 class Passage(CableSkin):
-    """Passage: Passport Echo on the 2004 Scientific Atlanta boxes, drawn to
-    the viewer's manual's frames (640x480) in Archivo Narrow, the condensed
+    """Passage: a 2004 Scientific Atlanta box's guide, drawn to its viewer's
+    manual's frames (640x480) in Archivo Narrow, the condensed
     face the box lettered in. A silver page; the cream card top-left with
     the channel disc, call sign, title, hours and synopsis; the picture
     top-right over the maroon channel strip with the clock in its dark
@@ -1324,7 +1324,7 @@ class Passage(CableSkin):
     light channel tile, the clock tab and the green progress line."""
     name = "passage"
     label = "Passage"
-    MARK, MARK_TAG = "Passage", "echo"
+    MARK, MARK_TAG = "Passage", "cathode"
     default_font = "akzidenz"
     guide_hours = 2                 # 137 a half hour, as the frame: the fourth column runs off the edge
     NO_SIGNAL = ("Not Available", "This channel is not available at this time.", "Please try again later.")
@@ -1389,10 +1389,10 @@ class Passage(CableSkin):
         self.tx(c, word, f, ink or b["ink"], x, y + Y(8))
         return x + self.width(f, word)
 
-    # ── The mark: the frame's own 'PASSPORT echo' lockup ──────────────────
+    # ── The mark: PASSAGE, then Cathode's own set and name ────────────────
 
     def wordmark(self, c, x, y, size, ink=None):
-        """The PASSAGE echo lockup (chrome.py mark.png, drawn at
+        """The PASSAGE cathode lockup (assets' mark.png, drawn at
         twice the frames' size: 16 is the frames' own, 34 tall), scaled to
         `size`; `ink` is ignored, the lockup keeps its colours."""
         h = int(34 * size / 16)
@@ -1518,7 +1518,7 @@ class Passage(CableSkin):
 
     def draw_guide(self, c, g):
         """The guide on the frame itself: the page, card, time header,
-        channel column, grid panel, mark and foot are the Passport Echo
+        channel column, grid panel, mark and foot are the
         frame's own pixels (chrome.py guide.png) with its text
         taken out; the picture shows through the window; the channel tile,
         call sign and number, title, hours, rating and synopsis, the day
@@ -1636,7 +1636,7 @@ class Passage(CableSkin):
 
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         """The banner on the frame itself: the band and the channel tile
-        with its slant are the Passport Echo frame's own pixels
+        with its slant are the frame's own pixels
         (chrome.py banner.png, y 357-447); the clock, logo, call
         sign and number on the tile, the title and hours on the title
         strip, the start and end times, the green line with its ticks and

@@ -354,10 +354,10 @@ without clean frames they never got past a re-coloured body.
   `row_sel.png` is re-cut from the frame's column 420 (the pale yellow
   (255,255,155) row; the first cut had sampled its olive edge). The list
   pages' heading starts at x 48 (the frame's heart gone). Passage's
-  `mark.png` is now "PASSAGE echo" at twice the frames' size (397 x 68):
+  `mark.png` is now "PASSAGE cathode" at twice the frames' size (408 x 68):
   PASSAGE in Avante (an Avant Garde clone, C:\Windows\Fonts\avante.TTF)
-  caps 12 tall, navy (44,66,150), 4 apart, then the frame's own arrow and
-  echo swoosh cropped from the original mark (x 98-190, 2x); the old mark
+  caps 12 tall, navy (44,66,150), 4 apart, then Cathode's own set
+  (assets/cathode.png) and name in Liberation Sans Bold; the old mark
   is erased from guide.png (its origin (42,416)), od.png ((59,44)) and
   markbox.png ((59,2)) by running each row between two clean columns, and
   `Passage._mark()` draws the new one there at half size. The key bar's

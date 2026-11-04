@@ -9,6 +9,10 @@
   runtime and as much of its summary as fits (recordings too). A season's
   episodes are always a list, poster wall or not. The wall's panel lost the
   list's rules behind the posters, and the posters took the title row's room.
+- **Passage wears our own mark.** The other company's tag and swoosh are gone:
+  the lockup now reads PASSAGE with Cathode's own TV and name, wherever it
+  shows (guide, On Demand, boot, screensaver), and the same TV sits in the
+  guide card's corner.
 
 ## 4.43
 
