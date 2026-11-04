@@ -73,7 +73,10 @@ class OnDemandScreen(Screen):
     def view(self) -> str:
         """The poster wall only for levels of titles; menus of places to go
         (the library list, genres) read better as a list either way."""
-        if self.app.config.ppv_view != "wall" or not self.app.skin.poster_wall:
+        skin = self.app.skin
+        if self.app.config.ppv_view != "wall" or not skin.poster_wall:
+            return "list"
+        if not skin.wall_episodes and all(r.get("type") in ("episode", "sort") for r in self.rows):
             return "list"
         titled = any(r.get("playable") or r.get("type") in ("show", "season", "movie")
                      for r in self.rows)

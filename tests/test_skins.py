@@ -112,7 +112,8 @@ def page_screens():
     info, playback and the remote-capture prompt, from made-up data."""
     rows = [dict(type="sort", title="Sort by: Title", meta="")] + [
         dict(type="movie", title=f"MOVIE NUMBER {i}", meta=f"{1980 + i}   PG   7.{i}", playable=True,
-             offset=120 if i == 2 else 0, duration=600) for i in range(14)]
+             summary="A summary of the film that runs well past what any box could hold. " * 6,
+             offset=120 if i == 2 else 0, duration=6000) for i in range(14)]
     recs = [dict(type="download", title=f"Recording {i}", meta="42%" if i == 1 else "", playable=i != 1,
                  state="downloading" if i == 1 else "done") for i in range(8)]
 
@@ -142,6 +143,24 @@ def page_screens():
     cap = NS(name="capture", prompt="Press the key for Guide  (Esc cancels)")
     rec = NS(**{**vars(info), "kind": "download"})       # a recording: Program Information, not an offer
     return [od(), od(view="wall"), od(depth=1), od(mode="auth"), od(key="recordings", rws=recs), info, rec, pb, cap]
+
+
+class TestOnDemandEpisodes(unittest.TestCase):
+    def view(self, wall_episodes, rows):
+        from cathode.screens.ondemand import OnDemandScreen
+        app = NS(config=NS(ppv_view="wall"), skin=NS(poster_wall=True, wall_episodes=wall_episodes))
+        return OnDemandScreen.view.fget(NS(app=app, rows=rows))
+
+    def test_a_skin_can_keep_a_season_a_list(self):
+        sort, ep = dict(type="sort"), dict(type="episode", playable=True)
+        self.assertEqual(self.view(False, [sort, ep]), "list")
+        self.assertEqual(self.view(True, [sort, ep]), "wall")
+        self.assertEqual(self.view(False, [sort, dict(type="movie", playable=True)]), "wall")
+        self.assertEqual(self.view(False, [ep, dict(type="movie", playable=True)]), "wall")   # Continue Watching
+
+    def test_browse_rows_carry_the_summary(self):
+        from cathode.plex import _meta_row
+        self.assertEqual(_meta_row(dict(type="movie", title="T", summary="S"))["summary"], "S")
 
 
 class TestPictureFormat(unittest.TestCase):

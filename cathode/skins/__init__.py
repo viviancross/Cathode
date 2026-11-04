@@ -325,6 +325,7 @@ class Skin:
     browse_style = "banner"     # BROWSE shows: banner (one channel) | mini (a mini guide)
     guide_jump_min = 24 * 60    # how far REW / FF move the guide
     poster_wall = True          # On Demand titles may show as a poster wall
+    wall_episodes = True        # ...a season's episodes among them
     keyboard_layer = "abc"      # the case the on-screen keyboard opens in
     default_font = "vcr"
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.44
+
+- **Passage's On Demand tidied.** The chosen row's teal band stops at the
+  list's edge instead of running across the picture and the channel strip.
+  The details box grew up to the strip and now tells you about whatever's
+  chosen, in the list or on the poster wall: its title, year, rating, score,
+  runtime and as much of its summary as fits (recordings too). A season's
+  episodes are always a list, poster wall or not. The wall's panel lost the
+  list's rules behind the posters, and the posters took the title row's room.
+
 ## 4.43
 
 - **Smooth pictures while schedules are worked out.** Spelunkr (and any

@@ -353,6 +353,8 @@ class CableSkin(BoxSkin):
     def page_video_box(self, screen):
         return self.guide_video_box()
 
+    WALL_LABEL = True               # the chosen poster's title on a row under the wall
+
     def ondemand_cols(self, screen):
         return self.WALL[0] if screen.view == "wall" else 1
 
@@ -407,7 +409,7 @@ class CableSkin(BoxSkin):
         cols = self.WALL[0]
         gap = X(10)
         tw = (area.w - (cols + 1) * gap) // cols
-        th = (area.h - Y(30)) // self.WALL[1] - Y(8)
+        th = (area.h - (Y(30) if self.WALL_LABEL else 0)) // self.WALL[1] - Y(8)
         for i, slot in self.wall_cells(s, cols, self.WALL[1]):
             row = s.rows[i]
             r = pygame.Rect(area.x + gap + (slot % cols) * (tw + gap), area.y + Y(6) + (slot // cols) * (th + Y(8)), tw, th)
@@ -418,6 +420,8 @@ class CableSkin(BoxSkin):
             if art:
                 c.blit(art, art.get_rect(center=r.center))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
+        if not self.WALL_LABEL:
+            return
         cur = s.current() or {}
         r = pygame.Rect(area.x, area.bottom - Y(22), area.w, Y(20))
         self._list_row(c, r, nice(cur.get("title", "")), cur.get("meta", "").split("   ")[0], True)
@@ -1332,6 +1336,8 @@ class Passage(CableSkin):
     LIST = (50, 216, 590, 194)
     OD_ROWS = 7
     WALL = (3, 2)                   # posters, not stamps: three a row in the list panel
+    WALL_LABEL = False              # the details box has the title
+    wall_episodes = False           # a season reads as a list: their stills say little
     # Measured off the frames: the silver page, the purple cell, the cream
     # card, the dark lettering, the lavender channel tile.
     NATIVE = {"bg": [206, 206, 216], "accent": [118, 103, 168], "accent2": [246, 241, 186],
@@ -2040,11 +2046,15 @@ class Passage(CableSkin):
         self._keybar(c, self.Y(403), keys, focus if 0 <= focus < len(keys) else None)
 
     def _rows(self, c, s, area, rows, sel, top, n_vis):
-        """The list's rows, 37 apart between the frame's rules, the chosen
-        one on the frame's teal band; the details in the teal panel."""
+        """The list's rows, 37 apart between rules, the chosen one on the
+        frame's teal band, which stops at the panel's edge."""
         b, X, Y = self.b, self.X, self.Y
         f = self.f(Y(21))
         rh = Y(37)
+        for k in range(1, self.OD_ROWS):
+            ry = area.y + k * rh - Y(2)
+            c.fill((170, 189, 193), (X(56), ry, X(264), max(1, Y(1))))
+            c.fill((240, 246, 249), (X(56), ry + max(1, Y(1)), X(264), max(1, Y(1))))
         for k, i in enumerate(range(top, min(len(rows), top + n_vis))):
             row = rows[i]
             r = pygame.Rect(area.x, area.y + k * rh, X(270), rh)
@@ -2053,19 +2063,29 @@ class Passage(CableSkin):
                 c.blit(self._sprite("od_sel.png"), (X(50), r.y))
             self.tx(c, self.fit(f, nice(row.get("title", "")), X(205)), f, b["white"] if on else b["navy"], X(95), r.y + Y(14))
             self.hit(r, lambda i=i: (setattr(s, "sel", i), s.select()))
-        cur = rows[sel] if 0 <= sel < len(rows) else None
-        if cur:
-            fd = self.f(Y(20))
-            y = max(Y(283), area.y + (sel - top) * rh + rh + Y(8))    # under the band when the list's end pushes it lower
-            for ln in [cur.get("meta", "")] + self.wrap(fd, cur.get("summary", "") or "", X(290), 3):
-                if ln:
-                    self.tx(c, self.fit(fd, ln, X(290)), fd, b["white"], X(335), y)
-                    y += Y(24)
         fs = self.f(Y(17))
         if top + n_vis < len(rows):
             self.tx(c, "\u25bc", fs, b["navy"], X(300), area.bottom - Y(18))
         if top:
             self.tx(c, "\u25b2", fs, b["navy"], X(300), area.y - Y(12))
+
+    def _details(self, c, cur):
+        """The teal box, for a row or a poster alike: what's chosen, its
+        facts and runtime, as much of its summary as fits."""
+        b, X, Y = self.b, self.X, self.Y
+        ft, fd, w = self.wb(Y(17)), self.f(Y(20)), X(290)
+        y = Y(254)
+        for ln in self.wrap(ft, nice(cur.get("title", "")), w, 2):
+            self.tx(c, ln, ft, b["white"], X(335), y)
+            y += Y(22)
+        mins = (cur.get("duration") or 0) // 60
+        facts = "   ".join(x for x in (cur.get("meta"), f"{mins} min" if mins else "") if x)
+        if facts:
+            self.tx(c, self.fit(fd, facts, w), fd, b["white"], X(335), y)
+            y += Y(26)
+        for ln in self.wrap(fd, cur.get("summary") or "", w, (Y(388) - y) // Y(24)):
+            self.tx(c, ln, fd, b["white"], X(335), y)
+            y += Y(24)
 
     def draw_ondemand(self, c, s):
         """On Demand on the DVR list frame (chrome.py od.png): the
@@ -2080,8 +2100,6 @@ class Passage(CableSkin):
         live = self.app.live
         self._strip(c, live.channel if live else None, frame=True, top=Y(216))
         area = self.R(50, 127, 270, 259)                           # the panel's seven rows under its heading slot
-        if s.mode == "auth":                                     # the rules under the words: the panel plain
-            vgrad(c, (X(56), Y(106), X(264), Y(284)), rgba((128, 152, 158)), rgba((180, 190, 192)))
         fh = self.wb(Y(16))
         head_word = "My Recordings" if rec else (s.crumb() if len(s.stack) > 1 else "On Demand")
         self.tx(c, self.fit(fh, head_word, X(250)), fh, b["navy"], X(62), Y(106))
@@ -2096,11 +2114,13 @@ class Passage(CableSkin):
             self._keybar(c, Y(403), [("", "Cancel", s.back)], 0)
             return
         rows, n_vis = s.rows, self.ondemand_page(s)
-        top = max(0, min(s.sel - 3, len(rows) - n_vis))     # the chosen row in the fourth slot, between the strip and the details, as the frame
+        top = max(0, min(s.sel - 3, len(rows) - n_vis))     # the chosen row in the fourth slot once the list scrolls
         if s.view == "wall":
             self._wall(c, s, area.inflate(-X(10), -Y(10)))
         else:
             self._rows(c, s, area, rows, s.sel, top, n_vis)
+        if s.current():
+            self._details(c, s.current())
         side = self.od_side(s)
         self._od_buttons(c, [lab for lab, _ in side], -1 if s.side is None else s.side, [fn for _, fn in side])
         fs = self.f(Y(17))

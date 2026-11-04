@@ -248,6 +248,7 @@ class DownloadStore:
             meta = "FAILED"
         return {"type": "download", "rating_key": e["rating_key"],
                 "title": e.get("title", "?"), "meta": meta,
+                "summary": e.get("summary", ""), "duration": int(e.get("duration") or 0),
                 "playable": st == DONE, "state": st,
                 "offset": int(e.get("offset") or 0)}
 

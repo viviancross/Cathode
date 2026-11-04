@@ -720,6 +720,7 @@ def _meta_row(m: dict) -> dict:
     playable = typ in ("movie", "episode", "clip") or bool(m.get("Media"))
     return {"type": typ, "rating_key": str(m.get("ratingKey", "")),
             "title": title, "meta": "   ".join(bits),
+            "summary": m.get("summary", ""),
             "playable": playable,
             # Episodes often carry no thumb of their own; without the parent
             # fallbacks a season view is a wall of blank tiles.
