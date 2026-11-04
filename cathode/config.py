@@ -56,7 +56,7 @@ class Config:
     # the other end from ui_max_aspect: a phone held upright is about 1:2.4, and
     # a 16:9 box there is a band using a quarter of the screen.
     ui_min_aspect: float = 0.0
-    # A 4:3 skin (InDirecTV SD, Plate SD) on a wider screen: False pillarboxes
+    # A 4:3 skin (Cathode DSS, Cathode Plate) on a wider screen: False pillarboxes
     # it, as the box looked on a widescreen set in 4:3 mode; True stretches it
     # to fill, as the set's Full/Stretch mode did.
     stretch_43: bool = False

@@ -107,7 +107,7 @@ def render(size, ops):
     return pygame.transform.smoothscale(s, (w, h))
 
 
-# ── Cumcast i-Grid ──────────────────────────────────────────────────────────
+# ── Cathode Cumcast ──────────────────────────────────────────────────────────
 # A navy page; a blue panel beside the picture window; steel channel tiles
 # with a bright edge, navy cells with a pale rule between rows; a blue
 # gradient band along the foot.

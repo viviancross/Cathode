@@ -2,7 +2,7 @@
 leased out, drawn to frames of the real ones (docs/cathode-4/
 skin-references.md names the sources):
 
-- Cumcast i-Grid (2006): the Motorola-era interactive guide. A navy
+- Cathode Cumcast (2006): the Motorola-era interactive guide. A navy
   header with the mark, clock and a red tile; the picture top-right with
   the programme described in a blue panel beside it; steel channel tiles,
   blue cells, a pale yellow cursor with navy lettering; a Main Menu of
@@ -737,12 +737,12 @@ class CableSkin(BoxSkin):
 
 
 class IGrid(CableSkin):
-    """Cumcast i-Grid: the 2006 interactive guide of the Motorola boxes, to
+    """Cathode Cumcast: the 2006 interactive guide of the Motorola boxes, to
     the frames in the box's reference manual (640x480), the cumcast lockup
     and the TV GRID badge where the box's operator and listings brands sat."""
     name = "igrid"
-    label = "Cumcast i-Grid"
-    MARK, MARK_TAG = "i-Grid", "CUMCAST"
+    label = "Cathode Cumcast"
+    MARK, MARK_TAG = "Cathode", "CUMCAST"
     NO_SIGNAL = ("One Moment Please", "This channel should be available shortly.", "Ref code: S0a00")
     BOOT_WORDS = ("Please wait...", "Loading program guide...")
     ROWS, ROW_PITCH = 4, 45
@@ -782,8 +782,8 @@ class IGrid(CableSkin):
         }
 
     def wordmark(self, c, x, y, size, ink=None):
-        """The cumcast lockup (chrome.py cumcast.png: the lowercase
-        word with its red crescent), its crescent `size` tall; `ink` is
+        """The lockup (cumcast.png: 'cumcast' in its red crescent,
+        'cathode' small beneath), its crescent `size` tall; `ink` is
         ignored, the lockup keeps its colours."""
         img = self._sprite("cumcast.png")
         k = size / img.get_height()
@@ -1323,7 +1323,7 @@ class Passage(CableSkin):
     words along the foot. The banner is the frame's purple band with the
     light channel tile, the clock tab and the green progress line."""
     name = "passage"
-    label = "Passage"
+    label = "Cathode Passage"
     MARK, MARK_TAG = "Passage", "cathode"
     default_font = "akzidenz"
     guide_hours = 2                 # 137 a half hour, as the frame: the fourth column runs off the edge

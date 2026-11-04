@@ -27,6 +27,36 @@ _CALL = pygame.event.custom_type()     # run a callable on the UI thread
 _FRAME = pygame.event.custom_type()    # mpv has a new video frame
 
 
+TUBE_ON, TUBE_OFF = 0.6, 0.44     # seconds
+
+
+def draw_tube(c, t, off=False):
+    """The set's tube, over any skin's frame, t from 0 to 1 through the move.
+    On: a bright line opens into the picture. Off: the picture squashes into
+    a bright line, the line pinches to a dot, the dot fades."""
+    W, H = c.get_size()
+    t, line = min(1.0, t), max(2, H // 240)
+    v = None                                # the rect's own solid grey, when it holds no picture
+    if not off:
+        w, h, veil = max(2, int(W * min(1, t * 3))), max(line, int(H * t * t)), int(255 * (1 - t))
+    elif t < 0.5:                           # ease out: the scan dies fast, then settles
+        p = 1 - (1 - t / 0.5) ** 4
+        w, h, veil = W, max(line, int(H * (1 - p))), int(255 * p)
+    elif t < 0.77:
+        w, h, v, veil = max(line, int(W * (1 - (t - 0.5) / 0.27) ** 2)), line, 255, 0
+    else:
+        w, h, v, veil = line * 2, line * 2, int(255 * (1 - (t - 0.77) / 0.23)), 0
+    r = pygame.Rect((W - w) // 2, (H - h) // 2, w, h)
+    for band in ((0, 0, W, r.y), (0, r.bottom, W, H - r.bottom), (0, r.y, r.x, h), (r.right, r.y, W - r.right, h)):
+        c.fill((0, 0, 0, 255), band)
+    if v is not None:
+        c.fill((v, v, v, 255), r)
+    elif veil:
+        layer = pygame.Surface(r.size, pygame.SRCALPHA)
+        layer.fill((255, 255, 255, veil))
+        c.blit(layer, r)
+
+
 class Screen:
     """Something on the stack. Screens hold state and react to remote
     buttons; the skin draws them."""
@@ -103,6 +133,8 @@ class App:
             config.save()
         self.pending_update = None  # install script to run once we've quit
         self.restarting = False     # quit, then start again (the menu's Restart Cathode)
+        self._tube_on_at = self._tube_off_at = None
+        self._tube_open = False
         self.agent = config.user_agent  # the User-Agent the current playlist's provider answers to
 
     # ── Threads -> UI thread ──────────────────────────────────────────────
@@ -136,6 +168,22 @@ class App:
             _, _, fn, cancelled = heapq.heappop(self._timers)
             if not cancelled:
                 fn()
+
+    def _tube(self):
+        """(t, off) while the set is switching on or off, else None."""
+        if self.shot or not self.config.motion_enabled:
+            return None
+        now = time.monotonic()
+        if not self.running:
+            self._tube_off_at = self._tube_off_at or now
+            return (now - self._tube_off_at) / TUBE_OFF, True
+        self._tube_on_at = self._tube_on_at or now
+        t = (now - self._tube_on_at) / TUBE_ON
+        if t < 1:
+            return t, False
+        if not self._tube_open:             # one clean frame to finish on
+            self._tube_open = self.dirty = True
+        return None
 
     def _wait_ms(self) -> int:
         if any(s.animating() for s in self.screens):
@@ -718,8 +766,11 @@ class App:
         self.running = True
         t_start = time.monotonic()
         try:
-            while self.running:
-                events = [pygame.event.wait(self._wait_ms())] + pygame.event.get()
+            while True:
+                tube = self._tube()
+                if not self.running and (not tube or tube[0] >= 1):
+                    break
+                events = [pygame.event.wait(1 if tube or self.dirty else self._wait_ms())] + pygame.event.get()
                 for e in events:
                     self._dispatch(e)
                 self._run_timers()
@@ -731,7 +782,7 @@ class App:
                 due = bool(self.shot) and time.monotonic() - t_start >= self.shot[1]
                 changed = resized or self.dirty or due
                 anim = any(s.animating() for s in self.screens)
-                if self.dirty or anim:
+                if self.dirty or anim or tube:
                     self.dirty = False
                     if canvas.get_size() != self.skin.canvas:     # skin or window shape changed
                         canvas = pygame.Surface(self.skin.canvas, pygame.SRCALPHA)
@@ -747,6 +798,8 @@ class App:
                         skin.paint(canvas, "note", lambda c: skin.draw_note(c, self.note_text))
                     if time.monotonic() < self.toast_until:
                         skin.paint(canvas, "toast", lambda c: skin.draw_toast(c, self.toast_text))
+                    if tube:
+                        draw_tube(canvas, *tube)
                     self.gfx.upload_ui(canvas, nearest=self.skin.nearest)
                     changed = True
                 # After the UI: a menu just opened may want the picture in a box.

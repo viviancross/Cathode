@@ -1,6 +1,6 @@
 # Changelog
 
-## 4.44
+## 4.45
 
 - **Passage's On Demand tidied.** The chosen row's teal band stops at the
   list's edge instead of running across the picture and the channel strip.
@@ -13,6 +13,16 @@
   the lockup now reads PASSAGE with Cathode's own TV and name, wherever it
   shows (guide, On Demand, boot, screensaver), and the same TV sits in the
   guide card's corner.
+- **The suite renamed.** Cathode Classic, Cathode DSS, Cathode Direct, Cathode
+  Plate, Cathode Plate HD, Cathode Cumcast and Cathode Passage, in Settings,
+  the first-run wizard and each box's own logo, which keeps its style: Direct
+  and DSS their tile and spaced word, Plate its slanted word and red dish,
+  Cumcast its crescent. Saved settings carry over. Direct's boot says hello
+  to Cathode.
+- **The tube, on every skin.** Every box now switches on with a bright line
+  opening into the picture and off with the picture squashing to a line, a
+  dot, then dark. The switch-off is Cathode 3's, lost in the rewrite. The
+  Motion setting turns both off.
 
 ## 4.43
 

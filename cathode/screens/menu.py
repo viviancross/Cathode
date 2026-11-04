@@ -122,7 +122,7 @@ class Menu(Screen):
         skin = getattr(self.app, "skin", None)
         cols = skin.menu_cols(self) if skin else 1
         if cols > 1 and a in (R.UP, R.DOWN, R.LEFT, R.RIGHT):
-            # A grid (Plate Network's Main Menu), filled a column at a time:
+            # A grid (Cathode Plate's Main Menu), filled a column at a time:
             # UP/DOWN within the column, LEFT/RIGHT to the same row of the
             # next one (or its last item when that column is shorter).
             rows, n = skin.menu_rows(self), len(self.items)

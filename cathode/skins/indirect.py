@@ -1,9 +1,9 @@
-"""InDirecTV: a mid-2000s DirecTV-style box, drawn to measurements taken from
-frames of the real receivers. InDirecTV HD follows the HR20 (2007): a
+"""Cathode Direct: a mid-2000s DirecTV-style box, drawn to measurements taken from
+frames of the real receivers. Cathode Direct follows the HR20 (2007): a
 near-white title area over a light facts strip, white synopsis on a cyan
 page, a navy-and-teal grid inside a frame, amber selection, the colour keys
 along the bottom; setup-style menu pages with the picture kept top-right.
-InDirecTV (SD) is the D10/R15 era: the same screens compressed to 4:3 on a
+Cathode DSS is the D10/R15 era: the same screens compressed to 4:3 on a
 navy ground, gold selection.
 
 Geometry is written in the HR20's own 1280x720 pixels; X() and Y() scale it
@@ -38,7 +38,8 @@ DOTS = {"red": (245, 28, 46), "green": (17, 164, 96), "yellow": (221, 216, 60)}
 
 class InDirectHD(BoxSkin):
     name = "indirect_hd"
-    label = "InDirecTV HD"
+    label = "Cathode Direct"
+    BRAND = "Cathode Direct"
     canvas = (1280, 720)
     browse_style = "mini"           # BROWSE opens the mini guide
     guide_hours = 1.5               # three half-hour columns, as the box showed
@@ -126,15 +127,16 @@ class InDirectHD(BoxSkin):
 
     def mark_stacked(self, c, x, y, ink):
         """Tile over the spaced wordmark, as the box stacked its logo."""
-        self.tile(c, (x + self.X(4), y, self.X(66), self.Y(55)), self.b["sky"])
-        self._spaced(c, "InDirecTV", self.fb(self.Y(17)), ink, x, y + self.Y(62), self.X(2))
+        f, gap = self.fb(self.Y(17)), self.X(2)
+        self.tile(c, (x + (self.brand_w(f, gap) - self.X(66)) // 2, y, self.X(66), self.Y(55)), self.b["sky"])
+        self._spaced(c, self.BRAND, f, ink, x, y + self.Y(62), gap)
 
-    def mark_inline(self, c, x, y, size, ink):
-        """Tile beside the wordmark, for the banner; returns the width."""
-        s = self.Y(size)
-        self.tile(c, (x, y, s, s), self.b["sky"])
-        return s + self.X(10) + self._spaced(c, "InDirecTV", self.fb(int(s * 0.62)), ink, x + s + self.X(10),
-                                              y + (s - self.text.ink(self.fb(int(s * 0.62)))[1]) // 2, self.X(2))
+    def brand_w(self, f, gap) -> int:
+        return sum(self.text.width(f, ch) for ch in self.BRAND) + gap * (len(self.BRAND) - 1)
+
+    def brand(self, c, f, ink, cx, y, gap):
+        """The spaced wordmark centred on cx."""
+        self._spaced(c, self.BRAND, f, ink, cx - self.brand_w(f, gap) // 2, y, gap)
 
     def _spaced(self, c, s, f, ink, x, y, gap) -> int:
         x0 = x
@@ -170,7 +172,7 @@ class InDirectHD(BoxSkin):
         self.hole(c, (vx, vy, vw, vh))
         pygame.draw.rect(c, rgba(self.b["text"]), (vx - 3, vy - 3, vw + 6, vh + 6), 3)
         if not getattr(self.app, "channels", None):     # nothing playing yet: the mark, not black
-            self.mark_stacked(c, vx + vw // 2 - self.X(62), vy + vh // 2 - self.Y(42), self.b["text"])
+            self.mark_stacked(c, vx + vw // 2 - self.brand_w(self.fb(self.Y(17)), self.X(2)) // 2, vy + vh // 2 - self.Y(42), self.b["text"])
         return pygame.Rect(vx, vy, vw, vh)
 
     def guide_video_box(self):
@@ -736,8 +738,7 @@ class InDirectHD(BoxSkin):
         tile = self.R(32, 35, 312, 150)
         vgrad(c, tile, rgba(b["od_tile"]), rgba(mix(b["od_tile"], b["od_bar"], 0.6)), radius=Y(14))
         fw = self.fb(Y(30))
-        w = sum(t.width(fw, ch) for ch in "InDirecTV") + X(3) * 8
-        self._spaced(c, "InDirecTV", fw, b["ink"], tile.centerx - w // 2, tile.y + Y(30), X(3))
+        self.brand(c, fw, b["ink"], tile.centerx, tile.y + Y(30), X(3))
         tag = pygame.Rect(tile.x + X(40), tile.y + Y(80), tile.w - X(80), Y(40))
         pygame.draw.rect(c, b["od_tag"], tag)
         ft = self.fb(Y(24))
@@ -805,8 +806,7 @@ class InDirectHD(BoxSkin):
             # The welcome tile where the posters would be, as the home page had.
             wl = main.inflate(-X(300), -X(120))
             vgrad(c, wl, rgba(b["od_tile"]), rgba(mix(b["od_tile"], b["od_bar"], 0.6)), radius=Y(10))
-            w = sum(t.width(fw, ch) for ch in "InDirecTV") + X(3) * 8
-            self._spaced(c, "InDirecTV", fw, b["ink"], wl.centerx - w // 2, wl.y + Y(40), X(3))
+            self.brand(c, fw, b["ink"], wl.centerx, wl.y + Y(40), X(3))
             tg = pygame.Rect(wl.x + X(40), wl.y + Y(86), wl.w - X(80), Y(40))
             pygame.draw.rect(c, b["od_tag"], tg)
             w = sum(t.width(ft, ch) for ch in "ON>DEMAND") + X(3) * 8
@@ -1134,8 +1134,7 @@ class InDirectHD(BoxSkin):
         vgrad(c, tile, rgba(b["tk_tile"]), rgba(mix(b["tk_tile"], b["od_bar"], 0.7)))
         self.tile(c, (tile.centerx - X(26), tile.y + Y(9), X(52), Y(42)), b["sky"])
         fw = self.fb(Y(15))
-        w = sum(t.width(fw, ch) for ch in "InDirecTV") + X(2) * 8
-        self._spaced(c, "InDirecTV", fw, b["ink"], tile.centerx - w // 2, tile.y + Y(58), X(2))
+        self.brand(c, fw, b["ink"], tile.centerx, tile.y + Y(58), X(2))
         band = self.R(372, 546, 736, 84)
         pygame.draw.rect(c, b["tk_band"], band)
         f = self.fb(Y(22))
@@ -1249,11 +1248,11 @@ class InDirectHD(BoxSkin):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         c.fill((0, 0, 0, 255))
         f = self.fb(Y(30))
-        w = sum(t.width(f, ch) for ch in "InDirecTV") + X(3) * 8
+        w = self.brand_w(f, X(3))
         bw, bh = max(w, X(120)), Y(100) + Y(12) + t.ink(f)[1]
         x, y = ss.position(bw, bh, W, H)
         self.tile(c, (x + bw // 2 - X(60), y, X(120), Y(100)), b["sky"])
-        self._spaced(c, "InDirecTV", f, b["text"], x + (bw - w) // 2, y + Y(112), X(3))
+        self._spaced(c, self.BRAND, f, b["text"], x + (bw - w) // 2, y + Y(112), X(3))
 
     def _message(self, c, msg):
         """A message on black, in the navy band of the box's own notices."""
@@ -1306,13 +1305,13 @@ class InDirectHD(BoxSkin):
             self.progress(c, bar, frac, rgba(b["gap"]), rgba(b["sel"]))
             t.draw(c, "Press any button to skip", self.f(Y(18)), b["soft"], W // 2, Y(660), align="center")
             return
-        # The blue bitmap screens: a flat DirecTV blue, white text, nothing else.
+        # The blue bitmap screens: a flat blue, white text, nothing else.
         blue = (0, 48, 135)
         c.fill((*blue, 255))
         f_big, f = self.fb(Y(40)), self.f(Y(28))
         if scene == "hello":
             t.draw(c, "hello,", f_big, b["text"], X(160), Y(250))
-            t.draw(c, "DirecTV", f_big, b["text"], X(160), Y(304))
+            t.draw(c, "Cathode", f_big, b["text"], X(160), Y(304))
             t.draw(c, "your receiver is starting up", f, b["text"], X(160), Y(372))
         elif scene == "almost":
             t.draw(c, "Almost there...", f_big, b["text"], X(160), Y(280))
@@ -1334,7 +1333,8 @@ class InDirect(InDirectHD):
     top with a two-line schedule; a numbered Main Menu with the chosen item
     explained in a teal box. 640x480, geometry from the box's own frame."""
     name = "indirect"
-    label = "InDirecTV"
+    label = "Cathode DSS"
+    BRAND = "Cathode DSS"
     canvas = (640, 480)
     boot_scenes = []                # a DSS box was never off: power-on is the last channel, at once
     ui_sounds = False               # the DSS was silent
@@ -2073,11 +2073,11 @@ class InDirect(InDirectHD):
         b, t, X, Y = self.b, self.text, self.X, self.Y
         c.fill((0, 0, 0, 255))
         f = self.fb(Y(9))
-        w = sum(t.width(f, ch) for ch in "InDirecTV") + X(1) * 8
+        w = self.brand_w(f, X(1))
         bw, bh = max(w, X(30)), Y(36) + t.ink(f)[1]
         x, y = ss.position(bw, bh, W, H)
         self.tile(c, (x + bw // 2 - X(15), y, X(30), Y(30)), b["teal"])
-        self._spaced(c, "InDirecTV", f, b["text"], x + (bw - w) // 2, y + Y(36), X(1))
+        self._spaced(c, self.BRAND, f, b["text"], x + (bw - w) // 2, y + Y(36), X(1))
 
     def _message(self, c, msg):
         c.fill((0, 0, 0, 255))
@@ -2094,8 +2094,7 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["purple"], (0, 0, W, H))
         self.tile(c, (W // 2 - X(15), Y(74), X(30), Y(30)), b["teal"])
         f = self.fb(Y(9))
-        w = sum(t.width(f, ch) for ch in "InDirecTV") + X(1) * 8
-        self._spaced(c, "InDirecTV", f, b["text"], W // 2 - w // 2, Y(110), X(1))
+        self.brand(c, f, b["text"], W // 2, Y(110), X(1))
         if stage == "starting":
             return
         caption = {"signal": "Acquiring satellite signal...", "guide": "Receiving program guide..." + self.guide_pct(),

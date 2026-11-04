@@ -7,7 +7,7 @@ program guide, a channel banner on every tune, browse, pause-live-TV, and a
 remote-control way of doing everything, in the style of a mid-2000s set-top
 box. Your Plex library is On Demand, and downloaded titles are My Recordings.
 
-**Version 4.44 (alpha)** · Windows, macOS, Linux
+**Version 4.45 (alpha)** · Windows, macOS, Linux
 
 <br clear="left">
 
@@ -18,20 +18,20 @@ Picture & Style > Skin**:
 
 - **Cathode Classic**: Cathode 3's retro-CRT look. Phosphor colour themes,
   pixel fonts, static when you change channel.
-- **InDirecTV / InDirecTV HD**: a DirecTV-style box. HD after the HR20
+- **Cathode DSS / Cathode Direct**: a DirecTV-style box. Direct after the HR20
   (sky-blue banner with the favourites bar, cyan guide page, navy grid,
-  amber selection, the colour keys, a mini guide); SD after a 1997 DSS
+  amber selection, the colour keys, a mini guide); DSS after a 1997
   receiver (purple and lavender pages, bevelled cells, drop-shadowed
   lettering, 4:3).
-- **Plate Network / Plate Network HD**: a Dish Network-style box. HD after
+- **Cathode Plate / Cathode Plate HD**: a Dish Network-style box. HD after
   the 2007 teal guide (teal page, charcoal channel cells, teal and navy
   program cells, a gold frame, a grey banner, numbered menus, RIGHT to
   browse); SD after the 2005 receivers (grey page with the blue tab of
   pills, blue cells with a pale selection, a bare banner, 4:3).
 - **The cable boxes**: two after the guides the US cable companies leased
-  out, drawn to their manuals' frames. **Cumcast i-Grid** (2006: navy
+  out, drawn to their manuals' frames. **Cathode Cumcast** (2006: navy
   pages, a blue grid with steel channel tiles, a pale yellow cursor,
-  capsule menus, 4:3) and **Passage** (2004: a silver page, a cream card
+  capsule menus, 4:3) and **Cathode Passage** (2004: a silver page, a cream card
   for the programme, a purple grid, the A / B / C key bar, condensed
   lettering, 4:3).
 
@@ -83,19 +83,19 @@ Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 
-Download `cathode-windows-4.44-portable.zip`, right-click it, **Extract All**,
+Download `cathode-windows-4.45-portable.zip`, right-click it, **Extract All**,
 and run **Cathode.exe**.
 
 ### Linux
 
 **AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-4.44.AppImage`, make it executable (file properties, or
+`cathode-linux-x86_64-4.45.AppImage`, make it executable (file properties, or
 `chmod +x`) and run it.
 
 **Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
 
 ```bash
-flatpak install --user cathode-linux-x86_64-4.44.flatpak
+flatpak install --user cathode-linux-x86_64-4.45.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
@@ -104,8 +104,8 @@ It fetches the freedesktop runtime from Flathub the first time. On the Deck,
 
 ### macOS
 
-Download the zip for your Mac (`cathode-macos-arm64-4.44.zip` for Apple
-Silicon, `cathode-macos-x86_64-4.44.zip` for Intel), unzip it, and move
+Download the zip for your Mac (`cathode-macos-arm64-4.45.zip` for Apple
+Silicon, `cathode-macos-x86_64-4.45.zip` for Intel), unzip it, and move
 **Cathode.app** to Applications. It isn't signed: the first time,
 right-click it and choose **Open** (or **Open Anyway** under System Settings
 > Privacy & Security).
@@ -145,7 +145,7 @@ them under **Settings > Channels**.
 | Back | Backspace | B |
 | Exit (close everything) | Esc | |
 | Previous channel | P | R3 |
-| Browse / mini guide | B (Plate Network: Right too) | |
+| Browse / mini guide | B (Cathode Plate: Right too) | |
 | Themes (genres) | T | |
 | Favourite | F | |
 | My Recordings | L | |
@@ -156,7 +156,7 @@ them under **Settings > Channels**.
 | Quit | Q | |
 
 Media keys (play/pause, stop, rewind, fast-forward, mute, volume) do what they
-say. In menus, number keys pick rows (on Plate Network's Main Menu, tiles). Remap
+say. In menus, number keys pick rows (on Cathode Plate's Main Menu, tiles). Remap
 anything under **Settings > Remote control**. A FLIRC USB receiver learns any
 IR remote there too (**FLIRC receiver**: a walk-through, one button at a time;
 see `docs/remotes/flirc.md`).
@@ -226,7 +226,7 @@ cathode/
   video.py          libmpv in-process      gfx.py      window + GPU compositor
   remote.py         every input -> remote buttons
   screens/          live TV, guide, menus, browse, On Demand, playback, ...
-  skins/            Classic, InDirecTV, Plate Network
+  skins/            the seven boxes
   ondemand.py plex.py downloads.py playlist.py epg.py updater.py weather.py
 assets/  fonts and icons      tools/  build and dev scripts
 ```

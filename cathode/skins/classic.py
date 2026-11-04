@@ -296,14 +296,6 @@ class Classic(Skin):
         c.fill((0, 0, 0, 255))
         stage = boot.stage()
         age = time.monotonic() - boot.start
-        if stage == "starting":
-            # The tube warming up: a line that opens into the picture.
-            k = min(1.0, age / 0.6)
-            h = max(2, int(H * k * k))
-            pygame.draw.rect(c, p["WHITE"][:3] + (int(255 * (1 - k * 0.7)),),
-                             (int(W * (0.5 - 0.5 * min(1, k * 3))), (H - h) // 2,
-                              int(W * min(1, k * 3)), h))
-            return
         c.fill(p["SCREEN_BG"])
         logo = self._boot_logo()
         y = int(H * 0.22)
@@ -312,7 +304,7 @@ class Classic(Skin):
             y += logo.get_height() + 24
         f_word, f_stage = self.f(64), self.role("heading")
         t.draw(c, "CATHODE", f_word, p["CYAN"], W // 2, y, align="center")
-        caption = {"signal": "Acquiring signal...", "guide": "Downloading program guide..." + self.guide_pct(),
+        caption = {"starting": "Acquiring signal...", "signal": "Acquiring signal...", "guide": "Downloading program guide..." + self.guide_pct(),
                    "done": "Ready"}[stage]
         t.draw(c, caption, f_stage, p["WHITE"], W // 2, y + 110, align="center")
         bar = pygame.Rect(W // 2 - 260, y + 160, 520, 12)

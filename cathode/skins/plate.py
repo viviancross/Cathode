@@ -1,11 +1,11 @@
-"""Plate Network: a mid-2000s Dish Network-style box, drawn to measurements
-taken from frames of the real receivers. Plate Network HD follows the 2007
+"""Cathode Plate: a mid-2000s Dish Network-style box, drawn to measurements
+taken from frames of the real receivers. Cathode Plate HD follows the 2007
 teal guide: a dark teal page with the mark and TV-guide tag top-left, the
 programme's title, rating and synopsis in white beside the picture, the list
 name and clock, a charcoal time header and 7 rows of charcoal channel cells
 with teal (on now) and navy (later) program cells, a gold frame on the
 selection; the playback banner is a grey translucent box lettered in white.
-Plate Network (SD) follows the 2005 guide of the 322/522 era: a grey page
+Cathode Plate (SD) follows the 2005 guide of the 322/522 era: a grey page
 with a big blue tab of pills, blue cells with a pale selection, and a bare
 black band of a banner.
 
@@ -39,7 +39,8 @@ def time_left(prog, now) -> str:
 class PlateHD(BoxSkin):
     name = "plate_hd"
     tune_black = 1.0                # the ViP's black on a change, about a second
-    label = "Plate Network HD"
+    label = "Cathode Plate HD"
+    MARK_TAG = "P L A T E   H D"
     canvas = (1280, 720)
     right_is_browse = True
     guide_hours = 1.5               # three half-hour columns, as the box showed
@@ -129,23 +130,24 @@ class PlateHD(BoxSkin):
     # ── Wordmark ──────────────────────────────────────────────────────────
 
     def wordmark(self, c, x, y, size, ink, dish):
-        """'plate' slanted and bold with a red dish beside it, NETWORK small
-        beneath: our own mark, after the era's lockup."""
+        """'cathode' slanted and bold with a red dish beside it, the box's
+        name small beneath: our own mark, after the era's lockup."""
         t = self.text
+        tag_size = max(8, size // 3)
+        size = size * 4 // 5            # the longer word in the room the old one had
         f = self.fb(size)
         h = t.ink(f)[1]
         tx = x + int(size * 0.9)
         f.italic = True                 # the face has no bold italic: slant it
         try:
-            w = t.draw(c, "plate", f, ink, tx, y)
+            w = t.draw(c, "cathode", f, ink, tx, y)
         finally:
             f.italic = False
         d = pygame.Rect(x, y + h // 4, int(size * 0.78), int(h * 0.62))
         pygame.draw.ellipse(c, dish, d)
         pygame.draw.ellipse(c, mix(dish, (255, 255, 255), 0.4), d.inflate(-d.w // 3, -d.h // 3))
         pygame.draw.line(c, dish, d.center, (d.right, y - h // 10), max(2, size // 10))
-        fs = self.f(max(8, size // 3))
-        t.draw(c, "N E T W O R K", fs, ink, tx + w, y + h + size // 12, align="right")
+        t.draw(c, self.MARK_TAG, self.f(tag_size), ink, tx + w, y + h + size // 12, align="right")
         return tx + w - x
 
     # ── Pages ─────────────────────────────────────────────────────────────
@@ -1103,7 +1105,8 @@ class Plate(PlateHD):
     geometry from the video's 4:3 frame (its 160..1120 x 0..720 mapped to
     640x480)."""
     name = "plate"
-    label = "Plate Network"
+    label = "Cathode Plate"
+    MARK_TAG = "P L A T E"
     canvas = (640, 480)
     tune_black = 1.2                # the 301's black on a change, a second or two
     guide_rows = 4

@@ -99,7 +99,7 @@ def panel(c, rect, top, bottom, radius=10, edge=None, edge_w=2):
 
 
 class BoxSkin(Classic):
-    """Base for InDirecTV and Plate Network. Subclasses give `NATIVE` base colours and
+    """Base for Cathode Direct and Cathode Plate. Subclasses give `NATIVE` base colours and
     `roles(base)`, their extra colours, and redraw the screens that make a
     box recognisable: banner, guide, menu, browse, boot, signal loss."""
     tune_cover = "black"            # digital boxes cut to black, not snow

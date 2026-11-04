@@ -145,6 +145,30 @@ def page_screens():
     return [od(), od(view="wall"), od(depth=1), od(mode="auth"), od(key="recordings", rws=recs), info, rec, pb, cap]
 
 
+class TestTube(unittest.TestCase):
+    def frame(self, t, off=False):
+        from cathode.app import draw_tube
+        c = pygame.Surface((64, 48), pygame.SRCALPHA)     # all picture: transparent
+        draw_tube(c, t, off)
+        return c
+
+    def test_on_opens_a_line_into_the_untouched_picture(self):
+        c = self.frame(0.0)
+        self.assertEqual(c.get_at((0, 0)), (0, 0, 0, 255))
+        self.assertEqual(c.get_at((32, 24))[:3], (255, 255, 255))
+        c = self.frame(1.0)
+        self.assertEqual(c.get_at((0, 0)).a, 0)
+        self.assertEqual(c.get_at((32, 24)).a, 0)
+
+    def test_off_squashes_pinches_and_goes_dark(self):
+        c = self.frame(0.6, off=True)                     # the line
+        self.assertEqual(c.get_at((32, 24))[:3], (255, 255, 255))
+        self.assertEqual(c.get_at((32, 10)), (0, 0, 0, 255))
+        c = self.frame(1.0, off=True)
+        for at in ((0, 0), (32, 24), (63, 47)):
+            self.assertEqual(c.get_at(at), (0, 0, 0, 255))
+
+
 class TestOnDemandEpisodes(unittest.TestCase):
     def view(self, wall_episodes, rows):
         from cathode.screens.ondemand import OnDemandScreen
