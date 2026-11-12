@@ -966,7 +966,7 @@ class PlateHD(BoxSkin):
         # The transport buttons: the white capsules of the box's dialogs.
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
-            br = self.R(140 + k * 170, 618, 150, 42)
+            br = self.R(100 + k * 156, 618, 140, 42)
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
             rects.append(br)
@@ -1986,7 +1986,7 @@ class Plate(PlateHD):
         # The transport buttons: small capsules like the banner's.
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
-            br = pygame.Rect(X(55) + k * X(89), top + h + Y(8), X(80), Y(34))
+            br = pygame.Rect(X(40) + k * X(80), top + h + Y(8), X(72), Y(34))
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)
             rects.append(br)

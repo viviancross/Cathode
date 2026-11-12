@@ -30,6 +30,30 @@ class TestTransportRow(unittest.TestCase):
         self.assertFalse(pb._row_keys(R.LEFT))         # out of the row, LEFT seeks again
 
 
+class TestVolumeButton(unittest.TestCase):
+    def test_select_the_volume_then_left_right_change_it(self):
+        pb = Playback.__new__(Playback)
+        video = SimpleNamespace(volume=50, muted=True, paused=False)
+        pb.app = SimpleNamespace(screens=[pb], invalidate=lambda: None, video=video)
+        pb.tfocus = None
+        pb.show_bar = lambda seconds=5.0: None
+        pb.bar_visible = lambda: True
+        pb._row_keys(R.DOWN)
+        for _ in range(4):
+            pb._row_keys(R.RIGHT)
+        self.assertEqual(pb.transport()[pb.tfocus][0], "vol")
+        pb._row_keys(R.SELECT)
+        self.assertEqual(pb.transport()[pb.tfocus][0], "voladj")
+        pb._row_keys(R.RIGHT)
+        pb._row_keys(R.RIGHT)
+        pb._row_keys(R.LEFT)
+        self.assertEqual((video.volume, video.muted), (55, False))
+        self.assertEqual(pb.tfocus, 6)                  # the cursor stayed on the volume
+        pb._row_keys(R.SELECT)                          # done: LEFT moves along the row again
+        pb._row_keys(R.LEFT)
+        self.assertEqual((video.volume, pb.tfocus), (55, 5))
+
+
 class TestAddressKeyboard(unittest.TestCase):
     def _kb(self, rows):
         from cathode.screens.menu import Keyboard

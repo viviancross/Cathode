@@ -706,10 +706,11 @@ class Classic(Skin):
         self.hit(tl.inflate(0, 24), lambda: pb.seek_to(self._click_frac(tl)))
         # Transport buttons, for the mouse (the remote acts on its own keys).
         buttons = pb.transport()
-        bw = 104
-        x = bar.centerx - (len(buttons) * bw + (len(buttons) - 1) * 10) // 2
+        widths = [max(104, t.width(f_btn, label) + 28) for _, label, _ in buttons]
+        x = bar.centerx - (sum(widths) + (len(buttons) - 1) * 10) // 2
         rects = []
         for k, (_, label, fn) in enumerate(buttons):
+            bw = widths[k]
             r = pygame.Rect(x, bar.y + 104, bw, 34)
             rects.append(r)
             on = k == getattr(pb, "tfocus", None)

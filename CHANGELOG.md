@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.46
+
+- **Volume on the On Demand bar.** The playback buttons end in a volume
+  button again, as on Cathode 3, on every skin: a speaker and the level.
+  Choose it and press OK, then LEFT and RIGHT turn it down and up (arrows
+  either side say so); OK, UP or BACK hands the arrows back to the row. It
+  reads Mute when muted, and the volume keys bring the bar up so you can see
+  the level.
+
 ## 4.45
 
 - **Passage's On Demand tidied.** The chosen row's teal band stops at the

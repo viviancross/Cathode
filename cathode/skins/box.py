@@ -243,6 +243,8 @@ class BoxSkin(Classic):
         """A transport button's face centred in `r`: the symbol, and the
         seconds (or a word) after the arrows going back, before them going
         forward."""
+        if kind in ("vol", "voladj"):
+            return self.volume_face(c, kind == "voladj", r, ink, f, shadow)
         t = self.text
         h = max(7, r.h * 9 // 20)
         num = self.SEEK_SECONDS.get(kind, "") if num is None else num
@@ -256,6 +258,42 @@ class BoxSkin(Classic):
             self.transport_icon(c, kind, ix + d, r.centery + d, h, ink_)
             if num:
                 t.draw(c, num, f, ink_, nx + d, ny + d)
+
+    def volume_face(self, c, adjusting, r, ink, f, shadow=None):
+        """The volume button's face: a speaker and the level as a bar (the
+        word Mute when muted), arrows either side while LEFT/RIGHT change it."""
+        v, t = self.app.video, self.text
+        h = max(7, r.h * 9 // 20)
+        gap = max(2, h // 3)
+        aw = h // 2 if adjusting else 0
+        arrows = 2 * (aw + gap) if adjusting else 0
+        word = "Mute" if v.muted else ""
+        bw = t.width(f, word) if word else max(h, min(h * 3, r.w - 3 * gap - h - arrows))
+        x0 = r.centerx - (h + gap + bw + arrows) // 2
+        for d, col in ([(2, shadow)] if shadow else []) + [(0, ink)]:
+            x, cy = x0 + d, r.centery + d
+            if adjusting:
+                pts = [(x + aw, cy - aw), (x + aw, cy + aw), (x, cy)]
+                gfxdraw.aapolygon(c, pts, col)
+                gfxdraw.filled_polygon(c, pts, col)
+                x += aw + gap
+            neck = x + h * 3 // 10
+            pygame.draw.rect(c, col, (x, cy - h // 5, max(1, neck - x), max(2, h * 2 // 5)))
+            pts = [(neck, cy - h // 5), (neck, cy + h // 5), (x + h, cy + h // 2), (x + h, cy - h // 2)]
+            gfxdraw.aapolygon(c, pts, col)
+            gfxdraw.filled_polygon(c, pts, col)
+            x += h + gap
+            if word:
+                t.draw(c, word, f, col, x, r.y + (r.h - t.ink(f)[1]) // 2 + d)
+            else:
+                bar = pygame.Rect(x, cy - max(3, h // 2) // 2, bw, max(3, h // 2))
+                pygame.draw.rect(c, col, bar, 1)
+                pygame.draw.rect(c, col, (bar.x, bar.y, round(bar.w * max(0, min(100, v.volume)) / 100), bar.h))
+            x += bw + gap
+            if adjusting:
+                pts = [(x, cy - aw), (x, cy + aw), (x + aw, cy)]
+                gfxdraw.aapolygon(c, pts, col)
+                gfxdraw.filled_polygon(c, pts, col)
 
     # Box skins keep their look in skin_fonts / skin_themes (the base class).
     def font_key(self):

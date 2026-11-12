@@ -1954,9 +1954,10 @@ class InDirect(InDirectHD):
         pygame.draw.rect(c, b["teal"], (bar.x, bar.y, int(bar.w * frac), bar.h))
         self.hit(bar.inflate(0, Y(8)), lambda: pb.seek_to(self._click_frac(bar)))
         # The transport buttons: the DSS's teal buttons with their shadow.
-        bw = (bar.w - 5 * X(4)) // 6
+        buttons = pb.transport()
+        bw = (bar.w - (len(buttons) - 1) * X(4)) // len(buttons)
         rects = []
-        for k, (kind, _, fn) in enumerate(pb.transport()):
+        for k, (kind, _, fn) in enumerate(buttons):
             br = pygame.Rect(bar.x + k * (bw + X(4)), r.y + Y(41), bw, Y(13))
             self._tbtn(c, br, kind, k == getattr(pb, "tfocus", None))
             self.hit(br, fn)

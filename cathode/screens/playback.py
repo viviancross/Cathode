@@ -1,7 +1,8 @@
 """On Demand playback: the picture full screen, with a transport bar like a
 DVR's. Remote buttons act directly (no focus-hopping): OK/PAUSE pause, LEFT
 and RIGHT step back and forward, CH up/down move through the queue, OK skips
-an intro or the credits while that marker is up."""
+an intro or the credits while that marker is up. The row's last button is
+the volume, as on Cathode 3: SELECT it, then LEFT/RIGHT change the level."""
 
 import time
 
@@ -14,6 +15,7 @@ REPORT_EVERY = 10.0         # seconds between position reports to the server
 class Playback(Screen):
     name = "playback"
     opaque = True               # nothing under it is drawn; its own canvas is clear
+    vol_adjust = False          # the volume button chosen: LEFT/RIGHT change the level
 
     def __init__(self, app, rk, info, title="", subtitle=""):
         super().__init__(app)
@@ -31,6 +33,7 @@ class Playback(Screen):
         self.markers = info.get("markers") or []
         self.subs = list(info.get("subs") or [])      # files beside the video
         self.tfocus = None                            # the transport button DOWN moved to
+        self.vol_adjust = False
         self._shown = False                           # the bar (or Skip) was up at the last tick
         self._subs_added = False
         self.pos = float(info.get("offset") or 0)
@@ -199,20 +202,43 @@ class Playback(Screen):
             self.flash = ("PLAY >", time.monotonic() + 1.5)
         self.show_bar()
 
+    def toggle_volume(self):
+        self.vol_adjust = not self.vol_adjust
+        self.show_bar()
+
+    def nudge_volume(self, d: int):
+        v = self.app.video
+        v.muted = False                 # changing the level means "I want sound"
+        v.volume = v.volume + d
+
     def transport(self):
         """The on-screen buttons, for the mouse (the remote acts on its own
-        keys): (kind, label, action), left to right."""
-        paused = self.app.video.paused
+        keys): (kind, label, action), left to right. The volume's kind is
+        "voladj" while LEFT/RIGHT change it."""
+        v = self.app.video
+        vol = "MUTE" if v.muted else f"VOL {v.volume}"
         return [("prev", "|<<", lambda: self.skip(-1)), ("back", "<< 10", lambda: self.seek(-10)),
-                ("play", "PLAY", self.toggle_pause) if paused else ("pause", "PAUSE", self.toggle_pause),
+                ("play", "PLAY", self.toggle_pause) if v.paused else ("pause", "PAUSE", self.toggle_pause),
                 ("stop", "STOP", self.stop), ("fwd", "30 >>", lambda: self.seek(30)),
-                ("next", ">>|", lambda: self.skip(1))]
+                ("next", ">>|", lambda: self.skip(1)),
+                ("voladj", f"< {vol} >", self.toggle_volume) if self.vol_adjust else ("vol", vol, self.toggle_volume)]
 
     def _row_keys(self, a) -> bool:
         """The transport row: DOWN moves into it (on Play/Pause), LEFT/RIGHT
         along it, SELECT presses, UP or BACK leaves it."""
         if self.tfocus is not None and not self.bar_visible():
             self.tfocus = None
+        if self.tfocus is None:
+            self.vol_adjust = False
+        elif self.vol_adjust:
+            if a in (R.LEFT, R.RIGHT):
+                self.nudge_volume(5 if a == R.RIGHT else -5)
+            elif a in (R.SELECT, R.UP, R.DOWN, R.BACK):
+                self.vol_adjust = False     # back to moving along the row
+            else:
+                return False
+            self.show_bar()
+            return True
         if self.tfocus is None:
             if a == R.DOWN:
                 self.tfocus = 2
@@ -280,6 +306,9 @@ class Playback(Screen):
             if getattr(self.app, "toast_text", "") == self.TIP:     # DOWN moves the menu now
                 self.app.toast_until = 0.0
             playback_menu(self.app, self)
+        elif a in (R.VOL_UP, R.VOL_DOWN, R.MUTE):
+            self.show_bar()                 # the volume button shows the level
+            return False                    # live TV changes it
         elif a in R.DIGITS or a in (R.GUIDE, R.PREV, R.BROWSE, R.FAV, R.THEMES):
             # No channels to change during a movie: say how to get back to them.
             self.app.note(f"Stop the movie first: press {self.app.press_hint(R.BACK)}")

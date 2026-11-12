@@ -588,7 +588,7 @@ class CableSkin(BoxSkin):
         self.hit(line.inflate(0, Y(14)), lambda: pb.seek_to(self._click_frac(line)))
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
-            br = pygame.Rect(r.x + X(70) + k * X(78), r.bottom - Y(30), X(70), Y(22))
+            br = pygame.Rect(r.x + X(70) + k * X(64), r.bottom - Y(30), X(58), Y(22))
             self._tbtn(c, br, kind, k == self._tfocus(pb))
             self.hit(br, fn)
             rects.append(br)
@@ -2289,7 +2289,7 @@ class Passage(CableSkin):
         self.hit(line.inflate(0, Y(16)), lambda: pb.seek_to(self._click_frac(line)))
         rects = []
         for k, (kind, _, fn) in enumerate(pb.transport()):
-            br = pygame.Rect(X(195) + k * X(72), band.y + Y(27), X(64), Y(18))
+            br = pygame.Rect(X(195) + k * X(62), band.y + Y(27), X(56), Y(18))
             self._tbtn(c, br, kind, k == self._tfocus(pb))
             self.hit(br, fn)
             rects.append(br)
