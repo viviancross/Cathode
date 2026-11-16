@@ -59,7 +59,7 @@ MATURE = ["TV-MA", "R", "NC-17"]
 OFF = "-off-"                   # an off-the-air stretch among the days drawn up
 BRB = "-brb-"                   # a "we'll be right back" slate: a break's time nothing fits
 PADS = [(0, "No"), (15, "Quarter hours"), (30, "Half hours"), (60, "Hours")]
-MIDS = [("off", "None"), ("halfway", "Halfway"), ("every20", "Every 20 minutes")]
+MIDS = [("off", "Off"), ("halfway", "Halfway"), ("every20", "Every 20 minutes")]
 BREAK_LENGTHS = [60, 90, 120, 180, 240]
 MID_FROM = 15 * 60              # a programme this long gets breaks in it
 CLIP_MAX = 600                  # break material: clips up to ten minutes
@@ -260,11 +260,11 @@ def _matching(src: dict, index):
     only = src.get("only")
     for sec in index.sections.values():
         if (src.get("section") and sec.key != src["section"]) or (
-                not src.get("section") and (sec.breaks or sec.hidden)):
+                not src.get("section") and (sec.breaks or sec.hidden or (sec.kind == "music" and only != "music"))):
             continue
         if only and sec.kind != only:
             continue
-        if sec.kind == "show":
+        if sec.kind in ("show", "music"):
             keys = {k for k, sh in sec.shows.items() if _match(src, sh)}
             yield from (i for i in sec.items if i["show_key"] in keys and i["duration"] >= MIN_SECONDS)
         elif src.get("kind") != "show":
@@ -335,7 +335,7 @@ def groups(c: dict, index) -> list:
         for i in _matching(src, index):
             if i["id"] in banned or not _rated(c, i["rating"]) or not _words(c, f"{i['title']} {i['name']}"):
                 continue
-            gid = "s" + i["show_key"] if i["type"] == "episode" else "m" + i["plex"]
+            gid = "s" + i["show_key"] if i["type"] in ("episode", "track") else "m" + i["plex"]
             g = out.get(gid)
             if g is None:
                 g = out[gid] = {"id": gid, "title": i["title"], "items": [], "src": set(), "k": k, "w": w}
@@ -346,7 +346,7 @@ def groups(c: dict, index) -> list:
                 g["items"].append(i)
     for g in out.values():
         if len(g["items"]) > 1:
-            g["items"].sort(key=lambda i: (i["season"], i["episode"], i["air"]))
+            g["items"].sort(key=lambda i: (i["season"], i.get("album", ""), i["episode"], i["air"]))
             if any(i["season"] for i in g["items"]):
                 g["items"] = [i for i in g["items"] if i["season"]] or g["items"]
     return sorted((g for g in out.values() if g["items"]), key=lambda g: (g["title"].lower(), g["id"]))
@@ -599,6 +599,11 @@ def describe(i: dict) -> dict:
         e["icon"] = i["thumb"]
         return e
     new = i.get("added", 0) >= time.time() - NEW_DAYS * 86400
+    if i["type"] == "track":            # music: the radio card says what's playing
+        e["category"] = "Music"
+        e["desc"] = f'"{i["name"]}"' + (f" from {i['album']}" if i.get("album") else "")
+        e["radio"] = {"artist": i["title"], "song": i["name"], "album": i.get("album", ""), "art": ""}
+        return e
     if i["type"] == "episode":
         e["episode_text"] = (f"S{i['season']} E{i['episode']}" if i["season"] else "") + ("  New" if new else "")
         e["desc"] = (f'"{i["name"]}"  ' if i["name"] else "") + i["summary"]
@@ -909,6 +914,8 @@ class Timeline:
                 e = self._made[item_id] = describe(i)
                 if self.poster and i["thumb"] and i["type"] != "video":
                     e["icon"] = self.poster(i["thumb"])
+                if e.get("radio"):
+                    e["radio"] = dict(e["radio"], art=e.get("icon", ""))
             if extra:
                 e = dict(e, **extra)
                 if extra.get("brk"):
@@ -1276,9 +1283,9 @@ def options(index, section: str, kind: str) -> list:
     order."""
     n, names = {}, {}
     for sec in index.sections.values():
-        if (section and sec.key != section) or (not section and (sec.breaks or sec.hidden)):
+        if (section and sec.key != section) or (not section and (sec.breaks or sec.hidden or sec.kind == "music")):
             continue
-        rows = sec.shows.values() if sec.kind == "show" else sec.items
+        rows = sec.shows.values() if sec.kind in ("show", "music") else sec.items
         for r in rows:
             if kind == "genre":
                 vals = r["genres"]
@@ -1287,7 +1294,7 @@ def options(index, section: str, kind: str) -> list:
             elif kind == "studio":
                 vals = [brand(r["studio"])] if r["studio"] else []
             elif kind == "show":
-                vals = [r["key"]] if sec.kind == "show" else []
+                vals = [r["key"]] if sec.kind in ("show", "music") else []
                 names[r.get("key")] = r["title"]
             else:
                 vals = []

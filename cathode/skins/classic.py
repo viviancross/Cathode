@@ -84,6 +84,8 @@ class Classic(Skin):
             self._standby(c)
         if getattr(live, "signoff", None) and live.phase != "cover":
             self.draw_signoff(c, live.signoff)
+        elif getattr(live, "radio", None) and live.phase != "cover":
+            self.draw_radio(c, live.radio, live.channel)
         if live.phase == "cover" and live.channel:
             # The channel being tuned, big and top-left, over the static.
             self.text.draw(c, str(live.channel.number), self.f(96), p["CHANNEL_GREEN"],

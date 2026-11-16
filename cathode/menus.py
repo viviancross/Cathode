@@ -1524,6 +1524,25 @@ def library_channel_items(app):
         cfg.save()
         lc.place(app)
         app.toast(f"Breaks on {n} channels." if n else "Every channel already has breaks.")
+    def mids(d):
+        withb = [c for c in list(cfg.library_channels) + list(cfg.video_channels) if c.get("breaks")]
+        if not withb:
+            app.toast("No channel has breaks yet.")
+            return
+        now = withb[0]["breaks"].get("mid", "halfway")
+        to = _cycle(lc.MIDS, now, d)
+        for c in withb:
+            c["breaks"]["mid"] = to
+        cfg.save()
+        lc.place(app)
+
+    def mids_value():
+        got = {c["breaks"].get("mid", "halfway") for c in list(cfg.library_channels) + list(cfg.video_channels)
+               if c.get("breaks")}
+        return _label(lc.MIDS, got.pop()) if len(got) == 1 else "Mixed" if got else "-"
+    items.append(Item("Breaks during programmes", value=mids_value, adjust=mids,
+                      help="For every channel with breaks at once: none during programmes (Off), one halfway, or one "
+                           "every twenty minutes. Each channel's Breaks page sets its own."))
     items.append(Item("Give every channel breaks", all_breaks,
                       help="Commercials from your commercials libraries on every library and YouTube channel that "
                            "has none, bumpers named for each channel's studio, lined up with the half hours."))
@@ -1753,6 +1772,8 @@ def library_source_items(app, cid):
                                  help="TV-Y, TV-Y7, TV-G and G."))
                 rows.append(Item("Grown-ups' ratings", lambda: add(section, "rating", lc.MATURE),
                                  help="TV-MA, R and NC-17."))
+            elif kind == "show" and sec is not None and sec.kind == "music":
+                rows.append(Item("An artist...", submenu=lambda: values(section, "show")))
             elif kind != "show" or sec is None or sec.kind == "show":
                 rows.append(Item(f"A {label.lower()}...", submenu=lambda kind=kind: values(section, kind)))
         return rows

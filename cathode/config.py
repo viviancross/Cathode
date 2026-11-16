@@ -180,6 +180,7 @@ class Config:
     channels_edited: float = 0.0    # when the channel lists were last edited, here or by another Cathode
     channels_editor: str = ""       # which Cathode edited them
     music_playlists: list = field(default_factory=list)
+    retired_music: bool = False     # the old decade music channels taken out once (videochannels.migrate)
     ytdl_checked: float = 0.0       # when yt-dlp was last checked for a newer release
 
     # Remappable hotkeys (action -> key / gamepad button). Empty = defaults.

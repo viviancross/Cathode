@@ -373,6 +373,8 @@ class BoxSkin(Classic):
             self._signal_loss(c)
         if getattr(live, "signoff", None) and live.phase != "cover":
             self.draw_signoff(c, live.signoff)
+        elif getattr(live, "radio", None) and live.phase != "cover":
+            self.draw_radio(c, live.radio, live.channel)
         if (live.banner_visible() or live.phase == "cover") and live.channel:
             cur, nxt = live.programs()
             self._banner(c, live.channel, cur, nxt, full=live.banner_full)

@@ -40,10 +40,21 @@ def listings(**kw):
 class TestConfig(unittest.TestCase):
     def test_a_fresh_config_has_the_prefill(self):
         cfg = Config("")
-        self.assertEqual([len(c["sources"]) for c in cfg.video_channels], [1, 1, 1, 14])
-        self.assertEqual((cfg.video_channels[3]["name"], cfg.video_channels[3]["max_seconds"]), ("bideogaymin", 14400))
-        self.assertEqual(cfg.video_channels[0]["max_seconds"], 0)
+        self.assertEqual([len(c["sources"]) for c in cfg.video_channels], [14])
+        self.assertEqual((cfg.video_channels[0]["name"], cfg.video_channels[0]["max_seconds"]), ("bideogaymin", 14400))
         self.assertFalse(vc.migrate(cfg))                   # nothing to change
+
+    def test_the_old_decade_music_channels_go_once(self):
+        cfg = Config("")
+        old = [vc.new_channel("", [f"https://www.youtube.com/playlist?list={r}"]) for r in vc.RETIRED]
+        mine = vc.new_channel("My '80s", ["https://www.youtube.com/playlist?list=" + vc.RETIRED[0]])   # named: mine
+        cfg.video_channels = old + [mine] + cfg.video_channels
+        cfg.retired_music = False
+        self.assertTrue(vc.migrate(cfg))
+        self.assertEqual([c["name"] for c in cfg.video_channels], ["My '80s", "bideogaymin"])
+        self.assertGreater(cfg.channels_edited, 0)          # an edit: it wins over another Cathode's older lists
+        cfg.video_channels = old + cfg.video_channels
+        self.assertFalse(vc.migrate(cfg))                   # once only: put back by hand, they stay
 
     def test_music_playlists_of_4_34_migrate(self):
         cfg = Config("")
@@ -51,6 +62,7 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(vc.migrate(cfg))
         self.assertEqual([c["sources"][0]["url"] for c in cfg.video_channels[:2]], ["PLx", "PLy"])
         self.assertEqual(cfg.video_channels[2]["name"], "bideogaymin")
+        self.assertEqual(len(cfg.video_channels), 3)
         self.assertEqual(cfg.music_playlists, [])
         self.assertEqual(cfg.video_channels[0]["weighting"], "auto")
 
@@ -158,8 +170,8 @@ class TestSchedule(unittest.TestCase):
         shuffled = ids(c)
         self.assertEqual(sorted(shuffled), sorted(["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"]))
         self.assertEqual(ids(c), shuffled)                                         # the same all day
-        c["seed"] = 12345                                                          # a refresh: drawn again
-        self.assertNotEqual(ids(c), shuffled)
+        # a refresh draws again (one draw of five can land the same: 1 in 120, so three)
+        self.assertTrue(any(ids(dict(c, seed=s)) != shuffled for s in (12345, 23456, 34567)))
         # creators as shows: a block of each in its order, the shows taking turns
         two = chan(sources=("@Bob", "@Amy"), order="block_cyclic")
         got = day_ids(timeline(two, listings(**{"@Bob": ("Bob", eps), "@Amy": ("Amy", episodes(5, "Amy"))})))

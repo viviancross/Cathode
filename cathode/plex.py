@@ -202,9 +202,10 @@ class PlexClient:
         data = self._get(f"{self.server}/library/sections", token=self._server_token)
         out = []
         for d in _container(data, "Directory"):
-            if d.get("type") not in ("movie", "show"):
+            if d.get("type") not in ("movie", "show", "artist"):
                 continue
-            kind = "show" if d["type"] == "show" else "clip" if "none" in (d.get("agent") or "") else "movie"
+            kind = {"show": "show", "artist": "music"}.get(d["type"]) or ("clip" if "none" in (d.get("agent") or "")
+                                                                        else "movie")
             out.append({"key": str(d.get("key")), "title": d.get("title", "?"), "kind": kind,
                         "stamp": f"{d.get('scannedAt', '')}:{d.get('contentChangedAt', '')}"})
         return out

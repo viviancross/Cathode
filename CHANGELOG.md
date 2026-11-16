@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.54
+
+- **The three decade music channels are gone** ('80s, '90s and 2000s Vevo
+  playlists): taken out once from settings that still have them untouched,
+  and no longer made for a fresh install. A channel you named yourself stays.
+- **Mid-show breaks switch off for every channel at once**: Library Channels
+  > Breaks during programmes (Off, Halfway, Every 20 minutes). Each channel's
+  Breaks page still sets its own.
+- **Music libraries.** A Plex music library can be a library channel's source
+  (everything, a genre, a decade or an artist): artists play like shows, their
+  tracks album by album, and the picture is a radio card with the album's art,
+  the song, the artist and the album. No music channels are made for you.
+- **The Weather channel's almanac.** With no forecast to be had (offline, or
+  the weather service down), the Weather channel shows the almanac: each day's
+  sunrise and sunset and the moon's phase worked out for your place, and the
+  season's usual temperatures for its latitude, marked "Seasonal average". A
+  real forecast takes over as soon as one comes.
+
 ## 4.53
 
 - **Edit the lineup** (Settings > Channels > Edit lineup): hide a channel,

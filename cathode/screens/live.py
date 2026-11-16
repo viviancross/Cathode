@@ -24,6 +24,7 @@ class LiveTV(Screen):
         self.phase = "idle"         # idle | cover | reveal | watch
         self.standby = False        # dead stream: the skin's stand-by card
         self.signoff = None         # a timeline channel off the air: {"name", "back"} (the colour bars)
+        self.radio = None           # a music channel's song: {"artist", "song", "album", "art"}
         self.message = "Loading channels..." if app.config.playlist_url else \
             "No channels yet. Press MENU to set up your channels."
         self.banner_until = 0.0
@@ -100,7 +101,7 @@ class LiveTV(Screen):
         self.app.cancel(self._stall)
         self._stall = None
         ch = self.channels[idx]
-        self.phase, self.standby, self.signoff = "cover", False, None
+        self.phase, self.standby, self.signoff, self.radio = "cover", False, None, None
         self._cover_at = time.monotonic()
         self.behind = 0.0                   # a fresh tune is live
         self.app.cancel(self._timeout)

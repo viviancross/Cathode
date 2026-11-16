@@ -42,11 +42,12 @@ LIMITS = [0, 25, 50, 100, 250, 500, 1000]       # a source's newest this many (0
 MIN_SECONDS = [0, 30, 60, 120, 300, 600]
 MAX_SECONDS = [0, 1800, 3600, 7200, 10800, 14400, 28800]     # 0: any length
 
-# A fresh install's channels: the three decade playlists and bideogaymin.
+# The decade music playlists a fresh install once had (4.34 to 4.53): taken out
+# of configs that still have them untouched, at the user's word (2026-11-15).
+RETIRED = ("PLkqz3S84Tw-Qjyd_zHSVH_Xj6ge7yrgYI", "PL9tY0BWXOZFtv0mU4GO2j_jOB4512Qo1H", "PL9tY0BWXOZFu4vlBOzIOmvT6wjYb2jNiV")
+
+# A fresh install's channel: bideogaymin.
 PREFILL = [
-    {"name": "", "sources": ["https://www.youtube.com/playlist?list=PLkqz3S84Tw-Qjyd_zHSVH_Xj6ge7yrgYI"]},  # I Want My '80s Videos!
-    {"name": "", "sources": ["https://www.youtube.com/playlist?list=PL9tY0BWXOZFtv0mU4GO2j_jOB4512Qo1H"]},  # '90s Hits
-    {"name": "", "sources": ["https://www.youtube.com/playlist?list=PL9tY0BWXOZFu4vlBOzIOmvT6wjYb2jNiV"]},  # 2K Pop
     {"name": "bideogaymin", "max_seconds": 14400, "sources": [
         "@ScottTheWoz", "@Caddicarus", "@LGR", "@GameGrumps", "@TheGrumps", "@BringusStudios", "@JonBringus",
         "@NitroRad", "@StopSkeletonsFromFighting", "@PlanetClue", "@Billiam", "@GamingHistorian",
@@ -84,9 +85,18 @@ def migrate(config):
     old = getattr(config, "music_playlists", None) or []
     before = [dict(c) for c in (config.video_channels or [])]
     if old:
-        config.video_channels = [new_channel("", [u]) for u in old] + prefill()[3:]
+        config.video_channels = [new_channel("", [u]) for u in old] + prefill()
         config.music_playlists = []
     config.video_channels = [fix(c) for c in (config.video_channels or [])]
+    if not getattr(config, "retired_music", False):
+        config.retired_music = True
+        keep = [c for c in config.video_channels
+                if not (not c.get("name") and len(c.get("sources") or []) == 1
+                        and any(r in c["sources"][0].get("url", "") for r in RETIRED))]
+        if len(keep) != len(config.video_channels):
+            config.video_channels = keep
+            import time
+            config.channels_edited, config.channels_editor = time.time(), getattr(config, "sync_id", "") or ""
     return bool(old) or config.video_channels != before
 
 
@@ -586,6 +596,7 @@ class Player:
         else:
             self.app.video.play(s["video"], headers=s.get("headers"), audio=s.get("audio"),
                                 start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)))   # (a transcode starts at its base)
+        self.live.radio = e.get("radio")       # a music channel's song: the card that stands in for a picture
         artist, title = (self.ch.name, e["title"]) if e.get("kind") and not e.get("yt") else \
             parse_title(e["title"], e.get("uploader", ""))
         c = entry(self.app.config, self.cid) or {}
@@ -684,6 +695,7 @@ class Player:
         self.app.cancel(self._stop_timer)
         self.live.card = None
         self.live.signoff = None
+        self.live.radio = None
 
 
 def _resolve_quietly(video_id):

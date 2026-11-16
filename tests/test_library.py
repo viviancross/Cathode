@@ -557,7 +557,7 @@ class TestMaker(Temp):
                 if it.value:
                     self.assertIsInstance(it.value(), str)
         self.assertEqual([it.label for it in pages[0]],
-                         ["Comedy", "Add a channel...", "Content groups", "Give every channel breaks", "Add the starter lineup", "Remove the starter lineup",
+                         ["Comedy", "Add a channel...", "Content groups", "Breaks during programmes", "Give every channel breaks", "Add the starter lineup", "Remove the starter lineup",
                           "Read the library again"])
         self.assertEqual(pages[0][0].value(), "101")
         self.assertEqual(pages[1][2].value(), "13 titles, 6 h")

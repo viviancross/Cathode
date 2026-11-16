@@ -224,6 +224,13 @@ class TestMaker(Temp):
         lst["Give every channel breaks"].action()
         self.assertTrue(app.config.video_channels[0]["breaks"]["ads"])
         self.assertEqual(len(c["breaks"]["ads"]), 2)                               # one with breaks: left as it was
+        mids = {it.label: it for it in menus.library_channel_items(app)}["Breaks during programmes"]
+        self.assertEqual(mids.value(), "Halfway")
+        mids.adjust(-1)                                                            # switched off, everywhere
+        self.assertEqual(mids.value(), "Off")
+        self.assertEqual({x["breaks"]["mid"] for x in app.config.library_channels + app.config.video_channels}, {"off"})
+        tl, got = self.day(dict(c, order="cyclic_shuffle", sources=[{"section": "38", "kind": "all"}]))
+        self.assertEqual([round(s[2]) for s in got if s[1] == "p901"][:1], [6000])   # a film in one piece
 
 
 if __name__ == "__main__":

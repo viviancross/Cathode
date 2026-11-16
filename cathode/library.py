@@ -66,6 +66,16 @@ class Section:
         if dur <= 0:
             return
         rk = str(m.get("ratingKey"))
+        if m.get("type") == "track":        # a music library's: its artist is its "show"
+            artist = self.shows.get(str(m.get("grandparentRatingKey"))) or {}
+            self.items.append({
+                "id": "p" + rk, "plex": rk, "type": "track", "title": m.get("grandparentTitle") or artist.get("title", "?"),
+                "name": m.get("title") or "", "album": m.get("parentTitle") or "", "duration": dur,
+                "year": int(m.get("parentYear") or m.get("year") or 0), "genres": artist.get("genres", []), "studio": "",
+                "rating": "", "summary": "", "thumb": m.get("parentThumb") or artist.get("thumb", ""),
+                "added": int(m.get("addedAt") or 0), "show_key": str(m.get("grandparentRatingKey")), "season": 0,
+                "episode": int(m.get("index") or 0), "air": ""})
+            return
         if m.get("type") == "episode":
             show = self.shows.get(str(m.get("grandparentRatingKey"))) or {}
             self.items.append({
@@ -94,7 +104,10 @@ class Section:
         """Episodes leave what their show carries to the show's row."""
         rows = []
         for i in self.items:
-            if i["type"] == "episode":
+            if i["type"] == "track":
+                rows.append([i["plex"], i["show_key"], i["episode"], i["name"], i["album"], i["duration"], i["year"],
+                             i["thumb"], i["added"], i["title"]])
+            elif i["type"] == "episode":
                 rows.append([i["plex"], i["show_key"], i["season"], i["episode"], i["name"], i["duration"], i["air"],
                              i["summary"], i["added"], i["title"], i["rating"]])
             else:
@@ -120,7 +133,13 @@ class Section:
         s.fetched = d.get("fetched", 0.0)
         s.shows = {sh["key"]: sh for sh in d.get("shows", [])}
         for r in d.get("rows", []):
-            if s.kind == "show":
+            if s.kind == "music":
+                artist = s.shows.get(r[1]) or {}
+                s.items.append({"id": "p" + r[0], "plex": r[0], "type": "track", "title": r[9], "name": r[3],
+                                "album": r[4], "duration": r[5], "year": r[6], "genres": artist.get("genres", []),
+                                "studio": "", "rating": "", "summary": "", "thumb": r[7], "added": r[8], "show_key": r[1],
+                                "season": 0, "episode": r[2], "air": ""})
+            elif s.kind == "show":
                 show = s.shows.get(r[1]) or {}
                 s.items.append({"id": "p" + r[0], "plex": r[0], "type": "episode", "title": r[9], "name": r[4],
                                 "duration": r[5], "year": show.get("year", 0), "genres": show.get("genres", []),
@@ -173,10 +192,10 @@ def fetch(client, meta: dict, progress=None) -> Section:
                 progress(start, total)
             if not rows or start >= total:
                 return
-    if sec.kind == "show":
-        for m in pages(2):
+    if sec.kind in ("show", "music"):
+        for m in pages(2 if sec.kind == "show" else 8):     # shows, or artists
             sec.add_show(m)
-        for m in pages(4):
+        for m in pages(4 if sec.kind == "show" else 10):    # their episodes, or tracks
             sec.add_item(m)
     else:
         for m in pages(1):

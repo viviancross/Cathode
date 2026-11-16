@@ -633,6 +633,33 @@ class Skin:
             self.text.draw(c, self.text.fit(f, t, box.w - 16), f, (255, 255, 255), box.centerx, y, align="center")
             y += h + gap
 
+    def draw_radio(self, c, r, ch=None):
+        """A music channel's picture: the album's art and what's playing, on
+        the station's own deep blue (the station's, so one for every skin)."""
+        W, H = self.canvas
+        for y in range(0, H, 4):
+            k = y / H
+            pygame.draw.rect(c, (int(8 + 18 * k), int(10 + 16 * k), int(40 + 50 * k)), (0, y, W, 4))
+        side = int(H * 0.42)
+        box = pygame.Rect(int(W * 0.12), (H - side) // 2, side, side)
+        art = self.logo(r.get("art", ""), side, side) if r.get("art") else None
+        if art is not None:
+            c.blit(art, art.get_rect(center=box.center))
+        else:
+            pygame.draw.rect(c, (30, 34, 70), box)
+            pygame.draw.circle(c, (70, 74, 120), box.center, side // 3, max(2, side // 40))
+            pygame.draw.circle(c, (70, 74, 120), box.center, side // 12)
+        x, w = box.right + W // 20, W - box.right - W // 10
+        f1, f2, f3 = self.fb(max(16, H // 14)), self.f(max(13, H // 20)), self.f(max(11, H // 28))
+        y = box.y + side // 6
+        for text, f, col in ((r.get("song", ""), f1, (255, 255, 255)), (r.get("artist", ""), f2, (200, 210, 255)),
+                             (r.get("album", ""), f3, (150, 160, 210))):
+            if text:
+                self.text.draw(c, self.text.fit(f, text, w), f, col, x, y)
+                y += self.text.ink(f)[1] + H // 30
+        if ch is not None:
+            self.text.draw(c, self.text.fit(f3, ch.name, w), f3, (150, 160, 210), x, box.bottom - self.text.ink(f3)[1])
+
     def f(self, size: int, bold: bool = False):
         regular, heavy, _ = FONTS.get(self.font_key(), FONTS[self.default_font])
         return self.text.font(heavy if bold and heavy else regular, size)
