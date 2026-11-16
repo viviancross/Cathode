@@ -130,6 +130,11 @@ class TestQr(unittest.TestCase):
 class TestOutputs(Web):
     def test_m3u_xmltv_and_hdhomerun(self):
         lib = next(ch for ch in self.app.channels if lc.is_library(ch))
+        for _ in range(200):                    # the guide is built off the UI thread: wait for it
+            self.app.run_posted()
+            if (getattr(self.app, "video_programmes", None) or {}).get(lib.epg_id):
+                break
+            time.sleep(0.02)
         code, kind, m3u = self.get("/lineup.m3u")
         self.assertTrue(m3u.startswith("#EXTM3U"))
         self.assertIn(f'tvg-chno="{lib.number:g}"', m3u)
