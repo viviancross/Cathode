@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.57
+
+- **Jellyfin and Emby** (Settings > Channels > Jellyfin, Emby and folders):
+  sign in to a server once (the password isn't kept) and its movie, TV, music
+  and home-video libraries join Plex's for library channels and breaks.
+- **Folders on this computer**: movies, shows (episodes found by S01E02 in
+  their names, each show named for its folder) or clips for breaks. Lengths
+  are read from the files themselves (MP4, MKV, WebM, MOV, AVI); a file whose
+  length can't be read is left out. Folders are this computer's own: another
+  Cathode taking a channel made from them skips what it doesn't have.
+- **A title in two places is kept once**: from Plex first, then Jellyfin and
+  Emby, then folders.
+- A server that doesn't answer keeps what was read of it last, so its channels
+  stay on the air from the schedule already drawn up.
+- (HDHomeRun tuners came in 4.53, as playlists.)
+
 ## 4.56
 
 - **Profiles** (Settings > Profiles): who's watching. Each profile has its own

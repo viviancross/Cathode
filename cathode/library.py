@@ -177,6 +177,27 @@ class Index:
     def count(self) -> int:
         return sum(len(s.items) for s in self.sections.values())
 
+    def dedupe(self):
+        """A film or episode in two places is kept from the first: Plex, then
+        Jellyfin and Emby, then folders (clips are never folded together)."""
+        def rank(sec):
+            return 0 if sec.key[:1].isdigit() else 1 if sec.key.startswith("j") else 2
+        seen = {}
+        for sec in sorted(self.sections.values(), key=lambda s: (rank(s), s.key)):
+            keep = []
+            for i in sec.items:
+                if i["type"] == "episode":
+                    k = ("e", i["title"].lower(), i["season"], i["episode"])
+                elif i["type"] == "movie":
+                    k = ("m", i["title"].lower(), i["year"])
+                else:
+                    keep.append(i)
+                    continue
+                if seen.setdefault(k, rank(sec)) == rank(sec):
+                    keep.append(i)
+            sec.items = keep
+        self._by_id = None
+
 
 def fetch(client, meta: dict, progress=None) -> Section:
     """A library read off the server, page by page. progress(done, total)."""
@@ -204,22 +225,47 @@ def fetch(client, meta: dict, progress=None) -> Section:
     return sec
 
 
-def build(client, hidden=(), fresh: bool = False, progress=None) -> Index:
-    """The index: each library from its file when the server's stamp matches
-    it, fetched (and written) when it doesn't. Libraries hidden in the
+def build(clients, hidden=(), fresh: bool = False, progress=None) -> Index:
+    """The index: each library from its file when its place's stamp matches
+    it, fetched (and written) when it doesn't. `clients`: Plex, Jellyfin or
+    Emby servers, folders (one, or a list). Libraries hidden in the
     settings are read too (a channel can ask for one; the bumpers among
-    them are break material), marked so nothing takes them unasked."""
+    them are break material), marked so nothing takes them unasked. A place
+    that doesn't answer keeps what was read of it last. The same title from
+    two places is kept once (dedupe)."""
     out = []
-    for meta in client.library_sections():
-        sec = None if fresh else Section.load(meta["key"])
-        if sec is None or sec.stamp != meta["stamp"] or sec.kind != meta["kind"]:
-            t0 = time.time()
-            sec = fetch(client, meta, (lambda d, t, m=meta: progress(m["title"], d, t)) if progress else None)
-            sec.save()
-            print(f"[library] {sec.title}: {len(sec.items)} titles read in {time.time() - t0:.1f} s")
-        sec.title, sec.hidden = meta["title"], meta["key"] in hidden
-        out.append(sec)
-    return Index(out)
+    for client in clients if isinstance(clients, (list, tuple)) else [clients]:
+        try:
+            metas = client.library_sections()
+        except Exception as e:
+            print(f"[library] {type(client).__name__}: {e!r}: what was read of it last")
+            out += [s for s in (cached() or Index()).sections.values() if _owned(client, s.key)]
+            continue
+        for meta in metas:
+            sec = None if fresh else Section.load(meta["key"])
+            if sec is None or sec.stamp != meta["stamp"] or sec.kind != meta["kind"]:
+                t0 = time.time()
+                if hasattr(client, "fetch_section"):
+                    sec = client.fetch_section(meta, sec or Section.load(meta["key"]))
+                else:
+                    sec = fetch(client, meta, (lambda d, t, m=meta: progress(m["title"], d, t)) if progress else None)
+                sec.save()
+                print(f"[library] {sec.title}: {len(sec.items)} titles read in {time.time() - t0:.1f} s")
+            sec.title, sec.hidden = meta["title"], meta["key"] in hidden
+            out.append(sec)
+    idx = Index(out)
+    idx.dedupe()
+    return idx
+
+
+def _owned(client, key: str) -> bool:
+    """Whether a library (by its key) is this place's."""
+    from . import folders, jellyfin
+    if isinstance(client, jellyfin.Client):
+        return key.startswith(client.prefix())
+    if isinstance(client, folders.Folders):
+        return key.startswith("l")
+    return key[:1].isdigit()
 
 
 def cached(hidden=()) -> Optional[Index]:
@@ -242,8 +288,11 @@ def cached(hidden=()) -> Optional[Index]:
 def load(app, done=None, fresh: bool = False):
     """The index built on a thread; app.library set and done(index) called on
     the UI thread. One build at a time."""
+    from . import folders, jellyfin
     od = getattr(app, "ondemand", None)
-    if od is None or not od.signed_in or getattr(app, "library_loading", False):
+    plex = od is not None and od.signed_in
+    places = jellyfin.clients(app.config) + ([folders.find(app.config)] if folders.find(app.config) else [])
+    if (not plex and not places) or getattr(app, "library_loading", False):
         return
     app.library_loading = True
 
@@ -253,16 +302,29 @@ def load(app, done=None, fresh: bool = False):
     def work():
         idx, err = None, ""
         try:
-            c = od.client()
-            if not c.server:
-                c.discover_server(prefer=app.config.plex_server_id)
-            idx = build(c, hidden=set(app.config.plex_hidden_libraries or []), fresh=fresh, progress=progress)
+            clients = list(places)
+            if plex:
+                c = od.client()
+                try:
+                    if not c.server:
+                        c.discover_server(prefer=app.config.plex_server_id)
+                    clients.insert(0, c)
+                except Exception as e:
+                    print(f"[library] Plex didn't answer ({e!r}): what was read of it last")
+                    clients.insert(0, _Gone())
+            idx = build(clients, hidden=set(app.config.plex_hidden_libraries or []), fresh=fresh, progress=progress)
         except Exception as e:
             err = repr(e)
             print(f"[library] couldn't read the library ({e!r}): using what was read last")
             idx = cached(set(app.config.plex_hidden_libraries or []))
         app.post(_loaded, app, idx, err, done)
     threading.Thread(target=work, daemon=True).start()
+
+
+class _Gone:
+    """A Plex server that didn't answer: its libraries from their files."""
+    def library_sections(self):
+        raise OSError("Plex away")
 
 
 def _loaded(app, idx, err, done):

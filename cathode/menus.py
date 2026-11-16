@@ -820,6 +820,9 @@ def channel_items(app):
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
     items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
+    items.append(Item("Jellyfin, Emby and folders", submenu=lambda: places_items(app),
+                      value=lambda: str(len(cfg.media_servers) + len(cfg.local_folders)),
+                      help="More places for library channels to draw from, beside Plex."))
     days = [(2, "2 days"), (7, "A week"), (14, "Two weeks"), (30, "A month")]
 
     def guide_days(d):
@@ -1105,6 +1108,96 @@ def video_channel_page(app, cid):
              help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
     ]
+
+
+# ── Other places: Jellyfin and Emby servers, folders ─────────────────────
+
+def places_items(app):
+    from . import folders, jellyfin, libchannels as lc
+    cfg = app.config
+
+    def reread():
+        app.toast("Reading your libraries...", 60.0)
+        lc.start(app, done=lambda idx, err: app.toast(
+            f"{idx.count():,} titles in {len(idx.sections)} libraries." if idx else "Nothing could be read.", 6.0))
+
+    def add_server():
+        got = {}
+
+        def password(text):
+            if text is None:
+                return
+            app.toast("Signing in...", 30.0)
+
+            def work():
+                return jellyfin.sign_in(got["url"], got["user"], text, cfg.sync_id or "")
+            app.ondemand.run(work, lambda s: (cfg.media_servers.append(s), cfg.save(),
+                                              app.toast(f"{s['kind']}: {s['name']} added.", 5.0), reread()),
+                             lambda msg: app.toast("Couldn't sign in: check the address, the name and the password.", 6.0))
+
+        def user(text):
+            if text:
+                got["user"] = text.strip()
+                app.push(Keyboard(app, "Password", password, hint="Used once to sign in; only the sign-in is kept."))
+
+        def url(text):
+            if text and text.strip() != Keyboard.URL_START:
+                got["url"] = text.strip()
+                app.push(Keyboard(app, "User name", user))
+        app.push(Keyboard(app, "Jellyfin or Emby address (http://...:8096)", url, url=True))
+
+    def add_folder():
+        def got(text):
+            path = (text or "").strip()
+            if not path:
+                return
+            if not os.path.isdir(path):
+                app.toast("That folder isn't there.")
+                return
+            cfg.local_folders.append({"path": path, "name": os.path.basename(path.rstrip("/\\")) or path, "kind": "movie"})
+            cfg.save()
+            app.top().refresh(places_items(app))
+            reread()
+        app.push(Keyboard(app, "Folder (its full path)", got, hint="Movies, shows by SxxEyy, or clips; set which after."))
+
+    def server_page(s):
+        def remove():
+            cfg.media_servers[:] = [x for x in cfg.media_servers if x is not s]
+            cfg.save()
+            m = app.top()
+            m.back()
+            m.refresh(places_items(app))
+            reread()
+        return [Item("Address", value=lambda: s["url"]), Item("Signed in as", value=lambda: s.get("user", "")),
+                Item("Remove server", submenu=lambda: _confirm(app, "Remove it", remove, "Keep it"))]
+
+    def folder_page(f):
+        def kind(d):
+            f["kind"] = _cycle(folders.KINDS, f.get("kind", "movie"), d)
+            cfg.save()
+
+        def remove():
+            cfg.local_folders[:] = [x for x in cfg.local_folders if x is not f]
+            cfg.save()
+            m = app.top()
+            m.back()
+            m.refresh(places_items(app))
+            reread()
+        return [Item("Folder", value=lambda: f["path"][-30:]),
+                Item("Holds", value=lambda: _label(folders.KINDS, f.get("kind", "movie")), adjust=kind,
+                     help="Movies; shows (episodes found by S01E02 in their names, the show named for its folder); "
+                          "or clips, bumpers and commercials, for breaks. Read the libraries again after changing it."),
+                Item("Remove folder", submenu=lambda: _confirm(app, "Remove it", remove, "Keep it"))]
+    rows = [Item(f"{s.get('kind', 'Jellyfin')}: {s.get('name', s['url'])}", submenu=lambda s=s: server_page(s))
+            for s in cfg.media_servers]
+    rows.append(Item("Add a Jellyfin or Emby server...", add_server,
+                     help="Its libraries join Plex's for library channels and breaks. A title on both is kept from Plex."))
+    rows += [Item(f"Folder: {f.get('name') or f['path']}", submenu=lambda f=f: folder_page(f),
+                  value=lambda f=f: _label(folders.KINDS, f.get("kind", "movie"))) for f in cfg.local_folders]
+    rows.append(Item("Add a folder...", add_folder,
+                     help="Videos on this computer: MP4, MKV, WebM, MOV and AVI files, their lengths read from them."))
+    rows.append(Item("Read the libraries again", reread))
+    return rows
 
 
 # ── Profiles, the parent PIN, the watch history (profiles.py) ────────────
@@ -1616,9 +1709,10 @@ def library_channel_items(app):
     starter lineup; the library read again."""
     from . import libchannels as lc
     cfg = app.config
-    if not app.ondemand.signed_in:
+    if not app.ondemand.signed_in and not (cfg.media_servers or cfg.local_folders):
         return [Item("Link your Plex account first", enabled=False,
-                     help="Library channels are made from your Plex library. Link it under On Demand.")]
+                     help="Library channels are made from your Plex library (link it under On Demand), or from "
+                          "Jellyfin, Emby or folders (Settings > Channels > Jellyfin, Emby and folders).")]
 
     def number_of(c):
         ch = next((ch for ch in app.channels if lc.is_library(ch) and ch.url.endswith(c["id"])), None)

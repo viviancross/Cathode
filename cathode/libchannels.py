@@ -1232,7 +1232,9 @@ def rebuild(app, done=None):
     client = od.client() if od is not None and hasattr(od, "client") else None
 
     def poster(path):
-        return client.photo_url(path, 300, 450) if client and client.server else ""
+        if path.startswith("http"):                     # (Jellyfin and Emby: the image's own address)
+            return path
+        return client.photo_url(path, 300, 450) if client and client.server and path.startswith("/") else ""
 
     def work():
         built = {}
@@ -1269,8 +1271,19 @@ def broken(ex: Exception) -> bool:
 
 
 def stream(app, e: dict, at: float) -> dict:
-    """The stream for a title from `at` seconds in, asked of the server
-    (on the Player's thread)."""
+    """The stream for a title from `at` seconds in, asked of its place
+    (Plex, Jellyfin or Emby, a folder) on the Player's thread."""
+    key = e["plex"]
+    if key.startswith("L"):
+        from . import folders
+        return folders.stream(key)
+    if key.startswith("J"):
+        from . import jellyfin
+        from .plex import PlexError
+        c = jellyfin.for_key(app, key)
+        if c is None:
+            raise PlexError("Its server isn't in the settings any more.")
+        return c.stream_at(key, app.config.plex_quality or "Original", at)
     c = app.ondemand.client()
     if not c.server:
         c.discover_server(prefer=app.config.plex_server_id)

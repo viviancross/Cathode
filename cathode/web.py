@@ -214,8 +214,8 @@ def stream_url(app, cid: str):
     from . import libchannels as lc
     tl = lc.SCHEDULES.get(cid)
     cur = tl.at(datetime.now(timezone.utc)) if tl is not None else None
-    if not cur or not cur["entry"].get("plex"):
-        return None
+    if not cur or not str(cur["entry"].get("plex", ""))[:1].isdigit():
+        return None                     # (Plex's titles only: its transcoder starts where the programme's up to)
     e = cur["entry"]
     c = app.ondemand.client()
     if not c.server:

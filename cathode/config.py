@@ -177,6 +177,8 @@ class Config:
     profile: str = ""               # the profile on ("": the main one)
     main_fields: dict = field(default_factory=dict)     # the main profile's look, kept while another is on
     parent_pin: str = ""            # asked of a kids' profile for Settings and for switching away
+    media_servers: list = field(default_factory=list)   # Jellyfin/Emby: [{"url", "user", "user_id", "token", "name", "kind"}]
+    local_folders: list = field(default_factory=list)   # [{"path", "name", "kind": movie|show|clip}] (folders.py)
     packs: list = field(default_factory=list)           # [{"name", "keys": [channel addresses]}]: guide tabs
     # Sync (sync.py): every Cathode on the network with the same channels.
     lan_sync: bool = True
