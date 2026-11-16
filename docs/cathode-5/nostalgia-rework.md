@@ -133,7 +133,7 @@ method) is the old behaviour: sources interleaved by share of airtime.
 | 7 | Server and pages | Built-in web server: Configure, Watch, TV Remote; M3U, XMLTV, HDHR and stream output | 4.55: Remote, Channels (tap to tune), Lineup and My channels pages; M3U, XMLTV, HDHomeRun and per-programme stream redirects for the library channels. No in-browser Watch: Plex's files don't play in a browser without a transcoder session per tab |
 | + | Sync between Cathodes | Every Cathode on the network finds the others and keeps the same channel lists, library schedules and YouTube lists (NostalgiaTV's shared schedule across devices, without its server) | Built in 4.49 |
 | 8 | Profiles | Profiles with their own lineup and look, kid profiles, parent PIN, tether, watch history | 4.56: done. Every profile shares the schedules (tether is how it always works); the lineup differs only for kids' profiles |
-| 9 | Housekeeping | Export / import, weekly backup, bezels, languages if wanted | |
+| 9 | Housekeeping | Export / import, weekly backup, bezels, languages if wanted | 4.58: backup, restore, weekly backup. Bezels dropped and languages not wanted (the user's calls) |
 
 ### Phase 1 as it stands (4.47)
 

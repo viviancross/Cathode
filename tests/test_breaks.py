@@ -111,6 +111,16 @@ class TestBreaks(Temp):
             self.assertIn((lt.minute, lt.second), ((0, 0), (30, 0)))              # still on the grid
         self.assertTrue(all(abs(a[0] + a[2] - b[0]) < 0.01 for a, b in zip(slots, slots[1:])))
 
+    def test_a_guide_opening_in_a_break_starts_with_the_programme(self):
+        tl, got = self.day(chan(breaks=BREAKS))
+        ch = vc.add_to(lineup(1), type("C", (), {"video_channels": [], "library_channels": [
+            dict(chan(breaks=BREAKS), id=tl.c["id"])]})())[-1]
+        brk = next(s for s in got if len(s) > 3 and s[3].get("brk") == "bump" and s[0] > time.time() + 3600)
+        at = datetime.fromtimestamp(brk[0] + 2, timezone.utc)
+        progs = vc.programmes([ch], {vc.cid_of(ch): tl}, now=at + timedelta(hours=1), hours=2)[ch.epg_id]
+        self.assertTrue(progs[0].title in ("Alpha", "Bravo", "Charlie"), progs[0].title)
+        self.assertLessEqual(progs[0].start, at)
+
     def test_the_guide_runs_a_programme_over_its_breaks(self):
         app = FakeApp([])
         app.config.video_channels = []

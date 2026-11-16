@@ -2518,6 +2518,35 @@ def _save_diagnostics(app):
     app.toast(f"Saved {os.path.basename(path)} on your Desktop. Attach it to a bug report.", 8.0)
 
 
+def _back_up(app):
+    from . import backup
+    try:
+        path = backup.save(app.config)
+        app.toast(f"Saved: {path}", 8.0)
+    except OSError as e:
+        app.toast(f"Couldn't save the backup ({e.strerror or e}).", 6.0)
+
+
+def restore_items(app):
+    from . import backup
+
+    def restore(b):
+        try:
+            n = backup.restore(app.config, b["path"])
+        except (OSError, ValueError) as e:
+            app.toast(f"Couldn't read that backup ({e}).", 6.0)
+            return
+        app.toast(f"{n} settings put back.", 4.0)
+        app.top().open("RESTART CATHODE?", _confirm(app, "Restart now", app.restart, "Later", close=True))
+    rows = []
+    for b in backup.backups(app.config)[:30]:
+        when = time.strftime("%a %d %b %Y, %I:%M %p", time.localtime(b["saved"])).replace(" 0", " ")
+        rows.append(Item(when, submenu=lambda b=b: _confirm(app, "Put these settings back", lambda b=b: restore(b),
+                                                             "Keep mine"),
+                         value=lambda b=b: "Weekly" if b["auto"] else "", help=b["path"]))
+    return rows or [Item("No backups yet", enabled=False, help="Back up settings makes one; one is made each week.")]
+
+
 def system_items(app):
     from . import __version__, sounds
     from .screens.diagnostics import Diagnostics
@@ -2525,6 +2554,11 @@ def system_items(app):
     cfg = app.config
     return [
         Item("Diagnostics", lambda: app.push(Diagnostics(app)), close=True),
+        Item("Back up settings", lambda: _back_up(app),
+             help="Every setting to a file in the settings folder's backups (one is also made by itself each week). "
+                  "Your Plex, Jellyfin and Emby sign-ins aren't in it; playlist links are."),
+        Item("Restore settings", submenu=lambda: restore_items(app),
+             help="Put the settings back as a backup has them. Sign-ins stay as they are."),
         Item("Save diagnostics", lambda: _save_diagnostics(app),
              help="One zip on your Desktop to attach to a bug report: logs, settings without passwords, system."),
         Item("Audio output", submenu=lambda: audio_items(app)),

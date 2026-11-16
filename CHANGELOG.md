@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.58
+
+- **Back up and restore settings** (Settings > System): every setting to a
+  file in the settings folder's backups, and back from one. Cathode also
+  backs up by itself once a week and keeps the last eight of those. Your
+  Plex, Jellyfin and Emby sign-ins aren't in a backup and stay as they are
+  when one is restored; playlist links are in it.
+- **The guide no longer lists a bumper as a programme** when its window opens
+  in the middle of a break: it starts from the programme the break belongs to.
+
 ## 4.57
 
 - **Jellyfin and Emby** (Settings > Channels > Jellyfin, Emby and folders):

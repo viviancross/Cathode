@@ -17,7 +17,7 @@ from typing import Callable, List, Optional
 
 import pygame
 
-from . import lineup, ownchannels, paths, playlist as m3u, remote as R, videochannels
+from . import backup, lineup, ownchannels, paths, playlist as m3u, remote as R, videochannels
 from .config import Config
 from .epg import EPG
 from .logos import LogoStore
@@ -771,6 +771,13 @@ class App:
         self.after(10.0, self._idle_check)
 
         self.push(LiveTV(self))
+        if not self.shot:
+            try:
+                made = backup.weekly(self.config)      # the settings, saved by themselves once a week
+                if made:
+                    print(f"[backup] {made}")
+            except Exception as e:
+                print(f"[backup] {e!r}")
         if self.config._load_error:
             self.after(1.5, lambda: self.toast(f"Your settings couldn't be read, so Cathode started fresh. "
                                                f"The old file was kept as {self.config._load_error}.", 10.0))

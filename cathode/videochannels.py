@@ -205,6 +205,12 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
         progs = []
         if guide_style(c, sched) == "video":
             cur, n = sched.at(t0) or sched.at(now), 0
+            for _ in range(400):        # opening in a break (or a second half): from the programme it belongs to
+                if not cur or not (cur["entry"].get("kind") in ("ad", "bump", "brb", "card") or cur["entry"].get("part")):
+                    break
+                cur = sched.at(cur["start"] - timedelta(seconds=0.5)) or cur
+                if cur["start"] <= t0 - timedelta(hours=12):
+                    break
             while cur and cur["start"] < end and n < 8000:
                 e = cur["entry"]
                 if e.get("kind") == "signoff":
