@@ -4,6 +4,7 @@ fonts and colours, and one draw_<name> method per screen it knows. Screens it
 doesn't know fall back to Classic."""
 
 import os
+import re
 import time
 import weakref
 from typing import Optional
@@ -240,21 +241,23 @@ class Text:
 
     def wrap(self, font, s: str, max_w: int, max_lines: int) -> list:
         """Word-wrap into at most max_lines; text that doesn't fit ends the
-        last line with '...'."""
-        words, lines, line = (s or "").split(), [], ""
+        last line with '...'. A run of spaces is kept (a line of facts is
+        spaced apart); a line break or tab reads as one space."""
+        words = [w + (gap if gap.strip(" ") == "" else " ") for w, gap in re.findall(r"(\S+)(\s*)", s or "")]
+        lines, line = [], ""
         for i, w in enumerate(words):
-            trial = f"{line} {w}".strip()
-            if self.width(font, trial) <= max_w:
+            trial = line + w
+            if self.width(font, trial.rstrip()) <= max_w:
                 line = trial
                 continue
             if line:
-                lines.append(line)
+                lines.append(line.rstrip())
             if len(lines) == max_lines:
-                lines[-1] = self.fit(font, lines[-1] + " " + " ".join(words[i:]), max_w)
+                lines[-1] = self.fit(font, lines[-1] + " " + "".join(words[i:]).rstrip(), max_w)
                 return lines
             line = w
         if line:
-            lines.append(line)
+            lines.append(line.rstrip())
         return lines
 
     def wrap_even(self, font, s: str, max_w: int, max_lines: int) -> list:
@@ -696,7 +699,8 @@ class Skin:
     def fb(self, size: int):
         return self.f(size, bold=True)
 
-    def cell_text(self, title: str, w: int, h: int, font_for, size: int, width=None, lead: int = 2) -> tuple:
+    def cell_text(self, title: str, w: int, h: int, font_for, size: int, width=None, lead: int = 2,
+                  sub: str = "") -> tuple:
         """(font, [lines]) for a guide cell w by h: the whole title on one
         line, the size stepping down to seven tenths; else whole on two
         lines (where two fit the row), stepping down the same way; else at
@@ -704,19 +708,26 @@ class Skin:
         A cell too narrow for three letters carries nothing: the cursor's
         header names the programme. font_for(size) is the skin's face at
         that size; width measures it (a condensed face measures its own).
-        lead: the gap between two lines."""
+        lead: the gap between two lines. sub (the episode, "S5E11 - Name")
+        takes the second line, as NostalgiaTV's cells carry it, when the
+        title fits one and the row has room for two."""
         t = self.text
         width = width or t.width
         f = font_for(size)
         if not title or w < width(f, "MMM"):
             return f, []
-        if width(f, title) <= w:
+
+        def one(f):
+            if sub and 2 * t.ink(f)[1] + lead <= h:
+                return f, [title, t.clip(f, sub, w, width)]
             return f, [title]
+        if width(f, title) <= w:
+            return one(f)
         sizes = range(size - 1, int(size * 0.7) - 1, -1)
         for s in sizes:
             f = font_for(s)
             if width(f, title) <= w:
-                return f, [title]
+                return one(f)
         for s in (size,) + tuple(sizes):
             f = font_for(s)
             if 2 * t.ink(f)[1] + lead > h:
@@ -727,6 +738,18 @@ class Skin:
         f = font_for(size)
         n = 2 if 2 * t.ink(f)[1] + lead <= h else 1
         return f, t.lines(f, title, w, n, width)[0]
+
+    def fit_facts(self, f, lead: str, p, w: int, rating: bool = True) -> str:
+        """lead (the hours, say) then as many of the programme's facts as
+        fit w, each whole: a line of facts drops its last, never cuts one."""
+        width = getattr(self, "width", self.text.width)
+        line = lead
+        for bit in facts(p, rating).split("   "):
+            trial = f"{line}   {bit}" if line else bit
+            if not bit or width(f, trial) > w:
+                break
+            line = trial
+        return line
 
     def label_every(self, col_w: int, label_w: int) -> int:
         """How many columns apart the time ruler's labels sit: every column
@@ -806,6 +829,16 @@ class Skin:
         if self._anim_due <= now or now + wait < self._anim_due - 0.01:
             self._anim_due = now + wait
             self.app.after(wait, self.app.invalidate)
+
+
+def facts(p, rating: bool = True) -> str:
+    """A programme's info line as NostalgiaTV gives it: New or Premiere,
+    first aired, the rating, picture, sound, its length, the audience's
+    score; whichever it has."""
+    g = lambda k: getattr(p, k, "") or ""
+    bits = (g("flag"), g("air"), g("rating") if rating else "", g("quality"), g("audio"),
+            f"{g('minutes')} min" if g("minutes") else "", f"{g('score')}/10" if g("score") else "")
+    return "   ".join(b for b in bits if b)
 
 
 def skin_classes() -> dict:

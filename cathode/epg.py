@@ -88,6 +88,29 @@ def _parse_xmltv_dt(s: str) -> datetime:
     raise ValueError(f"Cannot parse XMLTV datetime: {s!r}")
 
 
+def _from_ns(ns: str) -> str:
+    """xmltv_ns "0.29." (counted from nought) -> "S1E30"."""
+    parts = (ns.split(".") + ["", ""])[:2]
+    try:
+        s, e = (int(p.split("/")[0]) + 1 if p.strip() else 0 for p in parts)
+    except ValueError:
+        return ""
+    return f"S{s}E{e}" if s and e else (f"E{e}" if e else "")
+
+
+def _air(s: str) -> str:
+    """XMLTV's <date> ("19980903040000 +0000", "1998-09-03", "1998") ->
+    "Sep 3, 1998", or the year alone."""
+    digits = re.sub(r"\D", "", (s or "").split(" ")[0])
+    try:
+        if len(digits) >= 8:
+            d = datetime.strptime(digits[:8], "%Y%m%d")
+            return f"{d:%b} {d.day}, {d.year}"
+    except ValueError:
+        return ""
+    return digits[:4] if len(digits) >= 4 else ""
+
+
 def _text(el: Optional[ET.Element], tag: str, default: str = "") -> str:
     child = el.find(tag) if el is not None else None
     if child is not None and child.text:
@@ -267,7 +290,8 @@ class EPG:
         desc = _text(prog_el, "desc")[:1500]
         category = _text(prog_el, "category")[:60]
 
-        # Episode number
+        # Episode number, and its own title: "S1E30 - Thunder 30" as
+        # NostalgiaTV writes it (Tunarr sends both).
         ep_nums = prog_el.findall("episode-num")
         episode = ""
         for ep in ep_nums:
@@ -276,6 +300,22 @@ class EPG:
                 break
         if not episode and ep_nums:
             episode = ep_nums[0].text.strip() if ep_nums[0].text else ""
+        if ep_nums and ep_nums[0].get("system") == "xmltv_ns" and episode == (ep_nums[0].text or "").strip():
+            episode = _from_ns(episode)
+        episode = re.sub(r"\bS0*(\d+)\s*E0*(\d+)\b", r"S\1E\2", episode, flags=re.I)
+        sub = _text(prog_el, "sub-title")[:120]
+        if sub and sub != title:
+            episode = f"{episode} - {sub}" if episode else sub
+        air = _air(_text(prog_el, "date"))
+        length = prog_el.find("length")
+        try:
+            n = float(length.text) if length is not None and length.text else 0
+        except ValueError:
+            n = 0
+        unit = (length.get("units") if length is not None else "") or "seconds"
+        minutes = round(n * {"seconds": 1 / 60, "minutes": 1, "hours": 60}.get(unit, 0))
+        quality = "HD" if _text(prog_el, "video/quality").upper().startswith("HD") else ""
+        flag = "New" if prog_el.find("new") is not None else ""
 
         rating = ""
         rating_el = prog_el.find("rating/value")
@@ -302,6 +342,10 @@ class EPG:
             episode=episode,
             rating=rating,
             icon=icon,
+            air=air,
+            minutes=minutes,
+            quality=quality,
+            flag=flag,
         ))
 
     def add_programs(self, channel_id: str, programs: List[Program]):

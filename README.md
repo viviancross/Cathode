@@ -13,7 +13,7 @@ with commercials and bumpers between the programmes, time slots, on-air hours
 and sign-offs. It keeps every Cathode on your network on the same channels,
 and has a web page for your phone: a remote, what's on, and the lineup.
 
-**Version 5.0** · Windows, macOS, Linux
+**Version 5.1** · Windows, macOS, Linux
 
 <br clear="left">
 
@@ -89,19 +89,19 @@ Steam Deck updates from Game Mode); the Mac app says when one is out.
 
 ### Windows
 
-Download `cathode-windows-5.0-portable.zip`, right-click it, **Extract All**,
+Download `cathode-windows-5.1-portable.zip`, right-click it, **Extract All**,
 and run **Cathode.exe**.
 
 ### Linux
 
 **AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-5.0.AppImage`, make it executable (file properties, or
+`cathode-linux-x86_64-5.1.AppImage`, make it executable (file properties, or
 `chmod +x`) and run it.
 
 **Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
 
 ```bash
-flatpak install --user cathode-linux-x86_64-5.0.flatpak
+flatpak install --user cathode-linux-x86_64-5.1.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
@@ -110,8 +110,8 @@ It fetches the freedesktop runtime from Flathub the first time. On the Deck,
 
 ### macOS
 
-Download the zip for your Mac (`cathode-macos-arm64-5.0.zip` for Apple
-Silicon, `cathode-macos-x86_64-5.0.zip` for Intel), unzip it, and move
+Download the zip for your Mac (`cathode-macos-arm64-5.1.zip` for Apple
+Silicon, `cathode-macos-x86_64-5.1.zip` for Intel), unzip it, and move
 **Cathode.app** to Applications. It isn't signed: the first time,
 right-click it and choose **Open** (or **Open Anyway** under System Settings
 > Privacy & Security).

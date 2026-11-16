@@ -244,12 +244,15 @@ class ProgramInfo(Screen):
     def lines(self):
         """The channel, when it's on (with its rating and genre), and the
         synopsis, each a line for the skin to wrap."""
+        from ..skins import facts
         ch, p = self.channel, self.program
         out = [f"{ch.number} {ch.name}"]
         if p:
             a, b = p.start.astimezone(), p.stop.astimezone()
             when = f"{a:%I:%M}-{b:%I:%M %p}".lstrip("0").replace("-0", "-")
-            out.append("   ".join(x for x in (when, p.rating, p.category, p.episode) if x))
+            if p.episode:
+                out.append(p.episode)
+            out.append("   ".join(x for x in (when, p.category, facts(p)) if x))
             out.append(p.description or "No further information.")
         else:
             out.append("No information is available for this time.")

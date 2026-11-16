@@ -207,11 +207,15 @@ class PlateHD(BoxSkin):
         self.cb(c, self.fit_cb(f_mid, dish_call(ch), X(200)), f_mid, ink, cx, r.y + Y(45), align="center", shadow=b["deep"])
         self.cb(c, self.fit_cb(f_small, g_list(self), X(200)), f_small, ink, cx, r.y + Y(73), align="center", shadow=b["deep"])
         mid = r.x + X(607)
-        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(600)), f_mid, ink, mid, r.y + Y(24), align="center",
-                shadow=b["deep"])
+        ep = cur.episode if cur else ""
+        self.cb(c, self.fit_cb(f_mid, cur.title if cur else ch.name, X(600)), f_mid, ink, mid, r.y + Y(10 if ep else 24),
+                align="center", shadow=b["deep"])
         if cur:
-            line = f"{cur.rating or 'NR'}   {ampm(cur.start)} - {ampm(cur.stop)}"
-            self.cb(c, line, f_small, ink, mid, r.y + Y(59), align="center", shadow=b["deep"])
+            if ep:
+                self.cb(c, self.fit_cb(f_small, ep, X(600)), f_small, ink, mid, r.y + Y(43), align="center", shadow=b["deep"])
+            line = self.fit_facts(f_small, f"{cur.rating or 'NR'}   {ampm(cur.start)} - {ampm(cur.stop)}", cur, X(600), rating=False)
+            self.cb(c, self.fit_cb(f_small, line, X(600)), f_small, ink, mid, r.y + Y(73 if ep else 59), align="center",
+                    shadow=b["deep"])
         rx = r.right - X(110)
         self.cb(c, f"{local:%a} {local.month}/{local.day:02d}", f_small, ink, rx, r.y + Y(12), align="center", shadow=b["deep"])
         self.cb(c, ampm(local), f_small, ink, rx, r.y + Y(42), align="center", shadow=b["deep"])
@@ -362,14 +366,19 @@ class PlateHD(BoxSkin):
         if art:
             c.blit(art, (X(205), Y(40)))
             cx, wide = X(500), X(440)
-        self.cb(c, self.fit_cb(f_title, title, wide), f_title, b["text"], cx, Y(44), align="center", shadow=b["deep"])
+        ep = cur.episode if cur else ""
+        self.cb(c, self.fit_cb(f_title, title, wide), f_title, b["text"], cx, Y(36 if ep else 44), align="center", shadow=b["deep"])
         logo = self.channel_logo(sel, X(150), Y(74))
         if logo:                            # where the box carried its guide tag
             c.blit(logo, logo.get_rect(midleft=(X(46), Y(182))))
         if cur:
+            if ep:
+                self.cb(c, self.fit_cb(f_small, ep, wide - X(40)), f_small, b["text"], cx, Y(80), align="center", shadow=b["deep"])
             info = "   ".join(s for s in (f"{ampm(cur.start)} - {ampm(cur.stop)}", cur.rating, cur.category) if s)
-            self.cb(c, self.fit_cb(f_info, info, wide - X(40)), f_info, b["soft"], cx, Y(92), align="center", shadow=b["deep"])
-            y = Y(132)
+            info = self.fit_facts(f_info, info, cur, int((wide - X(40)) / 0.86), rating=False)
+            self.cb(c, self.fit_cb(f_info, info, wide - X(40)), f_info, b["soft"], cx, Y(110 if ep else 92), align="center",
+                    shadow=b["deep"])
+            y = Y(142 if ep else 132)
             for line in t.wrap_even(f_small, cur.description or "", int((wide - X(80)) / 0.86), 3):
                 self.cb(c, line, f_small, b["text"], cx, y, align="center", shadow=b["deep"])
                 y += Y(30)
@@ -445,7 +454,7 @@ class PlateHD(BoxSkin):
                 right = min(cell.right, X(1216))         # the lettering stays inside the title-safe area
                 l, r = cell.x + (X(18) if p.start < start else X(6)), right - (X(18) if p.stop > end else X(6))
                 f, lines = self.cell_text(p.title, r - l, rh - Y(6), lambda s: self.fb(Y(s)), 27,
-                                          width=lambda f, s: int(t.width(f, s) * 0.86))
+                                          width=lambda f, s: int(t.width(f, s) * 0.86), sub=p.episode)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
@@ -1329,7 +1338,7 @@ class Plate(PlateHD):
                 if p.stop > end:
                     self._crescent(c, cell, mark, left=False)
                     inset_r = X(16)
-                f, lines = self.cell_text(p.title, cell.w - inset_l - inset_r, rh - Y(4), lambda s: self.fb(Y(s)), 17)
+                f, lines = self.cell_text(p.title, cell.w - inset_l - inset_r, rh - Y(4), lambda s: self.fb(Y(s)), 17, sub=p.episode)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2
@@ -1446,6 +1455,10 @@ class Plate(PlateHD):
         t.draw(c, t.fit(f_title, cur.title if cur else ch.name, mid.w - X(20)), f_title, ink, X(318), top + Y(3),
                align="center")
         if cur:
+            if cur.episode:
+                t.draw(c, t.fit(f_line, cur.episode, mid.w - X(20)), f_line, ink, X(318), top + Y(27), align="center")
+            line = self.fit_facts(f_line, f"{ampm(cur.start)} - {ampm(cur.stop)}", cur, mid.w - X(20))
+            t.draw(c, line, f_line, ink, X(318), top + Y(49 if cur.episode else 38), align="center")
             t.draw(c, time_left(cur, datetime.now(timezone.utc)), f_line, ink, X(160), top + Y(71))
         t.draw(c, f"List: {g_list(self)}", f_line, ink, X(376), top + Y(71))
         t.draw(c, str(ch.number), f_chan, ink, right.centerx, top + Y(21), align="center")
@@ -1453,9 +1466,9 @@ class Plate(PlateHD):
         while len(call) > 1 and t.width(f_chan, call) > right.w - X(10):     # call signs clip, no ellipsis
             call = call[:-1]
         t.draw(c, call, f_chan, ink, right.centerx, top + Y(49), align="center")
-        if full and cur and cur.description:
+        if full and cur and (cur.description or nxt):
             f = self.f(Y(13))
-            lines = t.wrap(f, cur.description, right.right - left.x - X(40), 3)
+            lines = ([f"Next: {nxt.title}"] if nxt else []) + t.wrap(f, cur.description or "", right.right - left.x - X(40), 3)
             d = pygame.Rect(left.x, 0, right.right - left.x, Y(12) + len(lines) * Y(17))
             d.y = top - d.h - Y(4) if bottom else top + h + Y(4)
             self._band(c, d)

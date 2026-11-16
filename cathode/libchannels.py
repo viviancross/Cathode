@@ -630,7 +630,8 @@ def describe(i: dict) -> dict:
         return e
     if i["type"] == "episode":
         code = f"S{i['season']}E{i['episode']}" if i["season"] else ""
-        e["episode_text"] = " - ".join(x for x in (code, i["name"]) if x)        # "S13E4 - Lost in MySpace"
+        name = "" if re.fullmatch(r"(season \d+,? )?episode \d+", i["name"] or "", re.I) else i["name"]  # Plex's stand-in
+        e["episode_text"] = " - ".join(x for x in (code, name) if x) or i["name"]  # "S13E4 - Lost in MySpace"
         e["desc"] = i["summary"]
         e["air"] = _date(i.get("air", ""))
         e["category"] = (i["genres"] or ["Series"])[0]

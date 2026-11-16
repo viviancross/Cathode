@@ -205,7 +205,7 @@ class Classic(Skin):
             pb_w = col_w            # its own column: 3.x let it run under NEXT
             self._blocks(c, (info_x, pb_y, pb_w, pb_h), cur.progress_at(datetime.now().astimezone()),
                          p["GREEN"], p["TRACK"], block=10, gap=2)
-            t.draw(c, span(cur), f_small, p["WHITE_DIM"], info_x, y_time)
+            t.draw(c, self.fit_facts(f_small, span(cur), cur, col_w), f_small, p["WHITE_DIM"], info_x, y_time)
         else:
             t.draw(c, "No program info", f_med, p["INK_MUTED"], info_x, y_prog)
 
@@ -1002,7 +1002,7 @@ class Classic(Skin):
         for line in t.wrap(f_title, cur.title, w, 2):
             t.draw(c, line, f_title, p["WHITE"], box.x, y)
             y += t.ink(f_title)[1] + 8
-        meta = "   ".join(x for x in (span(cur), cur.episode, cur.category) if x)
+        meta = self.fit_facts(f_text, "   ".join(x for x in (span(cur), cur.episode, cur.category) if x), cur, w)
         t.draw(c, t.fit(f_text, meta, w), f_text, p["CYAN"], box.x, y + 4)
         y += t.ink(f_text)[1] + 16
         lh = t.ink(f_text)[1] + 8
@@ -1073,7 +1073,7 @@ class Classic(Skin):
             if on_air:
                 pygame.draw.rect(c, p["SEL_TEXT"] if selected else p["CYAN"], (px + 1, y + 2, 4, rh - 4))
                 tx += 4
-            f, lines = self.cell_text(prog.title, px + pw - 4 - tx, rh - 6, self.f, self.TYPE["meta"])
+            f, lines = self.cell_text(prog.title, px + pw - 4 - tx, rh - 6, self.f, self.TYPE["meta"], sub=prog.episode)
             lh = t.ink(f)[1]
             ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
             for line in lines:

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pygame
 
+from . import facts
 from .box import BoxSkin, call_sign, mix, nice, rgba, vgrad
 
 
@@ -223,6 +224,9 @@ class InDirectHD(BoxSkin):
         group = t.fit(f_call, ch.group, X(260)) if ch.group else ""
         room = min(X(560), X(1105) - (t.width(f_call, group) + X(30) if group else 0) - X(385))
         t.draw(c, t.fit(f_title, cur.title if cur else ch.name, room), f_title, b["text"], X(385), Y(97))
+        if cur and cur.episode:             # NostalgiaTV's episode line, over the title
+            fe = self.f(Y(26))
+            t.draw(c, t.fit(fe, cur.episode, room), fe, b["text"], X(385), Y(64))
         if group:
             t.draw(c, group, f_call, b["text"], X(1105), Y(99), align="right")
         strip = self.R(0, 131, 1280, 55)
@@ -233,7 +237,7 @@ class InDirectHD(BoxSkin):
         sy = strip.y + (strip.h - t.ink(fs)[1]) // 2
         t.draw(c, stamp(), fs, b["paper_ink"], X(96), sy)
         if cur:
-            t.draw(c, hours(cur), fs, b["paper_ink"], X(385), sy)
+            t.draw(c, self.fit_facts(fs, hours(cur), cur, X(790) - X(385), rating=False), fs, b["paper_ink"], X(385), sy)
             if cur.rating:
                 t.draw(c, cur.rating, fs, b["paper_ink"], X(808), sy)
         # The strip's icons, upper right as the manual places them: audio
@@ -408,7 +412,7 @@ class InDirectHD(BoxSkin):
         for dx in (274, 740):
             pygame.draw.rect(c, b["strip_rule"], self.R(dx, 150, 4, 38))
         if cur:
-            t.draw(c, hours(cur), fs, b["strip_ink"], X(300), sy)
+            t.draw(c, self.fit_facts(fs, hours(cur), cur, X(730) - X(300), rating=False), fs, b["strip_ink"], X(300), sy)
             if cur.rating:
                 t.draw(c, cur.rating, fs, b["strip_ink"], X(760), sy)
         elif sel:
@@ -420,10 +424,14 @@ class InDirectHD(BoxSkin):
         if art:
             c.blit(art, (X(95), Y(203)))
             tx = X(95) + art.get_width() + X(14)
-        if cur and cur.description:
+        if cur and (cur.description or cur.episode):
             fd = self.fb(Y(28))
             y = Y(205)
-            for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(830) - tx, 3):
+            if cur.episode:
+                t.draw(c, t.fit(fd, cur.episode, X(830) - tx), fd, b["sel"], tx, y)
+                y += Y(36)
+            for line in t.wrap(fd, cur.description + (f" {cur.category}." if cur.category else ""), X(830) - tx,
+                               2 if cur.episode else 3):
                 t.draw(c, line, fd, b["text"], tx, y)
                 y += Y(36)
 
@@ -489,7 +497,7 @@ class InDirectHD(BoxSkin):
                     x += self._shadowed(c, "<", f_cell, ink if on else b["mark"], shadow, x, cy) + X(4)
                 more = p.stop > end
                 avail = cell.right - X(6) - x - (X(16) if more else 0)
-                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.fb(Y(s)), 30)
+                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.fb(Y(s)), 30, sub=p.episode)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
@@ -1424,9 +1432,12 @@ class InDirect(InDirectHD):
         t.draw(c, str(ch.number), fn, b["sel_ink"], num.centerx, num.y + (num.h - t.ink(fn)[1]) // 2, align="center")
         f_title = self.fb(Y(16))
         # Before the guide has the channel the box printed "Title not available" (the 1994 frames).
-        self._shadowed(c, t.fit(f_title, cur.title if cur else "Title not available", X(240)), f_title, b["text"],
-                       b["shadow"], X(57), Y(19))
+        title = t.fit(f_title, cur.title if cur else "Title not available", X(240))
+        self._shadowed(c, title, f_title, b["text"], b["shadow"], X(57), Y(19))
         fs = self.fb(Y(11))
+        if cur and cur.episode:
+            x = X(57) + int(t.width(f_title, title) * self.SQUEEZE) + X(6)
+            self._shadowed(c, t.fit(fs, cur.episode, int((X(297) - x) / self.SQUEEZE)), fs, b["text"], b["shadow"], x, Y(20))
         local = datetime.now()
         cat = g_cat(self)
         rows = [("Start", ampm(cur.start) + "m", cur.rating or "NR") if cur else ("No Information", "", ""),
@@ -1440,9 +1451,10 @@ class InDirect(InDirectHD):
             self._shadowed(c, when_, fs, b["text"], b["shadow"], X(82), y)
             self._shadowed(c, mid, fs, b["text"], b["shadow"], X(128), y)
             self._shadowed(c, right, fs, b["text"], b["shadow"], X(268) if k == 0 else X(288), y, align="right")
-        if full and cur and cur.description:
+        if full and cur and (cur.description or facts(cur, rating=False)):
             f = self.f(Y(12))
-            lines = t.wrap(f, cur.description, X(296), 3)
+            known = self.fit_facts(f, "", cur, X(296), rating=False)
+            lines = ([known] if known else []) + t.wrap(f, cur.description, X(296), 3)
             d = pygame.Rect(0, r.bottom, W, Y(8) + len(lines) * Y(15))
             vgrad(c, d, rgba(b["purple"], 230), rgba(b["deep"], 240))
             y = d.y + Y(4)
@@ -1602,7 +1614,7 @@ class InDirect(InDirectHD):
                 self._dss_cell(c, cell, on, airing=p.start <= now < p.stop)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
                 f, lines = self.cell_text(p.title, cell.w - X(6), rh - Y(2), lambda s: self.fb(Y(s)), 12,
-                                          width=lambda f, s: int(t.width(f, s) * self.SQUEEZE), lead=0)
+                                          width=lambda f, s: int(t.width(f, s) * self.SQUEEZE), lead=0, sub=p.episode)
                 for k, line in enumerate(lines):
                     self._shadowed(c, line, f, ink, shadow, cell.x + X(3), y + Y(2) + k * t.ink(f)[1])
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),

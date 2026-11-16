@@ -66,7 +66,25 @@ class TestParse(unittest.TestCase):
                 self.assertEqual(e.current_program("one.us", NOW).title, "Now")
                 self.assertEqual(e.next_program("one.us", NOW).title, "Next")
                 self.assertEqual(e.icon_url("one.us"), "http://logo/one.png")
-                self.assertEqual(e.current_program("one.us", NOW).episode, "S02E03")
+                self.assertEqual(e.current_program("one.us", NOW).episode, "S2E3")      # NostalgiaTV's form
+
+    def test_what_tunarr_says_of_a_programme(self):
+        # Tunarr's guide: the episode's own title, when it first aired, its length.
+        a, b = NOW - timedelta(minutes=10), NOW + timedelta(minutes=20)
+        xml = ('<?xml version="1.0"?><tv><channel id="c"><display-name>C</display-name></channel>'
+               f'<programme channel="c" start="{_ts(a)}" stop="{_ts(b)}"><title>WCW Thunder</title>'
+               '<sub-title>Thunder 30</sub-title><desc>Page and Konnan.</desc>'
+               '<date>19980903040000 +0000</date><length units="seconds">1321.5</length>'
+               '<episode-num system="onscreen">S01E30</episode-num><episode-num system="xmltv_ns">0.29.</episode-num>'
+               '<rating system="VCHIP"><value>TV-14</value></rating></programme>'
+               f'<programme channel="c" start="{_ts(b)}" stop="{_ts(b + timedelta(hours=1))}"><title>Show</title>'
+               '<episode-num system="xmltv_ns">1.4.</episode-num><date>2005</date><new/></programme></tv>').encode()
+        e = EPG()
+        e.load(self._write("t.xml", xml), now=NOW)
+        p = e.current_program("c", NOW)
+        self.assertEqual((p.episode, p.air, p.minutes, p.rating), ("S1E30 - Thunder 30", "Sep 3, 1998", 22, "TV-14"))
+        n = e.next_program("c", NOW)
+        self.assertEqual((n.episode, n.air, n.flag), ("S2E5", "2005", "New"))
 
     def test_streams_over_http(self):
         # The path real guides take: an HTTP body, gzipped, chunked or not.

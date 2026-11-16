@@ -392,3 +392,23 @@ class TestPersonaFixes(unittest.TestCase):
         app.remote.last_device = "keys"
         app.config.remote = "sony_rm_y195"          # a remote chosen: its buttons, not keys
         self.assertEqual(skin.key_also("MENU"), "")
+
+
+class TestProgrammeInfo(unittest.TestCase):
+    """NostalgiaTV's info: the episode under the title in a cell that has
+    room, a line of facts kept whole and spaced, every skin drawing them."""
+
+    def test_cells_facts_and_wrapping(self):
+        pygame.font.init()
+        app = FakeApp()
+        skin = skin_classes()["passage"](app)
+        p = Program("c", "Futurama", datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=30),
+                    episode="S2E4 - Xmas Story", rating="TV-14", air="Dec 19, 1999", quality="HD", minutes=22, score="8.0")
+        f, lines = skin.cell_text(p.title, 400, 80, lambda s: skin.f(s), 20, sub=p.episode)
+        self.assertEqual(lines, ["Futurama", "S2E4 - Xmas Story"])
+        self.assertEqual(skin.cell_text(p.title, 400, 22, lambda s: skin.f(s), 20, sub=p.episode)[1], ["Futurama"])
+        f = skin.f(20)
+        self.assertEqual(skin.fit_facts(f, "6:00", p, 10_000), "6:00   Dec 19, 1999   TV-14   HD   22 min   8.0/10")
+        short = skin.fit_facts(f, "6:00", p, skin.width(f, "6:00   Dec 19, 1999   TV-1"))
+        self.assertEqual(short, "6:00   Dec 19, 1999")                    # a fact dropped whole, never cut
+        self.assertEqual(skin.text.wrap(f, "a   b\nc", 10_000, 2), ["a   b c"])

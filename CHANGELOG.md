@@ -1,5 +1,27 @@
 # Changelog
 
+## 5.1
+
+- **The guide fills in for library channels.** In 5.0 drawing up the day's
+  commercial breaks took minutes, so the guide stayed empty for a long time
+  after a start. It takes seconds now.
+- **Programmes say what episode they are, as NostalgiaTV does.** The banner,
+  INFO's banner, the guide's header and a guide cell's INFO show the episode
+  ("S5E11 - Old Glory") with the title, and a line of what's known of it:
+  New or Premiere, when it first aired, the rating, HD or SD, the sound,
+  its length and its score. Movies read "Title (Year)". The synopsis is the
+  episode's own.
+- **Guide cells carry the episode** under the title where the row has room
+  for two lines.
+- **Tunarr's guide too**: its episode titles, air dates and lengths were
+  being dropped; they show now, the same way.
+- Every box keeps its own layout; the INFO banners of the Passage, i-Grid,
+  DSS and Dish boxes gained the facts line, and the Dish 2005 box's INFO
+  banner names what's on next, and the i-Grid's no longer prints
+  Next over the synopsis.
+- The library is read from the server again once after updating (it now
+  keeps picture quality, sound, scores, air dates and title art).
+
 ## 5.0
 
 **Cathode 5.** Everything NostalgiaTV does, inside Cathode, with Cathode's own

@@ -24,6 +24,7 @@ from . import chrome
 
 from ..paths import asset
 
+from . import facts
 from .box import BoxSkin, mix, nice, readable, rgba, vgrad
 
 
@@ -108,8 +109,8 @@ class CableSkin(BoxSkin):
     def mid(self, r, f) -> int:
         return r.y + (r.h - self.text.ink(f)[1]) // 2
 
-    def cell_lines(self, title, w, h, size):
-        return self.cell_text(title, w, h, lambda s: self.fb(self.Y(s)), size, width=self.width)
+    def cell_lines(self, title, w, h, size, sub=""):
+        return self.cell_text(title, w, h, lambda s: self.fb(self.Y(s)), size, width=self.width, sub=sub)
 
     # ── Pieces cut from a box's own frames ────────────────────────────────
 
@@ -681,7 +682,7 @@ class CableSkin(BoxSkin):
                     pygame.draw.polygon(c, ink, [(cell.right - X(3), cell.centery), (cell.right - X(8), cell.centery - Y(5)),
                                                  (cell.right - X(8), cell.centery + Y(5))])
                     r -= X(7)
-                f, lines = self.cell_lines(p.title, r - l, rh - Y(4), size)
+                f, lines = self.cell_lines(p.title, r - l, rh - Y(4), size, sub=p.episode)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1)) // 2
                 for line in lines:
@@ -870,17 +871,22 @@ class IGrid(CableSkin):
         sel, cur = g.selected(), g.selected_program()
         f_title, f_line, f_desc = self.fb(Y(20)), self.fb(Y(16)), self.fb(Y(16))
         title = cur.title if cur else (sel.name if sel else "")
-        self.tx(c, self.fit(f_title, title, X(230)), f_title, b["title"], X(48), Y(95), shadow=b["gap"])
+        ep = cur.episode if cur else ""
+        ty, hy, dy, step = (Y(92), Y(133), Y(153), Y(20)) if ep else (Y(95), Y(120), Y(146), Y(22))
+        self.tx(c, self.fit(f_title, title, X(230)), f_title, b["title"], X(48), ty, shadow=b["gap"])
         if sel:
             self.tx(c, self.fit(f_line, f"{sel.number} {call(sel)}", X(110)), f_line, b["text"], X(385), Y(97), align="right", shadow=b["gap"])
         if cur:
-            self.tx(c, f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}", f_line, b["text"], X(48), Y(120), shadow=b["gap"])
+            if ep:
+                self.tx(c, self.fit(f_line, ep, X(335)), f_line, b["title"], X(48), Y(113), shadow=b["gap"])
+            hours = f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}"
+            self.tx(c, self.fit_facts(f_line, hours, cur, X(290), rating=False), f_line, b["text"], X(48), hy, shadow=b["gap"])
             if cur.rating:
-                self.tx(c, cur.rating, f_line, b["text"], X(385), Y(120), align="right", shadow=b["gap"])
-            y = Y(146)
+                self.tx(c, cur.rating, f_line, b["text"], X(385), hy, align="right", shadow=b["gap"])
+            y = dy
             for ln in self.wrap(f_desc, cur.description or "", X(335), 2):
                 self.tx(c, ln, f_desc, b["text"], X(48), y, shadow=b["gap"])
-                y += Y(22)
+                y += step
         elif sel:
             self.tx(c, "No information available.", f_desc, b["text"], X(48), Y(146), shadow=b["gap"])
         # The time bar: the list's name where the frame says Today, the half hours centred.
@@ -930,13 +936,17 @@ class IGrid(CableSkin):
         b, X, Y = self.b, self.X, self.Y
         c.blit(self._sprite("banner.png"), (0, Y(352)))
         f_title, f_line = self.fb(Y(19)), self.fb(Y(15))
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(340)), f_title, b["title"], X(48), Y(362), shadow=b["gap"])
+        title = self.fit(f_title, cur.title if cur else ch.name, X(340))
+        self.tx(c, title, f_title, b["title"], X(48), Y(362), shadow=b["gap"])
+        if cur and cur.episode:
+            x = X(48) + self.width(f_title, title) + X(12)
+            self.tx(c, self.fit(f_line, cur.episode, X(372) - x), f_line, b["text"], x, Y(366), shadow=b["gap"])
         self.tx(c, self.fit(f_line, f"{ch.number} {call(ch)}", X(110)), f_line, b["text"], X(482), Y(366), align="right", shadow=b["gap"])
         pygame.draw.rect(c, mix(b["text"], b["navy"], 0.4), (X(498), Y(362), X(2), Y(22)))
         self.tx(c, ampm(datetime.now()), f_line, b["text"], X(600), Y(366), align="right", shadow=b["gap"])
         y = Y(397)
         if cur:
-            line = f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}" + (f"   {cur.rating}" if cur.rating else "")
+            line = self.fit_facts(f_line, f"{ampm(cur.start)[:-2]}-{ampm(cur.stop)}", cur, X(550))
             self.tx(c, line, f_line, b["text"], X(48), y, shadow=b["gap"])
             y += Y(26)
             f_desc = self.fb(Y(15))
@@ -948,8 +958,8 @@ class IGrid(CableSkin):
         hint = tag or (f"{self.k('INFO')} for more" if not full else "")
         if hint:
             self.tx(c, hint, self.fb(Y(13)), b["title"], X(600), Y(449), align="right", shadow=b["gap"])
-        if full and nxt:
-            self.tx(c, self.fit(f_line, f"Next: {nxt.title}", X(380)), f_line, b["text"], X(48), Y(447), shadow=b["gap"])
+        if full and nxt and y <= Y(463):
+            self.tx(c, self.fit(f_line, f"Next: {nxt.title}", X(380)), f_line, b["text"], X(48), max(y, Y(447)), shadow=b["gap"])
         if self._tick is None or self._tick[0] <= time.monotonic():
             self._tick = self.app.after(60 - time.time() % 60, self.app.invalidate)
 
@@ -1097,13 +1107,15 @@ class IGrid(CableSkin):
 
     def draw_program_info(self, c, info):
         ch, p = info.channel, info.program
+        chan = f"{ch.number} {call(ch)}"
         if p:
             when = f"{ampm(p.start)[:-2]}-{ampm(p.stop)}"
-            facts = "   ".join(x for x in (p.category, p.episode) if x)
-            lines = [p.description or "No further information."] + ([facts] if facts else [])
+            more = "   ".join(x for x in (p.category, facts(p, rating=False)) if x)
+            lines = [p.description or "No further information."] + ([more] if more else [])
+            line2, line3 = (p.episode, f"{when}   {chan}") if p.episode else (when, chan)
         else:
-            when, lines = "", ["No information is available for this time."]
-        self._info_page(c, p.title if p else ch.name, when, f"{ch.number} {call(ch)}", p.rating if p else "", lines,
+            line2, line3, lines = "", chan, ["No information is available for this time."]
+        self._info_page(c, p.title if p else ch.name, line2, line3, p.rating if p else "", lines,
                         lambda: info.handle("BACK"))
 
     def draw_iteminfo(self, c, info):
@@ -1540,27 +1552,13 @@ class Passage(CableSkin):
         if sel:
             self.tx(c, call(sel), f_wide, ink, X(125), Y(52))
             self.tx(c, str(sel.number), f_wide, ink, X(125), Y(72))
-        f_title, f_time, f_desc = self.f(Y(24)), self.wb(Y(18)), self.f(Y(22))
-        title = cur.title if cur else (sel.name if sel else "")
-        self.tx(c, self.fit(f_title, title, X(245)), f_title, ink, X(65), Y(106))
+        f_title, f_desc = self.f(Y(24)), self.f(Y(22))
         if cur:
-            self.tx(c, f"{ampm(cur.start)} \u2013 {ampm(cur.stop)}", f_time, ink, X(65), Y(130))
-            x0, y = X(65), Y(150)
-            if cur.rating:
-                fr = self.wb(Y(15))
-                chip = pygame.Rect(x0 - X(3), y, max(X(18), self.width(fr, cur.rating) + X(6)), Y(17))
-                pygame.draw.rect(c, (20, 20, 20), chip, border_radius=Y(2))
-                self.tx(c, cur.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
-                x0 = chip.right + X(5)
-            lines = self.wrap(f_desc, cur.description or "", X(245), 4)
-            if len(lines) > 3:
-                lines = lines[:3]
-                lines[-1] = self.fit(f_desc, lines[-1] + " ...", X(245))
-            for k, ln in enumerate(lines):
-                self.tx(c, ln, f_desc, ink, x0 if k == 0 else X(65), y)
-                y += Y(20)
-        elif sel:
-            self.tx(c, "No information available.", f_desc, ink, X(65), Y(150))
+            self._card_programme(c, cur, ink)
+        else:
+            self.tx(c, self.fit(f_title, sel.name if sel else "", X(245)), f_title, ink, X(65), Y(106))
+            if sel:
+                self.tx(c, "No information available.", f_desc, ink, X(65), Y(150))
         # The header: the day at the left, the half hours centred between the frame's grooves.
         hdr = self.R(53, 223, 573, 26)                   # to the panel's rounded end at 632
         grid_x, grid_w = X(185), X(548)
@@ -1602,8 +1600,8 @@ class Passage(CableSkin):
                                  ("THEMES", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
                                  ("INFO", "Info", lambda: g.handle("INFO"))], 1 if g.focus == "category" else None)
 
-    def cell_lines(self, title, w, h, size):
-        return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width)
+    def cell_lines(self, title, w, h, size, sub=""):
+        return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width, sub=sub)
 
     def label_every(self, col_w, label_w):
         return max(2, super().label_every(col_w, label_w))      # the box labelled the half hours
@@ -1634,6 +1632,37 @@ class Passage(CableSkin):
         self.tx(c, call(ch), f, b["tile_ink"], r.x + X(122), r.y + Y(10))
         self.tx(c, str(ch.number), f, b["tile_ink"], r.x + X(122), r.y + Y(32))
 
+    def _card_programme(self, c, p, ink, ellipsis=True):
+        """The card's programme: the title, its episode (NostalgiaTV's
+        "S2E4 - Name"), the hours, the rating chip and the synopsis's first
+        lines. True when the synopsis runs on past them."""
+        b, t, X, Y = self.b, self.text, self.X, self.Y
+        f_title, f_time, f_desc = self.f(Y(24)), self.wb(Y(18)), self.f(Y(22))
+        dy = Y(21) if p.episode else 0
+        self.tx(c, self.fit(f_title, p.title, X(245)), f_title, ink, X(65), Y(106) - dy // 10)
+        if p.episode:
+            self.tx(c, self.fit(f_desc, p.episode, X(245)), f_desc, ink, X(65), Y(127))
+        self.tx(c, f"{ampm(p.start)} \u2013 {ampm(p.stop)}", f_time, ink, X(65), Y(130) + dy)
+        x0, y = X(65), Y(150) + dy
+        if p.rating:
+            fr = self.wb(Y(15))
+            chip = pygame.Rect(x0 - X(3), y, max(X(18), self.width(fr, p.rating) + X(6)), Y(17))
+            pygame.draw.rect(c, (20, 20, 20), chip, border_radius=Y(2))
+            self.tx(c, p.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
+            x0 = chip.right + X(5)
+        n = 2 if p.episode else 3
+        w = X(245) - (x0 - X(65))          # every line as narrow as the first, beside the chip
+        lines = self.wrap(f_desc, p.description or "", w, n + 1)
+        runs_on = len(lines) > n
+        if runs_on:
+            lines = lines[:n]
+            if ellipsis:
+                lines[-1] = self.fit(f_desc, lines[-1] + " ...", w)
+        for k, ln in enumerate(lines):
+            self.tx(c, ln, f_desc, ink, x0 if k == 0 else X(65), y)
+            y += Y(20)
+        return runs_on
+
     def _banner(self, c, ch, cur, nxt, full=False, tag=None):
         """The banner on the frame itself: the band and the channel tile
         with its slant are the frame's own pixels
@@ -1658,9 +1687,14 @@ class Passage(CableSkin):
         self.tx(c, call(ch), self.f(Y(20)), ink, X(166), Y(392), align="right")
         self.tx(c, str(ch.number), self.wb(Y(17)), ink, X(166), Y(416), align="right")
         f_title, f_hours, f_time = self.wb(Y(17)), self.f(Y(19)), self.f(Y(20))
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(280)), f_title, b["white"], X(203), Y(368))
+        title = self.fit(f_title, cur.title if cur else ch.name, X(280))
+        self.tx(c, title, f_title, b["white"], X(203), Y(368))
         if cur:
-            self.tx(c, f"{ampm(cur.start)[:-1]} - {ampm(cur.stop)[:-1]}", f_hours, b["white"], X(598), Y(368), align="right")
+            hours = f"{ampm(cur.start)[:-1]} - {ampm(cur.stop)[:-1]}"
+            self.tx(c, hours, f_hours, b["white"], X(598), Y(368), align="right")
+            if cur.episode:
+                x = X(203) + self.width(f_title, title) + X(8)
+                self.tx(c, self.fit(f_hours, cur.episode, X(586) - self.width(f_hours, hours) - x), f_hours, b["card"], x, Y(368))
             now = datetime.now(timezone.utc)
             frac = max(0.0, min(1.0, (now - cur.start).total_seconds() / max(1, (cur.stop - cur.start).total_seconds())))
             line = self.R(243, 418, 270, 11)
@@ -1704,9 +1738,14 @@ class Passage(CableSkin):
         c.blit(img.subsurface((0, Y(366), W, H - Y(366))), (0, Y(366)))
         f_title, f_hours, f_desc = self.wb(Y(17)), self.f(Y(19)), self.f(Y(20))
         x0 = X(62)
-        self.tx(c, self.fit(f_title, cur.title if cur else ch.name, X(400)), f_title, b["white"], x0, Y(372))
+        title = self.fit(f_title, cur.title if cur else ch.name, X(400))
+        self.tx(c, title, f_title, b["white"], x0, Y(372))
         if cur:
-            self.tx(c, f"{ampm(cur.start)} \u2013 {ampm(cur.stop)}", f_hours, b["white"], X(580), Y(372), align="right")
+            hours = f"{ampm(cur.start)} \u2013 {ampm(cur.stop)}"
+            self.tx(c, hours, f_hours, b["white"], X(580), Y(372), align="right")
+            if cur.episode:
+                x = x0 + self.width(f_title, title) + X(10)
+                self.tx(c, self.fit(f_hours, cur.episode, X(568) - self.width(f_hours, hours) - x), f_hours, b["card"], x, Y(372))
             x, y = x0, Y(398)
             if cur.rating:
                 fr = self.wb(Y(14))
@@ -1714,7 +1753,11 @@ class Passage(CableSkin):
                 pygame.draw.rect(c, (30, 30, 50), chip, border_radius=Y(2))
                 self.tx(c, cur.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
                 x = chip.right + X(8)
-            lines = self.wrap(f_desc, cur.description or "", X(580) - x0, 3)
+            more = self.fit_facts(f_desc, "", cur, X(580) - x, rating=False)
+            if more:
+                self.tx(c, more, f_desc, b["card"], x, y)
+                x, y = x0, y + Y(22)
+            lines = self.wrap(f_desc, cur.description or "", X(580) - x0, 2 if more else 3)
             for k, ln in enumerate(lines):
                 self.tx(c, ln, f_desc, b["white"], x if k == 0 else x0, y)
                 y += Y(22)
@@ -1844,30 +1887,19 @@ class Passage(CableSkin):
         f_wide = self.wb(Y(17))
         self.tx(c, call(ch), f_wide, ink, X(125), Y(52))
         self.tx(c, str(ch.number), f_wide, ink, X(125), Y(72))
-        f_title, f_time, f_desc = self.f(Y(24)), self.wb(Y(18)), self.f(Y(22))
-        self.tx(c, self.fit(f_title, p.title if p else ch.name, X(245)), f_title, ink, X(65), Y(106))
+        f_title, f_desc = self.f(Y(24)), self.f(Y(22))
         more = []
         if p:
-            self.tx(c, f"{ampm(p.start)} \u2013 {ampm(p.stop)}", f_time, ink, X(65), Y(130))
-            x0, y = X(65), Y(150)
-            if p.rating:
-                fr = self.wb(Y(15))
-                chip = pygame.Rect(x0 - X(3), y, max(X(18), self.width(fr, p.rating) + X(6)), Y(17))
-                pygame.draw.rect(c, (20, 20, 20), chip, border_radius=Y(2))
-                self.tx(c, p.rating, fr, b["white"], chip.centerx, chip.y + (chip.h - t.cap(fr)) // 2, align="center")
-                x0 = chip.right + X(5)
-            lines = self.wrap(f_desc, p.description or "", X(245), 12)
-            for k, ln in enumerate(lines[:3]):
-                self.tx(c, ln, f_desc, ink, x0 if k == 0 else X(65), y)
-                y += Y(20)
-            facts = "   ".join(x for x in (p.category, p.episode) if x)
-            if facts:
-                more.append(facts)
-            if len(lines) > 3:
+            runs_on = self._card_programme(c, p, ink, ellipsis=False)
+            known = "   ".join(x for x in (p.category, facts(p, rating=False)) if x)
+            if known:
+                more.append(known)
+            if runs_on:
                 more.append(p.description or "")
-            elif not facts:
+            elif not known:
                 more.append("No further information.")
         else:
+            self.tx(c, self.fit(f_title, ch.name, X(245)), f_title, ink, X(65), Y(106))
             self.tx(c, "No information is available for this time.", f_desc, ink, X(65), Y(150))
         self.tx(c, "More Information", self.wb(Y(16)), b["navy"], X(346), Y(230), align="center")
         fm = self.f(Y(21))
