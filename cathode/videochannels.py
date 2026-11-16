@@ -223,14 +223,18 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
                         progs.append(Program(channel_id=ch.epg_id, title=e["title"], start=cur["start"], stop=cur["stop"],
                                              category=e.get("category") or c.get("category", "Video"),
                                              description=e.get("desc", ""), episode=e.get("episode_text", ""),
-                                             rating=e.get("rating", ""), icon=e.get("icon", "")))
+                                             rating=e.get("rating", ""), icon=e.get("icon", ""), air=e.get("air", ""),
+                                             quality=e.get("quality", ""), audio=e.get("audio", ""),
+                                             minutes=int(e.get("minutes") or 0), score=e.get("score", ""),
+                                             logo=e.get("logo", ""), art=e.get("art", ""), flag=e.get("flag", "")))
                     else:
                         progs[-1].stop = cur["stop"]
                 else:
                     artist, title = parse_title(e["title"], e.get("uploader", ""))
                     progs.append(Program(channel_id=ch.epg_id, title=title, start=cur["start"], stop=cur["stop"],
-                                         category="Video", description=f"From {artist or e.get('uploader', '')}, "
-                                         f"{max(1, round(e['duration'] / 60))} min.", icon=e.get("icon", "")))
+                                         category="Video", description=f"From {artist or e.get('uploader', '')}.",
+                                         icon=e.get("icon", ""), minutes=max(1, round(e["duration"] / 60)),
+                                         episode=artist or e.get("uploader", "")))
                 cur = sched.at(cur["stop"] + timedelta(seconds=0.5))
                 n += 1
         else:

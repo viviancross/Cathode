@@ -191,8 +191,9 @@ class PlexClient:
     # ── The whole library, for channels (library.py) ──────────────────────
 
     # What a listing row doesn't need: the cast, the files, the artwork.
-    _SLIM = ("&excludeElements=Media,Role,Director,Writer,Country,Image,UltraBlurColors"
-             "&excludeFields=art,grandparentArt,grandparentTheme,parentThumb,grandparentGuid,parentGuid,"
+    # (Media stays for the picture's quality and the audio; Image for a show's title art)
+    _SLIM = ("&excludeElements=Role,Director,Writer,Country,UltraBlurColors"
+             "&excludeFields=grandparentArt,grandparentTheme,parentThumb,grandparentGuid,parentGuid,"
              "audienceRatingImage,slug,grandparentSlug")
 
     def library_sections(self) -> List[dict]:

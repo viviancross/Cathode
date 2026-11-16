@@ -131,11 +131,11 @@ class TestBreaks(Temp):
         ch = app.channels[-1]
         progs = app.video_programmes[ch.epg_id]
         titles = {p.title for p in progs}
-        self.assertTrue(titles <= {"Heist", "Laughs", "Space"}, titles)        # no commercials, no slates listed
+        self.assertTrue(titles <= {"Heist (1995)", "Laughs (1999)", "Space (2003)"}, titles)        # no commercials, no slates listed
         self.assertTrue(all(a.stop == b.start for a, b in zip(progs, progs[1:])))
         for a, b in zip(progs, progs[1:]):
             self.assertNotEqual((a.title, a.stop), (b.title, b.start))         # a film's second half isn't listed again
-        heist = [p for p in progs if p.title == "Heist"]
+        heist = [p for p in progs if p.title == "Heist (1995)"]
         self.assertTrue(heist and (heist[0].stop - heist[0].start).total_seconds() > 6000)   # its halves and breaks
 
     def test_defaults_find_the_libraries(self):

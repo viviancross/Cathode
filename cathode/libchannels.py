@@ -601,26 +601,44 @@ def _utc(t: float) -> datetime:
     return datetime.fromtimestamp(t, timezone.utc)
 
 
+def _date(s: str) -> str:
+    """'2008-11-02' -> 'Nov 2, 2008'."""
+    try:
+        d = datetime.strptime((s or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return ""
+    return f"{d:%b} {d.day}, {d.year}"
+
+
 def describe(i: dict) -> dict:
-    """A title as the Player and the guide take it."""
+    """A title as the Player and the guide take it: what NostalgiaTV's info
+    line has (episode, air date, rating, quality, audio, length, score)."""
     e = dict(i)
     e["kind"] = "show"
+    e["minutes"] = max(1, round(i["duration"] / 60))
+    e["quality"], e["audio"] = i.get("q", ""), i.get("au", "")
     if i["type"] == "video":            # (a video channel's: the guide and the card read its title)
         e["yt"] = True
         e["icon"] = i["thumb"]
         return e
     new = i.get("added", 0) >= time.time() - NEW_DAYS * 86400
+    e["flag"] = "New" if new else ""
     if i["type"] == "track":            # music: the radio card says what's playing
         e["category"] = "Music"
         e["desc"] = f'"{i["name"]}"' + (f" from {i['album']}" if i.get("album") else "")
         e["radio"] = {"artist": i["title"], "song": i["name"], "album": i.get("album", ""), "art": ""}
         return e
     if i["type"] == "episode":
-        e["episode_text"] = (f"S{i['season']} E{i['episode']}" if i["season"] else "") + ("  New" if new else "")
-        e["desc"] = (f'"{i["name"]}"  ' if i["name"] else "") + i["summary"]
+        code = f"S{i['season']}E{i['episode']}" if i["season"] else ""
+        e["episode_text"] = " - ".join(x for x in (code, i["name"]) if x)        # "S13E4 - Lost in MySpace"
+        e["desc"] = i["summary"]
+        e["air"] = _date(i.get("air", ""))
         e["category"] = (i["genres"] or ["Series"])[0]
     else:
-        e["desc"] = (f"({i['year']})  " if i["year"] else "") + i["summary"]
+        if i["type"] == "movie" and i["year"]:
+            e["title"] = f"{i['title']} ({i['year']})"                          # "Barbarian (2022)"
+        e["desc"] = i["summary"]
+        e["air"] = _date(i.get("air", ""))
         e["category"] = "Movie" if i["type"] == "movie" else (i["genres"] or ["Video"])[0]
     return e
 
@@ -649,6 +667,8 @@ class Timeline:
         self.bumps = clips(brk.get("bumps"), index) if index is not None and brk else []
         for i in self.ads + self.bumps:
             self._by_id.setdefault(i["id"], i)
+        by_len = lambda pool: (sorted(pool, key=lambda i: i["duration"]), sorted(i["duration"] for i in pool))  # noqa: E731
+        self._ads, self._bumps = by_len(self.ads), by_len(self.bumps)
         self.sig = signature(c)
         self._slotted = any(s.get("airs") or s.get("season") for s in c.get("sources") or [] if not s.get("exclude"))
         self.days: list = []        # [{"day", "start", "state": as it began, "slots": [[start, id, seconds]]}]
@@ -720,26 +740,38 @@ class Timeline:
         state["bn"] = state.get("bn", 0) + 1
         rnd = random.Random(f"{self.cid}:brk:{state['bn']}")
         recent = state.setdefault("ads_recent", [])
+        seen = set(recent)
 
         def pick(pool, room, avoid=()):
-            fit = [i for i in pool if i["duration"] <= room and i["id"] not in self.dropped and i["id"] not in avoid]
-            if not fit:
+            """A clip that fits the room: a few random tries among those short
+            enough (the pool kept by length), one not aired lately if it can."""
+            items, lengths = pool
+            k = _bisect(lengths, room)
+            if not k:
                 return None
-            fresh = [i for i in fit if i["id"] not in recent] or fit
-            return fresh[rnd.randrange(len(fresh))]
-        b_in = pick(self.bumps, (until - t) / 3)
-        b_out = pick(self.bumps, (until - t) / 3, {b_in["id"]} if b_in else ())
+            spare = None
+            for _ in range(12):
+                i = items[rnd.randrange(k)]
+                if i["id"] in self.dropped or i["id"] in avoid:
+                    continue
+                if i["id"] not in seen:
+                    return i
+                spare = spare or i
+            return spare or next((i for i in items[:k] if i["id"] not in self.dropped and i["id"] not in avoid), None)
+        b_in = pick(self._bumps, (until - t) / 3)
+        b_out = pick(self._bumps, (until - t) / 3, {b_in["id"]} if b_in else ())
         end_ads = until - (b_out["duration"] if b_out else 0)
         if b_in:
             slots.append([t, b_in["id"], b_in["duration"], {"brk": "bump"}])
             t += b_in["duration"]
         while self.ads:
-            a = pick(self.ads, end_ads - t)
+            a = pick(self._ads, end_ads - t)
             if a is None:
                 break
             slots.append([t, a["id"], a["duration"], {"brk": "ad"}])
             t += a["duration"]
             recent.append(a["id"])
+            seen.add(a["id"])
             del recent[:max(0, len(recent) - 60)]
         if end_ads - t > 0.01:
             slots.append([t, BRB, end_ads - t, {"brk": "brb"}])
@@ -930,6 +962,10 @@ class Timeline:
                 e = self._made[item_id] = describe(i)
                 if self.poster and i["thumb"] and i["type"] != "video":
                     e["icon"] = self.poster(i["thumb"])
+                if self.poster and i.get("logo"):
+                    e["logo"] = self.poster(i["logo"], 480, 180)
+                if self.poster and i.get("art"):
+                    e["art"] = self.poster(i["art"], 640, 360)
                 if e.get("radio"):
                     e["radio"] = dict(e["radio"], art=e.get("icon", ""))
             if extra:
@@ -937,7 +973,7 @@ class Timeline:
                 if extra.get("brk"):
                     e["kind"] = extra["brk"]            # ("ad", "bump": a break's piece, not a programme)
                 if extra.get("premiere"):
-                    e["desc"] = "Premiere! " + e.get("desc", "")
+                    e["flag"] = "Premiere"
             return {"entry": e, "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
 
     def drop(self, item_id: str, now: Optional[datetime] = None):
@@ -1243,10 +1279,10 @@ def rebuild(app, done=None):
     od = getattr(app, "ondemand", None)
     client = od.client() if od is not None and hasattr(od, "client") else None
 
-    def poster(path):
+    def poster(path, w=300, h=450):
         if path.startswith("http"):                     # (Jellyfin and Emby: the image's own address)
             return path
-        return client.photo_url(path, 300, 450) if client and client.server and path.startswith("/") else ""
+        return client.photo_url(path, w, h) if client and client.server and path.startswith("/") else ""
 
     def work():
         built = {}

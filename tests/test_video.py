@@ -196,7 +196,7 @@ class TestGuide(unittest.TestCase):
         shows, hits = chans[1], chans[2]
         p = epg.current_program(shows.epg_id, now)
         self.assertTrue(p.title.startswith("Episode"))
-        self.assertIn("From Bob, ", p.description)
+        self.assertEqual((p.description, p.episode), ("From Bob.", "Bob"))
         self.assertLess((p.stop - p.start).total_seconds(), 1300)
         self.assertTrue(p.icon.startswith("https://i.ytimg.com/vi/"))          # the video's thumbnail
         q = epg.current_program(hits.epg_id, now)

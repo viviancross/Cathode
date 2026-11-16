@@ -341,8 +341,8 @@ class TestPremieresAndGroups(Temp):
         self.assertLess(datetime.fromtimestamp(before[-1][0]).hour * 60 + datetime.fromtimestamp(before[-1][0]).minute,
                         lc.PREMIERE_HOUR * 60 + 1)              # the first programme from eight
         e = tl.at(datetime.fromtimestamp(prem[0][0] + 5, timezone.utc))["entry"]
-        self.assertTrue(e["desc"].startswith("Premiere! "))
-        self.assertTrue(e["episode_text"].endswith("New"))
+        self.assertEqual(e["flag"], "Premiere")
+        self.assertEqual(tl.at(datetime.fromtimestamp(prem[0][0] - 60, timezone.utc))["entry"]["flag"] in ("", "New"), True)
         self.assertTrue(lc.is_doc(tl.doc()))                    # four-part slots travel to other Cathodes
         quiet = lc.Timeline(chan("cyclic_shuffle"), idx, store=False)
         self.assertFalse(any(len(s) > 3 for s in slots(quiet, 2)))

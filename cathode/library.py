@@ -21,10 +21,37 @@ from typing import Optional
 
 from . import paths
 
-VERSION = 1
+VERSION = 2                     # 2: quality, audio, score, air dates, title art
 PAGE = 2000
 SUMMARY = 400               # characters of a summary kept
 BREAK_MEDIAN = 150          # an Other Videos library of clips shorter than this (median) is break material
+
+
+AUDIO = {"aac": "AAC", "ac3": "AC3", "eac3": "EAC3", "mp3": "MP3", "dca": "DTS", "dts": "DTS", "truehd": "TrueHD",
+         "flac": "FLAC", "opus": "Opus", "vorbis": "Vorbis", "mp2": "MP2", "pcm": "PCM"}
+CHANNELS = {1: "Mono", 2: "Stereo", 6: "5.1", 8: "7.1"}
+
+
+def _media(m: dict) -> tuple:
+    """(quality, audio) of an item's first file: ("HD", "AC3 Stereo")."""
+    md = (m.get("Media") or [{}])[0] or {}
+    res = str(md.get("videoResolution") or "").lower()
+    q = {"720": "HD", "1080": "1080p", "4k": "4K", "2160": "4K"}.get(res, "SD" if res else "")
+    codec = AUDIO.get(str(md.get("audioCodec") or "").lower(), str(md.get("audioCodec") or "").upper())
+    ch = CHANNELS.get(int(md.get("audioChannels") or 0), "")
+    return q, " ".join(x for x in (codec, ch) if x)
+
+
+def _image(m: dict, kind: str) -> str:
+    return next((i.get("url", "") for i in m.get("Image") or [] if i.get("type") == kind), "")
+
+
+def _score(m: dict) -> str:
+    try:
+        v = float(m.get("audienceRating") or m.get("rating") or 0)
+    except (TypeError, ValueError):
+        return ""
+    return f"{v:.1f}" if v else ""
 
 
 def _dir() -> str:
@@ -59,7 +86,8 @@ class Section:
             "key": str(m.get("ratingKey")), "title": m.get("title", "?"), "year": int(m.get("year") or 0),
             "genres": [g.get("tag", "") for g in m.get("Genre", []) or []], "studio": m.get("studio") or "",
             "rating": m.get("contentRating") or "", "thumb": m.get("thumb") or "",
-            "summary": (m.get("summary") or "")[:SUMMARY]}
+            "summary": (m.get("summary") or "")[:SUMMARY], "logo": _image(m, "clearLogo"),
+            "art": m.get("art") or _image(m, "background")}
 
     def add_item(self, m: dict):
         dur = int(m.get("duration") or 0) / 1000
@@ -76,9 +104,11 @@ class Section:
                 "added": int(m.get("addedAt") or 0), "show_key": str(m.get("grandparentRatingKey")), "season": 0,
                 "episode": int(m.get("index") or 0), "air": ""})
             return
+        q, au = _media(m)
         if m.get("type") == "episode":
             show = self.shows.get(str(m.get("grandparentRatingKey"))) or {}
             self.items.append({
+                "q": q, "au": au, "score": _score(m), "logo": show.get("logo", ""), "art": show.get("art", ""),
                 "id": "p" + rk, "plex": rk, "type": "episode", "title": m.get("grandparentTitle") or show.get("title", "?"),
                 "name": m.get("title") or "", "duration": dur, "year": int(m.get("year") or show.get("year") or 0),
                 "genres": show.get("genres", []), "studio": show.get("studio", ""),
@@ -89,6 +119,8 @@ class Section:
                 "air": m.get("originallyAvailableAt") or ""})
         else:
             self.items.append({
+                "q": q, "au": au, "score": _score(m), "air": m.get("originallyAvailableAt") or "",
+                "logo": _image(m, "clearLogo"), "art": m.get("art") or "",
                 "id": "p" + rk, "plex": rk, "type": "clip" if self.kind == "clip" else "movie",
                 "title": m.get("title", "?"), "name": "", "duration": dur, "year": int(m.get("year") or 0),
                 "genres": [g.get("tag", "") for g in m.get("Genre", []) or []], "studio": m.get("studio") or "",
@@ -109,10 +141,12 @@ class Section:
                              i["thumb"], i["added"], i["title"]])
             elif i["type"] == "episode":
                 rows.append([i["plex"], i["show_key"], i["season"], i["episode"], i["name"], i["duration"], i["air"],
-                             i["summary"], i["added"], i["title"], i["rating"]])
+                             i["summary"], i["added"], i["title"], i["rating"], i.get("q", ""), i.get("au", ""),
+                             i.get("score", "")])
             else:
                 rows.append([i["plex"], i["title"], i["duration"], i["year"], i["genres"], i["studio"], i["rating"],
-                             i["summary"], i["thumb"], i["added"]])
+                             i["summary"], i["thumb"], i["added"], i.get("q", ""), i.get("au", ""), i.get("score", ""),
+                             i.get("air", ""), i.get("logo", ""), i.get("art", "")])
         data = {"v": VERSION, "key": self.key, "title": self.title, "kind": self.kind, "stamp": self.stamp,
                 "fetched": self.fetched, "shows": list(self.shows.values()), "rows": rows}
         tmp = self.path() + ".tmp"
@@ -145,11 +179,13 @@ class Section:
                                 "duration": r[5], "year": show.get("year", 0), "genres": show.get("genres", []),
                                 "studio": show.get("studio", ""), "rating": r[10], "summary": r[7],
                                 "thumb": show.get("thumb", ""), "added": r[8], "show_key": r[1], "season": r[2],
-                                "episode": r[3], "air": r[6]})
+                                "episode": r[3], "air": r[6], "q": r[11], "au": r[12], "score": r[13],
+                                "logo": show.get("logo", ""), "art": show.get("art", "")})
             else:
                 s.items.append({"id": "p" + r[0], "plex": r[0], "type": "clip" if s.kind == "clip" else "movie",
                                 "title": r[1], "name": "", "duration": r[2], "year": r[3], "genres": r[4],
-                                "studio": r[5], "rating": r[6], "summary": r[7], "thumb": r[8], "added": r[9]})
+                                "studio": r[5], "rating": r[6], "summary": r[7], "thumb": r[8], "added": r[9],
+                                "q": r[10], "au": r[11], "score": r[12], "air": r[13], "logo": r[14], "art": r[15]})
         return s
 
 

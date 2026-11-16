@@ -29,6 +29,15 @@ class Program:
     episode: str = ""
     rating: str = ""
     icon: str = ""           # the programme's poster, where the guide carries one (Tunarr does)
+    # Cathode's own channels know more of a programme (NostalgiaTV's info line):
+    air: str = ""            # first aired: "Nov 2, 2008"
+    quality: str = ""        # SD, HD, 1080p, 4K
+    audio: str = ""          # "AC3 Stereo"
+    minutes: int = 0         # the programme's own length (not its slot)
+    score: str = ""          # the audience's score, "7.4"
+    logo: str = ""           # the show's title art (Plex's clear logo)
+    art: str = ""            # the show's background art
+    flag: str = ""           # "New", "Premiere"
 
     @property
     def duration_minutes(self) -> int:

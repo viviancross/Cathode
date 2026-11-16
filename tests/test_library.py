@@ -382,7 +382,8 @@ class TestOnTheAir(Temp):
         tl = lc.SCHEDULES[self.cid]
         e = tl.at(now)["entry"]
         self.assertEqual((on.title, on.episode, on.category, on.rating), ("Alpha", e["episode_text"], "Comedy", "TV-Y7"))
-        self.assertIn(e["name"], on.description)
+        self.assertEqual(on.episode, f"S{e['season']}E{e['episode']} - {e['name']}")     # "S2E1 - Alpha 2x1"
+        self.assertEqual((on.description, on.minutes), ("Things happen.", 22))
         self.assertTrue(all(a.stop == b.start for a, b in zip(progs, progs[1:])))
         self.assertIsNotNone(cur if cur is not None else on)
 
@@ -440,10 +441,10 @@ class TestOnTheAir(Temp):
         progs = vc.programmes([ch], {self.cid: tl})[ch.epg_id]  # the guide moved up with it, no hole in it
         self.assertTrue(all(a.stop == b.start for a, b in zip(progs, progs[1:])))
         listed = next(p for p in progs if p.start <= datetime.now(timezone.utc) < p.stop)
-        self.assertIn(nxt["entry"]["name"], listed.description)
+        self.assertIn(nxt["entry"]["name"], listed.episode)
         tl.at(now + timedelta(days=2))                          # and it's off the days drawn up from here
         ahead = [s[1] for d in tl.days for s in d["slots"] if s[0] > now.timestamp() + 5]
-        self.assertGreater(len(ahead), 150)
+        self.assertGreater(len(ahead), 100)                     # (two days of 22-minute slots, whatever the hour)
         self.assertNotIn(bad["id"], ahead)
         again = lc.Timeline(self.app.config.library_channels[0], self.app.library)     # a restart remembers
         self.assertIn(bad["id"], again.dropped)
