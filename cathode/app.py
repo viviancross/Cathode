@@ -128,6 +128,7 @@ class App:
         self.weather = None
         self.listings = {}          # a video channel source -> its fetched list (videochannels)
         self.schedules = {}         # video channel id -> videochannels.Schedule
+        self.library = None         # the Plex library's index (library.Index), once read
         from . import spelunkr
         if spelunkr.ship(config) | videochannels.migrate(config):
             config.save()
@@ -499,6 +500,8 @@ class App:
         ownchannels.fill_guide(self.epg)
         videochannels.rebuild(self)         # Spelunkr's schedules and guide now, not after YouTube's lists
         videochannels.load(self)
+        from . import libchannels
+        libchannels.start(self)             # the Plex library read, its channels placed after these
         self.check_ytdl()
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1

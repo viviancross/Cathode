@@ -664,6 +664,11 @@ class Skin:
         go with the fetch but never into the URL or the cache name."""
         if not url or not self.app.logos:
             return None
+        if headers is None and "/photo/:/transcode" in url:     # a Plex poster in the guide: its token rides along
+            od = getattr(self.app, "ondemand", None)
+            c = od.client() if od is not None and od.signed_in else None
+            if c is not None and c.server and url.startswith(c.server):
+                headers = c.poster_headers()
         from ..logos import Animation
         key = (url, max_w, max_h)
         surf = self._logo_surfaces.get(key)

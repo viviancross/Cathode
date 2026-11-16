@@ -81,6 +81,8 @@ DESCRIPTIONS.update({
     "Diagnostics": "Signal, stream and picture details.",
     "Audio output": "Which speakers or HDMI the sound uses.",
     "Video Channels": "YouTube playlists and channels, mixed, as channels of videos on a timeline.",
+    "Library Channels": "Channels made from your Plex library: genres, decades, studios, shows, movies.",
+    "Plays": "What the channel draws from.",
     "Weather": "Local weather in the guide's header and on the Weather channel.",
     "Check for updates": "See if there's a newer Cathode.",
     "Check at start-up": "Look for a newer Cathode each time it opens.",
@@ -788,6 +790,7 @@ def channel_items(app):
     items.append(Item("Add a playlist...", lambda: add_playlist(app)))
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
+    items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
@@ -1011,6 +1014,263 @@ def video_channel_page(app, cid):
                   "to the sources and their order included) and starts the channel over if it's on."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
     ]
+
+
+# ── Library channels (libchannels.py): the maker ─────────────────────────
+
+ORDER_HELP = {
+    "random": "Any title, any time; nothing comes round again soon.",
+    "cyclic_shuffle": "Every title once, shuffled, then a fresh shuffle.",
+    "block_shuffle": "A few episodes of one show in order, then a random other show.",
+    "block_cyclic": "A few episodes of one show in order, the shows taking turns by name.",
+    "marathon_shuffle": "One show for hours, in order, then a random other show.",
+    "marathon_cyclic": "One show for hours, in order, the shows taking turns by name.",
+    "round_robin_shuffle": "One episode of each show in turn; the turn order reshuffled every round.",
+    "round_robin_cyclic": "One episode of each show in turn, by name.",
+    "playlist": "As listed: each show from its first episode to its last, shows by name.",
+}
+
+
+def library_channel_items(app):
+    """The library channels: each opens its page; one more at the foot; the
+    starter lineup; the library read again."""
+    from . import libchannels as lc
+    cfg = app.config
+    if not app.ondemand.signed_in:
+        return [Item("Link your Plex account first", enabled=False,
+                     help="Library channels are made from your Plex library. Link it under On Demand.")]
+
+    def number_of(c):
+        ch = next((ch for ch in app.channels if lc.is_library(ch) and ch.url.endswith(c["id"])), None)
+        return f"{ch.number:g}" if ch else ""
+
+    def again():
+        app.top().refresh(library_channel_items(app))
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if not text:
+                return
+            c = lc.new_channel(text)
+            cfg.library_channels.append(c)
+            cfg.save()
+            lc.place(app)
+            again()
+            app.top().open(text.upper(), library_channel_page(app, c["id"]))
+        app.push(Keyboard(app, "Channel name", got, hint="Then add what it plays: a library, a genre, a decade, a show."))
+
+    def make_starter():
+        if app.library is None:
+            app.toast("Still reading your library. Try again in a moment.")
+            return
+        n = lc.add_starter(cfg, app.library)
+        cfg.library_starter_done = True
+        cfg.save()
+        lc.place(app)
+        again()
+        app.toast(f"{n} channels added." if n else "Every starter channel is already here.")
+
+    def drop_starter():
+        cfg.library_channels[:] = [c for c in cfg.library_channels if not c.get("starter")]
+        cfg.save()
+        lc.place(app)
+        m = app.top()
+        m.back()
+        m.refresh(library_channel_items(app))
+
+    def reread():
+        app.toast("Reading your Plex library...", 120.0)
+        lc.start(app, fresh=True, done=lambda idx, err: (
+            app.toast(f"{idx.count():,} titles in {len(idx.sections)} libraries." if idx and not err
+                      else "Couldn't reach your Plex server.", 6.0)))
+
+    def library_value():
+        if getattr(app, "library_loading", False):
+            p = getattr(app, "library_progress", None)
+            return f"Reading {p[0]}" if p else "Reading..."
+        return f"{app.library.count():,} titles" if app.library else "Not read yet"
+    items = [Item(c.get("name") or "Library Channel", submenu=lambda c=c: library_channel_page(app, c["id"]),
+                  value=lambda c=c: number_of(c),
+                  help="A channel made from your Plex library. SELECT opens it.")
+             for c in cfg.library_channels]
+    items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
+    items.append(Item("Add the starter lineup", make_starter,
+                      help="Channels made from what your library holds: genres, decades, studios, long-running "
+                           "shows, movies. Ones you already have (by name) are left alone."))
+    if any(c.get("starter") for c in cfg.library_channels):
+        items.append(Item("Remove the starter lineup",
+                          submenu=lambda: _confirm(app, "Remove its channels", drop_starter, "Keep them"),
+                          help="Takes out every channel the starter lineup made. Channels you made stay."))
+    items.append(Item("Read the library again", reread, value=library_value,
+                      help="Asks Plex for everything it holds. It checks for changes by itself every few hours; "
+                           "this reads it all afresh."))
+    return items
+
+
+def library_channel_page(app, cid):
+    """A library channel: name, number, what it plays, its sort method."""
+    from . import libchannels as lc
+    cfg = app.config
+    c = next((x for x in cfg.library_channels if x["id"] == cid), None)
+    if c is None:
+        return [Item("(this channel is gone)", enabled=False)]
+
+    def save(place=True):
+        c["starter"] = False                # edited: the starter lineup's removal leaves it be
+        cfg.save()
+        if place:
+            lc.place(app)
+        else:
+            lc.rebuild(app)
+        app.invalidate()
+
+    def set_name():
+        def got(text):
+            if text is None or not text.strip():
+                return
+            c["name"] = text.strip()
+            save()
+        app.push(Keyboard(app, "Channel name", got, initial=c.get("name", "")))
+
+    def set_number():
+        def got(text):
+            if text is None:
+                return
+            text = text.strip()
+            try:
+                c["number"] = int(text) if text else "auto"
+            except ValueError:
+                app.toast("A channel number is a whole number.")
+                return
+            save()
+        want = c.get("number", "auto")
+        app.push(Keyboard(app, "Channel number (empty = automatic)", got,
+                          initial=str(want) if isinstance(want, int) else ""))
+
+    def number_value():
+        ch = next((ch for ch in app.channels if lc.is_library(ch) and ch.url.endswith(cid)), None)
+        at = f" {ch.number:g}" if ch else ""
+        return f"Auto{at}" if c.get("number", "auto") == "auto" else f"Channel{at}"
+
+    def order(d):
+        c["order"] = _cycle(lc.ORDERS, c.get("order", "cyclic_shuffle"), d)
+        c["block"] = 0
+        save(place=False)
+
+    def block(d):
+        if c.get("order") not in lc.BLOCKS:
+            return
+        now = int(c.get("block") or lc.BLOCKS.get(c.get("order"), 1))
+        c["block"] = max(1, min(48, now + d))
+        save(place=False)
+
+    def block_value():
+        if c.get("order") not in lc.BLOCKS:
+            return "-"
+        return f"{int(c.get('block') or lc.BLOCKS[c['order']])} episodes"
+
+    def card(d=0):
+        c["card"] = not c.get("card", False)
+        save(place=False)
+
+    def refresh():
+        c["seed"] = int(time.time())
+        save(place=False)
+        app.toast("Today onward drawn up again.")
+        ch = app.live.channel
+        if ch is not None and lc.is_library(ch) and ch.url.endswith(cid):
+            app.after(1.5, lambda: ch in app.channels and app.live.tune(app.channels.index(ch)))
+
+    def remove():
+        cfg.library_channels[:] = [x for x in cfg.library_channels if x["id"] != cid]
+        cfg.save()
+        lc.place(app)
+        m = app.top()
+        m.back()
+        m.refresh(library_channel_items(app))
+
+    def holds():
+        tl = lc.SCHEDULES.get(lc.PREFIX + cid)
+        if not tl or not tl.entries:
+            return "Nothing yet"
+        hours = sum(i["duration"] for i in tl.entries) / 3600
+        return f"{len(tl.entries):,} titles, {hours:,.0f} h"
+    return [
+        Item("Name", set_name, value=lambda: c.get("name") or "", help="The channel's name in the lineup and the guide."),
+        Item("Channel number", set_number, value=number_value,
+             help="Automatic (with the other library channels, after the lineup) or one you choose; a taken "
+                  "number moves to the next free."),
+        Item("Plays", submenu=lambda: library_source_items(app, cid), value=holds,
+             help="What the channel draws from: libraries, genres, decades, studios, ratings, shows."),
+        Item("Sort method", value=lambda: _label(lc.ORDERS, c.get("order", "cyclic_shuffle")), adjust=order,
+             help=ORDER_HELP.get(c.get("order", "cyclic_shuffle"), "") + "  LEFT/RIGHT changes it."),
+        Item("Block length", value=block_value, adjust=block,
+             help="How many episodes of a show run before the next show (Block and Marathon methods)."),
+        Item("Lower-third", value=lambda: "On" if c.get("card", False) else "Off", adjust=card,
+             help="A name card as each programme starts and before it ends."),
+        Item("Draw up the schedule again", refresh,
+             help="Today onward in a fresh order. The show on now changes."),
+        Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
+    ]
+
+
+def library_source_items(app, cid):
+    """What a library channel plays: each source removable; one more at the foot."""
+    from . import libchannels as lc
+    cfg = app.config
+    c = next((x for x in cfg.library_channels if x["id"] == cid), None)
+    if c is None:
+        return [Item("(this channel is gone)", enabled=False)]
+    index = app.library
+
+    def changed():
+        c["starter"] = False
+        cfg.save()
+        lc.rebuild(app)
+        m = app.top()
+        while len(m.pages) > 1 and m.pages[-1][0] != "Plays":
+            m.back()
+        m.refresh(library_source_items(app, cid))
+
+    def remove(i):
+        c["sources"].pop(i)
+        changed()
+
+    def add(section, kind, value):
+        c.setdefault("sources", []).append({"section": section, "kind": kind, "value": value})
+        changed()
+
+    def values(section, kind):
+        return [Item(label, lambda v=v: add(section, kind, v), value=lambda k=k: str(k))
+                for v, label, k in lc.options(index, section, kind)] or [Item("(nothing here)", enabled=False)]
+
+    def kinds(section):
+        sec = index.sections.get(section)
+        rows = [Item("Everything in it", lambda: add(section, "all", None))]
+        for kind, label in lc.KINDS[1:]:
+            if kind == "rating":
+                rows.append(Item("Kids' ratings", lambda: add(section, "rating", lc.KIDS),
+                                 help="TV-Y, TV-Y7, TV-G and G."))
+                rows.append(Item("Grown-ups' ratings", lambda: add(section, "rating", lc.MATURE),
+                                 help="TV-MA, R and NC-17."))
+            elif kind != "show" or sec is None or sec.kind == "show":
+                rows.append(Item(f"A {label.lower()}...", submenu=lambda kind=kind: values(section, kind)))
+        return rows
+
+    def where():
+        rows = [Item("Every library", submenu=lambda: kinds(""),
+                     help="All your programme libraries together (not the bumpers, nor ones hidden from On Demand).")]
+        for sec in sorted(index.sections.values(), key=lambda s: s.title.lower()):
+            rows.append(Item(sec.title, submenu=lambda sec=sec: kinds(sec.key), value=lambda sec=sec: f"{len(sec.items):,}"))
+        return rows
+    if index is None:
+        return [Item("Still reading your library...", enabled=False)]
+    items = [Item(lc.source_label(index, s), submenu=lambda i=i: _confirm(app, "Remove it", lambda: remove(i), "Keep it"),
+                  help="SELECT to take it out.")
+             for i, s in enumerate(c.get("sources") or [])]
+    items.append(Item("Add...", submenu=where, help="One more slice of the library for this channel."))
+    return items
 
 
 def video_source_items(app, cid):

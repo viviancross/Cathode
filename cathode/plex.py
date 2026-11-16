@@ -188,6 +188,53 @@ class PlexClient:
                             "type": d.get("type"), "agent": d.get("agent", "")})
         return out
 
+    # ── The whole library, for channels (library.py) ──────────────────────
+
+    # What a listing row doesn't need: the cast, the files, the artwork.
+    _SLIM = ("&excludeElements=Media,Role,Director,Writer,Country,Image,UltraBlurColors"
+             "&excludeFields=art,grandparentArt,grandparentTheme,parentThumb,grandparentGuid,parentGuid,"
+             "audienceRatingImage,slug,grandparentSlug")
+
+    def library_sections(self) -> List[dict]:
+        """Every movie, show and Other Videos library: [{key, title, kind,
+        stamp}]. kind is movie, show or clip (Other Videos); stamp changes
+        when the server's scan finds something new."""
+        data = self._get(f"{self.server}/library/sections", token=self._server_token)
+        out = []
+        for d in _container(data, "Directory"):
+            if d.get("type") not in ("movie", "show"):
+                continue
+            kind = "show" if d["type"] == "show" else "clip" if "none" in (d.get("agent") or "") else "movie"
+            out.append({"key": str(d.get("key")), "title": d.get("title", "?"), "kind": kind,
+                        "stamp": f"{d.get('scannedAt', '')}:{d.get('contentChangedAt', '')}"})
+        return out
+
+    def section_page(self, section_key: str, type_: int, start: int, size: int) -> tuple:
+        """(rows, total) for one page of a library's items of a type (1 movie,
+        2 show, 4 episode), as the server sends them, slimmed."""
+        data = self._get(f"{self.server}/library/sections/{section_key}/all?type={type_}"
+                         f"&X-Plex-Container-Start={start}&X-Plex-Container-Size={size}{self._SLIM}",
+                         token=self._server_token, timeout=60)
+        mc = data.get("MediaContainer", {})
+        rows = mc.get("Metadata", []) or []
+        return rows, int(mc.get("totalSize", len(rows)) or 0)
+
+    def stream_at(self, rating_key: str, quality: str = "Original", at: float = 0.0) -> dict:
+        """A channel's stream of an item from `at` seconds in: {video, headers,
+        base}. Direct play is the file (the player seeks; base 0); a quality
+        preset is a transcode that starts at `at` (base = at, the player
+        starts at its top)."""
+        data = self._get(f"{self.server}/library/metadata/{rating_key}", token=self._server_token)
+        items = _container(data, "Metadata")
+        part = _first_part(items[0]) if items else None
+        if not part:
+            raise PlexError("No playable file for this item.")
+        kbps = _QUALITY.get(quality)
+        headers = {"X-Plex-Token": self._server_token}
+        if kbps:
+            return {"video": self._transcode_url(rating_key, kbps, int(at)), "headers": headers, "base": float(int(at))}
+        return {"video": f"{self.server}{part['key']}", "headers": headers, "base": 0.0}
+
     def is_other_videos(self, section: dict) -> bool:
         """Home-video / 'Other Videos' libraries support folder browsing."""
         return "none" in (section.get("agent") or "")

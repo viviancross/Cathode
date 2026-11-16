@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.47
+
+- **Library channels: channels made from your Plex library, inside Cathode.**
+  No Tunarr needed for these. Cathode reads what your Plex server holds (once,
+  then only what changed), and each channel plays a slice of it on a timeline
+  you join in progress: a library, a genre, a decade, a studio, a rating band
+  or one show. They sit in a block after your lineup, from the next hundred up.
+- **A starter lineup, made from what you have.** The first time, Cathode makes
+  channels for every genre, decade and studio with enough shows in it, a Kids
+  and an After Dark channel by rating, a channel for each long-running show,
+  your movies by genre and decade, and one for each smaller library. Bumper
+  and commercial libraries are recognised (short clips) and kept out; so are
+  libraries you've hidden from On Demand, unless a channel asks for one.
+- **Nine sort methods.** Random, Cyclic Shuffle, Block Shuffle, Block Cyclic,
+  Marathon Shuffle, Marathon Cyclic, Round Robin Shuffle, Round Robin Cyclic
+  and Playlist Order. Every method keeps a show's place: its next episode is
+  the one after the last it aired.
+- **The schedule is written down, a day at a time,** so episodes carry on in
+  order across days and restarts, and the guide lists each programme with its
+  episode number, summary, rating and poster. Editing a channel redraws today
+  onward; new arrivals in the library join from tomorrow.
+- **Settings > Channels > Library Channels.** Make a channel, name and number
+  it, pick what it plays and how it's sorted, redraw its schedule, add or
+  remove the starter lineup, read the library again.
+- A title that won't play (a broken file, the server away) shows the stand-by
+  card until its slot ends; the next programme still starts on time.
+- This is the first slice of the NostalgiaTV rework. The plan is in
+  `docs/cathode-5/nostalgia-rework.md`.
+
 ## 4.46
 
 - **Volume on the On Demand bar.** The playback buttons end in a volume

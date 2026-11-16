@@ -107,7 +107,8 @@ def epg_id(cid: str) -> str:
 
 
 def entry(config, cid: str) -> Optional[dict]:
-    return next((c for c in config.video_channels if c["id"] == cid), None)
+    from . import libchannels
+    return next((c for c in config.video_channels if c["id"] == cid), None) or libchannels.entry(config, cid)
 
 
 def add_to(chans: list, config, names: Optional[dict] = None) -> list:
@@ -116,6 +117,7 @@ def add_to(chans: list, config, names: Optional[dict] = None) -> list:
     the titles resolved so far, the rest are named for their first source's
     cache, or 'Video Channel' until then."""
     from . import ytdl
+    from . import libchannels
     out = [c for c in chans if not is_made(c)]
     if not out:
         return out
@@ -135,7 +137,7 @@ def add_to(chans: list, config, names: Optional[dict] = None) -> list:
         ch = Channel(number=num, name=name, url=SCHEME + c["id"], epg_id=epg_id(c["id"]), group="Video")
         at = next((i for i, o in enumerate(out) if o.number > num), len(out))
         out.insert(at, ch)
-    return out
+    return libchannels.add_to(out, config)
 
 
 def _cached_name(ytdl, c) -> str:
@@ -323,13 +325,15 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
         c = sched.c
         progs = []
         if guide_style(c, sched) == "video":
-            cur, n = sched.at(t0), 0
+            cur, n = sched.at(t0) or sched.at(now), 0
             while cur and cur["start"] < end and n < 4000:
                 e = cur["entry"]
-                if e.get("kind"):       # Spelunkr: its shows, each running on over the breaks after it
+                if e.get("kind"):       # Spelunkr, the library: shows, each running on over the breaks after it
                     if e["kind"] == "show" or not progs:
                         progs.append(Program(channel_id=ch.epg_id, title=e["title"], start=cur["start"], stop=cur["stop"],
-                                             category=c.get("category", "Video"), description=e.get("desc", "")))
+                                             category=e.get("category") or c.get("category", "Video"),
+                                             description=e.get("desc", ""), episode=e.get("episode_text", ""),
+                                             rating=e.get("rating", ""), icon=e.get("icon", "")))
                     else:
                         progs[-1].stop = cur["stop"]
                 else:
@@ -467,9 +471,10 @@ def rebuild(app, report: bool = False):
 
 
 def _build(cfg_channels: list, listings: dict, chans: list):
-    from . import spelunkr
+    from . import libchannels, spelunkr
     schedules = {c["id"]: Schedule(c, listings) for c in cfg_channels}
     schedules.update(spelunkr.SCHEDULES)
+    schedules.update(libchannels.SCHEDULES)
     return schedules, programmes(chans, schedules), listings
 
 
@@ -536,8 +541,9 @@ class Player:
 
     @property
     def sched(self) -> Optional[Schedule]:
-        from . import spelunkr
-        s = getattr(self.app, "schedules", {}).get(self.cid) or spelunkr.SCHEDULES.get(self.cid)
+        from . import libchannels, spelunkr
+        s = (getattr(self.app, "schedules", {}).get(self.cid) or spelunkr.SCHEDULES.get(self.cid)
+             or libchannels.SCHEDULES.get(self.cid))
         return s if s and s.entries else None
 
     def start(self, cont: bool = False):
@@ -569,11 +575,18 @@ class Player:
             try:
                 if e.get("url"):        # a Spelunkr file plays as it is: no yt-dlp in the way
                     s = {"video": e["url"]}
+                elif e.get("plex"):     # a library title: its stream asked of the server, from where it's up to
+                    from . import libchannels
+                    s = libchannels.stream(app, e, max(0.0, (now - cur["start"]).total_seconds()) + e.get("in", 0))
                 else:
                     from . import ytdl
                     ytdl.MAX_HEIGHT = int(app.config.video_quality or 1080)
                     s = ytdl.stream(e["id"])
             except Exception as ex:
+                if e.get("plex"):
+                    print(f"[library] {e.get('title', '')!r} can't play ({ex!r}): stand-by")
+                    app.post(self._hold, gen, cur)
+                    return
                 print(f"[video] {e['id']} {e.get('title', '')!r} can't play ({ex.__class__.__name__}): skipped")
                 app.post(self._skip, gen, e["id"])
                 return
@@ -595,6 +608,23 @@ class Player:
         self.cur = None
         self.start(cont=True)
 
+    def _hold(self, gen, cur):
+        """A library title that can't play (a broken file, the server away):
+        the stand-by card, another try each minute while its slot lasts. The
+        clock is the schedule's, so the next title still starts on time."""
+        if gen != self.gen:
+            return
+        self.cur = cur
+        live = self.live
+        live.standby = True
+        if live.phase == "cover":
+            live._reveal()
+        self.app.invalidate()
+        left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
+        self.app.cancel(self._stop_timer)
+        self._stop_timer = self.app.after(max(1.0, min(left, 60.0)),
+                                          lambda: gen == self.gen and self.start(cont=left <= 60.0))
+
     def _play(self, gen, cur, s, cont=False):
         if gen != self.gen:
             return
@@ -612,7 +642,8 @@ class Player:
                     self.live._reveal()
             self._slides(gen, e, offset)
         else:
-            self.app.video.play(s["video"], headers=s.get("headers"), start=offset + e.get("in", 0), audio=s.get("audio"))
+            self.app.video.play(s["video"], headers=s.get("headers"), audio=s.get("audio"),
+                                start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)))   # (a transcode starts at its base)
         artist, title = (self.ch.name, e["title"]) if e.get("kind") else parse_title(e["title"], e.get("uploader", ""))
         c = entry(self.app.config, self.cid) or {}
         if c.get("card", True) and e.get("kind", "show") == "show":
@@ -668,6 +699,10 @@ class Player:
             if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
                 if reason == "stalled":         # archive.org slow for a moment: mpv fills its cache; a reload
                     print(f"[spelunkr] {e.get('title')!r} waiting on archive.org")    # would fetch the index again
+                    return
+                if reason != "eof" and e.get("plex"):
+                    print(f"[library] {e.get('title')!r} stopped ({reason}): stand-by")
+                    self._hold(self.gen, self.cur)
                     return
                 if reason != "eof" and e["kind"] != "card":
                     print(f"[spelunkr] {e.get('title')!r} stopped ({reason}): trying it again")

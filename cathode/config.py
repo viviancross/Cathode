@@ -166,6 +166,10 @@ class Config:
     # for an entry's fields. 4.34's music_playlists migrate into them.
     video_channels: list = field(default_factory=_video_prefill)
     video_quality: int = 1080       # a video channel's tallest picture (1080/720/480/360): lower buffers less
+    # Library channels (libchannels.py): channels made from the Plex library,
+    # after the lineup. See libchannels.new_channel() for an entry's fields.
+    library_channels: list = field(default_factory=list)
+    library_starter_done: bool = False      # the starter lineup was made once
     music_playlists: list = field(default_factory=list)
     ytdl_checked: float = 0.0       # when yt-dlp was last checked for a newer release
 
