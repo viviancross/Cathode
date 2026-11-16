@@ -33,7 +33,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import library
+from . import library, sync as _sync
 from .playlist import Channel
 
 PREFIX = "lib."                 # a library channel's id among the video channels'
@@ -328,6 +328,8 @@ class Timeline:
         self.stamp = index.stamp()
         self.days: list = []        # [{"day", "start", "state": as it began, "slots": [[start, id, seconds]]}]
         self.state: dict = {}       # as the last day ended
+        # Its line (first drawn up where, when) and how worked on: what other Cathodes compare (sync.py).
+        self.lineage, self.born, self.rev, self.by = uuid.uuid4().hex[:12], time.time(), 0, _sync.ME
         self._starts: list = []
         self._slots: list = []
         self._made: dict = {}
@@ -353,6 +355,9 @@ class Timeline:
             return
         days, state = d.get("days") or [], d.get("state") or {}
         self.dropped = {k: v for k, v in (d.get("dropped") or {}).items() if time.time() - v < OFF_AIR}
+        self.lineage = d.get("lineage") or self.lineage
+        self.born = float(d.get("born") or (days[0]["start"] if days else self.born))
+        self.rev, self.by = int(d.get("rev") or 0), d.get("by") or self.by
         today = day_of(time.time())[0]
         cut = None                                  # the first day that has to be drawn up again
         for n, day in enumerate(days):
@@ -379,8 +384,7 @@ class Timeline:
         tmp = self._path() + ".tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"v": VERSION, "sig": self.sig, "stamp": self.stamp, "days": self.days,
-                           "state": self.state, "dropped": self.dropped}, f, separators=(",", ":"))
+                json.dump(self._doc(), f, separators=(",", ":"))
             os.replace(tmp, self._path())
         except OSError as e:
             print(f"[library] schedule not written: {e!r}")
@@ -415,6 +419,7 @@ class Timeline:
         state["t"] = t
         self.days.append({"day": name, "start": start, "state": before, "slots": slots})
         self._dirty = True
+        self.rev, self.by = self.rev + 1, _sync.ME
 
     def _cover(self, t: float):
         """Days drawn up until they reach past `t`; old ones let go."""
@@ -486,8 +491,80 @@ class Timeline:
             if shift:
                 self.state["t"] = self.state.get("t", 0) - shift
             self._dirty = True
+            self.rev, self.by = self.rev + 1, _sync.ME
             self._index()
             self._save()
+
+    # ── Other Cathodes (sync.py) ──────────────────────────────────────────
+
+    def version(self) -> dict:
+        return {"sig": self.sig, "lineage": self.lineage, "born": self.born, "rev": self.rev, "by": self.by}
+
+    def _doc(self) -> dict:
+        return {"v": VERSION, **self.version(), "stamp": self.stamp, "days": self.days, "state": self.state,
+                "dropped": self.dropped}
+
+    def doc(self) -> dict:
+        """The written-down days, as another Cathode asks for them."""
+        with self.lock:
+            return json.loads(json.dumps(self._doc()))
+
+    def adopt(self, doc) -> bool:
+        """Another Cathode's days taken in place of these, when they win
+        (beats()). A title skipped here and not there is skipped again, so
+        it's out on both."""
+        if not is_doc(doc):
+            return False
+        with self.lock:
+            if not beats(doc, self.version()):
+                return False
+            mine = dict(self.dropped)
+            self.days, self.state = doc["days"], doc["state"]
+            self.dropped = {k: float(v) for k, v in doc["dropped"].items() if time.time() - float(v) < OFF_AIR}
+            self.lineage, self.born, self.rev, self.by = doc["lineage"], float(doc["born"]), int(doc["rev"]), doc["by"]
+            self.guide_memo = None
+            self._dirty = True
+            self._index()
+            self._save()
+            for k in mine:
+                if k not in self.dropped:
+                    self.drop(k)
+        return True
+
+
+def beats(theirs: dict, mine: dict) -> bool:
+    """Whether another Cathode's schedule for a channel wins over this
+    one's: the same channel as edited, then the older line, then the more
+    worked on (ties to the higher id)."""
+    try:
+        if theirs.get("sig") != mine.get("sig"):
+            return False
+        if theirs.get("lineage") != mine.get("lineage"):
+            return (float(theirs["born"]), str(theirs["lineage"])) < (float(mine["born"]), str(mine["lineage"]))
+        return (int(theirs["rev"]), str(theirs["by"])) > (int(mine["rev"]), str(mine["by"]))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
+def is_doc(d) -> bool:
+    """A schedule as another Cathode sends it, its shape checked."""
+    try:
+        if not (isinstance(d, dict) and d.get("v") == VERSION and isinstance(d["days"], list)
+                and isinstance(d["state"], dict) and isinstance(d["dropped"], dict)
+                and isinstance(d["lineage"], str) and isinstance(d["by"], str) and isinstance(d["rev"], int)
+                and isinstance(d["born"], (int, float)) and isinstance(d["state"].get("t", 0), (int, float))):
+            return False
+        for day in d["days"]:
+            if not (isinstance(day, dict) and isinstance(day["day"], str) and isinstance(day["start"], (int, float))
+                    and isinstance(day["state"], dict) and isinstance(day["slots"], list)):
+                return False
+            for s in day["slots"]:
+                if not (isinstance(s, list) and len(s) == 3 and isinstance(s[0], (int, float))
+                        and isinstance(s[1], str) and isinstance(s[2], (int, float))):
+                    return False
+        return all(isinstance(v, (int, float)) for v in d["dropped"].values())
+    except (KeyError, TypeError, AttributeError):
+        return False
 
 
 def _bisect(a, x):
@@ -530,7 +607,9 @@ def starter(index) -> list:
     out = []
 
     def add(name, group, order, *sources):
-        out.append(new_channel(name, sources, order, starter=True, group=group))
+        # the same id from the same library on any Cathode: two never edited air the same days
+        cid = hashlib.sha1(json.dumps([name, sources], sort_keys=True).encode()).hexdigest()[:8]
+        out.append(new_channel(name, sources, order, starter=True, group=group, id=cid))
 
     secs = index.programme_sections()
     shows = [s for s in secs if s.kind == "show"]
@@ -619,6 +698,7 @@ def start(app, fresh: bool = False, done=None):
                 n = add_starter(cfg, index)
                 cfg.library_starter_done = True
                 cfg.save()
+                _sync.quiet(app)                # Cathode's doing, not an edit: another Cathode's lists still win
                 if n:
                     app.toast(f"{n} channels made from your Plex library. Settings > Channels > "
                               "Library Channels to change them.", 10.0)

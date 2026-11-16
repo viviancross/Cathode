@@ -20,7 +20,9 @@ update the Status column as phases land.
   (phase 7) is the comfortable way to do the fiddly parts, not the only way.
 - **No Tunarr required.** A box with only a Plex sign-in must end up with a full
   lineup. Tunarr and playlists keep working beside it.
-- Lands in slices on `main`, each one finished, tested and versioned (4.47 on).
+- Lands in slices on `main`, each one finished, tested and versioned: 4.47, 4.48
+  and on. **The finished rework is Cathode 5.0**: when every phase below is done,
+  the version goes to 5.0 rather than the next 4.x.
 
 ## Where NostalgiaTV's features map
 
@@ -121,6 +123,7 @@ it aired, on any channel using that method.
 | 5 | Lineup editing | Hide, reorder, renumber, decimal numbers, channel packs as guide tabs | |
 | 6 | More sources | Jellyfin and Emby behind the same index; local folders; duplicate hiding; HDHR import; Plex Live TV | |
 | 7 | Server and pages | Built-in web server: Configure, Watch, TV Remote; M3U, XMLTV, HDHR and stream output | |
+| + | Sync between Cathodes | Every Cathode on the network finds the others and keeps the same channel lists, library schedules and YouTube lists (NostalgiaTV's shared schedule across devices, without its server) | Built in 4.49 |
 | 8 | Profiles | Profiles with their own lineup and look, kid profiles, parent PIN, tether, watch history | |
 | 9 | Housekeeping | Export / import, weekly backup, bezels, languages if wanted | |
 

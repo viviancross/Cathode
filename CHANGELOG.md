@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.49
+
+- **Every Cathode on your network keeps the same channels.** Run Cathode on the
+  PC and the Steam Deck and they find each other by themselves: the channel
+  lists (library channels, video channels, where Cathode's own channels sit),
+  each library channel's written-down schedule and the YouTube lists the video
+  channels are drawn from. The same channel shows the same programme at the
+  same point on both. Edit a channel on either and the other follows within
+  seconds; the last edit made anywhere wins. A title one Cathode couldn't play
+  is skipped on the others too.
+- Settings > Channels > Sync with other Cathodes turns it off, and shows which
+  Cathodes it's found. Nothing secret goes over the network: no Plex token, no
+  provider password, only channel lists and schedules.
+- Windows may ask once whether Cathode can use the network (its firewall):
+  allow it on private networks, or the PC can't be found by the others.
+
 ## 4.48
 
 - **A file that won't play is skipped.** On a library channel, a damaged file

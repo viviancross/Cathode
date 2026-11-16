@@ -170,6 +170,11 @@ class Config:
     # after the lineup. See libchannels.new_channel() for an entry's fields.
     library_channels: list = field(default_factory=list)
     library_starter_done: bool = False      # the starter lineup was made once
+    # Sync (sync.py): every Cathode on the network with the same channels.
+    lan_sync: bool = True
+    sync_id: str = ""               # this Cathode's id among the others
+    channels_edited: float = 0.0    # when the channel lists were last edited, here or by another Cathode
+    channels_editor: str = ""       # which Cathode edited them
     music_playlists: list = field(default_factory=list)
     ytdl_checked: float = 0.0       # when yt-dlp was last checked for a newer release
 

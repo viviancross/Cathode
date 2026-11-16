@@ -176,6 +176,15 @@ def listing(s: str, max_age: float = LISTING_TTL) -> dict:
     return out
 
 
+def keep_listing(s: str, lst: dict):
+    """A source's list another Cathode fetched, cached as if fetched here."""
+    p = _cache_path(s)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(lst, f)
+    os.replace(tmp, p)
+
+
 cached_playlist, playlist = cached_listing, listing      # 4.34's names
 
 

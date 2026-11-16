@@ -791,6 +791,23 @@ def channel_items(app):
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
     items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
+
+    def sync_value():
+        s = getattr(app, "sync", None)
+        if not cfg.lan_sync or s is None:
+            return "Off"
+        names = sorted(p["name"] for p in s.others())
+        return ("On: " + ", ".join(names))[:32] if names else "On, none found"
+
+    def sync_toggle(d=0):
+        from . import sync
+        cfg.lan_sync = not cfg.lan_sync
+        cfg.save()
+        (sync.start if cfg.lan_sync else sync.stop)(app)
+    items.append(Item("Sync with other Cathodes", value=sync_value, adjust=sync_toggle, action=sync_toggle,
+                      help="Every Cathode on your network keeps the same channels: the lists, the library channels' "
+                           "schedules and the YouTube lists. The same channel shows the same thing on each. The last "
+                           "edit made on any of them wins."))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))

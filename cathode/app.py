@@ -500,8 +500,10 @@ class App:
         ownchannels.fill_guide(self.epg)
         videochannels.rebuild(self)         # Spelunkr's schedules and guide now, not after YouTube's lists
         videochannels.load(self)
-        from . import libchannels
+        from . import libchannels, sync
         libchannels.start(self)             # the Plex library read, its channels placed after these
+        if not self.shot:
+            sync.start(self)                # the same channels as every other Cathode on the network
         self.check_ytdl()
         live.channels_loaded()
         self._lineup_gen = getattr(self, "_lineup_gen", 0) + 1
@@ -930,6 +932,8 @@ class App:
         return bool(e.unicode) and e.unicode.isprintable() and not e.mod & pygame.KMOD_CTRL
 
     def _shutdown(self):
+        from . import sync
+        sync.stop(self)
         try:
             self.config.volume = self.video.volume
             self.config.muted = self.video.muted
