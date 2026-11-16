@@ -317,13 +317,13 @@ class TestLineup(Temp):
             idx = index()
             made = lc.starter(idx)
             names = [c["name"] for c in made]
-            self.assertEqual(names, ["Comedy", "The '90s", "Nickelodeon", "Alpha", "Movies", "Action Movies",
-                                     "Comedy Movies", "Sci-Fi Movies", "'90s Movies"])
+            self.assertEqual(names, ["Laugh Track", "The '90s", "Slimetime", "Alpha", "Movies", "Action Movies",
+                                     "Comedy Movies", "Sci-Fi Movies", "'90s Movies"])     # placeholders of our own
             self.assertTrue(all(c["starter"] for c in made))
             for c in made:
                 self.assertTrue(lc.groups(c, idx), c["name"])           # none of them empty
             app = FakeApp([])
-            app.config.library_channels = [chan("Comedy")]              # one of yours by that name: left alone
+            app.config.library_channels = [chan("Laugh Track")]         # one of yours by that name: left alone
             self.assertEqual(lc.add_starter(app.config, idx), 8)
             self.assertEqual(lc.add_starter(app.config, idx), 0)
             self.assertFalse(app.config.library_channels[0]["starter"])
@@ -411,15 +411,105 @@ class TestOnTheAir(Temp):
         left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
         self.assertTrue(any(abs(t[0] - left) < 3 and not t[3] for t in self.app.timers), "the next is due at the stop")
 
-    def test_a_title_that_cannot_play_holds_the_stand_by_until_its_slot_ends(self):
-        def broken(app, e, at):
-            raise OSError("No playable file for this item.")
-        lc.stream = broken
+    def test_a_broken_file_is_skipped_and_what_follows_moves_up(self):
+        from cathode.plex import PlexError
+        tl = lc.SCHEDULES[self.cid]
+        ch = self.app.channels[-1]
+        now = datetime.now(timezone.utc)
+        cur = tl.at(now)
+        nxt = tl.at(cur["stop"] + timedelta(seconds=1))
+        bad, was_due = cur["entry"], nxt["start"]
+
+        def stream(app, e, at):
+            if e["plex"] == bad["plex"]:
+                raise PlexError("The server can't read this file.")
+            return {"video": f"http://plex/{e['plex']}", "headers": {}, "base": 0.0}
+        lc.stream = stream
+        live = LiveTV(self.app)
+        live.tune(len(self.app.channels) - 1)
+        self.run_posted()                                       # the file can't be read: skipped
+        self.run_posted()                                       # the next title's stream
+        url, _h, start = self.app.video.played[-1]
+        self.assertEqual(url, f"http://plex/{nxt['entry']['plex']}")
+        self.assertLessEqual(start, 2)                          # from its top, now: not when it was due
+        self.assertFalse(live.standby)
+        on = tl.at(datetime.now(timezone.utc))
+        self.assertEqual(on["entry"]["id"], nxt["entry"]["id"])
+        self.assertLess(on["start"], was_due)
+        self.assertLess(abs((on["start"] - now).total_seconds()), 5)
+        progs = vc.programmes([ch], {self.cid: tl})[ch.epg_id]  # the guide moved up with it, no hole in it
+        self.assertTrue(all(a.stop == b.start for a, b in zip(progs, progs[1:])))
+        listed = next(p for p in progs if p.start <= datetime.now(timezone.utc) < p.stop)
+        self.assertIn(nxt["entry"]["name"], listed.description)
+        tl.at(now + timedelta(days=2))                          # and it's off the days drawn up from here
+        ahead = [s[1] for d in tl.days for s in d["slots"] if s[0] > now.timestamp() + 5]
+        self.assertGreater(len(ahead), 150)
+        self.assertNotIn(bad["id"], ahead)
+        again = lc.Timeline(self.app.config.library_channels[0], self.app.library)     # a restart remembers
+        self.assertIn(bad["id"], again.dropped)
+        self.assertEqual(again.at(datetime.now(timezone.utc))["entry"]["id"], nxt["entry"]["id"])
+        # a file that breaks off part-way is skipped the same way
+        live.phase = "watch"
+        third = tl.at(on["stop"] + timedelta(seconds=1))
+        live.on_video("video_ended", reason="error")
+        self.run_posted()
+        self.assertEqual(self.app.video.played[-1][0], f"http://plex/{third['entry']['plex']}")
+        self.assertFalse(live.standby)
+
+    def test_the_title_due_next_is_checked_ahead_and_skipped_before_its_time(self):
+        from cathode.plex import PlexError
+        tl = lc.SCHEDULES[self.cid]
+        cur = tl.at(datetime.now(timezone.utc))
+        nxt = tl.at(cur["stop"] + timedelta(seconds=1))
+        after = tl.at(nxt["stop"] + timedelta(seconds=1))
+
+        def stream(app, e, at):
+            if e["plex"] == nxt["entry"]["plex"]:
+                raise PlexError("The server can't read this file.")
+            return {"video": f"http://plex/{e['plex']}", "headers": {}, "base": 0.0}
+        lc.stream = stream
+        live = LiveTV(self.app)
+        live.tune(len(self.app.channels) - 1)
+        self.run_posted()
+        left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
+        ahead = [t for t in self.app.timers if not t[3] and abs(t[0] - max(0.5, left - vc.AHEAD)) < 3]
+        self.assertTrue(ahead)
+        ahead[-1][2]()                                          # twenty seconds before the stop: asked ahead
+        self.run_posted()
+        self.assertEqual(len(self.app.video.played), 1)         # what's on carries on
+        follows = tl.at(cur["stop"] + timedelta(seconds=1))
+        self.assertEqual(follows["entry"]["id"], after["entry"]["id"])
+        self.assertEqual(follows["start"], cur["stop"])
+
+    def test_failures_in_a_row_stop_at_the_stand_by_card(self):
+        from cathode.plex import PlexError
+
+        def stream(app, e, at):
+            raise PlexError("The server can't read this file.")
+        lc.stream = stream
+        old, vc.MAX_SKIPS = vc.MAX_SKIPS, 3
+        try:
+            live = LiveTV(self.app)
+            live.tune(len(self.app.channels) - 1)
+            for _ in range(4):
+                self.run_posted()
+            self.assertTrue(live.standby)
+            self.assertEqual(self.app.video.played, [])
+            self.assertEqual(len(lc.SCHEDULES[self.cid].dropped), 3)       # three skipped; the fourth held
+            self.assertEqual(self.calls, [])
+        finally:
+            vc.MAX_SKIPS = old
+
+    def test_the_server_being_away_holds_the_stand_by_and_tries_again(self):
+        def away(app, e, at):
+            raise OSError("connection refused")
+        lc.stream = away
         live = LiveTV(self.app)
         live.tune(len(self.app.channels) - 1)
         self.run_posted()
         self.assertTrue(live.standby)
         self.assertEqual(self.app.video.played, [])
+        self.assertEqual(lc.SCHEDULES[self.cid].dropped, {})    # nothing is skipped for the server's sake
         cur = lc.SCHEDULES[self.cid].at(datetime.now(timezone.utc))
         left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
         retry = [t for t in self.app.timers if not t[3] and abs(t[0] - min(left, 60.0)) < 3]
@@ -428,10 +518,16 @@ class TestOnTheAir(Temp):
         retry[-1][2]()                                          # the server is back
         self.run_posted()
         self.assertEqual(self.app.video.played[-1][0], "http://plex/ok")
-        live.phase = "watch"
-        live.on_video("video_ended", reason="error")            # the file breaks off mid-way: stand-by, not a loop
+
+    def test_a_channel_with_nothing_left_to_play_waits_quietly(self):
+        tl = lc.SCHEDULES[self.cid]
+        for i in list(tl.entries):
+            tl.drop(i["id"])
+        self.assertIsNone(tl.at(datetime.now(timezone.utc)))
+        live = LiveTV(self.app)
+        live.tune(len(self.app.channels) - 1)                   # no recursion, no thread: the stand-by card
         self.assertTrue(live.standby)
-        self.assertEqual(len(self.app.video.played), 1)
+        self.assertEqual(self.calls, [])
 
 
 class TestMaker(Temp):

@@ -15,8 +15,10 @@ tomorrow onward.
 
 The timelines here are played by videochannels.Player (as Spelunkr's are):
 an entry carries `plex`, its rating key, and its stream is asked of the
-server as it comes due. The clock is the schedule's: a title that can't
-play leaves the stand-by card up until its slot ends."""
+server as it comes due. A title that can't play (a damaged file, one that
+left the library) is skipped: what follows moves up to start at once, the
+guide with it, and the title stays off the air for a week. Only the server
+itself being away leaves the stand-by card up."""
 
 from __future__ import annotations
 
@@ -39,6 +41,7 @@ VERSION = 1                     # of the written-down schedule
 DAY_STARTS = 4                  # the broadcast day turns over at 4 AM
 MIN_SECONDS = 60                # shorter titles stay out of a programme channel
 KEEP_DAYS = 1                   # days behind today kept on disk
+OFF_AIR = 7 * 86400             # a title that couldn't play is left out of the days drawn up this long
 REFRESH = 6 * 3600              # the server asked again for what changed, this often
 SCHEDULES: dict = {}            # channel id (with its prefix) -> Timeline
 
@@ -167,8 +170,9 @@ class Rotor:
     """Draws a channel's next title by its sort method. Its state is a small
     dict that goes to disk with the schedule, so the rotation carries on."""
 
-    def __init__(self, cid: str, order: str, block: int, groups_: list, state: dict):
+    def __init__(self, cid: str, order: str, block: int, groups_: list, state: dict, skip=()):
         self.cid, self.order, self.groups, self.state = cid, order, groups_, state
+        self.skip = skip            # titles off the air (they couldn't play)
         self.block = max(1, int(block or BLOCKS.get(order, 1)))
         self.items = [i for g in groups_ for i in g["items"]]
         self._gpos = {g["id"]: n for n, g in enumerate(groups_)}
@@ -201,8 +205,14 @@ class Rotor:
         return self._memo[1]
 
     def next(self) -> Optional[dict]:
-        if not self.items:
-            return None
+        """The next title to air, passing over any that are off the air."""
+        for _ in range(len(self.items)):
+            i = self._draw()
+            if i["id"] not in self.skip:
+                return i
+        return None
+
+    def _draw(self) -> dict:
         o, st = self.order, self.state
         if o == "random":
             st["n"] = st.get("n", 0) + 1
@@ -308,7 +318,7 @@ class Timeline:
         self.index = index
         self.poster = poster
         self.store = store
-        self.dropped: set = set()
+        self.dropped: dict = {}     # a title that couldn't play -> when
         self.guide_memo = None
         self.lock = threading.RLock()
         self.groups = groups(c, index)
@@ -342,6 +352,7 @@ class Timeline:
         if d.get("v") != VERSION:
             return
         days, state = d.get("days") or [], d.get("state") or {}
+        self.dropped = {k: v for k, v in (d.get("dropped") or {}).items() if time.time() - v < OFF_AIR}
         today = day_of(time.time())[0]
         cut = None                                  # the first day that has to be drawn up again
         for n, day in enumerate(days):
@@ -369,7 +380,7 @@ class Timeline:
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"v": VERSION, "sig": self.sig, "stamp": self.stamp, "days": self.days,
-                           "state": self.state}, f, separators=(",", ":"))
+                           "state": self.state, "dropped": self.dropped}, f, separators=(",", ":"))
             os.replace(tmp, self._path())
         except OSError as e:
             print(f"[library] schedule not written: {e!r}")
@@ -383,16 +394,17 @@ class Timeline:
 
     def _generate(self, name: str, start: float):
         """One more day: from where the last ended (a programme running
-        over 4 AM) to the first programme ending after the next 4 AM."""
+        over 4 AM, or short of it where a title was skipped) to the first
+        programme ending after the next 4 AM."""
         before = json.loads(json.dumps(self.state))
         state = self.state
         end = _next_day(start)
         t = state.get("t") or start
-        if not start <= t < end:
+        if not start - 86400 <= t < end:
             t = start                   # a gap in the days (the box was off): from the day's top
         seed = self.c.get("seed", 0)                # (a refresh's: the days drawn differently)
         rotor = Rotor(f"{self.cid}:{seed}" if seed else self.cid, self.c.get("order", "cyclic_shuffle"),
-                      self.c.get("block", 0), self.groups, state)
+                      self.c.get("block", 0), self.groups, state, self.dropped)
         slots = []
         while t < end:
             i = rotor.next()
@@ -405,19 +417,18 @@ class Timeline:
         self._dirty = True
 
     def _cover(self, t: float):
-        """Days drawn up through the one `t` falls in; old ones let go."""
-        if not self.entries:
+        """Days drawn up until they reach past `t`; old ones let go."""
+        if not self.entries or (self.days and self.state.get("t", 0) > t):
             return
-        name, start = day_of(t)
-        if self.days and name <= self.days[-1]["day"]:
-            return
-        if self.days and start - self.days[-1]["start"] > 3 * 86400:
+        if self.days and day_of(t)[1] - self.days[-1]["start"] > 3 * 86400:
             self.days = []              # the box was off for days: no drawing up every day between
-        if not self.days:               # from today (or the day asked for, if that's before it)
-            self._generate(*min(day_of(time.time()), (name, start)))
-        while self.days[-1]["day"] < name:
-            nxt = _next_day(self.days[-1]["start"])
-            self._generate(day_of(nxt + 3600)[0], day_of(nxt + 3600)[1])
+        for _ in range(40):
+            if not self.days:           # from today (or the day asked for, if that's before it)
+                self._generate(*min(day_of(time.time()), day_of(t)))
+            else:
+                self._generate(*day_of(_next_day(self.days[-1]["start"]) + 3600))
+            if self.state.get("t", 0) > t or not self.days[-1]["slots"]:
+                break                   # (nothing left that can play: no days of nothing)
         keep = day_of(time.time() - KEEP_DAYS * 86400)[0]
         self.days = [d for d in self.days if d["day"] >= keep] or self.days[-1:]
         self._index()
@@ -446,9 +457,37 @@ class Timeline:
                     e["icon"] = self.poster(i["thumb"])
             return {"entry": e, "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
 
-    def drop(self, item_id: str):
-        """A title that can't play: noted (the clock doesn't close up)."""
-        self.dropped.add(item_id)
+    def drop(self, item_id: str, now: Optional[datetime] = None):
+        """A title that can't play leaves the air: what's left of it now, and
+        every airing of it drawn up ahead, is taken out and what follows
+        moves up to fill the time. It stays out of the days drawn up from
+        here on, for a week."""
+        t = (now or datetime.now(timezone.utc)).timestamp()
+        with self.lock:
+            self.dropped[item_id] = time.time()
+            shift = 0.0
+            for d in self.days:
+                if shift and d["state"].get("t", 0) > t:
+                    d["state"]["t"] -= shift            # (the day began that much sooner)
+                keep = []
+                for s in d["slots"]:
+                    if s[1] == item_id and s[0] + s[2] > t:
+                        if s[0] < t:                    # on the air now: it ends here (no hole behind it)
+                            shift += s[0] + s[2] - t
+                            s[2] = t - s[0]
+                            keep.append(s)
+                        else:
+                            shift += s[2]
+                        continue
+                    if shift:
+                        s[0] -= shift
+                    keep.append(s)
+                d["slots"] = keep
+            if shift:
+                self.state["t"] = self.state.get("t", 0) - shift
+            self._dirty = True
+            self._index()
+            self._save()
 
 
 def _bisect(a, x):
@@ -464,8 +503,19 @@ def _bisect(a, x):
 
 # ── The starter lineup ───────────────────────────────────────────────────
 
-GENRE_NAMES = {"Animation": "Cartoons", "Game Show": "Game Shows", "Documentary": "Documentaries",
-               "Science Fiction": "Sci-Fi", "Talk Show": "Talk", "Sport": "Sports", "Children": "Kids' Shows"}
+# The starter lineup's channel names: placeholders of our own, there to be renamed.
+GENRE_NAMES = {"Comedy": "Laugh Track", "Animation": "Toon Tube", "Family": "Family Room", "Reality": "Unscripted",
+               "Game Show": "Buzzer", "Adventure": "Quest", "Documentary": "Fact Finder", "Drama": "Primetime",
+               "Action": "Overdrive", "Fantasy": "Spellbound", "Music": "Encore", "Talk Show": "Couch Talk",
+               "Talk": "Couch Talk", "Romance": "Heartstrings", "Sport": "Scoreboard", "Science Fiction": "Orbit",
+               "Mystery": "Whodunit", "Crime": "Case File", "Horror": "Fright Night", "Children": "Playtime",
+               "News": "The Wire", "History": "Time Capsule", "Anime": "Mecha", "Thriller": "Edge of Seat",
+               "Western": "High Noon", "War": "Front Line", "Food": "Hot Plate"}
+STUDIO_NAMES = {"Nickelodeon": "Slimetime", "Disney": "Mouse House", "Hanna-Barbera": "Yabba Dabba",
+                "Cartoon Network": "Checkerboard", "Williams Street": "Late Swim", "Warner Bros.": "Water Tower",
+                "MTV": "Unplugged", "G4": "Player Two", "BBC": "The Beeb", "Comedy Central": "Comedy Capital",
+                "20th Century Fox": "Fanfare", "Dickhouse": "Stunt House"}
+KIDS_NAME, MATURE_NAME = "Saturday Morning", "After Dark"
 MOVIE_NAMES = {"Animation": "Animated", "Science Fiction": "Sci-Fi"}
 MAIN_SHOWS = 30                 # a show library this big gets genre, decade and studio channels
 GENRE_SHOWS, DECADE_SHOWS, STUDIO_SHOWS = 10, 10, 6
@@ -503,11 +553,12 @@ def starter(index) -> list:
                 {"kind": "decade", "value": decade, "only": "show"})
     for studio, n in count(brand(sh["studio"]) for _s, sh in rows):
         if n >= STUDIO_SHOWS:
-            add(studio, "Studios", "block_shuffle", {"kind": "studio", "value": studio, "only": "show"})
+            add(STUDIO_NAMES.get(studio, studio), "Studios", "block_shuffle",
+                {"kind": "studio", "value": studio, "only": "show"})
     if sum(1 for _s, sh in rows if sh["rating"] in KIDS) >= GENRE_SHOWS:
-        add("Kids", "Genres", "round_robin_shuffle", {"kind": "rating", "value": KIDS, "only": "show"})
+        add(KIDS_NAME, "Genres", "round_robin_shuffle", {"kind": "rating", "value": KIDS, "only": "show"})
     if sum(1 for _s, sh in rows if sh["rating"] in MATURE) >= GENRE_SHOWS:
-        add("After Dark", "Genres", "block_shuffle", {"kind": "rating", "value": MATURE, "only": "show"})
+        add(MATURE_NAME, "Genres", "block_shuffle", {"kind": "rating", "value": MATURE, "only": "show"})
     eps = {}
     for s in main:
         for i in s.items:
@@ -619,6 +670,15 @@ def _built(app, built: dict, done):
     vc.rebuild(app)
     if done:
         done()
+
+
+def broken(ex: Exception) -> bool:
+    """Whether a stream failed because of the title (its file is damaged or
+    it left the library) and not the server being away: the one is skipped,
+    the other waited out."""
+    import urllib.error
+    from .plex import PlexError
+    return isinstance(ex, PlexError) or (isinstance(ex, urllib.error.HTTPError) and ex.code == 404)
 
 
 def stream(app, e: dict, at: float) -> dict:

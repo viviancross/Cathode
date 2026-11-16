@@ -26,6 +26,7 @@ from .epg import Program
 from .playlist import Channel
 
 SCHEME = "cathode://video/"
+MAX_SKIPS = 40                  # library titles that may fail in a row before the stand-by card
 CARD_SECONDS = 8.0              # the lower-third at a video's start and before its end
 AHEAD = 20.0                    # seconds before a video is due that its stream is resolved
 GRACE = 20.0                    # a video due this recently starts from its top, not its offset
@@ -538,6 +539,7 @@ class Player:
         self.cur = None             # the schedule entry playing
         self.gen = 0
         self._timer = self._stop_timer = None
+        self._skips, self._began = 0, 0.0       # library titles skipped in a row; when the last one started
 
     @property
     def sched(self) -> Optional[Schedule]:
@@ -565,6 +567,13 @@ class Player:
         cur = sched.at(self.cur["stop"] + timedelta(seconds=1)) if cont and self.cur else None
         if cur is None or now >= cur["stop"]:      # nothing after it, or that one is over too: whatever is due
             cur = sched.at(now)
+        if cur is None and self.cid.startswith("lib."):
+            # A library channel with nothing that can play just now: stand-by, and a look again in a minute.
+            self.live.standby = True
+            if self.live.phase == "cover":
+                self.live._reveal()
+            self._stop_timer = app.after(60.0, lambda: gen == self.gen and self.start())
+            return
         if cur is None:
             self.live.on_video("video_ended", reason="nothing to play")
             return
@@ -584,8 +593,13 @@ class Player:
                     s = ytdl.stream(e["id"])
             except Exception as ex:
                 if e.get("plex"):
-                    print(f"[library] {e.get('title', '')!r} can't play ({ex!r}): stand-by")
-                    app.post(self._hold, gen, cur)
+                    from . import libchannels
+                    if libchannels.broken(ex):      # the file, not the server: on to the next title
+                        print(f"[library] {e.get('title', '')!r} {e.get('episode_text', '')} can't play ({ex}): skipped")
+                        app.post(self._skip, gen, e["id"], cur)
+                    else:
+                        print(f"[library] {e.get('title', '')!r}: the server didn't answer ({ex!r}): stand-by")
+                        app.post(self._hold, gen, cur)
                     return
                 print(f"[video] {e['id']} {e.get('title', '')!r} can't play ({ex.__class__.__name__}): skipped")
                 app.post(self._skip, gen, e["id"])
@@ -601,17 +615,27 @@ class Player:
             sched.drop(video_id)
             fill_guide(self.app.epg, [self.ch], {self.cid: sched}, self.app.config)
 
-    def _skip(self, gen, video_id):
+    def _skip(self, gen, video_id, cur=None):
+        """A video that can't play leaves the order and the next starts at
+        once. Library titles failing one after another without any playing
+        (something wrong beyond one file) stop at the stand-by card instead
+        of emptying the schedule."""
         if gen != self.gen:
             return
+        if cur is not None:
+            self._skips += 1
+            if self._skips > MAX_SKIPS:
+                self._skips = 0
+                self._hold(gen, cur)
+                return
         self._drop(video_id)
         self.cur = None
         self.start(cont=True)
 
     def _hold(self, gen, cur):
-        """A library title that can't play (a broken file, the server away):
-        the stand-by card, another try each minute while its slot lasts. The
-        clock is the schedule's, so the next title still starts on time."""
+        """The server is away (a broken file is skipped, not held): the
+        stand-by card, another try each minute while the title's slot lasts.
+        The clock is the schedule's, so the next title still starts on time."""
         if gen != self.gen:
             return
         self.cur = cur
@@ -633,6 +657,7 @@ class Player:
         if (cont or offset < GRACE) and not e.get("kind"):
             offset = 0.0        # a handover, or due just now (resolving and opening took the seconds): the top, not a cut head
         self.cur = cur          # (Spelunkr keeps the network's clock: always the true offset)
+        self._began = time.monotonic()
         if e.get("kind") == "card":                     # a Spelunkr bumper: its music, its slides on the lower third
             if e.get("url"):
                 self.app.video.play(e["url"], start=offset + e.get("in", 0))
@@ -661,10 +686,23 @@ class Player:
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
-        if nxt and nxt["entry"]["id"] != e["id"] and not nxt["entry"].get("url"):
+        if nxt and nxt["entry"]["id"] != e["id"] and nxt["entry"].get("plex"):
+            # a library title: asked of the server ahead, so a broken one is out of the order before it's due
+            self.app.after(max(0.5, left - AHEAD), lambda: gen == self.gen and threading.Thread(
+                target=self._check_ahead, args=(gen, nxt["entry"]), daemon=True).start())
+        elif nxt and nxt["entry"]["id"] != e["id"] and not nxt["entry"].get("url"):
             delay = max(0.5, left - AHEAD)
             self.app.after(delay, lambda: gen == self.gen and threading.Thread(
                 target=lambda: _resolve_quietly(nxt["entry"]["id"]), daemon=True).start())
+
+    def _check_ahead(self, gen, e):
+        from . import libchannels
+        try:
+            libchannels.stream(self.app, e, 0.0)
+        except Exception as ex:
+            if libchannels.broken(ex):
+                print(f"[library] ahead: {e.get('title', '')!r} {e.get('episode_text', '')} can't play ({ex}): skipped")
+                self.app.post(lambda: gen == self.gen and self._drop(e["id"]))
 
     def _slides(self, gen, e, offset):
         """A bumper's slides on the lower third, each for its time, from
@@ -695,14 +733,16 @@ class Player:
         clock says what's next: a file that ends early waits for its stop,
         one that fails is tried again at its offset."""
         e = (self.cur or {}).get("entry") or {}
+        if self._began and time.monotonic() - self._began > 30:
+            self._skips = 0                 # it played a while: not one of a run of failures
         if e.get("kind"):
             if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
                 if reason == "stalled":         # archive.org slow for a moment: mpv fills its cache; a reload
                     print(f"[spelunkr] {e.get('title')!r} waiting on archive.org")    # would fetch the index again
                     return
-                if reason != "eof" and e.get("plex"):
-                    print(f"[library] {e.get('title')!r} stopped ({reason}): stand-by")
-                    self._hold(self.gen, self.cur)
+                if reason != "eof" and e.get("plex"):       # the file broke off: on to the next title
+                    print(f"[library] {e.get('title')!r} stopped ({reason}): skipped")
+                    self._skip(self.gen, e["id"], self.cur)
                     return
                 if reason != "eof" and e["kind"] != "card":
                     print(f"[spelunkr] {e.get('title')!r} stopped ({reason}): trying it again")

@@ -229,6 +229,10 @@ class PlexClient:
         part = _first_part(items[0]) if items else None
         if not part:
             raise PlexError("No playable file for this item.")
+        media = (items[0].get("Media") or [{}])[0]
+        if not media.get("container") and not part.get("Stream"):
+            # The server never managed to read it (a download cut short, a damaged file).
+            raise PlexError("The server can't read this file.")
         kbps = _QUALITY.get(quality)
         headers = {"X-Plex-Token": self._server_token}
         if kbps:

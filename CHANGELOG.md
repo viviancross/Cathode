@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.48
+
+- **A file that won't play is skipped.** On a library channel, a damaged file
+  (a download cut short, a title that left the library) no longer leaves the
+  stand-by card up for its whole slot: the next title starts at once, from its
+  top, and the guide moves up with it. Cathode asks Plex about the title due
+  next twenty seconds ahead, so most broken files are out of the order before
+  their time comes and you never see a gap. A skipped title stays off that
+  channel for a week, then gets another chance. The stand-by card is kept for
+  the server itself being away, and for forty failures in a row.
+- **The starter lineup's channels have names of their own** (Laugh Track, Toon
+  Tube, Slimetime, Checkerboard, Saturday Morning...): placeholders, there to
+  be renamed.
+
 ## 4.47
 
 - **Library channels: channels made from your Plex library, inside Cathode.**

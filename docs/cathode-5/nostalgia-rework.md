@@ -7,7 +7,11 @@ update the Status column as phases land.
 ## Ground rules
 
 - **Clone what it does, not what it is.** Features and behaviour are fair game. Its
-  name, artwork, theme designs and its made-up network names are not copied.
+  name, artwork, theme designs and its made-up network names are not copied. The
+  starter lineup's channels carry placeholder names of our own.
+- **Windows and the Steam Deck first.** The other builds follow later; nothing is
+  held back or trimmed for them now.
+- **No dates.** The phases are an order, not a calendar.
 - **What stays Cathode.** The seven real-box skins, the tube and CRT, the TV Guide
   and Weather channels, YouTube video channels, Spelunkr, IPTV playlists and Tunarr,
   the remote profiles and FLIRC, the ports. New features are drawn by the skins,
@@ -81,7 +85,9 @@ plex.py ──► library.py ──► libchannels.py ──► videochannels.Pl
 - **Playing.** Each entry is `{id, plex, title, duration, kind, in}`. The existing
   `Player` tunes in at the right offset; a library entry's stream is asked of Plex
   at that moment (direct play, or the Plex quality setting's transcode from the
-  offset). A file that won't play shows the skin's stand-by until its slot ends.
+  offset). A file that won't play is skipped: the next title starts at once and
+  the days drawn up close over it (4.48). The stand-by card is for the server
+  being away.
 - **Guide.** One listing per programme with its summary, episode number and
   poster; breaks belong to the programme before them, as Spelunkr's do.
 
@@ -135,8 +141,6 @@ Still open in phase 1:
   ships as the default playlist, which hides this; phase 5 fixes it properly.
 - The guide lists 48 hours, as video channels do. Schedule length (7/14/30 days)
   is phase 2.
-- The Android build keeps its own limits (`config.low_power`): the index of a
-  40,000-episode library needs trimming there before the branches merge.
 - Collections, playlists, labels and hand-picked titles as sources: phase 2.
 
 ## Decisions taken without asking (say if any are wrong)
