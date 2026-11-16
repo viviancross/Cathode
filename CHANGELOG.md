@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.55
+
+- **Cathode's web page.** Open the address shown at Settings > Channels >
+  Phone remote in a phone's browser on your network:
+  - **Remote**: the arrows, OK, Back, Guide, Menu, Info, Options, channel up
+    and down, last channel, volume, mute, pause.
+  - **Channels**: every channel with what's on and next; tap one to tune.
+  - **Lineup**: hide, rename and renumber channels (10.5 is fine).
+  - **My channels**: each library and YouTube channel's sort method, on-air
+    hours, breaks, and breaks during programmes.
+- **Share channels with other apps** (off unless you turn it on): the library
+  channels as an M3U playlist (/lineup.m3u), their guide (/xmltv.xml), and as an
+  HDHomeRun tuner at the same address, for Plex, Channels, Jellyfin or another
+  Cathode. A player is sent to the programme on the air, from where it's up to,
+  through Plex's transcoder (the address it's sent to carries your Plex token).
+- Only addresses on your own network are answered, and the page changes
+  nothing secret.
+
 ## 4.54
 
 - **The three decade music channels are gone** ('80s, '90s and 2000s Vevo

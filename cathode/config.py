@@ -176,6 +176,8 @@ class Config:
     packs: list = field(default_factory=list)           # [{"name", "keys": [channel addresses]}]: guide tabs
     # Sync (sync.py): every Cathode on the network with the same channels.
     lan_sync: bool = True
+    web_remote: bool = True         # the web page: a phone remote, the channels, the lineup (web.py)
+    share_channels: bool = False    # the library channels for other apps: M3U, XMLTV, HDHomeRun (web.py)
     sync_id: str = ""               # this Cathode's id among the others
     channels_edited: float = 0.0    # when the channel lists were last edited, here or by another Cathode
     channels_editor: str = ""       # which Cathode edited them

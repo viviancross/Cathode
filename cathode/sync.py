@@ -115,6 +115,10 @@ class Sync:
         self._stop.clear()
         if not self.serve(PORT, 0):         # (the port taken: another one, said in the hello)
             return
+        if not self.app.config.lan_sync:    # (serving the web page alone)
+            self.tick()
+            print(f"[web] on port {self.port}")
+            return
         try:
             u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
             u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -345,12 +349,59 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _type(self, body: bytes, kind: str, code: int = 200):
+        self.send_response(code)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        from . import web
+        s = self.sync
+        if not web.local(self.client_address[0]) or not s.app.config.web_remote or self.path != "/api/do":
+            return self._send(b"{}", 403 if self.path == "/api/do" else 404)
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(min(n, 8192)).decode("utf-8") or "{}")
+        except ValueError:
+            return self._send(b"{}", 400)
+        said = web.act(s.app, body if isinstance(body, dict) else {})
+        self._send(json.dumps({"said": said}).encode())
+
     def do_GET(self):
-        from . import libchannels as lc
+        from . import libchannels as lc, web
         s = self.sync
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        cfg = s.app.config
+        if not web.local(self.client_address[0]):
+            return self._send(b"{}", 403)
         try:
+            if cfg.web_remote and u.path in ("/", "/index.html"):
+                return self._type(web.PAGE.encode(), "text/html; charset=utf-8")
+            if cfg.web_remote and u.path == "/api/state":
+                return self._send(json.dumps(web.state(s.app)).encode())
+            if cfg.share_channels:
+                base = f"http://{self.headers.get('Host') or web.my_address() + ':' + str(s.port)}"
+                if u.path in ("/lineup.m3u", "/channels.m3u"):
+                    return self._type(web.m3u(s.app, base).encode(), "audio/x-mpegurl")
+                if u.path == "/xmltv.xml":
+                    return self._type(web.xmltv(s.app).encode(), "application/xml")
+                for name, what in (("/discover.json", "discover"), ("/lineup.json", "lineup"),
+                                   ("/lineup_status.json", "status")):
+                    if u.path == name:
+                        return self._send(json.dumps(web.hdhr(s.app, base, what)).encode())
+                if u.path.startswith("/stream/"):
+                    to = web.stream_url(s.app, urllib.parse.unquote(u.path[len("/stream/"):]))
+                    if not to:
+                        return self._send(b"{}", 404)
+                    self.send_response(302)
+                    self.send_header("Location", to)
+                    self.end_headers()
+                    return
+            if not cfg.lan_sync:
+                return self._send(b"{}", 404)
             if u.path == "/cathode/sync":
                 return self._send(s.snapshot)
             if u.path == "/cathode/channels":
@@ -370,7 +421,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def start(app) -> Optional[Sync]:
-    if getattr(app, "sync", None) is not None or not app.config.lan_sync:
+    """The server, for whichever of sync, the web page and sharing are on."""
+    cfg = app.config
+    if getattr(app, "sync", None) is not None or not (cfg.lan_sync or cfg.web_remote or cfg.share_channels):
         return getattr(app, "sync", None)
     app.sync = Sync(app)
     app.sync.start()
@@ -382,6 +435,12 @@ def stop(app):
     if s is not None:
         s.stop()
         app.sync = None
+
+
+def restart(app):
+    """After sync, the web page or sharing is switched on or off."""
+    stop(app)
+    start(app)
 
 
 def quiet(app):

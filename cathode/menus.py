@@ -836,11 +836,33 @@ def channel_items(app):
         from . import sync
         cfg.lan_sync = not cfg.lan_sync
         cfg.save()
-        (sync.start if cfg.lan_sync else sync.stop)(app)
+        sync.restart(app)
+
+    def web_toggle(key):
+        from . import sync
+        setattr(cfg, key, not getattr(cfg, key))
+        cfg.save()
+        sync.restart(app)
+
+    def web_value():
+        from . import web
+        s = getattr(app, "sync", None)
+        if not cfg.web_remote or s is None or not s.port:
+            return "Off"
+        return f"http://{web.my_address()}:{s.port}"
     items.append(Item("Sync with other Cathodes", value=sync_value, adjust=sync_toggle, action=sync_toggle,
                       help="Every Cathode on your network keeps the same channels: the lists, the library channels' "
                            "schedules and the YouTube lists. The same channel shows the same thing on each. The last "
                            "edit made on any of them wins."))
+    items.append(Item("Phone remote", lambda: web_toggle("web_remote"), value=web_value,
+                      adjust=lambda d: web_toggle("web_remote"),
+                      help="Open the address shown in a phone's browser on your network: a remote, the channels with "
+                           "what's on (tap to tune), and the lineup and channel settings."))
+    items.append(Item("Share channels with other apps", lambda: web_toggle("share_channels"),
+                      value=lambda: "On" if cfg.share_channels else "Off", adjust=lambda d: web_toggle("share_channels"),
+                      help="The library channels for other apps on your network: /lineup.m3u and /xmltv.xml at the "
+                           "Phone remote's address, and as an HDHomeRun tuner there. Their players get the programme "
+                           "on the air through Plex's transcoder; the address carries your Plex token."))
     if cfg.epg_url:
         items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
                           close=True))
