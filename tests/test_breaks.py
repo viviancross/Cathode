@@ -200,6 +200,38 @@ class TestOnTheAir(Temp):
             lc.stream = old
 
 
+class TestDefaults(Temp):
+    def test_every_channel_breaks_between_programmes_and_not_during_them(self):
+        idx = index()
+        c = chan("cyclic_shuffle", {"section": "38", "kind": "all"})          # breaks never set
+        self.assertEqual(lc.breaks_of(c, idx)["mid"], "off")
+        self.assertTrue(lc.breaks_of(c, idx)["ads"])
+        tl, got = self.day(c, idx)
+        self.assertTrue(any(len(s) > 3 and s[3].get("brk") == "ad" for s in got))   # breaks between
+        self.assertEqual([round(s[2]) for s in got if s[1] == "p901"][:1], [6000])    # a film in one piece
+        tl, got = self.day(dict(c, breaks={}), idx)                                    # switched off
+        self.assertFalse(any(len(s) > 3 for s in got))
+        self.assertEqual(lc.breaks_of(c, None), {})                                    # no library: nothing to break with
+
+    def test_short_titles_break_only_near_the_mark(self):
+        idx = index()
+        clips = library.Section("70", "Shorts", "movie", "s1")
+        for n in range(30):
+            clips.add_item({"type": "movie", "ratingKey": f"6{n:02d}", "title": f"Short {n}", "duration": 240000})
+        idx.sections["70"] = clips
+        idx._by_id = None
+        tl, got = self.day(chan("cyclic_shuffle", {"section": "70", "kind": "all"}, breaks=BREAKS), idx)
+        progs = [s for s in got if is_prog(s)]
+        runs = 0
+        for a, b in zip(progs, progs[1:]):
+            gap = b[0] - (a[0] + a[2])
+            if gap > 0.01:
+                runs += 1
+                lt = datetime.fromtimestamp(b[0])
+                self.assertIn((lt.minute, lt.second), ((0, 0), (30, 0)))      # a break, to the half hour
+        self.assertGreater(len(progs) / max(1, runs), 4)                      # several shorts to a break, not one each
+
+
 class TestMaker(Temp):
     def test_the_breaks_page_and_giving_every_channel_breaks(self):
         from types import SimpleNamespace
@@ -216,31 +248,34 @@ class TestMaker(Temp):
         app.toast = lambda *a, **k: None
         c = app.config.library_channels[0]
         rows = {it.label: it for it in menus.breaks_items(app, c, lambda place=True: None)}
-        self.assertEqual(rows["Breaks"].value(), "Off")
-        rows["Breaks"].action()
         self.assertEqual((rows["Breaks"].value(), rows["Commercials from"].value(), rows["Bumpers from"].value()),
-                         ("On", "1", "1"))
-        self.assertEqual(rows["Line up with the clock"].value(), "Half hours")
+                         ("On", "1", "1"))                                     # on from the start
+        self.assertEqual((rows["Line up with the clock"].value(), rows["During programmes"].value()),
+                         ("Half hours", "Off"))
         rows["Line up with the clock"].adjust(1)
         self.assertEqual(c["breaks"]["pad"], 60)
         libs = rows["Commercials from"].submenu()
         self.assertEqual([it.label for it in libs], ["Classic Commercials", "CN Bumps"])
         libs[1].action()
         self.assertEqual(len(c["breaks"]["ads"]), 2)
+        rows["Breaks"].action()
+        self.assertEqual((c["breaks"], rows["Breaks"].value()), ({}, "Off"))
+        rows["Breaks"].action()
+        self.assertEqual(("breaks" in c, rows["Breaks"].value()), (False, "On"))       # back to the defaults
         for it in rows.values():
             if it.value:
                 self.assertIsInstance(it.value(), str)
+        app.config.video_channels[0]["breaks"] = {}
         lst = {it.label: it for it in menus.library_channel_items(app)}
         lst["Give every channel breaks"].action()
-        self.assertTrue(app.config.video_channels[0]["breaks"]["ads"])
-        self.assertEqual(len(c["breaks"]["ads"]), 2)                               # one with breaks: left as it was
+        self.assertTrue(lc.breaks_of(app.config.video_channels[0], app.library)["ads"])
         mids = {it.label: it for it in menus.library_channel_items(app)}["Breaks during programmes"]
+        self.assertEqual(mids.value(), "Off")
+        mids.adjust(1)
         self.assertEqual(mids.value(), "Halfway")
         mids.adjust(-1)                                                            # switched off, everywhere
-        self.assertEqual(mids.value(), "Off")
-        self.assertEqual({x["breaks"]["mid"] for x in app.config.library_channels + app.config.video_channels}, {"off"})
-        tl, got = self.day(dict(c, order="cyclic_shuffle", sources=[{"section": "38", "kind": "all"}]))
-        self.assertEqual([round(s[2]) for s in got if s[1] == "p901"][:1], [6000])   # a film in one piece
+        self.assertEqual({lc.breaks_of(x, app.library)["mid"] for x in app.config.library_channels
+                          + app.config.video_channels}, {"off"})
 
 
 if __name__ == "__main__":

@@ -101,6 +101,32 @@ class TestPage(Web):
         self.assertEqual(self.post({"do": "nonsense"}), "not understood")
 
 
+class TestQr(unittest.TestCase):
+    def test_the_address_as_a_qr_code_on_every_skin(self):
+        import pygame
+        from tests.test_skins import FakeApp as SkinApp
+        from cathode.skins import skin_classes
+        from cathode.screens.qrcode import QrCode
+        from cathode import remote as R
+        from cathode.config import Config
+        self.assertTrue(Config("").share_channels)                      # sharing on from the start
+        pygame.display.init()
+        for name, cls in skin_classes().items():
+            app = SkinApp()
+            skin = cls(app)
+            app.skin = skin
+            popped = []
+            app.pop = popped.append
+            q = QrCode(app, "http://10.0.0.215:47810", "Phone remote", "Point your phone's camera here.")
+            W, H = skin.canvas
+            c = pygame.Surface((W, H), pygame.SRCALPHA)
+            skin.draw(c, q)
+            self.assertEqual(tuple(c.get_at((W // 2, H // 2 - int(H * 0.25))))[:3] in ((0, 0, 0), (255, 255, 255)), True)
+            self.assertFalse(q.handle(R.VOL_UP))                         # the volume still works
+            self.assertTrue(q.handle(R.BACK))
+            self.assertEqual(popped, [q])
+
+
 class TestOutputs(Web):
     def test_m3u_xmltv_and_hdhomerun(self):
         lib = next(ch for ch in self.app.channels if lc.is_library(ch))

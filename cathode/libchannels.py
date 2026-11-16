@@ -62,6 +62,7 @@ PADS = [(0, "No"), (15, "Quarter hours"), (30, "Half hours"), (60, "Hours")]
 MIDS = [("off", "Off"), ("halfway", "Halfway"), ("every20", "Every 20 minutes")]
 BREAK_LENGTHS = [60, 90, 120, 180, 240]
 MID_FROM = 15 * 60              # a programme this long gets breaks in it
+SHORT, NEAR = 600, 360          # titles under ten minutes break only within six of the quarter/half hour
 CLIP_MAX = 600                  # break material: clips up to ten minutes
 FLOOR = 0.05                    # Mix, automatic weighting: no source under this share of the airtime
 # What a channel's days are drawn from: a change to any of them redraws today onward.
@@ -304,7 +305,7 @@ def default_breaks(c: dict, index) -> dict:
     """Breaks for a channel from what the library holds: commercials from
     every commercials library, bumpers from the libraries named for the
     channel's studio (CN Bumps for a Cartoon Network channel), lined up
-    with the half hours, a break halfway through long programmes."""
+    with the half hours, none during programmes."""
     import re
     ads, bumps = [], []
     for sec in index.sections.values():
@@ -315,7 +316,16 @@ def default_breaks(c: dict, index) -> dict:
             ads.append({"section": sec.key, "kind": "all"})
         elif any(re.search(rf"(^|\W){re.escape(b)}", t) for b in _brands(c)):
             bumps.append({"section": sec.key, "kind": "all"})
-    return {"ads": ads, "bumps": bumps, "pad": 30, "mid": "halfway", "length": 120}
+    return {"ads": ads, "bumps": bumps, "pad": 30, "mid": "off", "length": 120}
+
+
+def breaks_of(c: dict, index) -> dict:
+    """A channel's breaks as they are: its own, or (never set, as every
+    channel starts) the defaults: between programmes, not during them. Set
+    off ({}) they're off."""
+    if "breaks" in c:
+        return c["breaks"] or {}
+    return default_breaks(c, index) if index is not None else {}
 
 
 def groups(c: dict, index) -> list:
@@ -405,9 +415,10 @@ def default_as(url: str) -> str:
     return "videos" if "list=" in ytdl.source_url(url) else "show"
 
 
-def yt_stamp(c: dict, listings: dict) -> str:
-    """Changes when any of the channel's lists is fetched again."""
-    return "|".join(f"{(listings.get(u) or {}).get('fetched', 0):.0f}"
+def yt_stamp(c: dict, listings: dict, index=None) -> str:
+    """Changes when any of the channel's lists is fetched again (or the
+    library its breaks come from changes)."""
+    return (index.stamp() + "#" if index is not None else "") + "|".join(f"{(listings.get(u) or {}).get('fetched', 0):.0f}"
                     for s in c.get("sources") or [] for u in (s["url"], s["url"] + "#live"))
 
 
@@ -633,7 +644,7 @@ class Timeline:
         self.groups, self.stamp = made if made else (groups(c, index), index.stamp())
         self._by_id = {i["id"]: i for g in self.groups for i in g["items"]}
         self.entries = list(self._by_id.values())
-        brk = c.get("breaks") or {}
+        self.brk = brk = breaks_of(c, index)
         self.ads = clips(brk.get("ads"), index) if index is not None and brk else []
         self.bumps = clips(brk.get("bumps"), index) if index is not None and brk else []
         for i in self.ads + self.bumps:
@@ -666,7 +677,7 @@ class Timeline:
         """A programme into the day: in parts with breaks between them when
         it's long and the channel breaks during programmes, then the break
         after it (to the next quarter or half hour, or of its length)."""
-        brk = self.c.get("breaks") or {}
+        brk = self.brk
         on = bool(self.ads or self.bumps)
         cuts = []
         if on and i["duration"] >= MID_FROM and brk.get("mid") in ("halfway", "every20"):
@@ -683,7 +694,12 @@ class Timeline:
                 t = self._break(t, slots, state, t + float(brk.get("length", 120)))
         if on:
             pad = int(brk.get("pad", 30) or 0)
-            t = self._break(t, slots, state, self._boundary(t, pad) if pad else t + float(brk.get("length", 120)))
+            if not pad:
+                return self._break(t, slots, state, t + float(brk.get("length", 120)))
+            until = self._boundary(t, pad)
+            if i["duration"] < SHORT and until - t > NEAR:
+                return t                # short titles (songs, clips) run on: a break only near the clock's mark
+            t = self._break(t, slots, state, until)
         return t
 
     @staticmethod
@@ -1179,10 +1195,6 @@ def add_starter(config, index) -> int:
     """The starter lineup's channels not already there (by name) added."""
     have = {c.get("name") for c in config.library_channels}
     new = [c for c in starter(index) if c["name"] not in have]
-    for c in new:                       # with breaks, when there are commercials to break for
-        brk = default_breaks(c, index)
-        if brk["ads"]:
-            c["breaks"] = brk
     config.library_channels.extend(new)
     return len(new)
 

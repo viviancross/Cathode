@@ -863,10 +863,22 @@ def channel_items(app):
                       help="Every Cathode on your network keeps the same channels: the lists, the library channels' "
                            "schedules and the YouTube lists. The same channel shows the same thing on each. The last "
                            "edit made on any of them wins."))
-    items.append(Item("Phone remote", lambda: web_toggle("web_remote"), value=web_value,
-                      adjust=lambda d: web_toggle("web_remote"),
-                      help="Open the address shown in a phone's browser on your network: a remote, the channels with "
-                           "what's on (tap to tune), and the lineup and channel settings."))
+    def show_qr():
+        from . import sync
+        if not cfg.web_remote:
+            cfg.web_remote = True
+            cfg.save()
+            sync.restart(app)
+        addr = web_value()
+        if addr == "Off":
+            app.toast("The phone remote couldn't start: is another app using its port?", 6.0)
+            return
+        from .screens.qrcode import QrCode
+        app.push(QrCode(app, addr, "Phone remote", "Point your phone's camera here, on the same Wi-Fi."))
+    items.append(Item("Phone remote", show_qr, value=web_value, adjust=lambda d: web_toggle("web_remote"),
+                      help="SELECT shows its address as a QR code: point a phone's camera at it (on your network) for "
+                           "a remote, the channels with what's on (tap to tune), and the lineup and channel settings. "
+                           "LEFT/RIGHT turns it on or off."))
     items.append(Item("Share channels with other apps", lambda: web_toggle("share_channels"),
                       value=lambda: "On" if cfg.share_channels else "Off", adjust=lambda d: web_toggle("share_channels"),
                       help="The library channels for other apps on your network: /lineup.m3u and /xmltv.xml at the "
@@ -1579,7 +1591,7 @@ def timeline_items(app, c, tid, save, unit="episodes", default="cyclic_shuffle")
              value=lambda: words_value("words_in"),
              help="When set, only titles with one of these words are on the channel."),
         Item("Breaks", submenu=lambda: breaks_items(app, c, save),
-             value=lambda: "On" if c.get("breaks") else "Off",
+             value=lambda: "On" if lc.breaks_of(c, getattr(app, "library", None)) else "Off",
              help="Commercials and bumpers from your Plex libraries between programmes and in long ones, lined "
                   "up with the clock."),
         Item("Coming up", submenu=lambda: coming_up_items(app, tid),
@@ -1600,7 +1612,7 @@ def breaks_items(app, c, save):
                      help="Breaks come from Plex libraries of commercials and bumpers.")]
 
     def b():
-        return c.get("breaks") or {}
+        return lc.breaks_of(c, index)
 
     def ensure():
         if not c.get("breaks"):
@@ -1608,7 +1620,12 @@ def breaks_items(app, c, save):
         return c["breaks"]
 
     def toggle(d=0):
-        c["breaks"] = {} if c.get("breaks") else lc.default_breaks(c, index)
+        if b():
+            c["breaks"] = {}                        # off
+        else:
+            c.pop("breaks", None)                   # back to the defaults
+            if not b():
+                c["breaks"] = lc.default_breaks(c, index)
         save(place=False)
 
     def flip(key, skey):
@@ -1632,9 +1649,9 @@ def breaks_items(app, c, save):
         save(place=False)
     lengths = [(n, f"{n // 60}:{n % 60:02d}") for n in lc.BREAK_LENGTHS]
     return [
-        Item("Breaks", toggle, value=lambda: "On" if c.get("breaks") else "Off", adjust=toggle,
-             help="On: commercials from the libraries below (it starts with your commercials libraries, and "
-                  "bumpers named for the channel's studio)."),
+        Item("Breaks", toggle, value=lambda: "On" if b() else "Off", adjust=toggle,
+             help="On (as every channel starts): commercials between programmes from the libraries below (your "
+                  "commercials libraries, and bumpers named for the channel's studio)."),
         Item("Commercials from", submenu=lambda: libs("ads"), value=lambda: str(len(b().get("ads") or [])),
              help="The libraries the commercials come from."),
         Item("Bumpers from", submenu=lambda: libs("bumps"), value=lambda: str(len(b().get("bumps") or [])),
@@ -1646,8 +1663,8 @@ def breaks_items(app, c, save):
         Item("Break length", value=lambda: _label(lengths, int(b().get("length", 120))),
              adjust=lambda d: cycle("length", lengths, 120, d),
              help="A break during a programme, and every break when they don't line up with the clock."),
-        Item("During programmes", value=lambda: _label(lc.MIDS, b().get("mid", "halfway")),
-             adjust=lambda d: cycle("mid", lc.MIDS, "halfway", d),
+        Item("During programmes", value=lambda: _label(lc.MIDS, b().get("mid", "off")),
+             adjust=lambda d: cycle("mid", lc.MIDS, "off", d),
              help="Breaks inside programmes of fifteen minutes or more: one halfway, or one every twenty minutes."),
     ]
 
@@ -1779,28 +1796,28 @@ def library_channel_items(app):
             return
         n = 0
         for c in list(cfg.library_channels) + list(cfg.video_channels):
-            if not c.get("breaks"):
-                c["breaks"] = lc.default_breaks(c, app.library)
-                c["starter"] = False if c in cfg.library_channels else c.get("starter")
+            if not lc.breaks_of(c, app.library):
+                c.pop("breaks", None)               # back to the defaults
+                if not lc.breaks_of(c, app.library):
+                    c["breaks"] = lc.default_breaks(c, app.library)
                 n += 1
         cfg.save()
         lc.place(app)
         app.toast(f"Breaks on {n} channels." if n else "Every channel already has breaks.")
     def mids(d):
-        withb = [c for c in list(cfg.library_channels) + list(cfg.video_channels) if c.get("breaks")]
+        withb = [c for c in list(cfg.library_channels) + list(cfg.video_channels) if lc.breaks_of(c, app.library)]
         if not withb:
-            app.toast("No channel has breaks yet.")
+            app.toast("No channel has breaks.")
             return
-        now = withb[0]["breaks"].get("mid", "halfway")
-        to = _cycle(lc.MIDS, now, d)
+        to = _cycle(lc.MIDS, lc.breaks_of(withb[0], app.library).get("mid", "off"), d)
         for c in withb:
-            c["breaks"]["mid"] = to
+            c["breaks"] = dict(lc.breaks_of(c, app.library), mid=to)
         cfg.save()
         lc.place(app)
 
     def mids_value():
-        got = {c["breaks"].get("mid", "halfway") for c in list(cfg.library_channels) + list(cfg.video_channels)
-               if c.get("breaks")}
+        got = {lc.breaks_of(c, app.library).get("mid", "off") for c in list(cfg.library_channels) + list(cfg.video_channels)
+               if lc.breaks_of(c, app.library)}
         return _label(lc.MIDS, got.pop()) if len(got) == 1 else "Mixed" if got else "-"
     items.append(Item("Breaks during programmes", value=mids_value, adjust=mids,
                       help="For every channel with breaks at once: none during programmes (Off), one halfway, or one "

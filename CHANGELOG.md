@@ -27,6 +27,13 @@ below; in short:
 - **Music libraries as radio channels**, the Weather channel's almanac,
   settings backups.
 - A file that won't play is skipped. The three decade music channels are gone.
+- **Defaults**: every library and YouTube channel breaks between programmes
+  from the start (lined up with the half hours; songs and other short titles
+  run on and break only near the mark), and not during programmes (switch that
+  on per channel, or for all of them under Library Channels). Sharing the
+  channels with other apps is on.
+- **The phone remote's address as a QR code**: Settings > Channels > Phone
+  remote; point your phone's camera at the screen.
 
 ## 4.58
 

@@ -82,7 +82,8 @@ def made(app) -> list:
         for c in lst:
             out.append({"kind": kind, "id": c["id"], "name": c.get("name") or "", "order": c.get("order") or
                         ("mix" if kind == "video" else "cyclic_shuffle"), "hours": c.get("hours"),
-                        "breaks": bool(c.get("breaks")), "mid": (c.get("breaks") or {}).get("mid", "halfway"),
+                        "breaks": bool(lc.breaks_of(c, app.library)),
+                        "mid": lc.breaks_of(c, app.library).get("mid", "off"),
                         "orders": lc.ORDERS, "hourses": lc.HOURS, "mids": lc.MIDS})
     return out
 
@@ -146,11 +147,15 @@ def _channel(app, cid, body):
         c["order"], c["block"] = body["order"], 0
     if "hours" in body and body["hours"] in [k for k, _ in lc.HOURS]:
         c["hours"] = body["hours"]
-    if "breaks" in body:
-        c["breaks"] = (lc.default_breaks(c, app.library) if body["breaks"] and app.library else {}) \
-            if bool(body["breaks"]) != bool(c.get("breaks")) else c.get("breaks")
-    if c.get("breaks") and body.get("mid") in dict(lc.MIDS):
-        c["breaks"]["mid"] = body["mid"]
+    if "breaks" in body and bool(body["breaks"]) != bool(lc.breaks_of(c, app.library)):
+        if body["breaks"]:
+            c.pop("breaks", None)
+            if not lc.breaks_of(c, app.library) and app.library:
+                c["breaks"] = lc.default_breaks(c, app.library)
+        else:
+            c["breaks"] = {}
+    if body.get("mid") in dict(lc.MIDS) and lc.breaks_of(c, app.library):
+        c["breaks"] = dict(lc.breaks_of(c, app.library), mid=body["mid"])
     c["starter"] = False
     app.config.save()
     lc.place(app)

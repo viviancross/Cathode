@@ -633,6 +633,35 @@ class Skin:
             self.text.draw(c, self.text.fit(f, t, box.w - 16), f, (255, 255, 255), box.centerx, y, align="center")
             y += h + gap
 
+    def draw_qr(self, c, s):
+        """A QR code on a white card over the dimmed picture: a title above,
+        the address and a line of help below."""
+        W, H = self.canvas
+        dim = pygame.Surface((W, H), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 190))
+        c.blit(dim, (0, 0))
+        n = len(s.modules)
+        cell = max(2, int(H * 0.5) // (n + 8))
+        side = cell * (n + 8)
+        f1, f2 = self.fb(max(14, H // 20)), self.f(max(11, H // 30))
+        th = self.text.ink(f1)[1]
+        card = pygame.Rect(0, 0, max(side, self.text.width(f2, s.text)) + cell * 8, side + th * 4)
+        card.center = (W // 2, H // 2)
+        pygame.draw.rect(c, (255, 255, 255), card, border_radius=max(4, cell * 2))
+        ink = (0, 0, 0)
+        if s.title:
+            self.text.draw(c, s.title, f1, ink, card.centerx, card.y + th // 2, align="center")
+        x0, y0 = card.centerx - side // 2 + cell * 4, card.y + th * 2 - cell * 2 + cell * 4
+        for y, row in enumerate(s.modules):
+            for x, on in enumerate(row):
+                if on:
+                    pygame.draw.rect(c, ink, (x0 + x * cell, y0 + y * cell, cell, cell))
+        y = y0 + n * cell + cell * 3
+        self.text.draw(c, s.text, f2, ink, card.centerx, y, align="center")
+        if s.caption:
+            self.text.draw(c, self.text.fit(f2, s.caption, W - 40), f2, (230, 230, 230), W // 2, card.bottom + th // 2,
+                           align="center")
+
     def draw_radio(self, c, r, ch=None):
         """A music channel's picture: the album's art and what's playing, on
         the station's own deep blue (the station's, so one for every skin)."""

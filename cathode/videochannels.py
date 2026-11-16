@@ -373,7 +373,7 @@ def _build(cfg_channels: list, listings: dict, chans: list, prev: Optional[dict]
     from . import libchannels as lc, spelunkr
     schedules = {}
     for c in cfg_channels:
-        stamp, old = lc.yt_stamp(c, listings), (prev or {}).get(c["id"])
+        stamp, old = lc.yt_stamp(c, listings, index), (prev or {}).get(c["id"])
         if isinstance(old, lc.Timeline) and old.sig == lc.signature(c) and old.stamp == stamp:
             old.c, old.guide_memo = dict(c), None       # (the guide style, the card: not in the days drawn)
             schedules[c["id"]] = old
