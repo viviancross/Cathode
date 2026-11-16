@@ -57,6 +57,12 @@ KINDS = [("all", "Everything"), ("genre", "Genre"), ("decade", "Decade"), ("stud
 KIDS = ["TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "G"]
 MATURE = ["TV-MA", "R", "NC-17"]
 OFF = "-off-"                   # an off-the-air stretch among the days drawn up
+BRB = "-brb-"                   # a "we'll be right back" slate: a break's time nothing fits
+PADS = [(0, "No"), (15, "Quarter hours"), (30, "Half hours"), (60, "Hours")]
+MIDS = [("off", "None"), ("halfway", "Halfway"), ("every20", "Every 20 minutes")]
+BREAK_LENGTHS = [60, 90, 120, 180, 240]
+MID_FROM = 15 * 60              # a programme this long gets breaks in it
+CLIP_MAX = 600                  # break material: clips up to ten minutes
 FLOOR = 0.05                    # Mix, automatic weighting: no source under this share of the airtime
 # What a channel's days are drawn from: a change to any of them redraws today onward.
 SIG_KEYS = ("sources", "order", "block", "seed", "hours", "content", "words_out", "words_in", "weighting",
@@ -263,6 +269,53 @@ def _matching(src: dict, index):
             yield from (i for i in sec.items if i["show_key"] in keys and i["duration"] >= MIN_SECONDS)
         elif src.get("kind") != "show":
             yield from (i for i in sec.items if i["duration"] >= MIN_SECONDS and _match(src, i))
+
+
+def clips(sources, index) -> list:
+    """Break material: the clips some library sources hold (any length up
+    to ten minutes, the libraries hidden from On Demand included)."""
+    out, seen = [], set()
+    for src in sources or []:
+        for sec in index.sections.values():
+            if src.get("section") and sec.key != src["section"]:
+                continue
+            for i in sec.items:
+                if 0 < i["duration"] <= CLIP_MAX and i["id"] not in seen and _match(src, i if sec.kind != "show" else
+                                                                                       sec.shows.get(i["show_key"], {})):
+                    seen.add(i["id"])
+                    out.append(i)
+    return out
+
+
+def _brands(c: dict) -> list:
+    """Words a channel's bumpers' libraries would carry: its studios'
+    first words (four letters of a long one) and initials."""
+    out = []
+    for s in c.get("sources") or []:
+        if s.get("kind") == "studio" and s.get("value"):
+            words = str(s["value"]).lower().split()
+            out.append(words[0][:4] if len(words[0]) > 4 else words[0])
+            if len(words) > 1:
+                out.append("".join(w[0] for w in words))
+    return out
+
+
+def default_breaks(c: dict, index) -> dict:
+    """Breaks for a channel from what the library holds: commercials from
+    every commercials library, bumpers from the libraries named for the
+    channel's studio (CN Bumps for a Cartoon Network channel), lined up
+    with the half hours, a break halfway through long programmes."""
+    import re
+    ads, bumps = [], []
+    for sec in index.sections.values():
+        if not sec.breaks:
+            continue
+        t = sec.title.lower()
+        if re.search(r"commercial|\bads?\b|promo", t):
+            ads.append({"section": sec.key, "kind": "all"})
+        elif any(re.search(rf"(^|\W){re.escape(b)}", t) for b in _brands(c)):
+            bumps.append({"section": sec.key, "kind": "all"})
+    return {"ads": ads, "bumps": bumps, "pad": 30, "mid": "halfway", "length": 120}
 
 
 def groups(c: dict, index) -> list:
@@ -575,6 +628,11 @@ class Timeline:
         self.groups, self.stamp = made if made else (groups(c, index), index.stamp())
         self._by_id = {i["id"]: i for g in self.groups for i in g["items"]}
         self.entries = list(self._by_id.values())
+        brk = c.get("breaks") or {}
+        self.ads = clips(brk.get("ads"), index) if index is not None and brk else []
+        self.bumps = clips(brk.get("bumps"), index) if index is not None and brk else []
+        for i in self.ads + self.bumps:
+            self._by_id.setdefault(i["id"], i)
         self.sig = signature(c)
         self._slotted = any(s.get("airs") or s.get("season") for s in c.get("sources") or [] if not s.get("exclude"))
         self.days: list = []        # [{"day", "start", "state": as it began, "slots": [[start, id, seconds]]}]
@@ -596,6 +654,79 @@ class Timeline:
         """Whether the days name titles this Cathode hasn't read (another's
         days, taken before this one's lists or library caught up)."""
         return any(s[1] != OFF and s[1] not in self._by_id for s in self._slots)
+
+    # ── Breaks ────────────────────────────────────────────────────────────
+
+    def _place(self, i: dict, t: float, slots: list, state: dict, extra: Optional[dict] = None) -> float:
+        """A programme into the day: in parts with breaks between them when
+        it's long and the channel breaks during programmes, then the break
+        after it (to the next quarter or half hour, or of its length)."""
+        brk = self.c.get("breaks") or {}
+        on = bool(self.ads or self.bumps)
+        cuts = []
+        if on and i["duration"] >= MID_FROM and brk.get("mid") in ("halfway", "every20"):
+            cuts = [i["duration"] / 2] if brk["mid"] == "halfway" else \
+                [k * 1200.0 for k in range(1, int(i["duration"] // 1200) + 1) if i["duration"] - k * 1200 >= 600]
+        edges = [0.0] + cuts + [i["duration"]]
+        for k in range(len(edges) - 1):
+            x = dict(extra or {})
+            if k:
+                x.update({"in": edges[k], "part": k})
+            slots.append([t, i["id"], edges[k + 1] - edges[k]] + ([x] if x else []))
+            t += edges[k + 1] - edges[k]
+            if on and k < len(edges) - 2:
+                t = self._break(t, slots, state, t + float(brk.get("length", 120)))
+        if on:
+            pad = int(brk.get("pad", 30) or 0)
+            t = self._break(t, slots, state, self._boundary(t, pad) if pad else t + float(brk.get("length", 120)))
+        return t
+
+    @staticmethod
+    def _boundary(t: float, pad: int) -> float:
+        """The next quarter, half or whole hour after a moment (local)."""
+        lt = datetime.fromtimestamp(t)
+        top = lt.replace(minute=0, second=0, microsecond=0)
+        mins = (t - top.timestamp()) / 60
+        nxt = (int(mins // pad) + 1) * pad
+        return (top + timedelta(minutes=nxt)).timestamp()
+
+    def _break(self, t: float, slots: list, state: dict, until: float) -> float:
+        """A break from t to `until`: a bumper in, commercials, a bumper
+        out; what no clip fits, the "we'll be right back" slate. Too short a
+        gap (under ten seconds) is no break."""
+        if until - t < 10:
+            return t
+        state["bn"] = state.get("bn", 0) + 1
+        rnd = random.Random(f"{self.cid}:brk:{state['bn']}")
+        recent = state.setdefault("ads_recent", [])
+
+        def pick(pool, room, avoid=()):
+            fit = [i for i in pool if i["duration"] <= room and i["id"] not in self.dropped and i["id"] not in avoid]
+            if not fit:
+                return None
+            fresh = [i for i in fit if i["id"] not in recent] or fit
+            return fresh[rnd.randrange(len(fresh))]
+        b_in = pick(self.bumps, (until - t) / 3)
+        b_out = pick(self.bumps, (until - t) / 3, {b_in["id"]} if b_in else ())
+        end_ads = until - (b_out["duration"] if b_out else 0)
+        if b_in:
+            slots.append([t, b_in["id"], b_in["duration"], {"brk": "bump"}])
+            t += b_in["duration"]
+        while self.ads:
+            a = pick(self.ads, end_ads - t)
+            if a is None:
+                break
+            slots.append([t, a["id"], a["duration"], {"brk": "ad"}])
+            t += a["duration"]
+            recent.append(a["id"])
+            del recent[:max(0, len(recent) - 60)]
+        if end_ads - t > 0.01:
+            slots.append([t, BRB, end_ads - t, {"brk": "brb"}])
+            t = end_ads
+        if b_out:
+            slots.append([t, b_out["id"], b_out["duration"], {"brk": "bump"}])
+            t += b_out["duration"]
+        return t
 
     def _premiere(self, t: float, state: dict, elig) -> Optional[dict]:
         """At the first programme from 8 PM each day: the newest arrival
@@ -717,8 +848,7 @@ class Timeline:
             elig = self._eligible(t)
             prem = self._premiere(t, state, elig)
             if prem is not None:
-                slots.append([t, prem["id"], prem["duration"], {"premiere": 1}])
-                t += prem["duration"]
+                t = self._place(prem, t, slots, state, {"premiere": 1})
                 continue
             i = rotor.next(elig) if elig is None or elig else None
             if i is None:
@@ -728,8 +858,7 @@ class Timeline:
                 off(t, b)
                 t = b
                 continue
-            slots.append([t, i["id"], i["duration"]])
-            t += i["duration"]
+            t = self._place(i, t, slots, state)
         state["t"] = t
         self.days.append({"day": name, "start": start, "state": before, "slots": slots})
         self._dirty = True
@@ -768,8 +897,9 @@ class Timeline:
             extra = slot[3] if len(slot) > 3 else None
             if t >= start + dur:
                 return None
-            if item_id == OFF:
-                return {"entry": {"id": OFF, "kind": "signoff", "title": "Off the air", "duration": dur},
+            if item_id in (OFF, BRB):
+                kind, title = ("signoff", "Off the air") if item_id == OFF else ("brb", "We'll be right back")
+                return {"entry": {"id": item_id, "kind": kind, "title": title, "duration": dur},
                         "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
             e = self._made.get(item_id)
             if e is None:
@@ -781,6 +911,8 @@ class Timeline:
                     e["icon"] = self.poster(i["thumb"])
             if extra:
                 e = dict(e, **extra)
+                if extra.get("brk"):
+                    e["kind"] = extra["brk"]            # ("ad", "bump": a break's piece, not a programme)
                 if extra.get("premiere"):
                     e["desc"] = "Premiere! " + e.get("desc", "")
             return {"entry": e, "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
@@ -800,7 +932,16 @@ class Timeline:
                 if shift and d["state"].get("t", 0) > t:
                     d["state"]["t"] -= shift            # (the day began that much sooner)
                 keep = []
-                for s in d["slots"]:
+                for n, s in enumerate(d["slots"]):
+                    if s[1] == item_id and len(s) > 3 and s[3].get("brk") and s[0] + s[2] > t:
+                        d["slots"][n] = [s[0] - shift, BRB, s[2], {"brk": "brb"}]   # a dud commercial: the slate
+                        keep.append(d["slots"][n])
+                        continue
+                    if shift and s[0] > t and len(s) > 3 and s[3].get("brk"):
+                        keep.append([s[0] - shift, BRB, shift, {"brk": "brb"}])  # the next break takes the time up
+                        shift = 0.0
+                        keep.append(s)
+                        continue
                     if s[1] == OFF and shift and s[0] > t:  # a sign-off takes the time up: sign-on stays put
                         s[0] -= shift
                         s[2] += shift
@@ -1031,6 +1172,10 @@ def add_starter(config, index) -> int:
     """The starter lineup's channels not already there (by name) added."""
     have = {c.get("name") for c in config.library_channels}
     new = [c for c in starter(index) if c["name"] not in have]
+    for c in new:                       # with breaks, when there are commercials to break for
+        brk = default_breaks(c, index)
+        if brk["ads"]:
+            c["breaks"] = brk
     config.library_channels.extend(new)
     return len(new)
 

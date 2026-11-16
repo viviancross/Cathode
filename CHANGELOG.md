@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.52
+
+- **Commercial breaks.** Library and YouTube channels can break between
+  programmes for commercials and bumpers from your Plex libraries: a bumper
+  going in, commercials, a bumper coming out. Breaks line up with the clock
+  (quarter hours, half hours or hours), so programmes start on time as on real
+  TV; or every break is a set length. Long programmes get a break halfway, or
+  every twenty minutes. Time no clip fits is a "We'll be right back" slate (a
+  few seconds of it is just black).
+- **Your bumper libraries are matched up**: a Cartoon Network channel gets CN
+  Bumps, a Nickelodeon one the Nick bumpers; commercials come from every
+  library with commercials or ads in its name. The starter lineup gets breaks
+  when there are commercials to break for, and "Give every channel breaks"
+  (Library Channels) gives them to the rest. Each channel's Breaks page picks
+  the libraries, the clock, the length and the breaks during programmes.
+- A commercial that won't play becomes the slate for its time; a programme
+  that won't play is made up for by a longer break, so the clock holds.
+- The guide lists a programme across its breaks; Coming up skips them.
+
 ## 4.51
 
 - **Premieres.** A library channel can premiere the newest arrival in your

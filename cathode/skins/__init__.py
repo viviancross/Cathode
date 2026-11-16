@@ -593,8 +593,21 @@ class Skin:
 
     def draw_signoff(self, c, s):
         """A channel off the air: the bars, and its name and when it's back
-        on a card over them."""
+        on a card over them. A break's slate is the channel's name on blue."""
         W, H = self.canvas
+        if s.get("style") == "gap":
+            c.fill((0, 0, 0, 255))
+            return
+        if s.get("style") == "brb":
+            for y in range(0, H, 4):
+                k = y / H
+                pygame.draw.rect(c, (int(10 + 20 * k), int(20 + 30 * k), int(70 + 60 * k)), (0, y, W, 4))
+            f1, f2 = self.fb(max(16, H // 12)), self.f(max(12, H // 22))
+            self.text.draw(c, self.text.fit(f1, s["name"], W - 40), f1, (255, 255, 255), W // 2, int(H * 0.36),
+                           align="center", outline=(0, 0, 0))
+            self.text.draw(c, "We'll be right back", f2, (230, 230, 255), W // 2, int(H * 0.36) + H // 8,
+                           align="center", outline=(0, 0, 0))
+            return
         bw, h1, h2 = W / 7, int(H * 0.67), int(H * 0.75)
         for k in range(7):
             x0, x1 = round(k * bw), round((k + 1) * bw)

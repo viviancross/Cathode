@@ -1145,11 +1145,77 @@ def timeline_items(app, c, tid, save, unit="episodes", default="cyclic_shuffle")
         Item("Only titles with", lambda: words("words_in", "Only titles with (commas between; empty = any)"),
              value=lambda: words_value("words_in"),
              help="When set, only titles with one of these words are on the channel."),
+        Item("Breaks", submenu=lambda: breaks_items(app, c, save),
+             value=lambda: "On" if c.get("breaks") else "Off",
+             help="Commercials and bumpers from your Plex libraries between programmes and in long ones, lined "
+                  "up with the clock."),
         Item("Coming up", submenu=lambda: coming_up_items(app, tid),
              help="What's on now and what follows, with the times."),
         Item("Skipped", submenu=lambda: skipped_items(app, tid),
              value=lambda: str(len(getattr(lc.SCHEDULES.get(tid), "dropped", {}) or {})),
              help="Titles that couldn't play, kept off the channel for a week. SELECT one to put it back."),
+    ]
+
+
+def breaks_items(app, c, save):
+    """A channel's breaks: on or off, the libraries the commercials and the
+    bumpers come from, the clock, the length, breaks during programmes."""
+    from . import libchannels as lc
+    index = getattr(app, "library", None)
+    if index is None:
+        return [Item("Link Plex first", enabled=False,
+                     help="Breaks come from Plex libraries of commercials and bumpers.")]
+
+    def b():
+        return c.get("breaks") or {}
+
+    def ensure():
+        if not c.get("breaks"):
+            c["breaks"] = lc.default_breaks(c, index)
+        return c["breaks"]
+
+    def toggle(d=0):
+        c["breaks"] = {} if c.get("breaks") else lc.default_breaks(c, index)
+        save(place=False)
+
+    def flip(key, skey):
+        lst = ensure().setdefault(key, [])
+        have = [s for s in lst if s.get("section") == skey]
+        for s in have:
+            lst.remove(s)
+        if not have:
+            lst.append({"section": skey, "kind": "all"})
+        save(place=False)
+
+    def libs(key):
+        secs = sorted((s for s in index.sections.values() if s.breaks or s.kind == "clip"), key=lambda s: s.title.lower())
+        return [Item(s.title, lambda s=s: flip(key, s.key), adjust=lambda d, s=s: flip(key, s.key),
+                     value=lambda s=s: "On" if any(x.get("section") == s.key for x in b().get(key) or []) else "Off",
+                     help=f"{len(s.items):,} clips.") for s in secs] or \
+            [Item("No libraries of clips", enabled=False, help="Plex Other Videos libraries of commercials or bumpers.")]
+
+    def cycle(key, options, default, d):
+        ensure()[key] = _cycle(options, b().get(key, default), d)
+        save(place=False)
+    lengths = [(n, f"{n // 60}:{n % 60:02d}") for n in lc.BREAK_LENGTHS]
+    return [
+        Item("Breaks", toggle, value=lambda: "On" if c.get("breaks") else "Off", adjust=toggle,
+             help="On: commercials from the libraries below (it starts with your commercials libraries, and "
+                  "bumpers named for the channel's studio)."),
+        Item("Commercials from", submenu=lambda: libs("ads"), value=lambda: str(len(b().get("ads") or [])),
+             help="The libraries the commercials come from."),
+        Item("Bumpers from", submenu=lambda: libs("bumps"), value=lambda: str(len(b().get("bumps") or [])),
+             help="Bumpers and idents, one going into each break and one coming out."),
+        Item("Line up with the clock", value=lambda: _label(lc.PADS, b().get("pad", 30)),
+             adjust=lambda d: cycle("pad", lc.PADS, 30, d),
+             help="Breaks fill to the next quarter hour, half hour or hour, so programmes start on time as on real "
+                  "TV. No: every break is the length below."),
+        Item("Break length", value=lambda: _label(lengths, int(b().get("length", 120))),
+             adjust=lambda d: cycle("length", lengths, 120, d),
+             help="A break during a programme, and every break when they don't line up with the clock."),
+        Item("During programmes", value=lambda: _label(lc.MIDS, b().get("mid", "halfway")),
+             adjust=lambda d: cycle("mid", lc.MIDS, "halfway", d),
+             help="Breaks inside programmes of fifteen minutes or more: one halfway, or one every twenty minutes."),
     ]
 
 
@@ -1161,6 +1227,8 @@ def coming_up_items(app, tid):
         when = f"{start.astimezone():%a %I:%M %p}".replace(" 0", " ")
         if e.get("kind") == "signoff":
             title, about = "Off the air", "The colour bars until it signs on."
+        elif e.get("kind") in ("ad", "bump", "brb"):
+            continue                                    # (breaks: the list is of programmes)
         elif e.get("yt"):
             artist, song = vc.parse_title(e["title"], e.get("uploader", ""))
             title, about = song, f"From {artist}, {max(1, round(e['duration'] / 60))} min."
@@ -1271,6 +1339,22 @@ def library_channel_items(app):
                       value=lambda: str(len(cfg.content_groups)),
                       help="Named sets of sources (\"Saturday cartoons\", \"90s sitcoms\") to use on any channel: change "
                            "the group and every channel naming it follows."))
+    def all_breaks():
+        if app.library is None:
+            app.toast("Still reading your library. Try again in a moment.")
+            return
+        n = 0
+        for c in list(cfg.library_channels) + list(cfg.video_channels):
+            if not c.get("breaks"):
+                c["breaks"] = lc.default_breaks(c, app.library)
+                c["starter"] = False if c in cfg.library_channels else c.get("starter")
+                n += 1
+        cfg.save()
+        lc.place(app)
+        app.toast(f"Breaks on {n} channels." if n else "Every channel already has breaks.")
+    items.append(Item("Give every channel breaks", all_breaks,
+                      help="Commercials from your commercials libraries on every library and YouTube channel that "
+                           "has none, bumpers named for each channel's studio, lined up with the half hours."))
     items.append(Item("Add the starter lineup", make_starter,
                       help="Channels made from what your library holds: genres, decades, studios, long-running "
                            "shows, movies. Ones you already have (by name) are left alone."))

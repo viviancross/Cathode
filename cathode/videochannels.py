@@ -203,7 +203,7 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
                                          description=f"{ch.name} is off the air. Back at "
                                                      f"{back:%I:%M %p}".replace(" 0", " ").lstrip("0") + "."))
                 elif e.get("kind") and not e.get("yt"):     # Spelunkr, the library: shows, each running on over the breaks after it
-                    if e["kind"] == "show" or not progs:
+                    if (e["kind"] == "show" and not e.get("part")) or not progs:
                         progs.append(Program(channel_id=ch.epg_id, title=e["title"], start=cur["start"], stop=cur["stop"],
                                              category=e.get("category") or c.get("category", "Video"),
                                              description=e.get("desc", ""), episode=e.get("episode_text", ""),
@@ -329,7 +329,7 @@ def rebuild(app, report: bool = False):
     if getattr(app, "post", None) is None:          # no event loop (tests): in line
         _apply(app, *_build(list(app.config.video_channels), dict(app.listings), list(app.channels),
                             dict(getattr(app, "schedules", {}) or {}),
-                            24 * int(getattr(app.config, "guide_days", 2) or 2)), report)
+                            24 * int(getattr(app.config, "guide_days", 2) or 2), getattr(app, "library", None)), report)
         return
     if getattr(app, "_vc_busy", False):
         app._vc_again = True
@@ -338,7 +338,7 @@ def rebuild(app, report: bool = False):
     app._vc_busy, app._vc_again = True, False
     app._vc_last = time.monotonic()
     args = (list(app.config.video_channels), dict(app.listings), list(app.channels), dict(app.schedules),
-            24 * int(getattr(app.config, "guide_days", 2) or 2))
+            24 * int(getattr(app.config, "guide_days", 2) or 2), getattr(app, "library", None))
 
     def work():
         try:
@@ -350,7 +350,8 @@ def rebuild(app, report: bool = False):
     threading.Thread(target=work, daemon=True).start()
 
 
-def _build(cfg_channels: list, listings: dict, chans: list, prev: Optional[dict] = None, hours: int = 48):
+def _build(cfg_channels: list, listings: dict, chans: list, prev: Optional[dict] = None, hours: int = 48,
+           index=None):
     """Each video channel's Timeline (the one in hand when neither the
     channel nor its lists changed), everyone's listings for the guide."""
     from . import libchannels as lc, spelunkr
@@ -361,7 +362,7 @@ def _build(cfg_channels: list, listings: dict, chans: list, prev: Optional[dict]
             old.c, old.guide_memo = dict(c), None       # (the guide style, the card: not in the days drawn)
             schedules[c["id"]] = old
         else:
-            schedules[c["id"]] = lc.Timeline(c, made=(lc.yt_groups(c, listings), stamp), cid=c["id"])
+            schedules[c["id"]] = lc.Timeline(c, index, made=(lc.yt_groups(c, listings), stamp), cid=c["id"])
     schedules.update(spelunkr.SCHEDULES)
     schedules.update(lc.SCHEDULES)
     return schedules, programmes(chans, schedules, hours=hours), listings
@@ -461,7 +462,7 @@ class Player:
         cur = sched.at(self.cur["stop"] + timedelta(seconds=1)) if cont and self.cur else None
         if cur is None or now >= cur["stop"]:      # nothing after it, or that one is over too: whatever is due
             cur = sched.at(now)
-        if cur is not None and cur["entry"].get("kind") == "signoff":
+        if cur is not None and cur["entry"].get("kind") in ("signoff", "brb"):
             self._sign_off(gen, cur)
             return
         self.live.signoff = None
@@ -536,7 +537,10 @@ class Player:
         self.cur = cur
         live = self.live
         self.app.video.stop()
-        live.signoff = {"name": self.ch.name, "back": cur["stop"]}
+        kind = cur["entry"]["kind"]
+        if kind == "brb" and cur["entry"]["duration"] < 5:
+            kind = "gap"                    # a few seconds between clips: black, not a flash of the slate
+        live.signoff = {"name": self.ch.name, "back": cur["stop"], "style": kind}
         live.standby = False
         if live.phase == "cover":
             live._reveal()
@@ -567,7 +571,7 @@ class Player:
             return
         e = cur["entry"]
         offset = max(0.0, (datetime.now(timezone.utc) - cur["start"]).total_seconds())
-        if (cont or offset < GRACE) and (not e.get("kind") or e.get("yt")):
+        if (cont or offset < GRACE) and (not e.get("kind") or e.get("yt") or e.get("kind") in ("ad", "bump")):
             offset = 0.0        # a handover, or due just now (resolving and opening took the seconds): the top, not a cut head
         self.cur = cur          # (Spelunkr keeps the network's clock: always the true offset)
         self._began = time.monotonic()
@@ -649,7 +653,7 @@ class Player:
         e = (self.cur or {}).get("entry") or {}
         if self._began and time.monotonic() - self._began > 30:
             self._skips = 0                 # it played a while: not one of a run of failures
-        if e.get("kind") == "signoff":
+        if e.get("kind") in ("signoff", "brb"):
             return                          # (the picture stopped for the bars: nothing ended)
         if e.get("kind") and not e.get("yt"):
             if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
