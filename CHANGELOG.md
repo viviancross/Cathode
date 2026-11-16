@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.0
+
+**Cathode 5.** Everything NostalgiaTV does, inside Cathode, with Cathode's own
+boxes, channels and remote kept. The details are in the 4.47 to 4.58 entries
+below; in short:
+
+- **Channels from your library, no Tunarr needed.** Plex, Jellyfin, Emby and
+  folders on this computer; a starter lineup made from what you have; ten
+  sort methods; a schedule written down a day at a time, joined in progress,
+  carried on across days.
+- **Scheduling rules**: on-air hours and the colour bars at sign-off, time
+  slots and marathons, seasons, premieres, content groups, leave-outs, word
+  and rating filters, weights, a guide up to a month ahead.
+- **Commercial breaks** from your commercials and bumper libraries, lined up
+  with the clock, during programmes or not.
+- **YouTube channels on the same schedule**, with all of the above and a
+  fuller editor.
+- **Every Cathode on your network in step**: the same channels, the same
+  programme at the same moment.
+- **The lineup yours**: hide, rename, renumber, packs as guide tabs, no
+  playlist at all, HDHomeRun tuners.
+- **A web page**: a phone remote, what's on, the lineup and channel settings;
+  and the library channels shared with other apps (M3U, XMLTV, HDHomeRun).
+- **Profiles**, kids' profiles, the parent PIN, the watch history.
+- **Music libraries as radio channels**, the Weather channel's almanac,
+  settings backups.
+- A file that won't play is skipped. The three decade music channels are gone.
+
 ## 4.58
 
 - **Back up and restore settings** (Settings > System): every setting to a

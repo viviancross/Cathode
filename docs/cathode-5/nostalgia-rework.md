@@ -120,11 +120,18 @@ in order, a playlist separate videos), and from there it is the same engine as
 library channels, with the same rules, skipping and sync. `Mix` (the tenth sort
 method) is the old behaviour: sources interleaved by share of airtime.
 
+## Done: Cathode 5.0 (2026-11-15)
+
+Every phase below landed between 4.47 and 4.58; 5.0 is that work, released.
+Left out at the user's word: the trailers channel, premade music channels,
+picture bezels, languages. Not built: chapter and silence breaks, an in-browser
+Watch page, Plex Live TV (use the tuner as an HDHomeRun playlist).
+
 ## Phases
 
 | # | Phase | Done when | Status |
 |---|---|---|---|
-| 1 | Library channels | Sign in to Plex, get a starter lineup; tune lands mid-programme; guide lists the days ahead; make and edit a channel with the remote; all nine sort methods | Built in 4.47, not yet watched on a TV (see below) |
+| 1 | Library channels | Sign in to Plex, get a starter lineup; tune lands mid-programme; guide lists the days ahead; make and edit a channel with the remote; all nine sort methods | 4.47-4.48. Run in the real app (hidden window) on 2026-11-15: library read, 67 starter channels, channel 1101 joined mid-programme |
 | 2 | Rules | Time slots, restricted hours with sign-off, exclusions, weights, marathons, premieres, seasonal lineups, kid filter, content groups, schedule length 7/14/30 | 4.50: hours and sign-off, time slots, seasons, leave-out sources, word filters, ratings filter, weights, Mix, guide 2/7/14/30 days, for library and YouTube channels. 4.51: premieres (8 PM, newest arrival; New in the guide), content groups, marathon slots. Done. |
 | 3 | Breaks | Commercial groups from any library; bumper-commercial-bumper sequences; padding to :00/:15/:30; halfway and chapter breaks; be-right-back card on every skin | 4.52: done. Breaks during programmes are halfway or every 20 minutes (chapter marks and silence detection left out: they need each title read through first) |
 | 4 | More channels | Trailers channel and pre-rolls; Plex music radio with a card; weather almanac fallback | 4.54: music libraries as channel sources with the radio card; the weather almanac. Trailers left out and no premade music channels (the user's call); the three Vevo decade channels retired |
