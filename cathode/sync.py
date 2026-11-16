@@ -47,8 +47,8 @@ ME = ""                         # this Cathode's id (config.sync_id), for libcha
 
 
 def channels_digest(cfg) -> str:
-    return hashlib.sha1(json.dumps([cfg.library_channels, cfg.video_channels, cfg.own_channels],
-                                   sort_keys=True).encode()).hexdigest()[:16]
+    return hashlib.sha1(json.dumps([cfg.library_channels, cfg.video_channels, cfg.own_channels,
+                                    getattr(cfg, "content_groups", [])], sort_keys=True).encode()).hexdigest()[:16]
 
 
 def channels_key(edited: float, editor: str) -> tuple:
@@ -182,7 +182,7 @@ class Sync:
         cfg = self.app.config
         return {"edited": cfg.channels_edited, "editor": cfg.channels_editor or "",
                 "library_channels": cfg.library_channels, "video_channels": cfg.video_channels,
-                "own_channels": cfg.own_channels}
+                "own_channels": cfg.own_channels, "content_groups": getattr(cfg, "content_groups", [])}
 
     # ── Hellos ────────────────────────────────────────────────────────────
 
@@ -287,6 +287,8 @@ class Sync:
         cfg.library_channels = doc["library_channels"]
         cfg.video_channels = [vc.fix(c) for c in doc["video_channels"]]
         cfg.own_channels = doc["own_channels"]
+        if isinstance(doc.get("content_groups"), list):
+            cfg.content_groups = [g for g in doc["content_groups"] if isinstance(g, dict) and isinstance(g.get("id"), str)]
         cfg.channels_edited, cfg.channels_editor = float(doc.get("edited") or 0), doc.get("editor") or peer["id"]
         cfg.library_starter_done = True             # (theirs stands in for a starter lineup of our own)
         cfg.save()

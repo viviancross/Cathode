@@ -1267,6 +1267,10 @@ def library_channel_items(app):
                   help="A channel made from your Plex library. SELECT opens it.")
              for c in cfg.library_channels]
     items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
+    items.append(Item("Content groups", submenu=lambda: content_group_items(app),
+                      value=lambda: str(len(cfg.content_groups)),
+                      help="Named sets of sources (\"Saturday cartoons\", \"90s sitcoms\") to use on any channel: change "
+                           "the group and every channel naming it follows."))
     items.append(Item("Add the starter lineup", make_starter,
                       help="Channels made from what your library holds: genres, decades, studios, long-running "
                            "shows, movies. Ones you already have (by name) are left alone."))
@@ -1278,6 +1282,70 @@ def library_channel_items(app):
                       help="Asks Plex for everything it holds. It checks for changes by itself every few hours; "
                            "this reads it all afresh."))
     return items
+
+
+def content_group_items(app):
+    """Content groups: each opens its page; one more at the foot."""
+    from . import libchannels as lc
+    cfg = app.config
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if not text:
+                return
+            import uuid
+            g = {"id": "g" + uuid.uuid4().hex[:7], "name": text, "sources": []}
+            cfg.content_groups.append(g)
+            cfg.save()
+            app.top().refresh(content_group_items(app))
+            app.top().open(text.upper(), content_group_page(app, g["id"]))
+        app.push(Keyboard(app, "Group name", got, hint="Then add what's in it: libraries, genres, decades, shows."))
+    rows = [Item(g["name"], submenu=lambda g=g: content_group_page(app, g["id"]),
+                 value=lambda g=g: str(len(g.get("sources") or [])), help="SELECT: what's in it, its name, removing it.")
+            for g in cfg.content_groups]
+    rows.append(Item("Make a group...", add, help="A named set of sources, to name on any channel."))
+    return rows
+
+
+def content_group_page(app, gid):
+    from . import libchannels as lc
+    cfg = app.config
+    g = next((x for x in cfg.content_groups if x["id"] == gid), None)
+    if g is None:
+        return [Item("(this group is gone)", enabled=False)]
+
+    def rename():
+        def got(text):
+            if text and text.strip():
+                g["name"] = text.strip()
+                for c in cfg.library_channels:
+                    for s in c.get("sources") or []:
+                        if s.get("kind") == "group" and s.get("value") == gid:
+                            s["label"] = g["name"]
+                cfg.save()
+                lc.rebuild(app)
+        app.push(Keyboard(app, "Group name", got, initial=g["name"]))
+
+    def remove():
+        cfg.content_groups[:] = [x for x in cfg.content_groups if x["id"] != gid]
+        for c in cfg.library_channels:
+            c["sources"] = [s for s in c.get("sources") or [] if not (s.get("kind") == "group" and s.get("value") == gid)]
+        cfg.save()
+        lc.rebuild(app)
+        m = app.top()
+        m.back()
+        m.refresh(content_group_items(app))
+    users = [c["name"] for c in cfg.library_channels
+             if any(s.get("kind") == "group" and s.get("value") == gid for s in c.get("sources") or [])]
+    return [
+        Item("Plays", submenu=lambda: library_source_items(app, gid), value=lambda: str(len(g.get("sources") or [])),
+             help="What's in the group."),
+        Item("Name", rename, value=lambda: g["name"]),
+        Item("Used by", value=lambda: str(len(users)), help=", ".join(users) or "No channel names it yet."),
+        Item("Remove group", submenu=lambda: _confirm(app, "Remove group", remove, "Keep it"),
+             help="Channels naming it lose it from what they play."),
+    ]
 
 
 def library_channel_page(app, cid):
@@ -1329,6 +1397,10 @@ def library_channel_page(app, cid):
         c["content"] = _cycle(lc.CONTENT, c.get("content", "any"), d)
         save(place=False)
 
+    def premieres(d):
+        c["premieres"] = _cycle(lc.PREMIERES, c.get("premieres", "off"), d)
+        save(place=False)
+
     def card(d=0):
         c["card"] = not c.get("card", False)
         save(place=False)
@@ -1363,6 +1435,9 @@ def library_channel_page(app, cid):
         Item("Plays", submenu=lambda: library_source_items(app, cid), value=holds,
              help="What the channel draws from: libraries, genres, decades, studios, ratings, shows."),
         *timeline_items(app, c, lc.PREFIX + cid, save),
+        Item("Premieres", value=lambda: _label(lc.PREMIERES, c.get("premieres", "off")), adjust=premieres,
+             help="Each evening at 8, the newest arrival in your library the channel hasn't premiered yet. The "
+                  "guide marks it, and marks every title added in the last two weeks as New."),
         Item("Ratings", value=lambda: _label(lc.CONTENT, c.get("content", "any")), adjust=content,
              help="Anything; nothing rated TV-MA, R or NC-17; or only TV-Y, TV-Y7, TV-G and G (unrated titles "
                   "stay off a kids' channel)."),
@@ -1376,11 +1451,18 @@ def library_channel_page(app, cid):
     ]
 
 
+def _holder(cfg, cid):
+    """A library channel, or a content group, by id: what has sources."""
+    return next((x for x in list(cfg.library_channels) + list(getattr(cfg, "content_groups", []) or [])
+                 if x["id"] == cid), None)
+
+
 def library_source_items(app, cid):
-    """What a library channel plays: each source removable; one more at the foot."""
+    """What a library channel (or a content group) plays: each source
+    opens its page; one more at the foot."""
     from . import libchannels as lc
     cfg = app.config
-    c = next((x for x in cfg.library_channels if x["id"] == cid), None)
+    c = _holder(cfg, cid)
     if c is None:
         return [Item("(this channel is gone)", enabled=False)]
     index = app.library
@@ -1419,9 +1501,18 @@ def library_source_items(app, cid):
                 rows.append(Item(f"A {label.lower()}...", submenu=lambda kind=kind: values(section, kind)))
         return rows
 
+    def group_rows():
+        return [Item(g["name"], lambda g=g: (c.setdefault("sources", []).append(
+                    {"kind": "group", "value": g["id"], "label": g["name"]}), changed()))
+                for g in cfg.content_groups] or [Item("No content groups yet", enabled=False,
+                                                      help="Make one under Library Channels > Content groups.")]
+
     def where():
         rows = [Item("Every library", submenu=lambda: kinds(""),
                      help="All your programme libraries together (not the bumpers, nor ones hidden from On Demand).")]
+        if c in cfg.library_channels:
+            rows.append(Item("A content group...", submenu=group_rows,
+                             help="A named set of sources you made once, to use on any channel."))
         for sec in sorted(index.sections.values(), key=lambda s: s.title.lower()):
             rows.append(Item(sec.title, submenu=lambda sec=sec: kinds(sec.key), value=lambda sec=sec: f"{len(sec.items):,}"))
         return rows
@@ -1476,7 +1567,7 @@ def source_rule_items(app, s, changed, mix=lambda: False):
 def library_source_page(app, cid, i):
     from . import libchannels as lc
     cfg = app.config
-    c = next((x for x in cfg.library_channels if x["id"] == cid), None)
+    c = _holder(cfg, cid)
     srcs = (c or {}).get("sources") or []
     if c is None or i >= len(srcs):
         return [Item("(this is gone)", enabled=False)]

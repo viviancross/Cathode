@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.51
+
+- **Premieres.** A library channel can premiere the newest arrival in your
+  library each evening: the first programme from 8 PM is the newest title it
+  hasn't premiered yet, and the guide says "Premiere!". Every title added in
+  the last two weeks is marked New in the guide.
+- **Content groups.** Named sets of sources ("Saturday cartoons", "90s
+  sitcoms") made once under Library Channels > Content groups and named on
+  any channel. Change the group and every channel naming it follows.
+- **Marathons.** Three more time slots (weeknight prime time, Saturday and
+  Sunday afternoons). A source of one show in a slot is a marathon: the slot
+  is all that show, in order.
+
 ## 4.50
 
 - **Scheduling rules, for library and YouTube channels alike.**

@@ -60,7 +60,10 @@ OFF = "-off-"                   # an off-the-air stretch among the days drawn up
 FLOOR = 0.05                    # Mix, automatic weighting: no source under this share of the airtime
 # What a channel's days are drawn from: a change to any of them redraws today onward.
 SIG_KEYS = ("sources", "order", "block", "seed", "hours", "content", "words_out", "words_in", "weighting",
-            "min_seconds", "max_seconds", "skip_shorts", "skip_live")
+            "min_seconds", "max_seconds", "skip_shorts", "skip_live", "premieres", "breaks")
+NEW_DAYS = 14                   # a title added this recently is new (the guide says so; premieres pick from them)
+PREMIERE_HOUR = 20              # premieres air at the first programme from 8 PM
+PREMIERES = [("off", "Off"), ("prime", "8 PM, the newest arrival")]
 WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
 CONTENT = [("any", "Anything"), ("family", "Nothing rated for grown-ups"), ("kids", "Kids' ratings only")]
 # When a channel is on the air: [sign on, sign off] hours, or None for always.
@@ -72,7 +75,10 @@ AIRS = [(None, "Any time"), ({"from": 6, "to": 12}, "Mornings"), ({"from": 12, "
         ({"from": 17, "to": 20}, "Early evening"), ({"from": 20, "to": 23}, "Prime time"),
         ({"from": 23, "to": 6}, "Late night"), ({"days": [5], "from": 7, "to": 12}, "Saturday mornings"),
         ({"days": [0, 1, 2, 3, 4], "from": 15, "to": 18}, "After school"), ({"days": [5, 6]}, "Weekends"),
-        ({"days": [0, 1, 2, 3, 4]}, "Weekdays"), ({"days": [4, 5], "from": 20, "to": 2}, "Friday and Saturday nights")]
+        ({"days": [0, 1, 2, 3, 4]}, "Weekdays"), ({"days": [4, 5], "from": 20, "to": 2}, "Friday and Saturday nights"),
+        ({"days": [0, 1, 2, 3, 4], "from": 20, "to": 23}, "Weeknight prime time"),
+        ({"days": [5], "from": 12, "to": 18}, "Saturday afternoons"), ({"days": [6], "from": 12, "to": 18}, "Sunday afternoons")]
+# (A source of one show in a slot is a marathon: the slot is all that show, in order.)
 SEASONS = [(None, "All year"), ([10], "October"), ([11], "November"), ([12], "December"),
            ([10, 11, 12], "October to December"), ([6, 7, 8], "Summer"), ([1, 2], "January and February")]
 
@@ -200,6 +206,24 @@ def _rated(c: dict, rating: str) -> bool:
     if mode == "family":
         return rating not in MATURE
     return True
+
+
+def expand(c: dict, config) -> dict:
+    """The channel with each content group it names replaced by the
+    group's own sources (taking the naming source's slot, season, weight,
+    leave-out and shuffle)."""
+    groups_ = {g["id"]: g for g in getattr(config, "content_groups", None) or []}
+    if not any(s.get("kind") == "group" for s in c.get("sources") or []):
+        return c
+    out = []
+    for s in c.get("sources") or []:
+        if s.get("kind") != "group":
+            out.append(s)
+            continue
+        over = {k: s[k] for k in ("airs", "season", "weight", "exclude", "shuffle") if k in s}
+        out += [dict(sub, **over) for sub in (groups_.get(s.get("value")) or {}).get("sources") or []
+                if sub.get("kind") != "group"]
+    return dict(c, sources=out)
 
 
 def signature(c: dict) -> str:
@@ -521,8 +545,9 @@ def describe(i: dict) -> dict:
         e["yt"] = True
         e["icon"] = i["thumb"]
         return e
+    new = i.get("added", 0) >= time.time() - NEW_DAYS * 86400
     if i["type"] == "episode":
-        e["episode_text"] = f"S{i['season']} E{i['episode']}" if i["season"] else ""
+        e["episode_text"] = (f"S{i['season']} E{i['episode']}" if i["season"] else "") + ("  New" if new else "")
         e["desc"] = (f'"{i["name"]}"  ' if i["name"] else "") + i["summary"]
         e["category"] = (i["genres"] or ["Series"])[0]
     else:
@@ -571,6 +596,27 @@ class Timeline:
         """Whether the days name titles this Cathode hasn't read (another's
         days, taken before this one's lists or library caught up)."""
         return any(s[1] != OFF and s[1] not in self._by_id for s in self._slots)
+
+    def _premiere(self, t: float, state: dict, elig) -> Optional[dict]:
+        """At the first programme from 8 PM each day: the newest arrival
+        the channel hasn't premiered yet, if it has premieres on."""
+        if self.c.get("premieres", "off") == "off":
+            return None
+        lt = datetime.fromtimestamp(t)
+        day = lt.strftime("%Y-%m-%d")
+        if lt.hour < PREMIERE_HOUR or state.get("prem_day") == day:
+            return None
+        state["prem_day"] = day
+        done = state.setdefault("premiered", [])
+        fresh = time.time() - NEW_DAYS * 86400
+        new = [i for g in self.groups if elig is None or g["id"] in elig for i in g["items"]
+               if i.get("added", 0) >= fresh and i["id"] not in done and i["id"] not in self.dropped]
+        if not new:
+            return None
+        i = max(new, key=lambda i: (i["added"], i["id"]))
+        done.append(i["id"])
+        del done[:max(0, len(done) - 500)]
+        return i
 
     def _eligible(self, t: float):
         """The groups that may air at a moment: those of the sources whose
@@ -669,6 +715,11 @@ class Timeline:
                 t = b
                 continue
             elig = self._eligible(t)
+            prem = self._premiere(t, state, elig)
+            if prem is not None:
+                slots.append([t, prem["id"], prem["duration"], {"premiere": 1}])
+                t += prem["duration"]
+                continue
             i = rotor.next(elig) if elig is None or elig else None
             if i is None:
                 if elig is None:
@@ -712,7 +763,9 @@ class Timeline:
             n = _bisect(self._starts, t) - 1
             if n < 0:
                 return None
-            start, item_id, dur = self._slots[n]
+            slot = self._slots[n]
+            start, item_id, dur = slot[0], slot[1], slot[2]
+            extra = slot[3] if len(slot) > 3 else None
             if t >= start + dur:
                 return None
             if item_id == OFF:
@@ -726,6 +779,10 @@ class Timeline:
                 e = self._made[item_id] = describe(i)
                 if self.poster and i["thumb"] and i["type"] != "video":
                     e["icon"] = self.poster(i["thumb"])
+            if extra:
+                e = dict(e, **extra)
+                if extra.get("premiere"):
+                    e["desc"] = "Premiere! " + e.get("desc", "")
             return {"entry": e, "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
 
     def drop(self, item_id: str, now: Optional[datetime] = None):
@@ -855,8 +912,9 @@ def is_doc(d) -> bool:
                     and isinstance(day["state"], dict) and isinstance(day["slots"], list)):
                 return False
             for s in day["slots"]:
-                if not (isinstance(s, list) and len(s) == 3 and isinstance(s[0], (int, float))
-                        and isinstance(s[1], str) and isinstance(s[2], (int, float))):
+                if not (isinstance(s, list) and len(s) in (3, 4) and isinstance(s[0], (int, float))
+                        and isinstance(s[1], str) and isinstance(s[2], (int, float))
+                        and (len(s) == 3 or isinstance(s[3], dict))):
                     return False
         return all(isinstance(v, (int, float)) for v in d["dropped"].values())
     except (KeyError, TypeError, AttributeError):
@@ -1017,7 +1075,7 @@ def rebuild(app, done=None):
     index = getattr(app, "library", None)
     if index is None:
         return
-    chans = [dict(c) for c in app.config.library_channels]
+    chans = [expand(dict(c), app.config) for c in app.config.library_channels]
     od = getattr(app, "ondemand", None)
     client = od.client() if od is not None and hasattr(od, "client") else None
 
@@ -1099,6 +1157,8 @@ def options(index, section: str, kind: str) -> list:
 
 def source_label(index, src: dict) -> str:
     """'TV Shows: Comedy', 'Everything: 1990s', 'The Simpsons'."""
+    if src.get("kind") == "group":
+        return f"Group: {src.get('label') or 'a content group'}"
     sec = index.sections.get(src.get("section") or "") if index else None
     where = sec.title if sec else "Everything"
     kind, val = src.get("kind", "all"), src.get("value")

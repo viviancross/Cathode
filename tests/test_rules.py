@@ -325,5 +325,53 @@ class TestMaker(Temp):
         self.assertEqual(app.config.guide_days, 7)
 
 
+class TestPremieresAndGroups(Temp):
+    def test_the_newest_arrival_premieres_at_eight_and_new_titles_say_so(self):
+        idx = index()
+        fresh = idx.item("p300103")
+        fresh["added"] = time.time() - 3600                     # added an hour ago
+        c = chan("cyclic_shuffle", premieres="prime")
+        tl = lc.Timeline(c, idx, store=False)
+        got = slots(tl, 3)
+        prem = [s for s in got if len(s) > 3 and s[3].get("premiere")]
+        self.assertEqual([s[1] for s in prem], ["p300103"])      # once, not every night
+        lt = datetime.fromtimestamp(prem[0][0])
+        self.assertGreaterEqual(lt.hour, lc.PREMIERE_HOUR)
+        before = [s for s in got if s[0] < prem[0][0]]
+        self.assertLess(datetime.fromtimestamp(before[-1][0]).hour * 60 + datetime.fromtimestamp(before[-1][0]).minute,
+                        lc.PREMIERE_HOUR * 60 + 1)              # the first programme from eight
+        e = tl.at(datetime.fromtimestamp(prem[0][0] + 5, timezone.utc))["entry"]
+        self.assertTrue(e["desc"].startswith("Premiere! "))
+        self.assertTrue(e["episode_text"].endswith("New"))
+        self.assertTrue(lc.is_doc(tl.doc()))                    # four-part slots travel to other Cathodes
+        quiet = lc.Timeline(chan("cyclic_shuffle"), idx, store=False)
+        self.assertFalse(any(len(s) > 3 for s in slots(quiet, 2)))
+
+    def test_a_content_group_is_its_sources_wherever_it_is_named(self):
+        from types import SimpleNamespace
+        cfg = SimpleNamespace(content_groups=[{"id": "g1", "name": "Nick", "sources": [
+            {"section": "51", "kind": "show", "value": "100"}, {"section": "51", "kind": "show", "value": "200"}]}])
+        c = chan("block_shuffle", {"kind": "group", "value": "g1", "label": "Nick", "airs": {"from": 7, "to": 12}},
+                 {"section": "51", "kind": "show", "value": "300"})
+        e = lc.expand(c, cfg)
+        self.assertEqual([s.get("value") for s in e["sources"]], ["100", "200", "300"])
+        self.assertEqual(e["sources"][0]["airs"], {"from": 7, "to": 12})          # the naming source's slot
+        self.assertEqual(sorted(g["title"] for g in lc.groups(e, index())), ["Alpha", "Bravo", "Charlie"])
+        self.assertEqual(lc.source_label(index(), c["sources"][0]), "Group: Nick")
+        cfg.content_groups[0]["sources"].pop()
+        self.assertNotEqual(lc.signature(lc.expand(c, cfg)), lc.signature(e))     # the group changed: redrawn
+
+    def test_a_one_show_slot_is_a_marathon(self):
+        c = chan("block_shuffle", {"section": "51", "kind": "all"},
+                 {"section": "51", "kind": "show", "value": "200", "airs": {"days": [5], "from": 12, "to": 18}})
+        tl = lc.Timeline(c, index(), store=False)
+        got = slots(tl, 7)
+        sat = [s for s in got if datetime.fromtimestamp(s[0]).weekday() == 5 and 12 <= datetime.fromtimestamp(s[0]).hour < 18]
+        self.assertTrue(sat)
+        self.assertTrue(all(s[1].startswith("p200") for s in sat))
+        bravo = [s[1] for s in sat]
+        self.assertEqual(bravo[:5], sorted(bravo[:5]) if bravo[0] == "p200101" else bravo[:5])     # in order
+
+
 if __name__ == "__main__":
     unittest.main()
