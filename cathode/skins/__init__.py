@@ -584,6 +584,42 @@ class Skin:
         cols = max(1, self.menu_cols(menu))
         return max(1, -(-len(menu.items) // cols))
 
+    # The colour bars a channel shows while it's off the air: the station's
+    # test card, not the box's, so one drawing does for every skin.
+    _BARS = [(192, 192, 192), (192, 192, 0), (0, 192, 192), (0, 192, 0), (192, 0, 192), (192, 0, 0), (0, 0, 192)]
+    _CASTELLATIONS = [(0, 0, 192), (19, 19, 19), (192, 0, 192), (19, 19, 19), (0, 192, 192), (19, 19, 19), (192, 192, 192)]
+    _PLUGE = [((0, 33, 76), 1.25), ((255, 255, 255), 1.25), ((50, 0, 106), 1.25), ((19, 19, 19), 1.25),
+              ((9, 9, 9), 1 / 3), ((19, 19, 19), 1 / 3), ((29, 29, 29), 1 / 3), ((19, 19, 19), 1.0)]
+
+    def draw_signoff(self, c, s):
+        """A channel off the air: the bars, and its name and when it's back
+        on a card over them."""
+        W, H = self.canvas
+        bw, h1, h2 = W / 7, int(H * 0.67), int(H * 0.75)
+        for k in range(7):
+            x0, x1 = round(k * bw), round((k + 1) * bw)
+            pygame.draw.rect(c, self._BARS[k], (x0, 0, x1 - x0, h1))
+            pygame.draw.rect(c, self._CASTELLATIONS[k], (x0, h1, x1 - x0, h2 - h1))
+        x = 0.0
+        for col, w in self._PLUGE:
+            pygame.draw.rect(c, col, (round(x), h2, round(x + w * bw) - round(x), H - h2))
+            x += w * bw
+        back = s["back"].astimezone()
+        when = f"{back:%I:%M %p}".lstrip("0")
+        lines = [(s["name"], self.fb(max(14, H // 18))), ("is off the air", self.f(max(12, H // 26))),
+                 (f"Back at {when}", self.f(max(12, H // 26)))]
+        gap = max(4, H // 90)
+        hs = [self.text.ink(f)[1] for _t, f in lines]
+        box_w = max(self.text.width(f, t) for t, f in lines) + H // 10
+        box = pygame.Rect(0, 0, min(W - 20, box_w), sum(hs) + gap * 2 + H // 16)
+        box.center = (W // 2, int(H * 0.36))
+        pygame.draw.rect(c, (0, 0, 0), box)
+        pygame.draw.rect(c, (255, 255, 255), box, max(1, H // 240))
+        y = box.y + H // 32
+        for (t, f), h in zip(lines, hs):
+            self.text.draw(c, self.text.fit(f, t, box.w - 16), f, (255, 255, 255), box.centerx, y, align="center")
+            y += h + gap
+
     def f(self, size: int, bold: bool = False):
         regular, heavy, _ = FONTS.get(self.font_key(), FONTS[self.default_font])
         return self.text.font(heavy if bold and heavy else regular, size)

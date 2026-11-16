@@ -791,6 +791,16 @@ def channel_items(app):
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
     items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
+    days = [(2, "2 days"), (7, "A week"), (14, "Two weeks"), (30, "A month")]
+
+    def guide_days(d):
+        from . import videochannels as vc
+        cfg.guide_days = _cycle(days, int(cfg.guide_days or 2), d)
+        cfg.save()
+        vc.rebuild(app)
+    items.append(Item("Guide listings", value=lambda: _label(days, int(cfg.guide_days or 2)), adjust=guide_days,
+                      help="How far ahead the guide lists the library and video channels. Further takes longer to "
+                           "draw up and more memory."))
 
     def sync_value():
         s = getattr(app, "sync", None)
@@ -999,6 +1009,17 @@ def video_channel_page(app, cid):
         m = app.top()
         m.back()
         m.refresh(video_channel_items(app))
+
+    def move(d):
+        lst = cfg.video_channels
+        i = lst.index(c)
+        if 0 <= i + d < len(lst):
+            lst[i], lst[i + d] = lst[i + d], lst[i]
+            save()
+            m = app.top()
+            m.back()
+            m.refresh(video_channel_items(app))
+            m.open((c.get("name") or "Video Channel").upper(), video_channel_page(app, cid))
     return [
         Item("Name", set_name, value=lambda: c.get("name") or "(its first source's)",
              help="The channel's name in the lineup and the guide. Empty: named for its first source."),
@@ -1006,10 +1027,7 @@ def video_channel_page(app, cid):
              help="Automatic (after the lineup's last number) or one you choose; a taken number moves to the next free."),
         Item("Sources", submenu=lambda: video_source_items(app, cid), value=lambda: str(len(c.get("sources") or [])),
              help="The playlists, channels and @handles this channel mixes."),
-        Item("Weighting", value=lambda: _label(vc.WEIGHTINGS, c.get("weighting", "auto")),
-             adjust=lambda d: cycle("weighting", vc.WEIGHTINGS, d),
-             help="Auto: each source's share of the airtime follows how much of it there is, no source under 5%. "
-                  "Equal: the same airtime each. Manual: the weights set on the sources."),
+        *timeline_items(app, c, cid, save, unit="videos", default="mix"),
         Item("Minimum length", value=lambda: (f"{c.get('min_seconds', 60)} s" if c.get("min_seconds", 60) else "Any"),
              adjust=min_len, help="Videos shorter than this stay out of the day."),
         Item("Maximum length", value=lambda: hours(c.get("max_seconds", 0)), adjust=max_len,
@@ -1029,6 +1047,11 @@ def video_channel_page(app, cid):
         Item("Refresh schedule", refresh,
              help="Fetches every source's list again, draws up today's running order anew (your changes "
                   "to the sources and their order included) and starts the channel over if it's on."),
+        Item("Move up", lambda: move(-1), enabled=cfg.video_channels.index(c) > 0,
+             help="Earlier in the list: channels numbered automatically take the lower number."),
+        Item("Move down", lambda: move(1), enabled=cfg.video_channels.index(c) < len(cfg.video_channels) - 1),
+        Item("Make a copy", lambda: _copy_channel(app, cfg.video_channels, c, video_channel_page),
+             help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
     ]
 
@@ -1036,6 +1059,7 @@ def video_channel_page(app, cid):
 # ── Library channels (libchannels.py): the maker ─────────────────────────
 
 ORDER_HELP = {
+    "mix": "The sources interleaved by their shares of the airtime; each one's titles shuffled, or in order.",
     "random": "Any title, any time; nothing comes round again soon.",
     "cyclic_shuffle": "Every title once, shuffled, then a fresh shuffle.",
     "block_shuffle": "A few episodes of one show in order, then a random other show.",
@@ -1046,6 +1070,137 @@ ORDER_HELP = {
     "round_robin_cyclic": "One episode of each show in turn, by name.",
     "playlist": "As listed: each show from its first episode to its last, shows by name.",
 }
+
+
+# ── Timeline channels (library and video): the rows they share ───────────
+
+def _label_of(options, key, other="Custom"):
+    """_label for options whose keys are lists or dicts."""
+    return next((label for k, label in options if k == key), other)
+
+
+def _ago(t: float) -> str:
+    s = time.time() - t
+    return "just now" if s < 120 else f"{int(s // 60)} min ago" if s < 3600 else \
+        f"{int(s // 3600)} h ago" if s < 86400 else f"{int(s // 86400)} d ago"
+
+
+def timeline_items(app, c, tid, save, unit="episodes", default="cyclic_shuffle"):
+    """How a timeline channel is sorted and when it's on: its sort method
+    (and block length, or Mix's weighting), on-air hours, word filters,
+    what's coming up, what was skipped."""
+    from . import libchannels as lc
+
+    def order(d):
+        c["order"] = _cycle(lc.ORDERS, c.get("order", default), d)
+        c["block"] = 0
+        save(place=False)
+
+    def block(d):
+        if c.get("order", default) not in lc.BLOCKS:
+            return
+        c["block"] = max(1, min(48, int(c.get("block") or lc.BLOCKS[c["order"]]) + d))
+        save(place=False)
+
+    def block_value():
+        o = c.get("order", default)
+        return f"{int(c.get('block') or lc.BLOCKS[o])} {unit}" if o in lc.BLOCKS else "-"
+
+    def weighting(d):
+        if c.get("order", default) != "mix":
+            return
+        c["weighting"] = _cycle(lc.WEIGHTINGS, c.get("weighting", "auto"), d)
+        save(place=False)
+
+    def hours(d):
+        c["hours"] = _cycle(lc.HOURS, c.get("hours"), d)
+        save(place=False)
+
+    def words(key, prompt):
+        def got(text):
+            if text is None:
+                return
+            c[key] = [w.strip() for w in text.split(",") if w.strip()]
+            save(place=False)
+        app.push(Keyboard(app, prompt, got, initial=", ".join(c.get(key) or [])))
+
+    def words_value(key):
+        ws = c.get(key) or []
+        return ", ".join(ws)[:24] if ws else "None"
+    return [
+        Item("Sort method", value=lambda: _label(lc.ORDERS, c.get("order", default)), adjust=order,
+             help=ORDER_HELP.get(c.get("order", default), "") + "  LEFT/RIGHT changes it."),
+        Item("Block length", value=block_value, adjust=block,
+             help=f"How many {unit} of one show run before the next (the Block and Marathon methods)."),
+        Item("Weighting", value=lambda: _label(lc.WEIGHTINGS, c.get("weighting", "auto"))
+             if c.get("order", default) == "mix" else "-", adjust=weighting,
+             help="Mix only. Auto: each source's share of the airtime follows how much of it there is, none under "
+                  "5%. Equal: the same airtime each. Manual: the weights set on the sources."),
+        Item("On the air", value=lambda: _label_of(lc.HOURS, c.get("hours")), adjust=hours,
+             help="When the channel broadcasts. Outside its hours it signs off to the colour bars until it's back. "
+                  "The last programme before sign-off plays to its end."),
+        Item("Leave out titles with", lambda: words("words_out", "Leave out titles with (commas between)"),
+             value=lambda: words_value("words_out"),
+             help="Anything whose title has one of these words stays off the channel: trailer, reaction, live..."),
+        Item("Only titles with", lambda: words("words_in", "Only titles with (commas between; empty = any)"),
+             value=lambda: words_value("words_in"),
+             help="When set, only titles with one of these words are on the channel."),
+        Item("Coming up", submenu=lambda: coming_up_items(app, tid),
+             help="What's on now and what follows, with the times."),
+        Item("Skipped", submenu=lambda: skipped_items(app, tid),
+             value=lambda: str(len(getattr(lc.SCHEDULES.get(tid), "dropped", {}) or {})),
+             help="Titles that couldn't play, kept off the channel for a week. SELECT one to put it back."),
+    ]
+
+
+def coming_up_items(app, tid):
+    from . import libchannels as lc, videochannels as vc
+    tl = lc.SCHEDULES.get(tid)
+    rows = []
+    for start, e in (tl.coming(30) if tl is not None else []):
+        when = f"{start.astimezone():%a %I:%M %p}".replace(" 0", " ")
+        if e.get("kind") == "signoff":
+            title, about = "Off the air", "The colour bars until it signs on."
+        elif e.get("yt"):
+            artist, song = vc.parse_title(e["title"], e.get("uploader", ""))
+            title, about = song, f"From {artist}, {max(1, round(e['duration'] / 60))} min."
+        else:
+            title = e["title"] + (f"  {e['episode_text']}" if e.get("episode_text") else "")
+            about = e.get("desc", "")[:240]
+        rows.append(Item(title, value=lambda w=when: w, help=about))
+    return rows or [Item("Nothing drawn up yet", enabled=False)]
+
+
+def skipped_items(app, tid):
+    from . import libchannels as lc
+    tl = lc.SCHEDULES.get(tid)
+    if tl is None or not tl.dropped:
+        return [Item("Nothing skipped", enabled=False,
+                     help="A title that can't play (a damaged file, a deleted video) shows up here.")]
+
+    def restore(k):
+        tl.restore(k)
+        app.toast("It's back in the days drawn up from here on.")
+        app.top().refresh(skipped_items(app, tid))
+    return [Item(tl.title_of(k), lambda k=k: restore(k), value=lambda k=k: _ago(tl.dropped.get(k, time.time())),
+                 help="SELECT puts it back on the channel.")
+            for k in sorted(tl.dropped, key=lambda k: -tl.dropped[k])]
+
+
+def _copy_channel(app, lst: list, c: dict, page):
+    """A copy of a channel after it, renamed, numbered automatically."""
+    import copy
+    import uuid
+    d = copy.deepcopy(c)
+    d.update(id=uuid.uuid4().hex[:8], name=(c.get("name") or "Channel") + " (copy)", number="auto", starter=False)
+    d.pop("seed", None)
+    lst.insert(lst.index(c) + 1, d)
+    app.config.save()
+    from . import libchannels as lc
+    lc.place(app)
+    m = app.top()
+    m.back()
+    m.open(d["name"].upper(), page(app, d["id"]))
 
 
 def library_channel_items(app):
@@ -1170,22 +1325,9 @@ def library_channel_page(app, cid):
         at = f" {ch.number:g}" if ch else ""
         return f"Auto{at}" if c.get("number", "auto") == "auto" else f"Channel{at}"
 
-    def order(d):
-        c["order"] = _cycle(lc.ORDERS, c.get("order", "cyclic_shuffle"), d)
-        c["block"] = 0
+    def content(d):
+        c["content"] = _cycle(lc.CONTENT, c.get("content", "any"), d)
         save(place=False)
-
-    def block(d):
-        if c.get("order") not in lc.BLOCKS:
-            return
-        now = int(c.get("block") or lc.BLOCKS.get(c.get("order"), 1))
-        c["block"] = max(1, min(48, now + d))
-        save(place=False)
-
-    def block_value():
-        if c.get("order") not in lc.BLOCKS:
-            return "-"
-        return f"{int(c.get('block') or lc.BLOCKS[c['order']])} episodes"
 
     def card(d=0):
         c["card"] = not c.get("card", False)
@@ -1220,14 +1362,16 @@ def library_channel_page(app, cid):
                   "number moves to the next free."),
         Item("Plays", submenu=lambda: library_source_items(app, cid), value=holds,
              help="What the channel draws from: libraries, genres, decades, studios, ratings, shows."),
-        Item("Sort method", value=lambda: _label(lc.ORDERS, c.get("order", "cyclic_shuffle")), adjust=order,
-             help=ORDER_HELP.get(c.get("order", "cyclic_shuffle"), "") + "  LEFT/RIGHT changes it."),
-        Item("Block length", value=block_value, adjust=block,
-             help="How many episodes of a show run before the next show (Block and Marathon methods)."),
+        *timeline_items(app, c, lc.PREFIX + cid, save),
+        Item("Ratings", value=lambda: _label(lc.CONTENT, c.get("content", "any")), adjust=content,
+             help="Anything; nothing rated TV-MA, R or NC-17; or only TV-Y, TV-Y7, TV-G and G (unrated titles "
+                  "stay off a kids' channel)."),
         Item("Lower-third", value=lambda: "On" if c.get("card", False) else "Off", adjust=card,
              help="A name card as each programme starts and before it ends."),
         Item("Draw up the schedule again", refresh,
              help="Today onward in a fresh order. The show on now changes."),
+        Item("Make a copy", lambda: _copy_channel(app, cfg.library_channels, c, library_channel_page),
+             help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
     ]
 
@@ -1283,11 +1427,83 @@ def library_source_items(app, cid):
         return rows
     if index is None:
         return [Item("Still reading your library...", enabled=False)]
-    items = [Item(lc.source_label(index, s), submenu=lambda i=i: _confirm(app, "Remove it", lambda: remove(i), "Keep it"),
-                  help="SELECT to take it out.")
+    def label(s):
+        return ("Not: " if s.get("exclude") else "") + lc.source_label(index, s)
+
+    def when(s):
+        bits = [_label_of(lc.AIRS, s.get("airs"))] if s.get("airs") else []
+        bits += [_label_of(lc.SEASONS, s.get("season"))] if s.get("season") else []
+        return ", ".join(bits)[:24] or ("Left out" if s.get("exclude") else "Any time")
+    items = [Item(label(s), submenu=lambda i=i: library_source_page(app, cid, i), value=lambda s=s: when(s),
+                  help="SELECT: when it airs, its weight, leaving it out, removing it.")
              for i, s in enumerate(c.get("sources") or [])]
     items.append(Item("Add...", submenu=where, help="One more slice of the library for this channel."))
     return items
+
+
+def source_rule_items(app, s, changed, mix=lambda: False):
+    """When a source airs and how much: rows a library source and a video
+    source share."""
+    from . import libchannels as lc
+
+    def cycle(key, options, d):
+        s[key] = _cycle(options, s.get(key), d)
+        changed()
+
+    def weight(d):
+        s["weight"] = max(1, min(10, int(s.get("weight", 1) or 1) + d))
+        changed()
+
+    def shuffle(d=0):
+        s["shuffle"] = not s.get("shuffle", True)
+        changed()
+    return [
+        Item("Airs", value=lambda: _label_of(lc.AIRS, s.get("airs")), adjust=lambda d: cycle("airs", lc.AIRS, d),
+             help="A time slot: while it's this one's time, the channel plays only sources whose slot it is. "
+                  "Sources without a slot fill the rest of the day."),
+        Item("Season", value=lambda: _label_of(lc.SEASONS, s.get("season")),
+             adjust=lambda d: cycle("season", lc.SEASONS, d),
+             help="Months it's on the channel at all: holiday specials in December, say."),
+        Item("Weight", value=lambda: str(s.get("weight", 1)), adjust=weight,
+             help="How much it airs against the others: with Mix (Manual weighting) its share of the airtime; with "
+                  "the Shuffle methods how often its shows come up (1 to 10)."),
+        Item("Shuffle", value=lambda: ("On" if s.get("shuffle", True) else "Off") if mix() else "-", adjust=shuffle,
+             help="Mix only. On: its titles shuffled, every one before any comes round again. Off: in its order, "
+                  "carrying on where it left off."),
+    ]
+
+
+def library_source_page(app, cid, i):
+    from . import libchannels as lc
+    cfg = app.config
+    c = next((x for x in cfg.library_channels if x["id"] == cid), None)
+    srcs = (c or {}).get("sources") or []
+    if c is None or i >= len(srcs):
+        return [Item("(this is gone)", enabled=False)]
+    s = srcs[i]
+
+    def changed():
+        c["starter"] = False
+        cfg.save()
+        lc.rebuild(app)
+
+    def leave_out(d=0):
+        s["exclude"] = not s.get("exclude")
+        changed()
+
+    def remove():
+        srcs.pop(i)
+        changed()
+        m = app.top()
+        m.back()
+        m.refresh(library_source_items(app, cid))
+    return [
+        Item("Leave these out", leave_out, value=lambda: "On" if s.get("exclude") else "Off", adjust=leave_out,
+             help="On: whatever this matches is kept off the channel, though another source takes it in (a "
+                  "Comedy channel without one show, say)."),
+        *source_rule_items(app, s, changed, mix=lambda: c.get("order") == "mix"),
+        Item("Remove it", submenu=lambda: _confirm(app, "Remove it", remove, "Keep it")),
+    ]
 
 
 def video_source_items(app, cid):
@@ -1355,9 +1571,19 @@ def video_source_page(app, cid, i):
         s["order"] = _cycle(vc.ORDERS, s.get("order", "listed"), d)
         done()
 
-    def shuffle(d):
-        s["shuffle"] = not s.get("shuffle", True)
+    def plays_as(d):
+        from .libchannels import default_as
+        now = s.get("as") or default_as(s["url"])
+        s["as"] = _cycle(vc.AS, now, d)
         done()
+
+    def limit(d):
+        s["limit"] = _cycle([(n, n) for n in vc.LIMITS], int(s.get("limit") or 0), d)
+        done()
+
+    def as_value():
+        from .libchannels import default_as
+        return _label(vc.AS, s.get("as") or default_as(s["url"]))
 
     def move(d):
         j = i + d
@@ -1382,13 +1608,19 @@ def video_source_page(app, cid, i):
     return [
         Item("Link", edit, value=lambda: s["url"][-28:], help="The playlist, channel or @handle this source is."),
         Item("Weight", value=lambda: str(s.get("weight", 1)), adjust=weight,
-             help="Its share of the airtime when the channel's weighting is Manual (1 to 10)."),
+             help="How much it airs against the others: with Mix (Manual weighting) its share of the airtime; "
+                  "with the Shuffle methods how often it comes up (1 to 10)."),
         Item("Order", value=lambda: _label(vc.ORDERS, s.get("order", "listed")), adjust=order,
-             help="How its videos run before any shuffle: as the playlist or channel lists them "
-                  "(a channel: newest first), reversed (oldest first), or by title."),
-        Item("Shuffle", value=lambda: "On" if s.get("shuffle", True) else "Off", adjust=shuffle,
-             help="On: its videos in a fresh random order each day. Off: in the order above, "
-                  "from the top at 4 AM."),
+             help="How its videos run: as the playlist or channel lists them (a channel: newest first), "
+                  "reversed (oldest first), or by title."),
+        Item("Plays as", value=as_value, adjust=plays_as,
+             help="One show, in order: its videos run in the order above, like a show's episodes (a creator's "
+                  "channel). Separate videos: each stands alone (a playlist of songs). It matters to the Block, "
+                  "Marathon, Round Robin and Playlist methods."),
+        Item("Newest only", value=lambda: f"{s['limit']} videos" if s.get("limit") else "All", adjust=limit,
+             help="Only the newest this many of its videos (as it lists them) are on the channel."),
+        *[it for it in source_rule_items(app, s, done, mix=lambda: c.get("order", "mix") == "mix")
+          if it.label != "Weight"],
         Item("Move up", lambda: move(-1), enabled=i > 0),
         Item("Move down", lambda: move(1), enabled=i < len(srcs) - 1),
         Item("Remove source", submenu=lambda: _confirm(app, "Remove source", remove, "Keep it")),

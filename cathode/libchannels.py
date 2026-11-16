@@ -1,4 +1,6 @@
 """Library channels: channels made from the Plex library, on a timeline.
+(Video channels, made from YouTube lists, run on the same timeline: their
+titles come from yt_groups() instead of the library.)
 
 Each channel in the settings (name, number, sources, sort method) sits
 after the lineup. A source is a slice of the library index (library.py):
@@ -45,7 +47,7 @@ OFF_AIR = 7 * 86400             # a title that couldn't play is left out of the 
 REFRESH = 6 * 3600              # the server asked again for what changed, this often
 SCHEDULES: dict = {}            # channel id (with its prefix) -> Timeline
 
-ORDERS = [("random", "Random"), ("cyclic_shuffle", "Cyclic Shuffle"), ("block_shuffle", "Block Shuffle"),
+ORDERS = [("mix", "Mix"), ("random", "Random"), ("cyclic_shuffle", "Cyclic Shuffle"), ("block_shuffle", "Block Shuffle"),
           ("block_cyclic", "Block Cyclic"), ("marathon_shuffle", "Marathon Shuffle"),
           ("marathon_cyclic", "Marathon Cyclic"), ("round_robin_shuffle", "Round Robin Shuffle"),
           ("round_robin_cyclic", "Round Robin Cyclic"), ("playlist", "Playlist Order")]
@@ -54,6 +56,25 @@ KINDS = [("all", "Everything"), ("genre", "Genre"), ("decade", "Decade"), ("stud
          ("rating", "Rating"), ("show", "Show")]
 KIDS = ["TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "G"]
 MATURE = ["TV-MA", "R", "NC-17"]
+OFF = "-off-"                   # an off-the-air stretch among the days drawn up
+FLOOR = 0.05                    # Mix, automatic weighting: no source under this share of the airtime
+# What a channel's days are drawn from: a change to any of them redraws today onward.
+SIG_KEYS = ("sources", "order", "block", "seed", "hours", "content", "words_out", "words_in", "weighting",
+            "min_seconds", "max_seconds", "skip_shorts", "skip_live")
+WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
+CONTENT = [("any", "Anything"), ("family", "Nothing rated for grown-ups"), ("kids", "Kids' ratings only")]
+# When a channel is on the air: [sign on, sign off] hours, or None for always.
+HOURS = [(None, "Always"), ([6, 2], "6 AM to 2 AM"), ([6, 0], "6 AM to midnight"), ([5, 1], "5 AM to 1 AM"),
+         ([7, 23], "7 AM to 11 PM"), ([6, 18], "Daytime, 6 AM to 6 PM"), ([18, 6], "Nights, 6 PM to 6 AM"),
+         ([22, 6], "Late, 10 PM to 6 AM")]
+# When a source airs (a time slot). Monday is day 0; a slot past midnight belongs to the night it began.
+AIRS = [(None, "Any time"), ({"from": 6, "to": 12}, "Mornings"), ({"from": 12, "to": 17}, "Afternoons"),
+        ({"from": 17, "to": 20}, "Early evening"), ({"from": 20, "to": 23}, "Prime time"),
+        ({"from": 23, "to": 6}, "Late night"), ({"days": [5], "from": 7, "to": 12}, "Saturday mornings"),
+        ({"days": [0, 1, 2, 3, 4], "from": 15, "to": 18}, "After school"), ({"days": [5, 6]}, "Weekends"),
+        ({"days": [0, 1, 2, 3, 4]}, "Weekdays"), ({"days": [4, 5], "from": 20, "to": 2}, "Friday and Saturday nights")]
+SEASONS = [(None, "All year"), ([10], "October"), ([11], "November"), ([12], "December"),
+           ([10, 11, 12], "October to December"), ([6, 7, 8], "Summer"), ([1, 2], "January and February")]
 
 _TAIL = re.compile(r"\s+(Television Animation|Animation Studios?|Animation|Productions?|Cartoons|Studios?|"
                    r"Networks?|Television|Media|Company|Entertainment|Pictures)$", re.I)
@@ -115,6 +136,77 @@ def add_to(chans: list, config) -> list:
     return out
 
 
+# ── Rules: when a channel and its sources are on ─────────────────────────
+
+def on_air(c: dict, t: float) -> bool:
+    """Whether the channel is on the air at a moment (its hours, local time)."""
+    hrs = c.get("hours")
+    if not hrs or hrs[0] == hrs[1]:
+        return True
+    a, b = hrs
+    lt = datetime.fromtimestamp(t)
+    h = lt.hour + lt.minute / 60 + lt.second / 3600
+    return a <= h < b if a < b else (h >= a or h < b)
+
+
+def next_on(c: dict, t: float) -> float:
+    """When the channel next signs on after a moment it's off the air."""
+    lt = datetime.fromtimestamp(t)
+    on = lt.replace(hour=c["hours"][0], minute=0, second=0, microsecond=0)
+    if on <= lt:
+        on += timedelta(days=1)
+    return on.timestamp()
+
+
+def active(src: dict, lt: datetime) -> bool:
+    """Whether a source airs at a local moment: its season, its slot."""
+    months = src.get("season")
+    if months and lt.month not in months:
+        return False
+    a = src.get("airs") or {}
+    day = lt.weekday()
+    f, to = a.get("from"), a.get("to")
+    if f is not None and to is not None:
+        h = lt.hour + lt.minute / 60
+        if f < to:
+            if not f <= h < to:
+                return False
+        elif h >= f:
+            pass
+        elif h < to:
+            day = (day - 1) % 7         # after midnight: the night before's slot
+        else:
+            return False
+    return not a.get("days") or day in a["days"]
+
+
+def _next_hour(t: float) -> float:
+    lt = datetime.fromtimestamp(t)
+    return (lt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)).timestamp()
+
+
+def _words(c: dict, text: str) -> bool:
+    """Whether a title gets past the channel's word filters."""
+    t = (text or "").lower()
+    out = [w.strip().lower() for w in c.get("words_out") or [] if w.strip()]
+    need = [w.strip().lower() for w in c.get("words_in") or [] if w.strip()]
+    return not any(w in t for w in out) and (not need or any(w in t for w in need))
+
+
+def _rated(c: dict, rating: str) -> bool:
+    mode = c.get("content", "any")
+    if mode == "kids":
+        return rating in KIDS
+    if mode == "family":
+        return rating not in MATURE
+    return True
+
+
+def signature(c: dict) -> str:
+    return hashlib.sha1(json.dumps([VERSION] + [c.get(k) for k in SIG_KEYS], sort_keys=True)
+                        .encode()).hexdigest()[:12]
+
+
 # ── What a channel draws from ────────────────────────────────────────────
 
 def _match(src: dict, obj: dict) -> bool:
@@ -133,79 +225,176 @@ def _match(src: dict, obj: dict) -> bool:
     return True
 
 
+def _matching(src: dict, index):
+    """The library's titles a source matches (long enough for a programme)."""
+    only = src.get("only")
+    for sec in index.sections.values():
+        if (src.get("section") and sec.key != src["section"]) or (
+                not src.get("section") and (sec.breaks or sec.hidden)):
+            continue
+        if only and sec.kind != only:
+            continue
+        if sec.kind == "show":
+            keys = {k for k, sh in sec.shows.items() if _match(src, sh)}
+            yield from (i for i in sec.items if i["show_key"] in keys and i["duration"] >= MIN_SECONDS)
+        elif src.get("kind") != "show":
+            yield from (i for i in sec.items if i["duration"] >= MIN_SECONDS and _match(src, i))
+
+
 def groups(c: dict, index) -> list:
     """The titles a channel's sources match, as groups in title order: a
     show's episodes in their order (specials left out when it has seasons),
-    each movie on its own. A title two sources match is in once."""
+    each movie on its own. A title two sources match is in once; one a
+    source set to leave out matches isn't in at all, nor one the channel's
+    word filters or ratings rule out. A group knows its sources (`src`,
+    the first `k`) and weight `w`, for time slots and Mix."""
+    srcs = c.get("sources") or []
+    banned = {i["id"] for s in srcs if s.get("exclude") for i in _matching(s, index)}
     out, seen = {}, set()
-    for src in c.get("sources") or []:
-        only = src.get("only")
-        for sec in index.sections.values():
-            if (src.get("section") and sec.key != src["section"]) or (
-                    not src.get("section") and (sec.breaks or sec.hidden)):
+    for k, src in enumerate(srcs):
+        if src.get("exclude"):
+            continue
+        w = max(0.0, float(src.get("weight", 1) or 0))
+        for i in _matching(src, index):
+            if i["id"] in banned or not _rated(c, i["rating"]) or not _words(c, f"{i['title']} {i['name']}"):
                 continue
-            if only and sec.kind != only:
-                continue
-            if sec.kind == "show":
-                keys = {k for k, sh in sec.shows.items() if _match(src, sh)}
-                for i in sec.items:
-                    if i["show_key"] in keys and i["duration"] >= MIN_SECONDS and i["id"] not in seen:
-                        seen.add(i["id"])
-                        out.setdefault("s" + i["show_key"], {"id": "s" + i["show_key"], "title": i["title"],
-                                                             "items": []})["items"].append(i)
-            elif src.get("kind") != "show":
-                for i in sec.items:
-                    if i["duration"] >= MIN_SECONDS and i["id"] not in seen and _match(src, i):
-                        seen.add(i["id"])
-                        out["m" + i["plex"]] = {"id": "m" + i["plex"], "title": i["title"], "items": [i]}
+            gid = "s" + i["show_key"] if i["type"] == "episode" else "m" + i["plex"]
+            g = out.get(gid)
+            if g is None:
+                g = out[gid] = {"id": gid, "title": i["title"], "items": [], "src": set(), "k": k, "w": w}
+            g["src"].add(k)
+            g["w"] = max(g["w"], w)
+            if i["id"] not in seen:
+                seen.add(i["id"])
+                g["items"].append(i)
     for g in out.values():
         if len(g["items"]) > 1:
             g["items"].sort(key=lambda i: (i["season"], i["episode"], i["air"]))
             if any(i["season"] for i in g["items"]):
                 g["items"] = [i for i in g["items"] if i["season"]] or g["items"]
-    return sorted(out.values(), key=lambda g: (g["title"].lower(), g["id"]))
+    return sorted((g for g in out.values() if g["items"]), key=lambda g: (g["title"].lower(), g["id"]))
+
+
+def yt_groups(c: dict, listings: dict) -> list:
+    """A video channel's titles from its sources' YouTube lists: each list
+    filtered (lengths, Shorts, streams, words), cut to its newest, put in
+    its order; a channel or @handle is one show in that order, a playlist
+    separate videos (unless the source says otherwise)."""
+    from . import ytdl
+    from .videochannels import clean_name
+    out, seen = [], set()
+    lo, hi = c.get("min_seconds", 60), c.get("max_seconds", 0)
+    for k, s in enumerate(c.get("sources") or []):
+        lst = listings.get(s["url"])
+        if not lst:
+            continue
+        es = list(lst.get("entries") or [])
+        if not c.get("skip_live", True):
+            es += (listings.get(s["url"] + "#live") or {}).get("entries") or []
+        if int(s.get("limit") or 0):
+            es = es[:int(s["limit"])]
+        if s.get("order") == "reversed":
+            es.reverse()
+        elif s.get("order") == "title":
+            es.sort(key=lambda e: (e.get("title") or "").lower())
+        name = clean_name(lst.get("title", ""))
+        items = []
+        for e in es:
+            d = float(e.get("duration") or 0)
+            if (not e.get("id") or e["id"] in seen or d <= 0 or d < lo or (hi and d > hi)
+                    or (c.get("skip_shorts", True) and e.get("short")) or (c.get("skip_live", True) and e.get("live"))
+                    or not _words(c, e.get("title", ""))):
+                continue
+            seen.add(e["id"])
+            items.append({"id": e["id"], "type": "video", "title": e.get("title") or "", "name": "", "duration": d,
+                          "uploader": e.get("uploader") or name, "year": 0, "genres": [], "studio": "", "rating": "",
+                          "summary": "", "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg", "added": 0})
+        if not items:
+            continue
+        w = max(0.0, float(s.get("weight", 1) or 0))
+        as_ = s.get("as") or default_as(s["url"])
+        if as_ == "show":
+            out.append({"id": "y" + ytdl.source_key(s["url"]), "title": name or s["url"], "items": items,
+                        "src": {k}, "k": k, "w": w})
+        else:
+            out += [{"id": "v" + i["id"], "title": i["title"], "items": [i], "src": {k}, "k": k, "w": w} for i in items]
+    return out
+
+
+def default_as(url: str) -> str:
+    """A playlist is separate videos (songs, say); a creator's channel or
+    @handle is one show, its videos in order."""
+    from . import ytdl
+    return "videos" if "list=" in ytdl.source_url(url) else "show"
+
+
+def yt_stamp(c: dict, listings: dict) -> str:
+    """Changes when any of the channel's lists is fetched again."""
+    return "|".join(f"{(listings.get(u) or {}).get('fetched', 0):.0f}"
+                    for s in c.get("sources") or [] for u in (s["url"], s["url"] + "#live"))
 
 
 class Rotor:
     """Draws a channel's next title by its sort method. Its state is a small
     dict that goes to disk with the schedule, so the rotation carries on."""
 
-    def __init__(self, cid: str, order: str, block: int, groups_: list, state: dict, skip=()):
-        self.cid, self.order, self.groups, self.state = cid, order, groups_, state
+    def __init__(self, cid: str, order: str, block: int, groups_: list, state: dict, skip=(),
+                 weighting: str = "auto", sources=()):
+        self.cid, self.order, self.all, self.state = cid, order, groups_, state
         self.skip = skip            # titles off the air (they couldn't play)
         self.block = max(1, int(block or BLOCKS.get(order, 1)))
-        self.items = [i for g in groups_ for i in g["items"]]
-        self._gpos = {g["id"]: n for n, g in enumerate(groups_)}
+        self.weighting = weighting
+        self.shuffles = [s.get("shuffle", True) for s in sources]
         self._ipos: dict = {}
-        self._memo = None           # (what, the shuffle for it)
-        self._weights = [len(g["items"]) ** 0.5 for g in groups_]
+        self._memos: dict = {}      # (pool, what, n) -> the shuffle for it
+        self._pools: dict = {}
+        self._key = None
+        self._use(None)
+
+    def _use(self, eligible):
+        """The groups to draw from: all, or those a time slot allows. Each
+        slot's rotation (its cycle, its turn) is kept apart in the state;
+        where a show is up to is one for all of them."""
+        key = "" if eligible is None else hashlib.sha1(",".join(sorted(eligible)).encode()).hexdigest()[:8]
+        if key == self._key:
+            return
+        self._key = key
+        p = self._pools.get(key)
+        if p is None:
+            gs = self.all if eligible is None else [g for g in self.all if g["id"] in eligible]
+            mix = {}
+            for g in gs:
+                mix.setdefault(g.get("k", 0), []).extend(g["items"])
+            p = self._pools[key] = (gs, [i for g in gs for i in g["items"]], {g["id"]: n for n, g in enumerate(gs)},
+                                    [len(g["items"]) ** 0.5 * g.get("w", 1.0) for g in gs], mix)
+        self.groups, self.items, self._gpos, self._weights, self._mix_pools = p
+        if not any(self._weights):
+            self._weights = None
+        self.st = self.state if not key else self.state.setdefault("slots", {}).setdefault(key, {})
 
     def _rng(self, *what):
         return random.Random(f"{self.cid}:" + ":".join(str(w) for w in what))
 
     def _shuffled(self, what: str, n: int, of: list) -> list:
-        if self._memo is None or self._memo[0] != (what, n):
+        k = (self._key, what, n)
+        if k not in self._memos:
             lst = list(of)
-            self._rng(what, n).shuffle(lst)
-            self._memo = ((what, n), lst)
-        return self._memo[1]
+            self._rng(self._key, what, n).shuffle(lst) if self._key else self._rng(what, n).shuffle(lst)
+            self._memos[k] = lst
+        return self._memos[k]
 
     def _cycle(self, n: int) -> list:
         """Every title, shuffled for cycle n; it doesn't open on the title
         the cycle before closed on."""
-        if self._memo is None or self._memo[0] != ("c", n):
-            lst = list(self.items)
-            self._rng("c", n).shuffle(lst)
-            if n and len(lst) > 2:
-                prev = list(self.items)
-                self._rng("c", n - 1).shuffle(prev)
-                if lst[0] is prev[-1]:
-                    lst[0], lst[1] = lst[1], lst[0]
-            self._memo = (("c", n), lst)
-        return self._memo[1]
+        lst = self._shuffled("c", n, self.items)
+        if n and len(lst) > 2 and lst[0] is self._shuffled("c", n - 1, self.items)[-1]:
+            lst[0], lst[1] = lst[1], lst[0]
+        return lst
 
-    def next(self) -> Optional[dict]:
-        """The next title to air, passing over any that are off the air."""
+    def next(self, eligible=None) -> Optional[dict]:
+        """The next title to air, from the groups a time slot allows (all,
+        by default), passing over any that are off the air."""
+        self._use(eligible)
         for _ in range(len(self.items)):
             i = self._draw()
             if i["id"] not in self.skip:
@@ -213,7 +402,9 @@ class Rotor:
         return None
 
     def _draw(self) -> dict:
-        o, st = self.order, self.state
+        o, st = self.order, self.st
+        if o == "mix":
+            return self._mix()
         if o == "random":
             st["n"] = st.get("n", 0) + 1
             rnd = self._rng("r", st["n"])
@@ -240,8 +431,38 @@ class Rotor:
         st["left"] -= 1
         return self._next_in(g)
 
+    def _mix(self) -> dict:
+        """Mix: the sources interleaved by their shares of the airtime (the
+        one furthest behind goes next), each source's titles shuffled a
+        round at a time, or in its own order, carrying on where it was."""
+        st, pools = self.st, self._mix_pools
+        ks = sorted(pools)
+        if self.weighting == "equal":
+            share = {k: 1.0 for k in ks}
+        elif self.weighting == "manual":
+            w = {g.get("k", 0): g.get("w", 1.0) for g in self.groups}
+            share = {k: w.get(k, 1.0) for k in ks}
+            if not any(share.values()):
+                share = {k: 1.0 for k in ks}
+        else:
+            rt = {k: sum(i["duration"] for i in pools[k]) for k in ks}
+            total = sum(rt.values()) or 1.0
+            share = {k: max(rt[k] / total, FLOOR) for k in ks}
+        played = st.setdefault("played", {})
+        k = min((k for k in ks if share[k] > 0), key=lambda k: (played.get(str(k), 0.0) / share[k], k))
+        mc = st.setdefault("mc", {})
+        cyc, pos = mc.get(str(k), [0, 0])
+        lst = pools[k]
+        if pos >= len(lst):
+            cyc, pos = cyc + 1, 0
+        mc[str(k)] = [cyc, pos + 1]
+        shuffle = self.shuffles[k] if k < len(self.shuffles) else True
+        i = (self._shuffled(f"m{k}", cyc, lst) if shuffle else lst)[pos]
+        played[str(k)] = played.get(str(k), 0.0) + i["duration"]
+        return i
+
     def _next_group(self) -> dict:
-        o, st, n = self.order, self.state, len(self.groups)
+        o, st, n = self.order, self.st, len(self.groups)
         if o in ("block_shuffle", "marathon_shuffle"):
             # at random, the bigger shows more often, never the one just on
             st["n"] = st.get("n", 0) + 1
@@ -296,6 +517,10 @@ def describe(i: dict) -> dict:
     """A title as the Player and the guide take it."""
     e = dict(i)
     e["kind"] = "show"
+    if i["type"] == "video":            # (a video channel's: the guide and the card read its title)
+        e["yt"] = True
+        e["icon"] = i["thumb"]
+        return e
     if i["type"] == "episode":
         e["episode_text"] = f"S{i['season']} E{i['episode']}" if i["season"] else ""
         e["desc"] = (f'"{i["name"]}"  ' if i["name"] else "") + i["summary"]
@@ -312,20 +537,21 @@ class Timeline:
 
     sources = ()                # (nothing for the video channels' source report)
 
-    def __init__(self, c: dict, index, poster=None, store: bool = True):
-        self.c = dict(c, guide="video")
-        self.cid = PREFIX + c["id"]
-        self.index = index
+    def __init__(self, c: dict, index=None, poster=None, store: bool = True, made=None, cid=None):
+        """A library channel's from the index; a video channel's from `made`:
+        (its groups, its lists' stamp), with its own `cid`."""
+        self.c = dict(c) if made else dict(c, guide="video")
+        self.cid = cid or PREFIX + c["id"]
         self.poster = poster
         self.store = store
         self.dropped: dict = {}     # a title that couldn't play -> when
         self.guide_memo = None
         self.lock = threading.RLock()
-        self.groups = groups(c, index)
-        self.entries = [i for g in self.groups for i in g["items"]]
-        self.sig = hashlib.sha1(json.dumps([VERSION, c.get("sources"), c.get("order"), c.get("block"),
-                                            c.get("seed", 0)], sort_keys=True).encode()).hexdigest()[:12]
-        self.stamp = index.stamp()
+        self.groups, self.stamp = made if made else (groups(c, index), index.stamp())
+        self._by_id = {i["id"]: i for g in self.groups for i in g["items"]}
+        self.entries = list(self._by_id.values())
+        self.sig = signature(c)
+        self._slotted = any(s.get("airs") or s.get("season") for s in c.get("sources") or [] if not s.get("exclude"))
         self.days: list = []        # [{"day", "start", "state": as it began, "slots": [[start, id, seconds]]}]
         self.state: dict = {}       # as the last day ended
         # Its line (first drawn up where, when) and how worked on: what other Cathodes compare (sync.py).
@@ -338,7 +564,26 @@ class Timeline:
             self._load()
 
     def median(self) -> float:
-        return 3600.0
+        d = sorted(i["duration"] for i in self.entries)
+        return d[len(d) // 2] if d else 0.0
+
+    def unknown(self) -> bool:
+        """Whether the days name titles this Cathode hasn't read (another's
+        days, taken before this one's lists or library caught up)."""
+        return any(s[1] != OFF and s[1] not in self._by_id for s in self._slots)
+
+    def _eligible(self, t: float):
+        """The groups that may air at a moment: those of the sources whose
+        time slot it is, if any's is; else those of the sources without a
+        slot (a seasonal source joins them in its months). None: all."""
+        if not self._slotted:
+            return None
+        lt = datetime.fromtimestamp(t)
+        srcs = self.c.get("sources") or []
+        act = [k for k, s in enumerate(srcs) if not s.get("exclude") and active(s, lt)]
+        slot = {k for k in act if srcs[k].get("airs")}
+        use = slot or {k for k in act if not srcs[k].get("airs")}
+        return frozenset(g["id"] for g in self.groups if g["src"] & use)
 
     # ── On disk ───────────────────────────────────────────────────────────
 
@@ -361,7 +606,7 @@ class Timeline:
         today = day_of(time.time())[0]
         cut = None                                  # the first day that has to be drawn up again
         for n, day in enumerate(days):
-            if any(self.index.item(s[1]) is None for s in day["slots"]):
+            if any(s[1] != OFF and s[1] not in self._by_id for s in day["slots"]):
                 cut = n                             # a title left the library
                 break
             if d.get("sig") != self.sig and day["day"] >= today:
@@ -408,12 +653,30 @@ class Timeline:
             t = start                   # a gap in the days (the box was off): from the day's top
         seed = self.c.get("seed", 0)                # (a refresh's: the days drawn differently)
         rotor = Rotor(f"{self.cid}:{seed}" if seed else self.cid, self.c.get("order", "cyclic_shuffle"),
-                      self.c.get("block", 0), self.groups, state, self.dropped)
+                      self.c.get("block", 0), self.groups, state, self.dropped, self.c.get("weighting", "auto"),
+                      self.c.get("sources") or [])
         slots = []
+
+        def off(a, b):                  # off the air from a to b (one stretch with any just before)
+            if slots and slots[-1][1] == OFF and abs(slots[-1][0] + slots[-1][2] - a) < 0.01:
+                slots[-1][2] += b - a
+            else:
+                slots.append([a, OFF, b - a])
         while t < end:
-            i = rotor.next()
+            if not on_air(self.c, t):
+                b = next_on(self.c, t)
+                off(t, b)
+                t = b
+                continue
+            elig = self._eligible(t)
+            i = rotor.next(elig) if elig is None or elig else None
             if i is None:
-                break
+                if elig is None:
+                    break               # nothing can play at all
+                b = _next_hour(t)       # nothing in this slot can: off the air till the hour
+                off(t, b)
+                t = b
+                continue
             slots.append([t, i["id"], i["duration"]])
             t += i["duration"]
         state["t"] = t
@@ -452,13 +715,16 @@ class Timeline:
             start, item_id, dur = self._slots[n]
             if t >= start + dur:
                 return None
+            if item_id == OFF:
+                return {"entry": {"id": OFF, "kind": "signoff", "title": "Off the air", "duration": dur},
+                        "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
             e = self._made.get(item_id)
             if e is None:
-                i = self.index.item(item_id)
+                i = self._by_id.get(item_id)
                 if i is None:
                     return None
                 e = self._made[item_id] = describe(i)
-                if self.poster and i["thumb"]:
+                if self.poster and i["thumb"] and i["type"] != "video":
                     e["icon"] = self.poster(i["thumb"])
             return {"entry": e, "offset": t - start, "start": _utc(start), "stop": _utc(start + dur)}
 
@@ -467,6 +733,8 @@ class Timeline:
         every airing of it drawn up ahead, is taken out and what follows
         moves up to fill the time. It stays out of the days drawn up from
         here on, for a week."""
+        if item_id == OFF:
+            return
         t = (now or datetime.now(timezone.utc)).timestamp()
         with self.lock:
             self.dropped[item_id] = time.time()
@@ -476,6 +744,12 @@ class Timeline:
                     d["state"]["t"] -= shift            # (the day began that much sooner)
                 keep = []
                 for s in d["slots"]:
+                    if s[1] == OFF and shift and s[0] > t:  # a sign-off takes the time up: sign-on stays put
+                        s[0] -= shift
+                        s[2] += shift
+                        shift = 0.0
+                        keep.append(s)
+                        continue
                     if s[1] == item_id and s[0] + s[2] > t:
                         if s[0] < t:                    # on the air now: it ends here (no hole behind it)
                             shift += s[0] + s[2] - t
@@ -494,6 +768,28 @@ class Timeline:
             self.rev, self.by = self.rev + 1, _sync.ME
             self._index()
             self._save()
+
+    def restore(self, item_id: str):
+        """A skipped title back in the days drawn up from here on."""
+        with self.lock:
+            if self.dropped.pop(item_id, None) is not None:
+                self._dirty = True
+                self.rev, self.by = self.rev + 1, _sync.ME
+                self._save()
+
+    def coming(self, n: int = 24, now: Optional[datetime] = None) -> list:
+        """[(start, entry)] for what's on now and the next n-1 after it."""
+        out, cur = [], self.at(now or datetime.now(timezone.utc))
+        while cur and len(out) < n:
+            out.append((cur["start"], cur["entry"]))
+            cur = self.at(cur["stop"] + timedelta(seconds=0.5))
+        return out
+
+    def title_of(self, item_id: str) -> str:
+        i = self._by_id.get(item_id)
+        if not i:
+            return item_id
+        return f"{i['title']}: {i['name']}" if i.get("name") else i["title"]
 
     # ── Other Cathodes (sync.py) ──────────────────────────────────────────
 
@@ -744,7 +1040,8 @@ def rebuild(app, done=None):
 
 def _built(app, built: dict, done):
     from . import videochannels as vc
-    SCHEDULES.clear()
+    for k in [k for k in SCHEDULES if k.startswith(PREFIX)]:
+        del SCHEDULES[k]                # (the video channels' stay)
     SCHEDULES.update(built)
     print(f"[library] {len(built)} channels on the air.")
     vc.rebuild(app)

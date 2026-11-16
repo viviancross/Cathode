@@ -1,20 +1,23 @@
 """Video channels: YouTube playlists and channels, mixed, as a channel of
 videos on a timeline.
 
-Each channel in the settings (name, number, sources, how they're weighed)
+Each channel in the settings (name, number, sources, how they're sorted)
 sits after Cathode's own channels. A source is a playlist, a YouTube
-channel or an @handle; its full list of videos is fetched weekly (ytdl),
-and each broadcast day (from 4 AM) draws a sample of up to 500 of them by
-the date. The day's running order interleaves the sources by weight
-(automatic: each source's share of the sample's running time, no source
-under 5 %; equal; or set by hand), laid end to end, so tuning in lands
-mid-video, the guide can list what's coming, and tuning away and back
-finds the same video further in. A video that can't play is dropped from
-the order. A lower-third names each video as it starts and as it ends."""
+channel or an @handle; its full list of videos is fetched weekly (ytdl).
+The running order is a libchannels.Timeline, as a library channel's is:
+written down a day at a time with any of the sort methods (Mix, the
+default, interleaves the sources by their shares of the airtime), the
+rules (on-air hours, time slots, seasons, word filters) and the skipping
+of a video that can't play. Tuning in lands mid-video, the guide lists
+what's coming, tuning away and back finds the same video further in. A
+lower-third names each video as it starts and as it ends.
+
+The Player here plays every timeline: video channels', library
+channels' and Spelunkr's."""
 
 from __future__ import annotations
 
-import random
+
 import re
 import threading
 import time
@@ -30,13 +33,12 @@ MAX_SKIPS = 40                  # library titles that may fail in a row before t
 CARD_SECONDS = 8.0              # the lower-third at a video's start and before its end
 AHEAD = 20.0                    # seconds before a video is due that its stream is resolved
 GRACE = 20.0                    # a video due this recently starts from its top, not its offset
-SAMPLE = 500                    # videos a source contributes to a day
-FLOOR = 0.05                    # automatic weighting: no source under this share of the day
-DAY_STARTS = 4                  # the broadcast day turns over at 4 AM, not midnight
 LONG = 600                      # videos this long (median) get their own guide listings
 WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
 GUIDES = [("auto", "Auto"), ("video", "Per video"), ("blocks", "Half-hour blocks")]
 ORDERS = [("listed", "As listed"), ("reversed", "Reversed"), ("title", "By title")]
+AS = [("show", "One show, in order"), ("videos", "Separate videos")]
+LIMITS = [0, 25, 50, 100, 250, 500, 1000]       # a source's newest this many (0: all)
 MIN_SECONDS = [0, 30, 60, 120, 300, 600]
 MAX_SECONDS = [0, 1800, 3600, 7200, 10800, 14400, 28800]     # 0: any length
 
@@ -56,8 +58,8 @@ def new_channel(name: str = "", sources=()) -> dict:
     """A channel's settings entry with every field at its default."""
     return {"id": uuid.uuid4().hex[:8], "name": name, "number": "auto",
             "sources": [{"url": s, "weight": 1} if isinstance(s, str) else dict(s) for s in sources],
-            "weighting": "auto", "min_seconds": 60, "max_seconds": 0, "skip_shorts": True, "skip_live": True,
-            "guide": "auto", "card": True}
+            "order": "mix", "block": 0, "weighting": "auto", "min_seconds": 60, "max_seconds": 0,
+            "skip_shorts": True, "skip_live": True, "guide": "auto", "card": True}
 
 
 def fix(c: dict) -> dict:
@@ -156,150 +158,16 @@ def clean_name(title: str) -> str:
     return re.sub(r"\s+-\s+(Videos|Shorts|Live)$", "", t).strip() or "Video Channel"
 
 
-# ── The timeline ─────────────────────────────────────────────────────────
-
-class Schedule:
-    """A channel's running order for a broadcast day: each source's sample
-    for the date, shuffled, interleaved by weight, end to end, repeating."""
-
-    def __init__(self, c: dict, listings: dict):
-        """c: the channel's settings; listings: source url -> its listing
-        ({"title", "entries"}), the ones fetched so far."""
-        self.c = c
-        self.cid = c["id"]
-        self.sources = []           # [(url, weight, [entries])]
-        self.opts = {}              # url -> the source's settings (order, shuffle)
-        self.dropped = set()
-        min_s, max_s = c.get("min_seconds", 60), c.get("max_seconds", 0)
-        for s in c.get("sources") or []:
-            lst = listings.get(s["url"])
-            if not lst:
-                continue
-            entries = list(lst.get("entries") or [])
-            if not c.get("skip_live", True):            # the channel's streams tab, fetched beside its videos
-                entries += (listings.get(s["url"] + "#live") or {}).get("entries") or []
-            es = [e for e in entries if e.get("id") and e.get("duration", 0) > 0
-                  and e["duration"] >= min_s and (not max_s or e["duration"] <= max_s)
-                  and not (c.get("skip_shorts", True) and e.get("short"))
-                  and not (c.get("skip_live", True) and e.get("live"))]
-            for e in es:
-                if not e.get("uploader"):        # a channel's own list names no uploader
-                    e["uploader"] = clean_name(lst.get("title", ""))
-            if es:
-                self.sources.append((s["url"], max(0.0, float(s.get("weight", 1) or 0)), es))
-                self.opts[s["url"]] = s
-        self._day = None
-        self._order: list = []
-        self._starts: list = []
-        self.total = 0.0
-
-    @property
-    def entries(self) -> list:
-        return [e for _u, _w, es in self.sources for e in es if e["id"] not in self.dropped]
-
-    def median(self) -> float:
-        d = sorted(e["duration"] for e in self.entries)
-        return d[len(d) // 2] if d else 0.0
-
-    def _for(self, day):
-        if self._day == day:
-            return self._order, self._starts
-        samples, weights = [], []
-        seed = self.c.get("seed", 0)             # a refresh draws the day again
-        for url, w, es in self.sources:
-            es = [e for e in es if e["id"] not in self.dropped]
-            rnd = random.Random(f"{self.cid}:{url}:{day}" + (f":{seed}" if seed else ""))
-            if len(es) > SAMPLE:                 # a day's sample, kept in the list's order
-                es = [es[i] for i in sorted(rnd.sample(range(len(es)), SAMPLE))]
-            opt = self.opts.get(url, {})
-            order = opt.get("order", "listed")
-            if order == "reversed":
-                es.reverse()
-            elif order == "title":
-                es.sort(key=lambda e: e.get("title", "").lower())
-            if opt.get("shuffle", True):
-                rnd.shuffle(es)
-            if es:
-                samples.append(es)
-                weights.append((w, sum(e["duration"] for e in es)))
-        mode = self.c.get("weighting", "auto")
-        if mode == "equal":
-            shares = [1.0] * len(samples)
-        elif mode == "manual":
-            shares = [w for w, _rt in weights]
-            if not any(shares):
-                shares = [1.0] * len(samples)
-        else:
-            total = sum(rt for _w, rt in weights) or 1.0
-            shares = [max(rt / total, FLOOR) for _w, rt in weights]
-        order, starts, t = [], [], 0.0
-        played = [0.0] * len(samples)
-        pos = [0] * len(samples)
-        want = sum(len(s) for s in samples)
-        while samples and len(order) < want:
-            # the source furthest behind its share of the airtime so far
-            total_share = sum(shares) or 1.0
-            i = max(range(len(samples)), key=lambda k: shares[k] / total_share * (t + 1) - played[k])
-            e = samples[i][pos[i] % len(samples[i])]
-            pos[i] += 1
-            order.append(e)
-            starts.append(t)
-            t += e["duration"]
-            played[i] += e["duration"]
-        self._day, self._order, self._starts, self.total = day, order, starts, t
-        return order, starts
-
-    @staticmethod
-    def day_of(local: datetime):
-        """The broadcast day a local moment belongs to, and its start."""
-        start = local.replace(hour=DAY_STARTS, minute=0, second=0, microsecond=0)
-        if local < start:
-            start -= timedelta(days=1)
-        return start.date(), start
-
-    def at(self, now: datetime) -> Optional[dict]:
-        """{"entry", "offset", "start", "stop"} playing at `now` (UTC), the
-        times UTC; None with nothing to play."""
-        local = now.astimezone()
-        day, day_start = self.day_of(local)
-        order, starts = self._for(day)
-        if not order:
-            return None
-        secs = (local - day_start).total_seconds()
-        base = secs - secs % self.total
-        pos = secs - base
-        i = max(0, _bisect(starts, pos) - 1)
-        e = order[i]
-        start = day_start + timedelta(seconds=base + starts[i])
-        return {"entry": e, "offset": pos - starts[i], "start": start.astimezone(timezone.utc),
-                "stop": (start + timedelta(seconds=e["duration"])).astimezone(timezone.utc)}
-
-    def drop(self, video_id: str):
-        """A video that can't play leaves the order (the rest close up)."""
-        self.dropped.add(video_id)
-        self._day = None
-
-
-def _bisect(a, x):
-    lo, hi = 0, len(a)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if a[mid] <= x:
-            lo = mid + 1
-        else:
-            hi = mid
-    return lo
-
-
-def guide_style(c: dict, sched: Schedule) -> str:
+def guide_style(c: dict, sched) -> str:
     style = c.get("guide", "auto")
     if style == "auto":
         return "video" if sched.median() >= LONG else "blocks"
     return style
 
 
-def fill_guide(epg, chans: list, schedules: dict, config=None, now=None, hours: int = 48):
+def fill_guide(epg, chans: list, schedules: dict, config=None, now=None, hours: int = 0):
     """Each video channel's listings into the guide (programmes())."""
+    hours = hours or 24 * int(getattr(config, "guide_days", 2) or 2)
     for eid, progs in programmes(chans, schedules, now, hours).items():
         epg.set_programs(eid, progs)
 
@@ -327,9 +195,14 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
         progs = []
         if guide_style(c, sched) == "video":
             cur, n = sched.at(t0) or sched.at(now), 0
-            while cur and cur["start"] < end and n < 4000:
+            while cur and cur["start"] < end and n < 8000:
                 e = cur["entry"]
-                if e.get("kind"):       # Spelunkr, the library: shows, each running on over the breaks after it
+                if e.get("kind") == "signoff":
+                    back = cur["stop"].astimezone()
+                    progs.append(Program(channel_id=ch.epg_id, title="Off the air", start=cur["start"], stop=cur["stop"],
+                                         description=f"{ch.name} is off the air. Back at "
+                                                     f"{back:%I:%M %p}".replace(" 0", " ").lstrip("0") + "."))
+                elif e.get("kind") and not e.get("yt"):     # Spelunkr, the library: shows, each running on over the breaks after it
                     if e["kind"] == "show" or not progs:
                         progs.append(Program(channel_id=ch.epg_id, title=e["title"], start=cur["start"], stop=cur["stop"],
                                              category=e.get("category") or c.get("category", "Video"),
@@ -341,20 +214,23 @@ def programmes(chans: list, schedules: dict, now=None, hours: int = 48) -> dict:
                     artist, title = parse_title(e["title"], e.get("uploader", ""))
                     progs.append(Program(channel_id=ch.epg_id, title=title, start=cur["start"], stop=cur["stop"],
                                          category="Video", description=f"From {artist or e.get('uploader', '')}, "
-                                         f"{max(1, round(e['duration'] / 60))} min."))
+                                         f"{max(1, round(e['duration'] / 60))} min.", icon=e.get("icon", "")))
                 cur = sched.at(cur["stop"] + timedelta(seconds=0.5))
                 n += 1
         else:
             slot = timedelta(minutes=30)
             for i in range(hours * 2):
                 a, b = t0 + i * slot, t0 + (i + 1) * slot
-                names, cur, u = [], sched.at(a), a
+                names, cur, u, off = [], sched.at(a), a, True
                 while cur and u < b and len(names) < 12:
-                    artist, song = parse_title(cur["entry"]["title"], cur["entry"].get("uploader", ""))
-                    names.append(f"{artist}: {song}" if artist else song)
+                    if cur["entry"].get("kind") != "signoff":
+                        off = False
+                        artist, song = parse_title(cur["entry"]["title"], cur["entry"].get("uploader", ""))
+                        names.append(f"{artist}: {song}" if artist else song)
                     u = cur["stop"] + timedelta(seconds=0.5)
                     cur = sched.at(u)
-                progs.append(Program(channel_id=ch.epg_id, title=ch.name, start=a, stop=b, category="Music",
+                progs.append(Program(channel_id=ch.epg_id, title="Off the air" if off and cur is not None and names == []
+                                     else ch.name, start=a, stop=b, category="Music",
                                      description=("Videos. " + "  ".join(names)) if names else "Videos."))
         out[ch.epg_id] = progs
         if hasattr(sched, "guide_memo"):
@@ -451,7 +327,9 @@ def rebuild(app, report: bool = False):
     thread only swaps the result in. One build at a time; any asked for
     while one runs make one more after it."""
     if getattr(app, "post", None) is None:          # no event loop (tests): in line
-        _apply(app, *_build(list(app.config.video_channels), dict(app.listings), list(app.channels)), report)
+        _apply(app, *_build(list(app.config.video_channels), dict(app.listings), list(app.channels),
+                            dict(getattr(app, "schedules", {}) or {}),
+                            24 * int(getattr(app.config, "guide_days", 2) or 2)), report)
         return
     if getattr(app, "_vc_busy", False):
         app._vc_again = True
@@ -459,7 +337,8 @@ def rebuild(app, report: bool = False):
         return
     app._vc_busy, app._vc_again = True, False
     app._vc_last = time.monotonic()
-    args = (list(app.config.video_channels), dict(app.listings), list(app.channels))
+    args = (list(app.config.video_channels), dict(app.listings), list(app.channels), dict(app.schedules),
+            24 * int(getattr(app.config, "guide_days", 2) or 2))
 
     def work():
         try:
@@ -471,12 +350,21 @@ def rebuild(app, report: bool = False):
     threading.Thread(target=work, daemon=True).start()
 
 
-def _build(cfg_channels: list, listings: dict, chans: list):
-    from . import libchannels, spelunkr
-    schedules = {c["id"]: Schedule(c, listings) for c in cfg_channels}
+def _build(cfg_channels: list, listings: dict, chans: list, prev: Optional[dict] = None, hours: int = 48):
+    """Each video channel's Timeline (the one in hand when neither the
+    channel nor its lists changed), everyone's listings for the guide."""
+    from . import libchannels as lc, spelunkr
+    schedules = {}
+    for c in cfg_channels:
+        stamp, old = lc.yt_stamp(c, listings), (prev or {}).get(c["id"])
+        if isinstance(old, lc.Timeline) and old.sig == lc.signature(c) and old.stamp == stamp:
+            old.c, old.guide_memo = dict(c), None       # (the guide style, the card: not in the days drawn)
+            schedules[c["id"]] = old
+        else:
+            schedules[c["id"]] = lc.Timeline(c, made=(lc.yt_groups(c, listings), stamp), cid=c["id"])
     schedules.update(spelunkr.SCHEDULES)
-    schedules.update(libchannels.SCHEDULES)
-    return schedules, programmes(chans, schedules), listings
+    schedules.update(lc.SCHEDULES)
+    return schedules, programmes(chans, schedules, hours=hours), listings
 
 
 def _built(app, built, report):
@@ -490,7 +378,13 @@ def _built(app, built, report):
 
 
 def _apply(app, schedules: dict, progs: dict, listings: dict, report: bool = False):
+    from . import libchannels as lc
     app.schedules = schedules
+    for k in [k for k in lc.SCHEDULES if not k.startswith(lc.PREFIX)]:
+        del lc.SCHEDULES[k]
+    for cid, s in schedules.items():            # (the video channels' among the timelines another Cathode asks for)
+        if isinstance(s, lc.Timeline) and not cid.startswith(lc.PREFIX):
+            lc.SCHEDULES[cid] = s
     app.video_programmes = progs        # (a guide reloaded later takes these again)
     for ch in app.channels:
         if is_video(ch):
@@ -504,10 +398,10 @@ def _apply(app, schedules: dict, progs: dict, listings: dict, report: bool = Fal
     for eid, ps in progs.items():
         app.epg.set_programs(eid, ps)
     if report:
-        for cid, s in schedules.items():
-            if s.sources:
-                print(f"[video] {s.c.get('name') or cid}: " + ", ".join(
-                    f"{clean_name(listings[u].get('title', ''))} ({len(es)})" for u, _w, es in s.sources))
+        for c in app.config.video_channels:
+            s = schedules.get(c["id"])
+            if s is not None and s.entries:
+                print(f"[video] {c.get('name') or c['id']}: {len(s.entries)} videos")
     app.invalidate()
 
 
@@ -542,7 +436,7 @@ class Player:
         self._skips, self._began = 0, 0.0       # library titles skipped in a row; when the last one started
 
     @property
-    def sched(self) -> Optional[Schedule]:
+    def sched(self):
         from . import libchannels, spelunkr
         s = (getattr(self.app, "schedules", {}).get(self.cid) or spelunkr.SCHEDULES.get(self.cid)
              or libchannels.SCHEDULES.get(self.cid))
@@ -567,8 +461,12 @@ class Player:
         cur = sched.at(self.cur["stop"] + timedelta(seconds=1)) if cont and self.cur else None
         if cur is None or now >= cur["stop"]:      # nothing after it, or that one is over too: whatever is due
             cur = sched.at(now)
-        if cur is None and self.cid.startswith("lib."):
-            # A library channel with nothing that can play just now: stand-by, and a look again in a minute.
+        if cur is not None and cur["entry"].get("kind") == "signoff":
+            self._sign_off(gen, cur)
+            return
+        self.live.signoff = None
+        if cur is None and hasattr(sched, "coming"):
+            # A timeline with nothing that can play just now: stand-by, and a look again in a minute.
             self.live.standby = True
             if self.live.phase == "cover":
                 self.live._reveal()
@@ -632,6 +530,21 @@ class Player:
         self.cur = None
         self.start(cont=True)
 
+    def _sign_off(self, gen, cur):
+        """Off the air: the picture stops for the colour bars (the skin's)
+        until the channel signs on again."""
+        self.cur = cur
+        live = self.live
+        self.app.video.stop()
+        live.signoff = {"name": self.ch.name, "back": cur["stop"]}
+        live.standby = False
+        if live.phase == "cover":
+            live._reveal()
+        self.app.invalidate()
+        left = (cur["stop"] - datetime.now(timezone.utc)).total_seconds()
+        self.app.cancel(self._stop_timer)
+        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self.start(cont=True))
+
     def _hold(self, gen, cur):
         """The server is away (a broken file is skipped, not held): the
         stand-by card, another try each minute while the title's slot lasts.
@@ -654,7 +567,7 @@ class Player:
             return
         e = cur["entry"]
         offset = max(0.0, (datetime.now(timezone.utc) - cur["start"]).total_seconds())
-        if (cont or offset < GRACE) and not e.get("kind"):
+        if (cont or offset < GRACE) and (not e.get("kind") or e.get("yt")):
             offset = 0.0        # a handover, or due just now (resolving and opening took the seconds): the top, not a cut head
         self.cur = cur          # (Spelunkr keeps the network's clock: always the true offset)
         self._began = time.monotonic()
@@ -669,7 +582,8 @@ class Player:
         else:
             self.app.video.play(s["video"], headers=s.get("headers"), audio=s.get("audio"),
                                 start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)))   # (a transcode starts at its base)
-        artist, title = (self.ch.name, e["title"]) if e.get("kind") else parse_title(e["title"], e.get("uploader", ""))
+        artist, title = (self.ch.name, e["title"]) if e.get("kind") and not e.get("yt") else \
+            parse_title(e["title"], e.get("uploader", ""))
         c = entry(self.app.config, self.cid) or {}
         if c.get("card", True) and e.get("kind", "show") == "show":
             self.live.card = {"artist": artist, "song": title, "label": "", "until": time.monotonic() + CARD_SECONDS}
@@ -735,7 +649,9 @@ class Player:
         e = (self.cur or {}).get("entry") or {}
         if self._began and time.monotonic() - self._began > 30:
             self._skips = 0                 # it played a while: not one of a run of failures
-        if e.get("kind"):
+        if e.get("kind") == "signoff":
+            return                          # (the picture stopped for the bars: nothing ended)
+        if e.get("kind") and not e.get("yt"):
             if (self.cur["stop"] - datetime.now(timezone.utc)).total_seconds() > 2:
                 if reason == "stalled":         # archive.org slow for a moment: mpv fills its cache; a reload
                     print(f"[spelunkr] {e.get('title')!r} waiting on archive.org")    # would fetch the index again
@@ -763,6 +679,7 @@ class Player:
         self.app.cancel(self._timer)
         self.app.cancel(self._stop_timer)
         self.live.card = None
+        self.live.signoff = None
 
 
 def _resolve_quietly(video_id):

@@ -301,9 +301,10 @@ class Sync:
         if tl is None or not tl.adopt(doc):
             return
         print(f"[sync] {tl.c.get('name')}: schedule taken from {peer['name']}")
-        if any(self.app.library is not None and self.app.library.item(s[1]) is None for d in tl.days for s in d["slots"]):
+        if tl.unknown() and cid.startswith(lc.PREFIX):
             from . import library
             library.load(self.app, lambda idx, err: lc.place(self.app))    # titles this one hasn't read yet
+        # (a video channel's: the newer list comes over by itself)
         vc.rebuild(self.app)
         live = getattr(self.app, "live", None)
         p = getattr(live, "vplayer", None) if live else None

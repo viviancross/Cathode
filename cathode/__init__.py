@@ -1,3 +1,3 @@
 """Cathode: a satellite-box-style IPTV player."""
 
-__version__ = "4.49"
+__version__ = "4.50"

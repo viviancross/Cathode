@@ -1,5 +1,42 @@
 # Changelog
 
+## 4.50
+
+- **Scheduling rules, for library and YouTube channels alike.**
+  - **On the air**: a channel can keep hours (6 AM to 2 AM, daytime, nights...).
+    Outside them it signs off to the colour bars with its name and when it's
+    back; the last programme before sign-off plays to its end, and sign-on is
+    on the hour.
+  - **Time slots**: a source can air only in its slot (mornings, prime time,
+    late night, Saturday mornings, after school, weekends...). In its time it
+    takes the channel over; the sources without a slot fill the rest.
+  - **Seasons**: a source can be on only in its months (October, December,
+    October to December, summer...): the Christmas specials join in December.
+  - **Leave out**: a source can be set to keep what it matches off the channel
+    (a Comedy channel without one show).
+  - **Word filters**: leave out titles with given words, or only take titles
+    with them.
+  - **Ratings**: a library channel can take anything, nothing rated for grown-
+    ups, or kids' ratings only.
+  - **Mix**, a tenth sort method: the sources interleaved by their share of the
+    airtime (automatic, equal, or by the weights you set).
+  - **Weights** on library sources: how often a source's shows come up.
+  - **Guide listings**: the guide can list two days, a week, two weeks or a
+    month ahead (Settings > Channels).
+- **YouTube channels run on the same schedule as library channels now**, so
+  they get every sort method (blocks of one creator, marathons, round robin,
+  each creator in order from their first video...), the rules above, skipping a
+  video that won't play, and sync between Cathodes. A creator's channel plays
+  as one show in order; a playlist as separate videos (each source can say
+  otherwise). Existing channels keep Mix, which works as before.
+- **A fuller YouTube channel editor**: sort method, block length, weighting,
+  on-air hours, word filters, Coming up (the next thirty videos with their
+  times), Skipped (put a video back), Move up and down, Make a copy; and per
+  source, Plays as, Newest only (its newest 25 to 1000 videos), time slot,
+  season and shuffle. The guide shows each video's thumbnail.
+- The library channel editor got the same rows, plus Ratings, a page per
+  source (time slot, season, weight, leave out) and Make a copy.
+
 ## 4.49
 
 - **Every Cathode on your network keeps the same channels.** Run Cathode on the

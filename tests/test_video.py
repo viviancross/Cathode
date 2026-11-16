@@ -66,27 +66,33 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual(vc.add_to([], cfg), [])
 
 
+def timeline(c, lst):
+    from cathode import libchannels as lc
+    return lc.Timeline(c, made=(lc.yt_groups(c, lst), lc.yt_stamp(c, lst)), cid=c["id"], store=False)
+
+
+def day_ids(tl):
+    """The ids aired across today's broadcast day."""
+    tl.at(datetime.now(timezone.utc))
+    return [s[1] for s in tl.days[0]["slots"]]
+
+
 class TestSchedule(unittest.TestCase):
     def test_the_day_runs_from_4am_and_every_moment_is_in_a_video(self):
         c = chan()
-        s = vc.Schedule(c, listings(PLa=("Hits", songs(6)), **{"@Bob": ("Bob", episodes(4, "Bob"))}))
+        tl = timeline(c, listings(PLa=("Hits", songs(6)), **{"@Bob": ("Bob", episodes(4, "Bob"))}))
         now = datetime.now(timezone.utc)
-        day, start = s.day_of(now.astimezone())
-        self.assertEqual(start.hour, 4)
-        first = s.at(start.astimezone(timezone.utc) + timedelta(seconds=10))
-        self.assertEqual(first["offset"], 10)
-        self.assertEqual(first["start"], start.astimezone(timezone.utc))
-        t, seen = start.astimezone(timezone.utc), []
-        while t < start.astimezone(timezone.utc) + timedelta(seconds=s.total):
-            cur = s.at(t)
-            self.assertTrue(cur["start"] <= t < cur["stop"])
-            seen.append(cur["entry"]["id"])
-            t = cur["stop"] + timedelta(seconds=0.1)
-        self.assertEqual(len(seen), 10)                     # every video once a cycle
-        self.assertEqual(s.at(t + timedelta(seconds=s.total))["entry"], s.at(t)["entry"])    # repeats
-        # 3:59 belongs to the day before
-        early = start.replace(hour=3, minute=59)
-        self.assertEqual(s.day_of(early)[0], (start - timedelta(days=1)).date())
+        cur = tl.at(now)
+        self.assertTrue(cur["start"] <= now < cur["stop"])
+        self.assertEqual(datetime.fromtimestamp(tl.days[0]["start"]).hour, 4)
+        self.assertTrue(cur["entry"]["yt"])
+        t, seen = cur["stop"], set()
+        for _ in range(40):                                  # end to end, and every video airs
+            nxt = tl.at(t + timedelta(seconds=0.1))
+            self.assertEqual(nxt["start"], t)
+            seen.add(nxt["entry"]["id"])
+            t = nxt["stop"]
+        self.assertEqual(len(seen), 10)
 
     def test_weighting_shares_the_airtime(self):
         big, small = songs(200, "Big"), songs(10, "Small")
@@ -96,51 +102,51 @@ class TestSchedule(unittest.TestCase):
             c = chan(weighting=mode)
             for src, w in zip(c["sources"], weights):
                 src["weight"] = w
-            order, _ = vc.Schedule(c, lst)._for(datetime.now().date())
-            small_t = sum(e["duration"] for e in order if e["id"].startswith("Sm"))
-            return small_t / sum(e["duration"] for e in order)
+            tl = timeline(c, lst)
+            tl.at(datetime.now(timezone.utc))
+            slots = tl.days[0]["slots"]
+            small_t = sum(d for _t, i, d in slots if i.startswith("Sm"))
+            return small_t / sum(d for _t, _i, d in slots)
         self.assertAlmostEqual(share("equal"), 0.5, delta=0.05)
         auto = share("auto")
         self.assertGreaterEqual(auto, 0.045)                # the floor: not drowned
         self.assertLess(auto, 0.2)
         self.assertAlmostEqual(share("manual", (1, 3)), 0.75, delta=0.06)
 
-    def test_sampling_filters_and_dropping(self):
+    def test_filters(self):
         many = songs(700, "Many")
         many[0]["duration"] = 30                            # too short
         many[1]["short"] = True                             # a Short
         many[2]["live"] = True                              # a stream's recording
         many[3]["duration"] = 20000                         # a day-long upload
-        s = vc.Schedule(chan(sources=("PLa",)), listings(PLa=("Many", many)))
-        order, _ = s._for(datetime.now().date())
-        self.assertEqual(len(order), vc.SAMPLE)
-        self.assertEqual(len(set(e["id"] for e in order)), vc.SAMPLE)
-        self.assertNotIn("Ma0", [e["id"] for e in order])
-        self.assertNotIn("Ma1", [e["id"] for e in order])
-        self.assertNotIn("Ma2", [e["id"] for e in order])
-        self.assertIn("Ma3", [e["id"] for e in s.entries])  # any length, by default
-        capped = vc.Schedule(chan(sources=("PLa",), max_seconds=14400), listings(PLa=("Many", many)))
-        self.assertNotIn("Ma3", [e["id"] for e in capped.entries])
-        # live streams back in: the streams tab's entries join the videos'
-        both = vc.Schedule(chan(sources=("@Bob",), skip_live=False),
-                           listings(**{"@Bob": ("Bob", episodes(3, "Bob")),
-                                       "@Bob#live": ("Bob", [dict(e, id="L" + e["id"], live=True) for e in episodes(2, "Bob")])}))
-        self.assertEqual(len(both.entries), 5)
-        self.assertEqual(ytdl.source_url("@Bob#live"), "https://www.youtube.com/@Bob/streams")
-        other, _ = s._for(datetime.now().date() + timedelta(days=1))
-        self.assertNotEqual([e["id"] for e in order], [e["id"] for e in other])     # another day, another sample
-        s.drop(order[0]["id"])
-        self.assertNotIn(order[0]["id"], [e["id"] for e in s._for(datetime.now().date())[0]])
-        self.assertIsNone(vc.Schedule(chan(sources=("PLa",)), {}).at(datetime.now(timezone.utc)))
-        loose = vc.Schedule(chan(sources=("PLa",), min_seconds=0, skip_shorts=False, skip_live=False), listings(PLa=("Many", many)))
-        self.assertEqual(len(loose.entries), 700)
+        many[4]["title"] = "Artist 4 - Song 4 (Reaction)"
+        tl = timeline(chan(sources=("PLa",), words_out=["reaction"]), listings(PLa=("Many", many)))
+        ids = {i["id"] for i in tl.entries}
+        self.assertEqual(len(ids), 696)
+        for k in (0, 1, 2, 4):
+            self.assertNotIn(f"Ma{k}", ids)
+        capped = timeline(chan(sources=("PLa",), max_seconds=14400), listings(PLa=("Many", many)))
+        self.assertNotIn("Ma3", {i["id"] for i in capped.entries})
+        loose = timeline(chan(sources=("PLa",), min_seconds=0, skip_shorts=False, skip_live=False),
+                         listings(PLa=("Many", many)))
+        self.assertTrue({"Ma0", "Ma1", "Ma2", "Ma3"} <= {i["id"] for i in loose.entries})
+        only = timeline(chan(sources=("PLa",), words_in=["song 1"]), listings(PLa=("Many", many)))
+        self.assertTrue(all("Song 1" in i["title"] for i in only.entries))
+        newest = chan(sources=("PLa",))
+        newest["sources"][0]["limit"] = 25
+        self.assertEqual([i["id"] for i in timeline(newest, listings(PLa=("Many", many))).entries][:2], ["Ma3", "Ma4"])
+        self.assertEqual(len(timeline(newest, listings(PLa=("Many", many))).entries), 22)   # the 25 newest, less the short, the Short and the stream
+        self.assertIsNone(timeline(chan(sources=("PLa",)), {}).at(datetime.now(timezone.utc)))
+        both = timeline(chan(sources=("@Bob",), skip_live=False),
+                        listings(**{"@Bob": ("Bob", episodes(3, "Bob")),
+                                    "@Bob#live": ("Bob", [{"id": "L1", "title": "Stream", "duration": 7200, "live": True}])}))
+        self.assertIn("L1", {i["id"] for i in both.entries})
 
-    def test_a_source_in_order_or_shuffled_and_a_refresh(self):
+    def test_a_source_in_order_or_shuffled_a_creator_as_a_show_and_a_refresh(self):
         eps = episodes(5, "Bob")
-        day = datetime.now().date()
 
         def ids(c):
-            return [e["id"] for e in vc.Schedule(c, listings(**{"@Bob": ("Bob", eps)}))._for(day)[0]]
+            return day_ids(timeline(c, listings(**{"@Bob": ("Bob", eps)})))[:5]
         c = chan(sources=("@Bob",))
         c["sources"][0].update(shuffle=False)
         self.assertEqual(ids(c), ["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"])          # as listed
@@ -148,20 +154,21 @@ class TestSchedule(unittest.TestCase):
         self.assertEqual(ids(c), ["Bob4", "Bob3", "Bob2", "Bob1", "Bob0"])
         c["sources"][0].update(order="title")
         self.assertEqual(ids(c), ["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"])          # "Episode 0 - Bob" ...
-        c["sources"][0].update(shuffle=True)
+        c["sources"][0].update(shuffle=True, order="listed")
         shuffled = ids(c)
         self.assertEqual(sorted(shuffled), sorted(["Bob0", "Bob1", "Bob2", "Bob3", "Bob4"]))
         self.assertEqual(ids(c), shuffled)                                         # the same all day
         c["seed"] = 12345                                                          # a refresh: drawn again
         self.assertNotEqual(ids(c), shuffled)
-        # a big list's daily sample keeps the list's order when it isn't shuffled
-        many = songs(700, "Many")
-        c2 = chan(sources=("PLa",))
-        c2["sources"][0].update(shuffle=False)
-        order = [e["id"] for e in vc.Schedule(c2, listings(PLa=("Many", many)))._for(day)[0]]
-        self.assertEqual(len(order), vc.SAMPLE)
-        pos = {e["id"]: i for i, e in enumerate(many)}
-        self.assertEqual(order, sorted(order, key=pos.get))
+        # creators as shows: a block of each in its order, the shows taking turns
+        two = chan(sources=("@Bob", "@Amy"), order="block_cyclic")
+        got = day_ids(timeline(two, listings(**{"@Bob": ("Bob", eps), "@Amy": ("Amy", episodes(5, "Amy"))})))
+        self.assertEqual(got[:6], ["Bob0", "Bob1", "Amy0", "Amy1", "Bob2", "Bob3"])
+        # a playlist is separate videos unless told otherwise
+        pl = chan(sources=("PLa",), order="playlist")
+        self.assertEqual(len(timeline(pl, listings(PLa=("Hits", songs(4)))).groups), 4)
+        pl["sources"][0]["as"] = "show"
+        self.assertEqual(len(timeline(pl, listings(PLa=("Hits", songs(4)))).groups), 1)
 
 
 class TestGuide(unittest.TestCase):
@@ -170,7 +177,7 @@ class TestGuide(unittest.TestCase):
         cfg.video_channels = [chan("Shows", sources=("@Bob",)), chan("Hits", sources=("PLa",))]
         chans = vc.add_to(lineup(1), cfg)
         lst = listings(PLa=("Hits", songs(30)), **{"@Bob": ("Bob", episodes(40, "Bob"))})
-        scheds = {c["id"]: vc.Schedule(c, lst) for c in cfg.video_channels}
+        scheds = {c["id"]: timeline(c, lst) for c in cfg.video_channels}
         epg = EPG()
         vc.fill_guide(epg, chans, scheds, cfg)
         now = datetime.now(timezone.utc)
@@ -179,11 +186,14 @@ class TestGuide(unittest.TestCase):
         self.assertTrue(p.title.startswith("Episode"))
         self.assertIn("From Bob, ", p.description)
         self.assertLess((p.stop - p.start).total_seconds(), 1300)
+        self.assertTrue(p.icon.startswith("https://i.ytimg.com/vi/"))          # the video's thumbnail
         q = epg.current_program(hits.epg_id, now)
         self.assertEqual((q.title, (q.stop - q.start).total_seconds()), ("Hits", 1800))
         self.assertIn("Artist", q.description)
-        cfg.video_channels[0]["guide"] = "blocks"
-        vc.fill_guide(epg, chans, scheds, cfg)
+        cfg.video_channels[0]["guide"] = "blocks"                # (as the maker does: the timeline kept, its style new)
+        vc.rebuild(app := type("A", (), {"config": cfg, "listings": lst, "channels": chans, "schedules": scheds,
+                                         "epg": epg, "invalidate": lambda self: None})())
+        self.assertIs(app.schedules[cfg.video_channels[0]["id"]], scheds[cfg.video_channels[0]["id"]])
         self.assertEqual((epg.current_program(shows.epg_id, now).stop - epg.current_program(shows.epg_id, now).start).total_seconds(), 1800)
 
 
@@ -295,7 +305,7 @@ class TestTuning(unittest.TestCase):
         self.cid = self.app.config.video_channels[0]["id"]
         self.app.channels = vc.add_to(lineup(1), self.app.config)
         self.app.listings = listings(PLa=("Hits", songs(6)), **{"@Bob": ("Bob", episodes(4, "Bob"))})
-        self.app.schedules = {self.cid: vc.Schedule(self.app.config.video_channels[0], self.app.listings)}
+        self.app.schedules = {self.cid: timeline(self.app.config.video_channels[0], self.app.listings)}
         self.calls = []
         self.app.post = lambda fn, *a, **k: self.calls.append((fn, a, k))      # threads' results, held
 

@@ -371,6 +371,8 @@ class BoxSkin(Classic):
             return
         if live.standby and live.phase != "cover":
             self._signal_loss(c)
+        if getattr(live, "signoff", None) and live.phase != "cover":
+            self.draw_signoff(c, live.signoff)
         if (live.banner_visible() or live.phase == "cover") and live.channel:
             cur, nxt = live.programs()
             self._banner(c, live.channel, cur, nxt, full=live.banner_full)

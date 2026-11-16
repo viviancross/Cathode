@@ -112,12 +112,20 @@ NostalgiaTV names them without defining them. These are our definitions.
 Every method keeps each show's place: its next episode is the one after the last
 it aired, on any channel using that method.
 
+## YouTube channels on the timeline (4.50)
+
+Video channels left their day-sampled schedule for `libchannels.Timeline`: a
+source's YouTube list becomes groups (`yt_groups`: a creator's channel one show
+in order, a playlist separate videos), and from there it is the same engine as
+library channels, with the same rules, skipping and sync. `Mix` (the tenth sort
+method) is the old behaviour: sources interleaved by share of airtime.
+
 ## Phases
 
 | # | Phase | Done when | Status |
 |---|---|---|---|
 | 1 | Library channels | Sign in to Plex, get a starter lineup; tune lands mid-programme; guide lists the days ahead; make and edit a channel with the remote; all nine sort methods | Built in 4.47, not yet watched on a TV (see below) |
-| 2 | Rules | Time slots, restricted hours with sign-off, exclusions, weights, marathons, premieres, seasonal lineups, kid filter, content groups, schedule length 7/14/30 | |
+| 2 | Rules | Time slots, restricted hours with sign-off, exclusions, weights, marathons, premieres, seasonal lineups, kid filter, content groups, schedule length 7/14/30 | 4.50: hours and sign-off, time slots, seasons, leave-out sources, word filters, ratings filter, weights, Mix, guide 2/7/14/30 days, for library and YouTube channels. Still to do: premieres (new arrivals favoured and marked), content groups (named reusable sources), marathon events (a slot with its own sort method) |
 | 3 | Breaks | Commercial groups from any library; bumper-commercial-bumper sequences; padding to :00/:15/:30; halfway and chapter breaks; be-right-back card on every skin | |
 | 4 | More channels | Trailers channel and pre-rolls; Plex music radio with a card; weather almanac fallback | |
 | 5 | Lineup editing | Hide, reorder, renumber, decimal numbers, channel packs as guide tabs | |

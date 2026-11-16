@@ -127,7 +127,7 @@ class App:
         self.last_input = time.monotonic()
         self.weather = None
         self.listings = {}          # a video channel source -> its fetched list (videochannels)
-        self.schedules = {}         # video channel id -> videochannels.Schedule
+        self.schedules = {}         # timeline channel id -> its libchannels.Timeline (or Spelunkr's Schedule)
         self.library = None         # the Plex library's index (library.Index), once read
         from . import spelunkr
         if spelunkr.ship(config) | videochannels.migrate(config):
