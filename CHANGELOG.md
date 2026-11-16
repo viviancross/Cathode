@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.56
+
+- **Profiles** (Settings > Profiles): who's watching. Each profile has its own
+  look (skin, colours, fonts, the tube's lines) and its own favourites; every
+  profile watches the same schedules. Switch from the Main Menu's "Who's
+  watching" once there's more than one.
+- **Kids' profiles** see only the channels marked for kids (Edit lineup, a
+  channel's page: "On kids' profiles"), library channels set to kids' ratings,
+  and the TV Guide and Weather channels.
+- **Parent PIN**: four to eight digits. A kids' profile is asked for it to open
+  Settings or to switch to another profile.
+- **Watch history** (Settings > Profiles): every channel watched for a minute
+  or more in the last month, when, for how long, what was on and who was
+  watching, and the most watched channels of the week.
+
 ## 4.55
 
 - **Cathode's web page.** Open the address shown at Settings > Channels >

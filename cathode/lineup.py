@@ -11,7 +11,9 @@ NONE = "cathode://none"         # the playlist that's no playlist: Cathode's own
 
 def apply(chans: list, config) -> list:
     """The channels to show, edited, in number order (ties as they came)."""
+    from . import profiles
     edits = getattr(config, "channel_edits", None) or {}
+    kids = profiles.is_kids(config) if hasattr(config, "profiles") else False
     out = []
     for ch in chans:
         if not hasattr(ch, "orig"):
@@ -19,7 +21,7 @@ def apply(chans: list, config) -> list:
         e = edits.get(ch.url) or {}
         ch.name = e.get("name") or ch.orig[0]
         ch.number = e["number"] if isinstance(e.get("number"), (int, float)) else ch.orig[1]
-        if not e.get("hide"):
+        if not e.get("hide") and (not kids or profiles.kid_ok(ch, config)):
             out.append(ch)
     out.sort(key=lambda c: c.number)
     return out

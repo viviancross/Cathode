@@ -223,7 +223,10 @@ def main_items(app):
         Item("Favorites", guide("Favorites"), close=True, enabled=bool(app.channels)),
         Item("On Demand" if app.ondemand.signed_in else "Link Plex", ondemand(), close=True),
         *([Item("My Recordings", ondemand(recordings=True), close=True)] if app.ondemand.downloads.items() else []),
-        Item("Settings", submenu=lambda: settings_items(app)),
+        *([Item("Who's watching", submenu=lambda: who_items(app),
+                value=lambda: _who_name(app))]
+          if app.config.profiles else []),
+        Item("Settings", lambda: _pin_then(app, lambda: app.top().open("Settings", settings_items(app)))),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
         Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart, "Keep watching", close=True)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
@@ -246,6 +249,9 @@ def settings_items(app):
         Item("On Demand", submenu=lambda: ondemand_settings(app), help="Plex quality, libraries and your account."),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("System", submenu=lambda: system_items(app)),
+        Item("Profiles", submenu=lambda: profile_items(app),
+             help="Who's watching: each profile its own look and favourites; kids' profiles; the parent PIN; the "
+                  "watch history."),
     ]
 
 
@@ -1101,6 +1107,140 @@ def video_channel_page(app, cid):
     ]
 
 
+# ── Profiles, the parent PIN, the watch history (profiles.py) ────────────
+
+def _pin_then(app, go):
+    """go(), after the parent PIN when a kids' profile is on and there is one."""
+    from . import profiles
+    cfg = app.config
+    if not profiles.is_kids(cfg) or not cfg.parent_pin:
+        return go()
+
+    def got(text):
+        if text is not None and text.strip() == cfg.parent_pin:
+            go()
+        elif text is not None:
+            app.toast("That's not the parent PIN.")
+    app.push(Keyboard(app, "Parent PIN", got, hint="A grown-up's to enter."))
+
+
+def _who_name(app) -> str:
+    from . import profiles
+    return profiles.active(app.config)["name"]
+
+
+def who_items(app):
+    """Who's watching: the main profile and the others; SELECT switches."""
+    from . import profiles
+    cfg = app.config
+    on = profiles.active(cfg)
+
+    def go(pid):
+        def done():
+            profiles.switch(app, pid)
+            app.toast(f"Watching as {profiles.active(cfg)['name']}.")
+            m = app.top()
+            if hasattr(m, "close"):
+                m.close()
+        _pin_then(app, done) if on.get("kids") else done()
+    rows = [Item(("> " if not on["id"] else "  ") + (cfg.main_fields.get("_name") or "Main"), lambda: go(""))]
+    rows += [Item(("> " if on["id"] == p["id"] else "  ") + p["name"], lambda p=p: go(p["id"]),
+                  value=lambda p=p: "Kids" if p.get("kids") else "") for p in cfg.profiles]
+    return rows
+
+
+def profile_items(app):
+    from . import profiles
+    cfg = app.config
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if text:
+                profiles.new(cfg, text)
+                cfg.save()
+                app.top().refresh(profile_items(app))
+        app.push(Keyboard(app, "Profile name", got, hint="It starts with the look on now and no favourites."))
+
+    def set_pin():
+        def got(text):
+            if text is None:
+                return
+            pin = text.strip()
+            if pin and not (pin.isdigit() and 4 <= len(pin) <= 8):
+                app.toast("A PIN is four to eight digits.")
+                return
+            cfg.parent_pin = pin
+            cfg.save()
+            app.toast("Parent PIN set." if pin else "No parent PIN.")
+        _pin_then(app, lambda: app.push(Keyboard(app, "Parent PIN (empty = none)", got,
+                                                 hint="Four to eight digits. Kids' profiles need it for Settings.")))
+    rows = [Item("Who's watching", submenu=lambda: who_items(app), value=lambda: profiles.active(cfg)["name"],
+                 help="Switch profile: each has its own look and favourites.")]
+    rows += [Item(p["name"], submenu=lambda p=p: profile_page(app, p), value=lambda p=p: "Kids" if p.get("kids") else "")
+             for p in cfg.profiles]
+    rows.append(Item("Add a profile...", add))
+    rows.append(Item("Parent PIN", set_pin, value=lambda: "Set" if cfg.parent_pin else "None",
+                     help="Asked of a kids' profile for Settings and for switching to another profile."))
+    rows.append(Item("Watch history", submenu=lambda: history_items(app),
+                     help="What was watched, when and for how long, the last month."))
+    return rows
+
+
+def profile_page(app, p):
+    from . import profiles
+    cfg = app.config
+
+    def rename():
+        def got(text):
+            if text and text.strip():
+                p["name"] = text.strip()
+                cfg.save()
+        app.push(Keyboard(app, "Profile name", got, initial=p["name"]))
+
+    def kids(d=0):
+        p["kids"] = not p.get("kids")
+        cfg.save()
+        if profiles.active(cfg)["id"] == p["id"]:
+            app.relineup()
+
+    def remove():
+        if profiles.active(cfg)["id"] == p["id"]:
+            profiles.switch(app, "")
+        cfg.profiles[:] = [x for x in cfg.profiles if x is not p]
+        cfg.save()
+        m = app.top()
+        m.back()
+        m.refresh(profile_items(app))
+    return [
+        Item("Name", rename, value=lambda: p["name"]),
+        Item("Kids' profile", kids, value=lambda: "On" if p.get("kids") else "Off", adjust=kids,
+             help="On: only the channels marked for kids (Edit lineup, a channel's page) and library channels set "
+                  "to kids' ratings; Settings ask for the parent PIN."),
+        Item("Remove profile", submenu=lambda: _confirm(app, "Remove profile", remove, "Keep it")),
+    ]
+
+
+def history_items(app):
+    from . import profiles
+    rows = profiles.history()
+
+    def clear():
+        profiles.clear()
+        m = app.top()
+        m.back()
+        m.refresh(profile_items(app))
+    out = [Item("Most watched this week", submenu=lambda: [
+        Item(ch, value=lambda h=h: f"{h:.1f} h") for ch, h in profiles.most_watched(profiles.history())]
+        or [Item("Nothing yet", enabled=False)])]
+    for r in sorted(rows, key=lambda r: -r["t"])[:60]:
+        when = time.strftime("%a %I:%M %p", time.localtime(r["t"])).replace(" 0", " ")
+        out.append(Item(f"{when}  {r['num']:g} {r['ch']}", value=lambda r=r: f"{max(1, r['s'] // 60)} min",
+                        help=(r.get("title") or "") + (f"  ({r['who']})" if r.get("who") else "")))
+    out.append(Item("Clear the history", submenu=lambda: _confirm(app, "Clear it", clear, "Keep it")))
+    return out
+
+
 # ── The lineup: hide, rename, renumber, packs (lineup.py) ────────────────
 
 def lineup_items(app):
@@ -1174,6 +1314,10 @@ def channel_edit_items(app, ch):
         cfg.channel_edits.pop(ch.url, None)
         _lineup_changed(app)
 
+    def kids(d=0):
+        lu.edit(cfg, ch, kids=not e().get("kids"))
+        _lineup_changed(app)
+
     def packs_page():
         def flip(p):
             keys = p.setdefault("keys", [])
@@ -1191,6 +1335,8 @@ def channel_edit_items(app, ch):
         Item("Number", renumber, value=lambda: f"{e().get('number', orig[1]):g}",
              help=f"As it came: {orig[1]:g}. A taken number is shared: the guide lists them side by side."),
         Item("Packs", submenu=packs_page, value=lambda: str(sum(ch.url in (p.get("keys") or []) for p in lu.packs(cfg)))),
+        Item("On kids' profiles", kids, value=lambda: "Shown" if e().get("kids") else "-", adjust=kids,
+             help="Kids' profiles see only the channels shown here (and library channels set to kids' ratings)."),
         Item("As it came", reset, enabled=bool(e()), help="Its own name and number, shown."),
     ]
 

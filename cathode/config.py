@@ -172,7 +172,11 @@ class Config:
     library_starter_done: bool = False      # the starter lineup was made once
     guide_days: int = 2             # days of listings the guide holds for timeline channels (2, 7, 14, 30)
     content_groups: list = field(default_factory=list)  # named sets of library sources a channel can name
-    channel_edits: dict = field(default_factory=dict)   # channel address -> {"hide", "name", "number"} (lineup.py)
+    channel_edits: dict = field(default_factory=dict)   # channel address -> {"hide", "name", "number", "kids"} (lineup.py)
+    profiles: list = field(default_factory=list)        # [{"id", "name", "kids", "fields"}] (profiles.py)
+    profile: str = ""               # the profile on ("": the main one)
+    main_fields: dict = field(default_factory=dict)     # the main profile's look, kept while another is on
+    parent_pin: str = ""            # asked of a kids' profile for Settings and for switching away
     packs: list = field(default_factory=list)           # [{"name", "keys": [channel addresses]}]: guide tabs
     # Sync (sync.py): every Cathode on the network with the same channels.
     lan_sync: bool = True

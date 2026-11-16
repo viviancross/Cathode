@@ -73,6 +73,17 @@ class LiveTV(Screen):
     def channel(self):
         return self.channels[self.idx] if self.channels else None
 
+    def _log_watch(self):
+        """The channel being left into the watch history (a minute or more of it)."""
+        from .. import profiles
+        ch, since = self.channel, getattr(self, "_watch_since", 0.0)
+        if ch is not None and since and self.phase != "idle":
+            cur = self.programs()[0] if self.app.epg is not None else None
+            profiles.note(ch, since, getattr(cur, "title", "") or getattr(self, "_watch_title", ""),
+                          profiles.active(self.app.config)["name"])
+        self._watch_since = time.time()
+        self._watch_title = ""
+
     def channels_loaded(self):
         self.message = ""
         want = self.app.start_channel or self.app.config.last_channel
@@ -94,6 +105,7 @@ class LiveTV(Screen):
         idx %= len(self.channels)
         if self.phase != "idle" and idx != self.idx:
             self.prev = self.idx
+        self._log_watch()
         self.idx = idx
         if not retry:
             self._fails = 0

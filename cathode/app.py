@@ -956,6 +956,12 @@ class App:
     def _shutdown(self):
         from . import sync
         sync.stop(self)
+        live = getattr(self, "live", None)
+        if live is not None:
+            try:
+                live._log_watch()
+            except Exception as e:
+                print(f"[history] {e!r}")
         try:
             self.config.volume = self.video.volume
             self.config.muted = self.video.muted
