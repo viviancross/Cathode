@@ -305,7 +305,7 @@ class TestLineup(Temp):
         self.assertTrue(all(lc.is_library(c) for c in chans if c.number in (7, 101, 102)))
         self.assertTrue(vc.is_made(chans[-1]))
         self.assertEqual([c.number for c in vc.add_to(chans, cfg)], [2, 4, 7, 69, 101, 102])    # again: not doubled
-        self.assertEqual(vc.add_to([], cfg), [])
+        self.assertEqual([c.name for c in vc.add_to([], cfg)][:1], ["Comedy"])    # no playlist: Cathode's own, from 1
         self.assertEqual(vc.entry(cfg, lc.PREFIX + cfg.library_channels[0]["id"])["name"], "Comedy")
 
     def test_the_starter_lineup_follows_the_library(self):

@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.53
+
+- **Edit the lineup** (Settings > Channels > Edit lineup): hide a channel,
+  rename it, give it another number (10.5 is fine). Edits are kept by the
+  channel's address, so they hold when the playlist is fetched again; "As it
+  came" brings its own name and number back.
+- **Packs**: named sets of channels, each a tab in the guide's categories
+  (with Favorites and the genres). Put channels in from their page or the
+  pack's.
+- **No playlist**: Cathode's own channels alone, the library and YouTube
+  channels with TV Guide and Weather, numbered from 1. The first-run wizard
+  offers it ("No playlist: my Plex library").
+- **HDHomeRun tuners**: add one as a playlist (hdhomerun://its address, or its
+  lineup.json link); its channels keep their numbers, 2.1 and all.
+- Lineup edits and packs travel to your other Cathodes with the channels.
+
 ## 4.52
 
 - **Commercial breaks.** Library and YouTube channels can break between

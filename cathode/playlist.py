@@ -136,12 +136,37 @@ def _chno(raw, auto: int):
         return auto
 
 
+def hdhomerun(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
+    """An HDHomeRun tuner's lineup (hdhomerun://address, or its lineup.json
+    link): each channel at its own number (2.1 keeps its .1), its stream the
+    tuner's."""
+    import json
+    import urllib.request
+    url = source if "://" in source and not source.startswith("hdhomerun://") else \
+        "http://" + source.split("://", 1)[-1].strip("/") + "/lineup.json"
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        rows = json.loads(r.read().decode("utf-8", "replace"))
+    out = []
+    for n, row in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict) or not row.get("URL"):
+            continue
+        num = _chno(str(row.get("GuideNumber") or ""), n + 1)
+        out.append(Channel(number=num, name=str(row.get("GuideName") or num), url=row["URL"],
+                           group="HD" if row.get("HD") else "Antenna", epg_id=str(row.get("GuideNumber") or "")))
+    return out
+
+
 def load(source: str, user_agent: str = "Cathode/1.0", timeout: float = 30) -> List[Channel]:
     """Load an M3U playlist from a file path or URL, or a line through a
     provider's API (an xtream:// address)."""
     if source.startswith("spelunkr://"):
         from . import spelunkr
         return spelunkr.channels()
+    if source.startswith("cathode://none"):
+        return []                   # no playlist: Cathode's own channels only
+    if source.startswith("hdhomerun://") or source.rstrip("/").endswith("lineup.json"):
+        return hdhomerun(source, user_agent, timeout)
     if source.startswith("xtream://"):
         from . import servers
         line = servers.parse_xtream_api(source)

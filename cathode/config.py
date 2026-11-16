@@ -172,6 +172,8 @@ class Config:
     library_starter_done: bool = False      # the starter lineup was made once
     guide_days: int = 2             # days of listings the guide holds for timeline channels (2, 7, 14, 30)
     content_groups: list = field(default_factory=list)  # named sets of library sources a channel can name
+    channel_edits: dict = field(default_factory=dict)   # channel address -> {"hide", "name", "number"} (lineup.py)
+    packs: list = field(default_factory=list)           # [{"name", "keys": [channel addresses]}]: guide tabs
     # Sync (sync.py): every Cathode on the network with the same channels.
     lan_sync: bool = True
     sync_id: str = ""               # this Cathode's id among the others

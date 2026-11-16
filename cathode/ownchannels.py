@@ -46,10 +46,10 @@ def add_to(chans: list, config) -> list:
     numeric position. "off" leaves one out. An empty lineup stays empty: with
     no channels there is nothing for the guide channel to show."""
     out = [c for c in chans if not is_own(c)]
-    if not out:
+    if not out and not (getattr(config, "library_channels", None) or getattr(config, "video_channels", None)):
         return out
     taken = {c.number for c in out}
-    nxt = int(max(c.number for c in out)) + 1
+    nxt = int(max((c.number for c in out), default=0)) + 1
     for kind, (name, _t, _d) in KINDS.items():
         want = (getattr(config, "own_channels", None) or {}).get(kind, "auto")
         if want == "off":

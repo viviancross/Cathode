@@ -126,7 +126,17 @@ def open_welcome(app):
         add_playlist(app, on_added=added, first_run=True)
 
     def channels(title, extra=()):
-        return [title, [Item("Set up your channels", setup), *extra,
+        def plex_only():
+            from . import lineup as lu
+            app.config.playlist_url, app.config.epg_url = lu.NONE, ""
+            app.config.setup_done = True
+            app.config.save()
+            app.switch_playlist({"playlist_url": lu.NONE, "epg_url": ""})
+            m.close()
+            app.toast("Link Plex under On Demand: Cathode makes channels from your library.", 8.0)
+        return [title, [Item("Set up your channels", setup),
+                        Item("No playlist: my Plex library", plex_only,
+                             help="No Tunarr or M3U: channels made from your Plex library and YouTube."), *extra,
                         Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart,
                                                                           "Keep going", close=True)),
                         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit,
@@ -787,7 +797,20 @@ def channel_items(app):
         active = pl.get("playlist_url") == cfg.playlist_url
         items.append(Item(("> " if active else "  ") + pl.get("name", "Playlist"),
                           submenu=lambda pl=pl: playlist_items(app, pl)))
-    items.append(Item("Add a playlist...", lambda: add_playlist(app)))
+    items.append(Item("Add a playlist...", lambda: add_playlist(app),
+                      help="An M3U link, a Tunarr or ErsatzTV address, a provider line, or an HDHomeRun tuner "
+                           "(hdhomerun://its address)."))
+
+    def no_playlist():
+        from . import lineup as lu
+        app.config.playlist_url, app.config.epg_url = lu.NONE, ""
+        app.config.save()
+        app.switch_playlist({"playlist_url": lu.NONE, "epg_url": ""})
+    from . import lineup as _lu
+    items.append(Item(("> " if cfg.playlist_url == _lu.NONE else "  ") + "No playlist", no_playlist, close=True,
+                      help="Only Cathode's own channels: the library, YouTube, TV Guide and Weather channels."))
+    items.append(Item("Edit lineup", submenu=lambda: lineup_items(app),
+                      help="Hide, rename and renumber channels; make packs (guide tabs)."))
     items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
     items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
     items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
@@ -1053,6 +1076,155 @@ def video_channel_page(app, cid):
         Item("Make a copy", lambda: _copy_channel(app, cfg.video_channels, c, video_channel_page),
              help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
+    ]
+
+
+# ── The lineup: hide, rename, renumber, packs (lineup.py) ────────────────
+
+def lineup_items(app):
+    from . import lineup as lu
+    cfg = app.config
+    chans = getattr(app, "lineup_all", None) or app.channels
+
+    def unhide():
+        for k in list(cfg.channel_edits):
+            cfg.channel_edits[k].pop("hide", None)
+            if not cfg.channel_edits[k]:
+                del cfg.channel_edits[k]
+        cfg.save()
+        app.relineup()
+        app.top().refresh(lineup_items(app))
+    hidden = sum(1 for e in cfg.channel_edits.values() if e.get("hide"))
+    rows = [Item("Packs", submenu=lambda: pack_items(app), value=lambda: str(len(lu.packs(cfg))),
+                 help="Named sets of channels, each a tab in the guide's categories (THEMES, or OPTIONS)."),
+            Item("Show every hidden channel", unhide, value=lambda: str(hidden), enabled=hidden > 0)]
+    for ch in chans:
+        e = cfg.channel_edits.get(ch.url) or {}
+        rows.append(Item(f"{ch.number:g}  {ch.name}", submenu=lambda ch=ch: channel_edit_items(app, ch),
+                         value=lambda e=e: "Hidden" if e.get("hide") else "Edited" if e else "",
+                         help="SELECT: show or hide it, its name, its number, its packs."))
+    return rows
+
+
+def _lineup_changed(app):
+    app.config.save()
+    app.relineup()
+    m = app.top()
+    if getattr(m, "pages", None) and len(m.pages) > 1:
+        m.pages[-2][1] = lineup_items(app) if m.pages[-2][0] in ("EDIT LINEUP", "Edit lineup") else m.pages[-2][1]
+
+
+def channel_edit_items(app, ch):
+    from . import lineup as lu
+    cfg = app.config
+
+    def e():
+        return cfg.channel_edits.get(ch.url) or {}
+
+    def show(d=0):
+        lu.edit(cfg, ch, hide=not e().get("hide"))
+        _lineup_changed(app)
+
+    def rename():
+        def got(text):
+            if text is not None:
+                lu.edit(cfg, ch, name=text.strip() or None)
+                _lineup_changed(app)
+        app.push(Keyboard(app, "Channel name (empty = as it came)", got, initial=e().get("name", "")))
+
+    def renumber():
+        def got(text):
+            if text is None:
+                return
+            if not text.strip():
+                lu.edit(cfg, ch, number=None)
+            else:
+                n = lu.number(text)
+                if n is None:
+                    app.toast("A channel number, like 12 or 10.5.")
+                    return
+                lu.edit(cfg, ch, number=n)
+            _lineup_changed(app)
+        app.push(Keyboard(app, "Channel number (empty = as it came; 10.5 is fine)", got,
+                          initial=f"{e()['number']:g}" if "number" in e() else ""))
+
+    def reset():
+        cfg.channel_edits.pop(ch.url, None)
+        _lineup_changed(app)
+
+    def packs_page():
+        def flip(p):
+            keys = p.setdefault("keys", [])
+            (keys.remove if ch.url in keys else keys.append)(ch.url)
+            cfg.save()
+            app._cats = None
+        return [Item(p["name"], lambda p=p: flip(p), adjust=lambda d, p=p: flip(p),
+                     value=lambda p=p: "In" if ch.url in (p.get("keys") or []) else "-") for p in lu.packs(cfg)] or \
+            [Item("No packs yet", enabled=False, help="Make one under Edit lineup > Packs.")]
+    orig = getattr(ch, "orig", (ch.name, ch.number))
+    return [
+        Item("Show in the lineup", show, value=lambda: "Hidden" if e().get("hide") else "Shown", adjust=show,
+             help="Hidden channels are skipped by channel up and down and left out of the guide."),
+        Item("Name", rename, value=lambda: e().get("name") or orig[0], help=f"As it came: {orig[0]}"),
+        Item("Number", renumber, value=lambda: f"{e().get('number', orig[1]):g}",
+             help=f"As it came: {orig[1]:g}. A taken number is shared: the guide lists them side by side."),
+        Item("Packs", submenu=packs_page, value=lambda: str(sum(ch.url in (p.get("keys") or []) for p in lu.packs(cfg)))),
+        Item("As it came", reset, enabled=bool(e()), help="Its own name and number, shown."),
+    ]
+
+
+def pack_items(app):
+    from . import lineup as lu
+    cfg = app.config
+
+    def add():
+        def got(text):
+            text = (text or "").strip()
+            if text and not any(p["name"] == text for p in cfg.packs):
+                cfg.packs.append({"name": text, "keys": []})
+                cfg.save()
+                app._cats = None
+                app.top().refresh(pack_items(app))
+        app.push(Keyboard(app, "Pack name", got, hint="Then add channels to it from their pages, or its own."))
+    rows = [Item(p["name"], submenu=lambda p=p: pack_page(app, p), value=lambda p=p: str(len(p.get("keys") or [])))
+            for p in lu.packs(cfg)]
+    rows.append(Item("Make a pack...", add, help="A guide tab of the channels you put in it."))
+    return rows
+
+
+def pack_page(app, p):
+    cfg = app.config
+    chans = getattr(app, "lineup_all", None) or app.channels
+
+    def flip(ch):
+        keys = p.setdefault("keys", [])
+        (keys.remove if ch.url in keys else keys.append)(ch.url)
+        cfg.save()
+        app._cats = None
+
+    def rename():
+        def got(text):
+            if text and text.strip():
+                p["name"] = text.strip()
+                cfg.save()
+                app._cats = None
+        app.push(Keyboard(app, "Pack name", got, initial=p["name"]))
+
+    def remove():
+        cfg.packs[:] = [x for x in cfg.packs if x is not p]
+        cfg.save()
+        app._cats = None
+        m = app.top()
+        m.back()
+        m.refresh(pack_items(app))
+    return [
+        Item("Channels", submenu=lambda: [Item(f"{ch.number:g}  {ch.name}", lambda ch=ch: flip(ch),
+                                               adjust=lambda d, ch=ch: flip(ch),
+                                               value=lambda ch=ch: "In" if ch.url in (p.get("keys") or []) else "-")
+                                          for ch in chans],
+             value=lambda: str(len(p.get("keys") or []))),
+        Item("Name", rename, value=lambda: p["name"]),
+        Item("Remove pack", submenu=lambda: _confirm(app, "Remove pack", remove, "Keep it")),
     ]
 
 

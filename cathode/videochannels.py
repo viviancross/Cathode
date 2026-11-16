@@ -122,10 +122,10 @@ def add_to(chans: list, config, names: Optional[dict] = None) -> list:
     from . import ytdl
     from . import libchannels
     out = [c for c in chans if not is_made(c)]
-    if not out:
+    if not out and not (config.video_channels or getattr(config, "library_channels", None)):
         return out
     taken = {c.number for c in out}
-    nxt = int(max(c.number for c in out)) + 1
+    nxt = int(max((c.number for c in out), default=0)) + 1
     for c in config.video_channels or []:
         want = c.get("number", "auto")
         try:

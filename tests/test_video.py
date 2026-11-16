@@ -63,7 +63,7 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual([(c.number, c.name) for c in chans], [(2, "Ch2"), (3, "Picked"), (4, "Ch4"), (5, "Mix"), (6, "From Source")])
         self.assertTrue(vc.is_video(chans[1]) and chans[1].epg_id == "cathode.video." + cfg.video_channels[1]["id"])
         self.assertEqual([c.number for c in vc.add_to(chans, cfg)], [2, 3, 4, 5, 6])    # again: not doubled
-        self.assertEqual(vc.add_to([], cfg), [])
+        self.assertEqual([c.number for c in vc.add_to([], cfg)], [1, 3, 4])            # no playlist: from 1
 
 
 def timeline(c, lst):

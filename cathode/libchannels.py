@@ -126,10 +126,10 @@ def add_to(chans: list, config) -> list:
     from . import videochannels as vc
     out = [c for c in chans if not is_library(c)]
     made = getattr(config, "library_channels", None) or []
-    if not out or not made:
+    if not made:
         return out
     taken = {c.number for c in out}
-    nxt = (int(max(c.number for c in out)) // 100 + 1) * 100 + 1
+    nxt = (int(max(c.number for c in out)) // 100 + 1) * 100 + 1 if out else 1
     for c in made:
         want = c.get("number", "auto")
         try:

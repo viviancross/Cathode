@@ -17,7 +17,7 @@ from typing import Callable, List, Optional
 
 import pygame
 
-from . import ownchannels, paths, playlist as m3u, remote as R, videochannels
+from . import lineup, ownchannels, paths, playlist as m3u, remote as R, videochannels
 from .config import Config
 from .epg import EPG
 from .logos import LogoStore
@@ -103,6 +103,7 @@ class App:
         self.size = size
         self.start_channel = start_channel
         self.channels: List[Channel] = []
+        self.lineup_all: List[Channel] = []     # every channel, before your lineup edits (lineup.py)
         self.epg = EPG()
         self.screens: List[Screen] = []
         self.running = False
@@ -240,7 +241,8 @@ class App:
                 ch.category = (self.epg.dominant_category(cid) if cid else "") or ch.group or ""
                 if ch.category:
                     names.add(ch.category)
-            self._cats = ["All", "Favorites"] + sorted(names, key=str.lower)
+            packs = [p["name"] for p in lineup.packs(self.config)]
+            self._cats = ["All", "Favorites"] + packs + sorted(names - set(packs), key=str.lower)
         return self._cats
 
     def channels_in(self, category: str) -> List[Channel]:
@@ -250,6 +252,8 @@ class App:
         if category == "Favorites":
             favs = set(self.config.favorites)
             return [c for c in self.channels if c.number in favs]
+        if any(p["name"] == category for p in lineup.packs(self.config)):
+            return lineup.in_pack(self.config, category, self.channels)
         return [c for c in self.channels if getattr(c, "category", "") == category]
 
     def is_favorite(self, ch: Channel) -> bool:
@@ -407,7 +411,7 @@ class App:
 
     def switch_playlist(self, pl: dict):
         self.live.message = "Loading channels..."
-        self.channels, self._cats = [], None
+        self.channels, self.lineup_all, self._cats = [], [], None
         self.use_agent(pl.get("user_agent", ""))
         self.load_playlist(pl.get("playlist_url", ""), pl.get("epg_url", ""))
         self.invalidate()
@@ -476,7 +480,7 @@ class App:
                             pl["user_agent"] = agent
                     self.config.save()
                     self.post(self.use_agent, agent)
-                err = "" if chans else (f"Your playlist has no channels in it. Press {self.press_hint(R.MENU)} "
+                err = "" if chans or url == lineup.NONE else (f"Your playlist has no channels in it. Press {self.press_hint(R.MENU)} "
                                         "to check its address under Settings > Channels.")
             except Exception as e:
                 print(f"[cathode] playlist load failed: {e!r}")
@@ -493,8 +497,7 @@ class App:
             live.message = err
             self.invalidate()
             return
-        self.channels = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
-        self._cats = None
+        self.set_lineup(chans)
         self.config.playlist_url, self.config.epg_url = url, epg_url
         print(f"[cathode] {len(chans)} channels.")
         ownchannels.fill_guide(self.epg)
@@ -553,19 +556,39 @@ class App:
             videochannels.rebuild(self)     # new versions on the air, the guide rolled on
         from .screens.live import LiveTV
         live = self.find(LiveTV)
-        had = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_made(c)]
+        had = [c for c in self.lineup_all if not ownchannels.is_own(c) and not videochannels.is_made(c)]
         before = {c.number for c in had}
         after = {c.number for c in chans}
         if before == after and [c.name for c in had] == [c.name for c in chans]:
             return
         current = live.channel.number if live and live.channel else None
-        self.channels = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
+        self.set_lineup(chans)
         videochannels.rebuild(self)
-        self._cats = None
         if live and current is not None:
             live.idx = live.number_to_idx(current)
         print(f"[cathode] lineup refreshed: {len(chans)} channels "
               f"(+{len(after - before)}, -{len(before - after)}).")
+        self.invalidate()
+
+    def set_lineup(self, chans: list):
+        """The lineup from the playlist's channels: Cathode's own, video and
+        library channels placed among them (lineup_all, every one), then
+        your edits (channels, what's shown)."""
+        self.lineup_all = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
+        self.channels = lineup.apply(self.lineup_all, self.config)
+        self._cats = None
+
+    def relineup(self):
+        """Your lineup edits applied again, the channel on kept on."""
+        live = self.live
+        cur = live.channel if live else None
+        self.channels = lineup.apply(self.lineup_all, self.config)
+        self._cats = None
+        if live and cur is not None and self.channels:
+            if cur in self.channels:
+                live.idx = self.channels.index(cur)
+            else:
+                live.tune(min(live.idx, len(self.channels) - 1))
         self.invalidate()
 
     def place_own_channels(self):
@@ -573,9 +596,8 @@ class App:
         change, the channel playing kept (retuned to the first if it went)."""
         live = self.live
         current = live.channel.number if live and live.channel else None
-        plain = [c for c in self.channels if not ownchannels.is_own(c) and not videochannels.is_made(c)]
-        self.channels = videochannels.add_to(ownchannels.add_to(plain, self.config), self.config)
-        self._cats = None
+        plain = [c for c in self.lineup_all if not ownchannels.is_own(c) and not videochannels.is_made(c)]
+        self.set_lineup(plain)
         ownchannels.fill_guide(self.epg)
         videochannels.rebuild(self)
         if not getattr(self, "video_loading", False):

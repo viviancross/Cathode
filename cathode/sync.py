@@ -48,7 +48,8 @@ ME = ""                         # this Cathode's id (config.sync_id), for libcha
 
 def channels_digest(cfg) -> str:
     return hashlib.sha1(json.dumps([cfg.library_channels, cfg.video_channels, cfg.own_channels,
-                                    getattr(cfg, "content_groups", [])], sort_keys=True).encode()).hexdigest()[:16]
+                                    getattr(cfg, "content_groups", []), getattr(cfg, "channel_edits", {}),
+                                    getattr(cfg, "packs", [])], sort_keys=True).encode()).hexdigest()[:16]
 
 
 def channels_key(edited: float, editor: str) -> tuple:
@@ -182,7 +183,8 @@ class Sync:
         cfg = self.app.config
         return {"edited": cfg.channels_edited, "editor": cfg.channels_editor or "",
                 "library_channels": cfg.library_channels, "video_channels": cfg.video_channels,
-                "own_channels": cfg.own_channels, "content_groups": getattr(cfg, "content_groups", [])}
+                "own_channels": cfg.own_channels, "content_groups": getattr(cfg, "content_groups", []),
+                "channel_edits": getattr(cfg, "channel_edits", {}), "packs": getattr(cfg, "packs", [])}
 
     # ── Hellos ────────────────────────────────────────────────────────────
 
@@ -287,6 +289,10 @@ class Sync:
         cfg.library_channels = doc["library_channels"]
         cfg.video_channels = [vc.fix(c) for c in doc["video_channels"]]
         cfg.own_channels = doc["own_channels"]
+        if isinstance(doc.get("channel_edits"), dict):
+            cfg.channel_edits = {k: v for k, v in doc["channel_edits"].items() if isinstance(v, dict)}
+        if isinstance(doc.get("packs"), list):
+            cfg.packs = [p for p in doc["packs"] if isinstance(p, dict) and isinstance(p.get("name"), str)]
         if isinstance(doc.get("content_groups"), list):
             cfg.content_groups = [g for g in doc["content_groups"] if isinstance(g, dict) and isinstance(g.get("id"), str)]
         cfg.channels_edited, cfg.channels_editor = float(doc.get("edited") or 0), doc.get("editor") or peer["id"]

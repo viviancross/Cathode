@@ -113,7 +113,10 @@ class TestLineup(unittest.TestCase):
         self.assertEqual([c.number for c in own.add_to(once, cfg)], [1, 2, 3, 4])
 
     def test_no_lineup_no_own_channels(self):
-        self.assertEqual(own.add_to([], Config("")), [])
+        bare = Config("")
+        bare.video_channels = []
+        self.assertEqual(own.add_to([], bare), [])          # nothing at all: nothing to guide
+        self.assertEqual([c.name for c in own.add_to([], Config(""))], ["TV Guide", "Local Weather"])   # no playlist, made channels
 
 
 class TestGuide(unittest.TestCase):
