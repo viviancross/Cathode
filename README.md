@@ -2,245 +2,227 @@
 
 # Cathode
 
-IPTV that feels like a satellite box. Cathode plays your M3U channels with a
-program guide, a channel banner on every tune, browse, pause-live-TV, and a
-remote-control way of doing everything, in the style of a mid-2000s set-top
-box. Your Plex library is On Demand, and downloaded titles are My Recordings.
+Cable TV from your own library, on a box from the 2000s.
 
-Cathode also makes channels of its own from your library (Plex, Jellyfin,
-Emby, or folders): a 24-hour schedule per channel that you join in progress,
-with commercials and bumpers between the programmes, time slots, on-air hours
-and sign-offs. It keeps every Cathode on your network on the same channels,
-and has a web page for your phone: a remote, what's on, and the lineup.
+Cathode turns your Plex library (or Jellyfin, Emby, or folders on the
+computer) into a lineup of round-the-clock channels: Nickelodeon at 8 PM is
+Nick at Nite, the commercials and bumpers run between the programmes, the
+guide is filled two days ahead, and you join every channel in progress. It
+plays your Tunarr, ErsatzTV or M3U channels too, and YouTube playlists as
+channels. All of it on screen as a satellite or cable box of the period,
+driven by a remote.
 
-**Version 5.1** · Windows, macOS, Linux
+**Version 5.3** · Windows · Linux and the Steam Deck · Android TV, Google TV
+and Fire TV
 
 <br clear="left">
 
-## Looks
+## What it does
 
-Cathode has four families of skins, switchable any time under **Settings >
-Picture & Style > Skin**:
+**Channels from your library.** A starter lineup made from what you have,
+every show and movie placed on the channel it belongs on, and new arrivals
+placed as they come. Any channel of your own, built from shows, seasons,
+single episodes, movies, whole libraries, genres, decades, studios,
+ratings, Plex collections or playlists, and content groups.
 
-- **Cathode Classic**: Cathode 3's retro-CRT look. Phosphor colour themes,
-  pixel fonts, static when you change channel.
-- **Cathode DSS / Cathode Direct**: a DirecTV-style box. Direct after the HR20
-  (sky-blue banner with the favourites bar, cyan guide page, navy grid,
-  amber selection, the colour keys, a mini guide); DSS after a 1997
-  receiver (purple and lavender pages, bevelled cells, drop-shadowed
-  lettering, 4:3).
-- **Cathode Plate / Cathode Plate HD**: a Dish Network-style box. HD after
-  the 2007 teal guide (teal page, charcoal channel cells, teal and navy
-  program cells, a gold frame, a grey banner, numbered menus, RIGHT to
-  browse); SD after the 2005 receivers (grey page with the blue tab of
-  pills, blue cells with a pale selection, a bare banner, 4:3).
-- **The cable boxes**: two after the guides the US cable companies leased
-  out, drawn to their manuals' frames. **Cathode Cumcast** (2006: navy
-  pages, a blue grid with steel channel tiles, a pale yellow cursor,
-  capsule menus, 4:3) and **Cathode Passage** (2004: a silver page, a cream card
-  for the programme, a purple grid, the A / B / C key bar, condensed
-  lettering, 4:3).
+**Scheduled as TV was.** Eleven sort methods (shuffles, blocks, marathons,
+round robins, Mix, playlist order, whole albums). Time slots and dayparts,
+on-air hours with colour bars at sign-off, premieres, pinned start times
+("The Simpsons at 8:00 PM weeknights"), random marathons, holiday episodes
+only in their season, two-part episodes back to back, movies capped per
+day, grown-up ratings only late at night, a redirect to another channel
+overnight, a watched filter, per-title weights. The day is written down a
+day at a time and carried on across days and restarts.
 
-Each skin keeps its own colour theme and font. Every skin can use any colour
-theme, the colour editor, any font, and the CRT scanlines and vignette.
+**Breaks.** Commercials and bumpers from your clip libraries between
+programmes, lined up with the clock; station idents; a set number per
+break or fill-the-time; a running order or shuffled; long videos of old ads
+cut into commercial-length pieces; a coming-up-next card (with an announcer
+voice if you want one); mid-show breaks halfway, every so many minutes, at
+chapter marks, or at the quiet moments where a show faded out for its own
+breaks.
 
-## How it works
+**On screen.** The channel's logo as a screen bug (always, on change, or
+now and then), a TV rating box as a programme starts, an up-next countdown,
+the banner and guide with each episode's details, a choice of tuning
+screens, seasonal decorations on the guide, and a TV-cabinet bezel if you
+like.
 
-Cathode draws its own window (SDL, through pygame-ce) and plays video with
-libmpv inside it. The interface is drawn at the skin's own resolution and
-composited over the video on the GPU, along with the CRT effect. Nothing is
-redrawn unless something changed, so an idle Cathode costs next to nothing.
+**Special channels.** TV Guide; Local Weather with radar, the outlook and
+US weather alerts (and a red crawl over live TV for a severe one); music
+libraries as radio channels with a visualizer; a Video Store channel to
+browse and "rent" your movies; locked (18+) channels that come through
+scrambled until the PIN; pop-up trivia during programmes.
 
-## Features
+**Live TV from playlists.** M3U and XMLTV (Tunarr, ErsatzTV, an IPTV line,
+an HDHomeRun tuner), with the guide, favourites, channel packs, hidden,
+renamed and renumbered channels, a number offset per playlist, and
+pause, rewind and fast-forward through what's buffered. Spelunkr's channels
+come with it.
 
-- **Live TV from M3U + XMLTV**: guide with a live picture-in-picture,
-  genres ("themes") from the guide data, favourites, channel logos, typed
-  channel numbers, PREV for the last channel.
-- **Like a box**: start-up screen while it finds its signal, a banner on
-  every tune (INFO again for the full description), browse other channels
-  without tuning, a mini guide, a signal-loss screen for dead channels.
-- **Spelunkr**: [spelunkr.tv](https://spelunkr.tv)'s channels of forgotten
-  Internet Archive video come with it as a saved playlist (Settings >
-  Channels > Spelunkr > Watch this playlist): every channel at its dial
-  number, in step with the site to the second, its bumpers between shows
-  and its vintage commercials in the breaks. New channels join the dial as
-  the network adds them.
-- **Pause live TV**: pause, rewind and fast-forward through what's buffered,
-  then back to live.
-- **On Demand (Plex)**: sign in with a code, browse and search your
-  libraries as a list or a poster wall, Continue Watching, watchlist, play
-  queue, resume points, Skip Intro / Skip Credits, audio and subtitle tracks.
-- **My Recordings**: download Plex titles to this computer and watch them
-  with no network.
-- **Remote control**: keyboard, media keys (so a Media Center remote or a
-  FLIRC IR receiver works), any game controller, and the mouse. Every button
-  can be remapped.
-- **Desktop**: full screen on the monitor you choose, start with the
-  computer, keeps the screen awake while it plays.
-- Weather in the guide, a diagnostics "signal meter", screensaver, update
-  check.
+**On Demand.** Your Plex libraries to browse and search, Recommended rows,
+collections, trailers, theme songs, Continue Watching, the watchlist, a
+play queue, Skip Intro, and My Recordings (titles downloaded to watch
+offline).
+
+**Around the house.** Every Cathode on your network keeps the same channels,
+showing the same thing at the same moment. Cast a channel or a film to
+another Cathode. A web page on your phone: a remote, what's on, the lineup,
+every channel's settings, what Plex is playing, the log, export and import.
+An API for Home Assistant. Profiles, kids' profiles and a parent PIN.
+
+**Plex, kept in step.** Library channels mark what you watched in Plex and
+show in its dashboard as playing.
+
+## The boxes
+
+Seven skins, switchable any time under **Settings > Design**:
+
+| Skin | After |
+|---|---|
+| Cathode Classic | Cathode 3's own retro CRT look: phosphor colours, pixel fonts, static between channels |
+| Cathode Direct | a DirecTV HR20 (2006): the sky-blue banner, the cyan guide, the colour keys |
+| Cathode DSS | a DirecTV receiver from 1997: lavender pages, bevelled cells, 4:3 |
+| Cathode Plate HD | Dish Network's 2007 guide: teal, charcoal and gold |
+| Cathode Plate | Dish Network's 2005 receivers: grey pages and blue cells, 4:3 |
+| Cathode Passage | a cable company's 2004 guide: a silver page, a purple grid, 4:3 |
+| Cathode Cumcast | a cable company's 2006 guide: navy pages, steel channel tiles, 4:3 |
+
+Every skin draws every screen its own way: menus, guide, banner, On Demand.
+Any colour theme, the colour editor, any font, CRT scanlines and the
+vignette work with all of them.
 
 ## Install
 
-Every build has libmpv inside: nothing else to install. Updates: Windows, the
-AppImage, the Flatpak and source installs update themselves from **Settings >
-System > Check for updates** (the Flatpak through the host's `flatpak`, so a
-Steam Deck updates from Game Mode); the Mac app says when one is out.
+Every build carries libmpv; there's nothing else to install. Windows, the
+AppImage, the Flatpak and Android update themselves (**Settings > Admin >
+Check for updates**).
 
-### Windows
+**Windows:** unzip `cathode-windows-5.3-portable.zip` and run **Cathode.exe**.
 
-Download `cathode-windows-5.1-portable.zip`, right-click it, **Extract All**,
-and run **Cathode.exe**.
-
-### Linux
-
-**AppImage** (Ubuntu 24.04, Fedora 40, Arch or newer): download
-`cathode-linux-x86_64-5.1.AppImage`, make it executable (file properties, or
-`chmod +x`) and run it.
-
-**Flatpak**, also the way to go on a **Steam Deck** (in Desktop Mode):
+**Linux:** `cathode-linux-x86_64-5.3.AppImage` (make it executable and run
+it), or the Flatpak:
 
 ```bash
-flatpak install --user cathode-linux-x86_64-5.1.flatpak
+flatpak install --user cathode-linux-x86_64-5.3.flatpak
 flatpak run io.github.viviancross.Cathode
 ```
 
-It fetches the freedesktop runtime from Flathub the first time. On the Deck,
-**Add a Non-Steam Game** to play it from Game Mode with the controller.
+**Steam Deck:** install the Flatpak in Desktop Mode, then **Add a Non-Steam
+Game** to run it from Game Mode with the controller.
 
-### macOS
+**Android TV, Google TV, Fire TV:** sideload `cathode-android-5.3.apk` (with
+Downloader, or `adb install`). For the 2023 onn 4K Google TV box, use
+`cathode-android-onn-5.3.apk`: the same Cathode with its heavier extras
+trimmed for that box's memory and processor.
 
-Download the zip for your Mac (`cathode-macos-arm64-5.1.zip` for Apple
-Silicon, `cathode-macos-x86_64-5.1.zip` for Intel), unzip it, and move
-**Cathode.app** to Applications. It isn't signed: the first time,
-right-click it and choose **Open** (or **Open Anyway** under System Settings
-> Privacy & Security).
-
-### From source (any OS)
-
-Install libmpv, then run Cathode with Python 3.10 or newer:
+**From source** (Python 3.10+, with libmpv installed):
 
 ```bash
-brew install mpv                       # macOS
-sudo apt install libmpv2               # Debian / Ubuntu (Fedora: mpv-libs, Arch: mpv)
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
 
-On Windows, put `libmpv-2.dll` (from an `mpv-dev-x86_64` archive of
-[shinchiro's builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases))
-in a `_libmpv` folder next to `main.py`.
+On Windows, put `libmpv-2.dll` in a `_libmpv` folder next to `main.py`.
 
-## Using it
+## Getting started
 
-On first start Cathode asks for your playlist (an M3U address or file) and,
-optionally, an XMLTV guide address. Add more, switch between them, or delete
-them under **Settings > Channels**.
+The first start walks you through it: pick your box and its colours, then
+your channels. **From my Plex library** links Plex with a code at
+plex.tv/link, asks for a ZIP code for the weather (optional), reads your
+library, and shows the lineup it made. **From Tunarr, ErsatzTV or an M3U
+link** takes a playlist address instead. You can have both.
 
-### The remote
+## The remote
 
 | Button | Keyboard | Controller |
 |---|---|---|
 | Channel up / down | Up / Down, PgUp / PgDn (by 10) | LB / RB, D-pad |
 | Type a channel | 0-9 then Enter | |
 | Guide | G | X |
-| Info (twice: description) | I or Tab | Y |
-| Menu | C | Back / Start |
+| Info (twice: the full description) | I or Tab | Y |
+| Menu | C | Start |
+| Options (favourite, picture, subtitles, edit or cast this channel) | O | Back |
 | Select | Enter | A |
 | Back | Backspace | B |
-| Exit (close everything) | Esc | |
 | Previous channel | P | R3 |
-| Browse / mini guide | B (Cathode Plate: Right too) | |
-| Themes (genres) | T | |
+| Browse / mini guide | B | |
 | Favourite | F | |
 | My Recordings | L | |
 | Pause / rewind / fast-forward | Space / , / . | |
-| Back to live | media Next key | |
 | Volume / mute | + - / M | LT / RT, L3 |
 | Full screen | W or F11 | |
 | Quit | Q | |
 
-Media keys (play/pause, stop, rewind, fast-forward, mute, volume) do what they
-say. In menus, number keys pick rows (on Cathode Plate's Main Menu, tiles). Remap
-anything under **Settings > Remote control**. A FLIRC USB receiver learns any
-IR remote there too (**FLIRC receiver**: a walk-through, one button at a time;
-see `docs/remotes/flirc.md`).
-
-### On Demand and My Recordings
-
-Pick **On Demand** from the Main Menu. The first time, it shows a code to
-enter at plex.tv/link. Then browse, search, or open Continue Watching or your
-watchlist. An item's page has PLAY (or resume), +QUEUE, the watchlist, and
-RECORD, which downloads it to this computer. Recordings are in **My
-Recordings** (L on the keyboard), play from disk, and work offline.
-
-While a title plays: Select or Space pauses, Left/Right step back and forward,
-channel up/down move through the queue, and Select skips an intro or the
-credits while that button is up. MENU has audio, subtitles and the queue.
-
-Recordings are kept in your Videos folder (`~/Movies/Cathode` on macOS); set
-`download_dir` in the config to put them elsewhere.
+Media keys work as labelled, and every button can be remapped under
+**Settings > Preferences > Remote control**. A FLIRC USB receiver learns any
+infrared remote there. On Android the box's own remote works; Cathode asks
+once to switch on its key service so the Guide and colour buttons reach it.
+In the guide, INFO on a programme then SELECT offers to browse that channel
+or put the show on another one.
 
 ## Settings
 
-The Main Menu's **Settings** has Picture & Style (skin, colour theme, font,
-scanlines, vignette, motion, colour editor), Channels, Display (full screen,
-monitor, start with the computer), On Demand (view, quality, libraries,
-server, who's watching, unlink), Remote control, and System (diagnostics,
-audio output, weather, updates, start-up screen, screensaver).
+The Main Menu has Channel Search, the Sleep Timer and **Settings**, laid out
+in tabs:
 
-The config file is `~/.config/cathode/config.json`. A few things live only
-there: `mpv_extra_args` (extra libmpv options such as `["--hwdec=no"]`),
-`download_dir`, `nav_repeat_delay` / `nav_repeat_rate`.
+- **Channels:** add a channel (from your library, YouTube, or a stream
+  address), live TV sources, packs, hidden channels, content groups, find a
+  title, bulk edit, the starter lineup, and every channel's own editor.
+- **Commercials:** what every channel's breaks are made of, the next-up
+  card, the announcer, the break screen, which channels have breaks.
+- **Schedule:** draw the schedule up afresh, read the library again, how far
+  ahead the guide goes.
+- **Design:** the box, its colours and lettering, screen effects.
+- **Preferences:** subtitles, the channel logo, on-screen extras, sound,
+  playback, the remote, the weather, YouTube.
+- **Servers:** Plex, Jellyfin, Emby and folders.
+- **Profiles:** who's watching, kids' profiles, the parent PIN.
+- **Admin:** the phone remote, sync, sharing, continuous streams, export and
+  import, the API key, backups, diagnostics, updates.
+
+Off until you turn them on: the announcer, theme songs, continuous
+streams, the API, the Video Store channel, pop-up trivia and random
+marathons.
+
+Settings live in `~/.config/cathode/config.json`. Put any extra mpv
+option in `mpv.conf` beside it.
+
+## For other apps
+
+With **Share channels with other apps** on (Settings > Admin), your library
+channels are on the phone remote's address (port 47810 on your network):
+`/lineup.m3u`, `/xmltv.xml`, and as an HDHomeRun tuner for Plex's, Jellyfin's
+or Channels' live TV. **Continuous Streams** makes each channel one stream
+with its breaks, at `/live/<channel>.ts`. Nothing is served beyond your own
+network.
+
+Home Assistant and scripts: make a key under **Settings > Admin > API key**,
+then `/api/v1/state`, `/api/v1/tune?number=`, `/api/v1/key?k=` and
+`/api/v1/volume?level=`, with `Authorization: Bearer <key>`.
 
 ## Troubleshooting
 
-- **No picture, but sound**: try `"mpv_extra_args": ["--hwdec=no"]`.
-- **Guide is empty**: the playlist's `tvg-id`s must match the XMLTV channel
-  ids; Cathode falls back to matching names.
-- **Logs**: `cathode.log` (and `cathode.log.1`, the run before) in
-  `%LOCALAPPDATA%\cathode\` on Windows, `~/.cache/cathode/` elsewhere
-  (`~/.var/app/io.github.viviancross.Cathode/cache/cathode/` for the Flatpak).
+- **No picture but sound:** put `hwdec=no` in `mpv.conf`.
+- **A playlist's guide is empty:** its `tvg-id`s must match the XMLTV ids;
+  Cathode falls back to names.
+- **Logs:** Settings > Admin > Save diagnostics makes one zip of them (no
+  passwords or tokens). The log is also on the phone page's Log tab.
 
 ## Building
 
-PyInstaller builds for the OS it runs on; every build bundles libmpv.
-
 ```bash
-pip install pyinstaller
-python tools/build_windows.py      # Windows: cathode-windows-<ver>-portable.zip
-python tools/build_macos.py        # macOS: cathode-macos-<arch>-<ver>.zip (needs brew install mpv)
+python tools/build_all.py        # Windows zip, source zip, AppImage and Flatpak (Docker for Linux)
 ```
 
-The Linux AppImage and Flatpak build in a container (Docker on any OS):
-
-```bash
-docker build -t cathode-linux-build tools/linux
-docker run --rm --privileged -v "$PWD:/src" -v "$PWD/../builds:/builds" cathode-linux-build
-```
-
-For development without a playlist or a Plex account, `tools/devtv.py` writes
-a test lineup and `tools/devplex.py` runs Cathode against a fake Plex server.
-
-## Project layout
-
-```
-main.py             entry point
-cathode/
-  app.py            the kernel: one UI thread, the screen stack, timers
-  video.py          libmpv in-process      gfx.py      window + GPU compositor
-  remote.py         every input -> remote buttons
-  screens/          live TV, guide, menus, browse, On Demand, playback, ...
-  skins/            the seven boxes
-  ondemand.py plex.py downloads.py playlist.py epg.py updater.py weather.py
-assets/  fonts and icons      tools/  build and dev scripts
-```
+Android builds in its container on the `android-tv` branch
+(`tools/build_android.py`; `CATHODE_FLAVOR=onn` for the onn box's build).
 
 ## License
 
-Cathode is free, non-commercial software under the **GNU GPL v3**
-(`LICENSE`). It is not affiliated with, endorsed by, or sponsored by Plex,
-DirecTV or Dish Network; the box skins are original work styled after the
+Free, non-commercial software under the **GNU GPL v3** (`LICENSE`). Not
+affiliated with Plex, DirecTV, Dish Network, NostalgiaTV, Tunarr or any
+network or cable company; the boxes are original work in the style of the
 period. Bundled fonts, libmpv and libraries keep their own licenses:
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and [`LICENSES/`](LICENSES/).
