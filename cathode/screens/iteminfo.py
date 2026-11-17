@@ -38,7 +38,7 @@ class ItemInfo(Screen):
         """A show's theme song, quietly, while its page is up (as Plex plays
         it): fetched once into the cache, played through pygame's mixer."""
         path = self.detail.get("theme")
-        if not path or not getattr(self.app.config, "theme_music", True) or self.kind == "download":
+        if not path or not getattr(self.app.config, "theme_music", False) or self.kind == "download":
             return
         import hashlib
         import os

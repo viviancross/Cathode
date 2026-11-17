@@ -98,8 +98,8 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
     lineup.m3u and the HDHomeRun tuner point there while it's on.
 - **On Demand:** each library's Recommended rows (Plex's: Recently Added,
   Top Rated, Because You Watched...) and Collections; a TRAILER button on
-  a title that has one; a show's theme song on its page (Preferences > Playback >
-  Theme Songs).
+  a title that has one; a show's theme song on its page, if you turn it on
+  (Preferences > Playback > Theme Songs; off by default).
 - **Cast to Another Cathode** (Options on live TV, MENU during On Demand):
   the channel, or the title from where it is, on another Cathode on your
   network.

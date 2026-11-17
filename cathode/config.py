@@ -195,7 +195,7 @@ class Config:
     start_on: str = "last"          # at start-up: last (channel) | first (channel) | ondemand | guide
     plex_version: str = "first"     # an item with several files: first | best | smallest
     visualizer: str = "off"         # a music channel's picture: off (the album card) | waves | bars | spectrum
-    theme_music: bool = True        # On Demand: a show's theme song plays on its page
+    theme_music: bool = False       # On Demand: a show's theme song plays on its page (off unless turned on)
     broadcast_stream: bool = False  # /live/<channel>.ts: each library channel as one continuous stream (off unless turned on)
     api_key: str = ""               # for /api/v1 (Home Assistant and the like): "" = that API off
     weather_radar: bool = True      # the weather channel's radar page (RainViewer over Esri's map)
