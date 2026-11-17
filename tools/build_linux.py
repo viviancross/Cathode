@@ -22,8 +22,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import cathode  # noqa: E402
 # Next to the repo (S:/projects/builds/<version>), also when building from a
-# worktree under .claude/worktrees/; CATHODE_BUILDS overrides (the container).
-REPO = ROOT.split(os.sep + ".claude" + os.sep)[0]
+# worktree inside the repository; CATHODE_BUILDS overrides (the container).
+def _repo(d):
+    """The repository's root: up from here to the folder holding .git as a
+    folder (a worktree's .git is a file), else here."""
+    while not os.path.isdir(os.path.join(d, ".git")) and os.path.dirname(d) != d:
+        d = os.path.dirname(d)
+    return d if os.path.isdir(os.path.join(d, ".git")) else ROOT
+
+
+REPO = _repo(ROOT)
 BUILDS = os.path.join(os.environ.get("CATHODE_BUILDS") or os.path.join(os.path.dirname(REPO), "builds"),
                       cathode.__version__)
 WORK = os.environ.get("CATHODE_WORK") or os.path.join(ROOT, "_linuxbuild")

@@ -24,12 +24,20 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import cathode  # noqa: E402
 
-REPO = ROOT.split(os.sep + ".claude" + os.sep)[0]
+def _repo(d):
+    """The repository's root: up from here to the folder holding .git as a
+    folder (a worktree's .git is a file), else here."""
+    while not os.path.isdir(os.path.join(d, ".git")) and os.path.dirname(d) != d:
+        d = os.path.dirname(d)
+    return d if os.path.isdir(os.path.join(d, ".git")) else ROOT
+
+
+REPO = _repo(ROOT)
 BUILDS_ROOT = os.path.join(os.path.dirname(REPO), "builds")
 BUILDS = os.path.join(BUILDS_ROOT, cathode.__version__)
 IMAGE = "cathode-linux-build"
 # Things that must never be inside a shipped zip.
-BAD = ("__pycache__", ".pyc", "/.git", ".impeccable", ".claude", "config.json", "cathode.log", "_winbuild",
+BAD = ("__pycache__", ".pyc", "/.git", ".impeccable", "/worktrees/", "config.json", "cathode.log", "_winbuild",
        "_linuxbuild", "proto/", "scratchpad", ".venv", "Thumbs.db", ".DS_Store", "tests/")
 
 
