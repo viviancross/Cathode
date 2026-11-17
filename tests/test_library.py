@@ -156,19 +156,25 @@ class TestSources(Temp):
 
         def titles(*sources):
             return [(g["title"], len(g["items"])) for g in lc.groups({"sources": list(sources)}, idx)]
-        self.assertEqual(titles({"kind": "genre", "value": "Comedy"}), [("Alpha", 7), ("Bravo", 5), ("Laughs", 1)])
-        self.assertEqual(titles({"kind": "genre", "value": "Comedy", "only": "show"}), [("Alpha", 7), ("Bravo", 5)])
-        self.assertEqual(titles({"kind": "decade", "value": 1990}), [("Alpha", 7), ("Bravo", 5), ("Heist", 1), ("Laughs", 1)])
-        self.assertEqual(titles({"kind": "studio", "value": "Nickelodeon"}), [("Alpha", 7), ("Bravo", 5)])
+        # (Alpha: seven episodes and its special, the special long enough to be a programme)
+        self.assertEqual(titles({"kind": "genre", "value": "Comedy"}), [("Alpha", 8), ("Bravo", 5), ("Laughs", 1)])
+        self.assertEqual(titles({"kind": "genre", "value": "Comedy", "only": "show"}), [("Alpha", 8), ("Bravo", 5)])
+        self.assertEqual(titles({"kind": "decade", "value": 1990}), [("Alpha", 8), ("Bravo", 5), ("Heist", 1), ("Laughs", 1)])
+        self.assertEqual(titles({"kind": "studio", "value": "Nickelodeon"}), [("Alpha", 8), ("Bravo", 5)])
         self.assertEqual(titles({"kind": "rating", "value": lc.MATURE}), [("Charlie", 3)])
         self.assertEqual(titles({"section": "51", "kind": "show", "value": "200"}), [("Bravo", 5)])
         self.assertEqual(len(titles({"kind": "all"})), 6)       # the bumpers stay out of everything
         self.assertEqual(titles({"section": "10", "kind": "all"}), [])      # (and are too short for a programme)
-        # twice matched, once in; a show's specials left out; its episodes in order
+        # twice matched, once in; its episodes in order, its special after them (a short one: a bumper instead)
         g = lc.groups({"sources": [{"kind": "genre", "value": "Comedy"}, {"kind": "decade", "value": 1990}]}, idx)
         self.assertEqual([x["title"] for x in g], ["Alpha", "Bravo", "Heist", "Laughs"])
         self.assertEqual([(i["season"], i["episode"]) for i in g[0]["items"]],
-                         [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (2, 3)])
+                         [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (2, 3), (0, 1)])
+        special = next(i for i in idx.sections["51"].items if i["season"] == 0)
+        special["duration"] = 90
+        self.assertNotIn(special, lc.groups({"sources": [{"kind": "genre", "value": "Comedy"}]}, idx)[0]["items"])
+        self.assertEqual(lc.clips([{"section": "51", "kind": "show", "value": "100", "specials": True}], idx), [special])
+        special["duration"] = 1320
         idx.sections["38"].hidden = True
         self.assertEqual(len(titles({"kind": "all"})), 3)       # hidden from On Demand: not taken unasked
         self.assertEqual(len(titles({"section": "38", "kind": "all"})), 3)  # but there when asked for
@@ -191,11 +197,11 @@ class TestSorts(Temp):
         return f"{i['title'][0]}{i['season']}.{i['episode']}"
 
     def test_cyclic_shuffle_airs_everything_once_a_cycle(self):
-        got = [i["id"] for i in self.draw("cyclic_shuffle", 45)]
+        got = [i["id"] for i in self.draw("cyclic_shuffle", 48)]   # 13 episodes, Alpha's special, 2 movies
         for k in range(3):
-            self.assertEqual(len(set(got[k * 15:k * 15 + 15])), 15)
-        self.assertNotEqual(got[:15], got[15:30])
-        self.assertNotEqual(got[14], got[15])                   # a cycle doesn't open on the last one's closer
+            self.assertEqual(len(set(got[k * 16:k * 16 + 16])), 16)
+        self.assertNotEqual(got[:16], got[16:32])
+        self.assertNotEqual(got[15], got[16])                   # a cycle doesn't open on the last one's closer
 
     def test_random_keeps_recent_titles_away(self):
         got = [i["id"] for i in self.draw("random", 200)]
@@ -219,14 +225,13 @@ class TestSorts(Temp):
     def test_marathons_and_round_robin_shuffle_and_playlist(self):
         got = [self.tag(i) for i in self.draw("marathon_cyclic", 13)]
         self.assertEqual(got[:7], ["A1.1", "A1.2", "A1.3", "A1.4", "A2.1", "A2.2", "A2.3"])
-        self.assertEqual((got[7], got[11], got[12]), ("A1.1", "A2.1", "B1.1"))   # twelve of Alpha, then Bravo
+        self.assertEqual((got[7], got[11], got[12]), ("A0.1", "A1.4", "B1.1"))   # its special, twelve of Alpha, Bravo
         got = [self.tag(i)[0] for i in self.draw("round_robin_shuffle", 12)]
         for n in range(0, 12, 3):
             self.assertEqual(sorted(got[n:n + 3]), ["A", "B", "C"])     # every show once a round
-        got = [self.tag(i) for i in self.draw("playlist", 16)]
-        self.assertEqual(got[:7] + got[7:12] + got[12:15] + got[15:],
-                         ["A1.1", "A1.2", "A1.3", "A1.4", "A2.1", "A2.2", "A2.3", "B1.1", "B1.2", "B1.3", "B1.4",
-                          "B1.5", "C1.1", "C1.2", "C1.3", "A1.1"])
+        got = [self.tag(i) for i in self.draw("playlist", 17)]
+        self.assertEqual(got, ["A1.1", "A1.2", "A1.3", "A1.4", "A2.1", "A2.2", "A2.3", "A0.1", "B1.1", "B1.2", "B1.3",
+                               "B1.4", "B1.5", "C1.1", "C1.2", "C1.3", "A1.1"])
 
     def test_the_state_carries_the_rotation_on(self):
         import json
@@ -260,7 +265,7 @@ class TestTimeline(Temp):
             t = start + dur
             seen.append(item_id)
         self.assertGreaterEqual(t, lc._next_day(day["start"]))
-        self.assertEqual(seen[:8], ["p100101", "p100102", "p100103", "p100104", "p100201", "p100202", "p100203", "p100101"])
+        self.assertEqual(seen[:8], ["p100101", "p100102", "p100103", "p100104", "p100201", "p100202", "p100203", "p100001"])
         last = seen[-1]
         tomorrow = tl.at(now + timedelta(days=1))
         self.assertEqual(len(tl.days), 2)
@@ -630,7 +635,7 @@ class TestMaker(Temp):
                          ["Comedy", "Add a channel...", "Content groups", "Breaks during programmes", "Give every channel breaks", "Add the starter lineup", "Remove the starter lineup",
                           "Read the library again"])
         self.assertEqual(pages[0][0].value(), "101")
-        self.assertEqual(pages[1][2].value(), "13 titles, 6 h")
+        self.assertEqual(pages[1][2].value(), "14 titles, 6 h")      # (Alpha's special: after its seasons)
         self.assertEqual((pages[1][3].value(), pages[1][4].value()), ("Block Shuffle", "2 episodes"))
         self.assertEqual(pages[2][0].label, "Everything: Comedy")
         self.assertEqual([(it.label, it.value()) for it in pages[5]][:2], [("Comedy", "3"), ("Action", "1")])

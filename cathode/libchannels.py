@@ -281,6 +281,8 @@ def clips(sources, index) -> list:
             if src.get("section") and sec.key != src["section"]:
                 continue
             for i in sec.items:
+                if src.get("specials") and i["season"] != 0:
+                    continue                    # (a show's shorts, filed as specials: not its episodes)
                 if 0 < i["duration"] <= CLIP_MAX and i["id"] not in seen and _match(src, i if sec.kind != "show" else
                                                                                        sec.shows.get(i["show_key"], {})):
                     seen.add(i["id"])
@@ -330,7 +332,7 @@ def breaks_of(c: dict, index) -> dict:
 
 def groups(c: dict, index) -> list:
     """The titles a channel's sources match, as groups in title order: a
-    show's episodes in their order (specials left out when it has seasons),
+    show's episodes in their order (its specials after them, its shorts left to be bumpers),
     each movie on its own. A title two sources match is in once; one a
     source set to leave out matches isn't in at all, nor one the channel's
     word filters or ratings rule out. A group knows its sources (`src`,
@@ -356,9 +358,10 @@ def groups(c: dict, index) -> list:
                 g["items"].append(i)
     for g in out.values():
         if len(g["items"]) > 1:
-            g["items"].sort(key=lambda i: (i["season"], i.get("album", ""), i["episode"], i["air"]))
+            # specials after the seasons; a show's shorts among them are its network's bumpers, not episodes
+            g["items"].sort(key=lambda i: (i["season"] == 0, i["season"], i.get("album", ""), i["episode"], i["air"]))
             if any(i["season"] for i in g["items"]):
-                g["items"] = [i for i in g["items"] if i["season"]] or g["items"]
+                g["items"] = [i for i in g["items"] if i["season"] or i["duration"] > CLIP_MAX] or g["items"]
     return sorted((g for g in out.values() if g["items"]), key=lambda g: (g["title"].lower(), g["id"]))
 
 
@@ -1140,11 +1143,12 @@ def _bisect(a, x):
 # whether it ran commercials. Then the HBO channels from the movies, a few
 # 24/7 channels, and any library nothing else took.
 
-STARTER_MAKE = 2                # 2: network replicas (1: genres, decades, studios)
+STARTER_MAKE = 3                # 3: every title placed; 2: network replicas; 1: genres, decades, studios
 SATURDAY_MORNING = {"from": 7, "to": 12, "days": [5]}
 WEEKDAY_AFTERNOON = {"from": 16, "to": 18, "days": [0, 1, 2, 3, 4]}
 NET_SHOWS, SLOT_SHOWS, HBO_MOVIES = 4, 3, 20
 MARATHON_EPISODES, MARATHONS = 150, 5
+ALWAYS_247 = "10 Minute Power Hour"             # a 24/7 whatever its length
 NOT_247 = {"News", "Talk Show", "Talk", "Sport"}
 
 NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patterns on a library's name), ads, order
@@ -1214,7 +1218,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
                                        "The Brady Bunch|Mister Ed|Get Smart|Happy Days|Laverne & Shirley|"
                                        "Who's the Boss?|Taxi|Cheers|The Munsters|The Patty Duke Show")]},
     {"name": "Nicktoons", "group": "Kids", "bumps": r"nicktoons",
-     "shows": "Aaahh!!! Real Monsters|Action League Now!|The Angry Beavers|As Told By Ginger|Avatar: The Last Airbender|"
+     "shows": "Aaahh!!! Real Monsters|Action League Now!|The Angry Beavers|As Told By Ginger|"
+              "Avatar: The Last Airbender|"
               "CatDog|Catscratch|ChalkZone|Danny Phantom|Doug|El Tigre: The Adventures of Manny Rivera|"
               "The Fairly OddParents|Hey Arnold!|Invader ZIM|The Adventures of Jimmy Neutron: Boy Genius|KaBlam!|"
               "Kappa Mikey|The Mighty B!|Mr. Meaty|My Dad the Rock Star|My Life as a Teenage Robot|Oh Yeah! Cartoons|"
@@ -1223,7 +1228,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "The Penguins of Madagascar|Sanjay and Craig|Breadwinners|Harvey Beaks|Edgar & Ellen|"
               "Random! Cartoons|Making Fiends|Pelswick|Butt-Ugly Martians|Speed Racer: The Next Generation"},
     {"name": "Nick GAS", "group": "Kids", "bumps": r"nick ?gas",
-     "shows": "Double Dare|Double Dare 2000|Super Sloppy Double Dare|Family Double Dare|Figure It Out|"
+     "shows": "Finders Keepers|"
+              "Double Dare|Double Dare 2000|Super Sloppy Double Dare|Family Double Dare|Figure It Out|"
               "Get the Picture|Global Guts|Guts|Legends of the Hidden Temple|Make the Grade|Nickelodeon Arcade|"
               "Think Fast|Wild & Crazy Kids|What Would You Do?|You're On|Nickelodeon Splat|"
               "Nickelodeon's Slime Time Live|Scaredy Camp|Gamefarm|Brain Surge|Webheads"},
@@ -1233,7 +1239,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Square One TV|The Electric Company|Ghostwriter|Degrassi Junior High|Degrassi High|Fifteen|"
               "Out of the Box|Sponk!|A Walk in Your Shoes"},
     {"name": "Cartoon Network", "group": "Kids", "bumps": r"\bcn\b|cartoon network",
-     "shows": "2 Stupid Dogs|Adventure Time|The Amazing World of Gumball|Camp Lazlo|Cartoon Planet|"
+     "shows": "Code Lyoko: Evolution|"
+              "2 Stupid Dogs|Adventure Time|The Amazing World of Gumball|Camp Lazlo|Cartoon Planet|"
               "Codename: Kids Next Door|Courage the Cowardly Dog|Cow and Chicken|Craig of the Creek|"
               "Dexter's Laboratory|Ed, Edd n Eddy|Evil Con Carne|Grim & Evil|The Grim Adventures of Billy & Mandy|"
               "Hi Hi Puffy AmiYumi|I Am Weasel|Johnny Bravo|Mike, Lu & Og|The Powerpuff Girls|Regular Show|"
@@ -1247,7 +1254,9 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
                                    "Mobile Suit Gundam Wing|The Big O|Naruto|Hunter x Hunter|"
                                    "JoJo's Bizarre Adventure|ReBoot|Hamtaro|Yu Yu Hakusho|Outlaw Star|Tenchi Muyo!|"
                                    "Ronin Warriors|ThunderCats|Voltron|Zoids|Rurouni Kenshin|Teen Titans|"
-                                   "Megas XLR|IGPX|One Piece|Blue Submarine No. 6")]},
+                                   "Megas XLR|IGPX|One Piece|Blue Submarine No. 6|Powerpuff Girls Z|"
+                                   "Panty & Stocking with Garterbelt|Initial D|Ghost Stories|Lucky Star|"
+                                   "Polar Bear Cafe|Blue Eye Samurai")]},
     {"name": "Boomerang", "group": "Kids", "bumps": r"boomerang",
      "shows": "A Pup Named Scooby-Doo|Captain Caveman and the Teen Angels|Droopy|Hong Kong Phooey|"
               "Inch High, Private Eye|Jabberjaw|Jonny Quest|The Atom Ant Show|The Flintstones|The Jetsons|"
@@ -1259,7 +1268,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "The Huckleberry Hound Show|Quick Draw McGraw|The Smurfs|Snorks|The Banana Splits|"
               "Josie and the Pussycats|Super Friends|The Herculoids|Richie Rich|Heathcliff and the Catillac Cats"},
     {"name": "Disney Channel", "group": "Kids", "bumps": r"disney (ident|misc|channel|bump)", "ads": False,
-     "shows": "Even Stevens|Lizzie McGuire|That's So Raven|Phil of the Future|The Suite Life of Zack & Cody|"
+     "shows": "The Muppet Show|"
+              "Even Stevens|Lizzie McGuire|That's So Raven|Phil of the Future|The Suite Life of Zack & Cody|"
               "The Proud Family|Kim Possible|Lilo & Stitch: The Series|American Dragon: Jake Long|"
               "The Emperor's New School|Dave the Barbarian|Brandy & Mr. Whiskers|Big City Greens|Bug Juice|Braceface|"
               "Hannah Montana|Wizards of Waverly Place|Phineas and Ferb|Gravity Falls|Smart Guy|Flash Forward|"
@@ -1288,7 +1298,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Peter Pan & the Pirates|Attack of the Killer Tomatoes|The Ripping Friends|"
               "The Adventures of Sam & Max: Freelance Police"},
     {"name": "Adult Swim", "group": "Cable", "bumps": r"adult ?swim",
-     "shows": "Aqua Teen Hunger Force|Assy McGee|Black Dynamite|The Boondocks|The Brak Show|"
+     "shows": "Gary & Mike|"
+              "Aqua Teen Hunger Force|Assy McGee|Black Dynamite|The Boondocks|The Brak Show|"
               "Check It Out! with Dr. Steve Brule|Cowboy Bebop|The Eric Andre Show|Family Guy|Futurama|FLCL|"
               "Harvey Birdman, Attorney at Law|Home Movies|Joe Pera Talks with You|Metalocalypse|Mike Tyson Mysteries|"
               "Moral Orel|Robot Chicken|Sealab 2021|Space Ghost Coast to Coast|Squidbillies|Smiling Friends|"
@@ -1299,7 +1310,9 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Lupin the 3rd|Neon Genesis Evangelion|Samurai Champloo|Bleach|Death Note|The Cleveland Show|"
               "Stroker and Hoop|Superjail!|Mr. Pickles|Loiter Squad|NTSF:SD:SUV::"},
     {"name": "Comedy Central", "group": "Cable", "bumps": r"comedy central", "libs": r"stand.?up", "order": "mix",
-     "shows": "South Park|Reno 911!|Insomniac with Dave Attell|Strangers with Candy|The Jeselnik Offensive|"
+     "shows": "Archer|Letterkenny|I Think You Should Leave with Tim Robinson|Jon Benjamin Has a Van|Night Stand|"
+              "Set List: Stand-Up Without A Net|Nirvana the Band the Show|"
+              "South Park|Reno 911!|Insomniac with Dave Attell|Strangers with Candy|The Jeselnik Offensive|"
               "Comedy Central Roasts|Stella|Comedy Central Presents|Chappelle's Show|Drawn Together|"
               "Dr. Katz, Professional Therapist|Drunk History|Key & Peele|Kroll Show|Mind of Mencia|Nathan for You|"
               "Important Things With Demetri Martin|Inside Amy Schumer|Workaholics|Broad City|Detroiters|"
@@ -1310,7 +1323,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Tosh.0|Crank Yankers|The Man Show|Viva Variety|Exit 57|Premium Blend|Review|Another Period|"
               "Corporate|Ugly Americans"},
     {"name": "MTV", "group": "Cable", "bumps": r"\bmtv\b",
-     "shows": "Beavis and Butt-Head|Daria|Celebrity Deathmatch|The Head|Downtown|Liquid Television|Jackass|"
+     "shows": "Face to Face With 'Weird Al' Yankovic|"
+              "Beavis and Butt-Head|Daria|Celebrity Deathmatch|The Head|Downtown|Liquid Television|Jackass|"
               "Viva La Bam|Wildboyz|Pimp My Ride|Punk'd|MTV Cribs|Made|True Life|Next|Parental Control|"
               "Room Raiders|Remote Control|Singled Out|Rob & Big|Rob Dyrdek's Fantasy Factory|The Osbournes|"
               "Meet the Barkers|Doggy Fizzle Televizzle|A Shot at Love with Tila Tequila|Double Shot at Love|"
@@ -1320,7 +1334,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Ridiculousness|The Real World|Road Rules|Laguna Beach|The Hills|Jersey Shore|Total Request Live|"
               "Yo! MTV Raps|Date My Mom|Damage Control"},
     {"name": "VH1", "group": "Cable", "bumps": r"\bvh1\b", "libs": r"pop.?up.?video", "order": "mix",
-     "shows": "Behind the Music|I Love ...|I Love the 70s|I Love the 80s|I Love the 90s|I Love the 2000s|I Love Toys|"
+     "shows": "The Soup|Queer Eye for the Straight Guy|"
+              "Behind the Music|I Love ...|I Love the 70s|I Love the 80s|I Love the 90s|I Love the 2000s|I Love Toys|"
               "I Love Money|Flavor of Love|Bands on the Run|Supergroup|Ego Trip's The (White) Rapper Show|"
               "Fabulous Life of|Vh1 the Fabulous Life Of|Late World with Zach|Rock & Roll Jeopardy!|Driven|"
               "Pop-Up Video|Storytellers|Where Are They Now?|Best Week Ever|The Surreal Life|Celebrity Fit Club|"
@@ -1332,18 +1347,23 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "The Andy Griffith Show|The Beverly Hillbillies|Sanford and Son|Cougar Town|Angie Tribeca|"
               "Ripley's Believe It or Not!"},
     {"name": "G4", "group": "Cable", "bumps": r"\bg4\b|tech ?tv",
-     "shows": "Attack of the Show|X-Play|Cheat|Cinematech|Icons|Portal|Reviews on the Run|G4 Arena Classics|G4 Misc|"
+     "shows": "KASSO|Sports X Casino|Filter|SuperDog|"
+              "Attack of the Show|X-Play|Cheat|Cinematech|Icons|Portal|Reviews on the Run|G4 Arena Classics|G4 Misc|"
               "G4's Proving Ground|G4TV.COM|GameSpot TV|The Screen Savers|The Electric Playground|Code Monkeys|"
               "Web Soup|Unbeatable Banzuke|Sasuke|Women of Ninja Warrior|Ninja Warrior|American Ninja Warrior|"
               "Star Trek: The Next Generation|Arena|Players|Judgment Day|Pulse|Call for Help|Tech Live|Cops 2.0|"
               "Hurl!|Human Wrecking Balls|Campus Gamers|Bomb Patrol|GameCenter CX"},
     {"name": "Spike TV", "group": "Cable",
-     "shows": "MXC|1000 Ways to Die|Bully Beatdown|Stripperella|Star Trek: The Next Generation|Raw|Robot Wars|"
+     "shows": "American Gladiators|Penn & Teller: Bullshit!|Penn & Teller: Fool Us|Penn & Teller Tell a Lie|"
+              "Criss Angel Mindfreak|Breaking the Magician's Code: Magic's Biggest Secrets Finally Revealed|"
+              "Breaking the Magician's Code|Chris Hardwick's All Star Celebrity Bowling|X Games|"
+              "MXC|1000 Ways to Die|Bully Beatdown|Stripperella|Star Trek: The Next Generation|Raw|Robot Wars|"
               "TNN Motor Madness Monster Jam|Deadliest Warrior|Manswers|Blue Mountain State|Pros vs. Joes|"
               "The Joe Schmo Show|TNA Impact!|The Ultimate Fighter|UFC Unleashed|Auction Hunters|Bar Rescue|"
               "Ink Master|Lip Sync Battle|SlamBall"},
     {"name": "Food Network", "group": "Cable",
-     "shows": "Good Eats|Unwrapped|Diners, Drive-ins and Dives|Iron Chef America|Man v. Food|"
+     "shows": "Food Wars|"
+              "Good Eats|Unwrapped|Diners, Drive-ins and Dives|Iron Chef America|Man v. Food|"
               "Anthony Bourdain: No Reservations|The F Word|Ramsay's Kitchen Nightmares|Ramsay's Boiling Point|"
               "Inside Eats with Rhett & Link|Fluffy's Food Adventures|Iron Chef|30 Minute Meals|Emeril Live|"
               "Chopped|Cupcake Wars|Ace of Cakes|Guy's Grocery Games|Beat Bobby Flay|Throwdown! with Bobby Flay|"
@@ -1358,7 +1378,8 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "Love Connection|Catch 21|Baggage|Russian Roulette|Friend or Foe?|Street Smarts|The Chase|"
               "Drew Carey's Improv-A-Ganza"},
     {"name": "BBC America", "group": "Cable", "bumps": r"\bbbc\b",
-     "shows": "Top Gear|Monty Python's Flying Circus|Little Britain|Little Britain USA|The Office|Planet Earth|"
+     "shows": "The Unpleasant World of Penn and Teller|Hard Quiz|Wipeout (AU)|Wipeout (CA)|"
+              "Top Gear|Monty Python's Flying Circus|Little Britain|Little Britain USA|The Office|Planet Earth|"
               "Wild Arabia|Doctor Who|QI|The IT Crowd|Would I Lie to You?|8 Out of 10 Cats Does Countdown|"
               "8 Out of 10 Cats|Peep Show|The Mighty Boosh|The Inbetweeners|Look Around You|Total Wipeout|"
               "Robot Wars|Taskmaster|Brainiac: Science Abuse|Big Fat Quiz|Dinner Date|Lingo (UK)|Danger Mouse|"
@@ -1387,9 +1408,12 @@ NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patt
               "The Blue Planet|Frozen Planet|The Jeff Corwin Experience|Emergency Vets|Animal Cops: Detroit|"
               "Animal Precinct|Pet Star|Meerkat Manor|It's Me or the Dog|River Monsters|Whale Wars|"
               "Untamed and Uncut|The Most Extreme|Dogs 101|Pit Bulls and Parolees"},
+    {"name": "Defunctland Channel", "group": "Cable", "min": 1, "order": "cyclic_shuffle",
+     "shows": "Defunctland|DefunctTV"},
     {"name": "WWE Network", "group": "Cable", "libs": r"wrestl|wrasslin|\bww[ef]\b|\bwcw\b|\becw\b|\baew\b|\btna\b",
      "order": "mix",
-     "shows": "Raw|SmackDown!|SmackDown|Sunday Night Heat|WCW Monday Nitro|WCW Thunder|WWE Velocity|ECW Hardcore TV|"
+     "shows": "Player 54: Chasing the XFL Dream|"
+              "Raw|SmackDown!|SmackDown|Sunday Night Heat|WCW Monday Nitro|WCW Thunder|WWE Velocity|ECW Hardcore TV|"
               "WWE Confidential|Dark Side of the Ring|Dark Side of the Ring: After Dark|WCW MTV|Wrestling Society X|"
               "WWF Superstars of Wrestling|WWE NXT|Saturday Night's Main Event|WCW Saturday Night|"
               "WWF Prime Time Wrestling|Tough Enough|WWE Tough Enough|Legends of Wrestling|ECW on Sci Fi"},
@@ -1450,6 +1474,10 @@ def starter(index) -> list:
             for k, sh in sec.shows.items():
                 shows.setdefault(_tkey(sh["title"]), []).append((sec.key, k, n.get(k, 0)))
 
+    shorts = {(s.key, i["show_key"]) for s in index.sections.values() if s.kind == "show" for i in s.items
+              if i["season"] == 0 and 0 < i["duration"] <= CLIP_MAX and any(j["season"] for j in s.items
+                                                                             if j["show_key"] == i["show_key"])}
+
     def found(titles: str) -> list:
         return [hit for t in dict.fromkeys(_tkey(t) for t in titles.split("|") if t) for hit in shows.get(t, ())]
     ads = [{"section": s.key, "kind": "all"} for s in index.sections.values()
@@ -1468,7 +1496,7 @@ def starter(index) -> list:
         if len(day) < SLOT_SHOWS and not libs:      # too little for the rest of the day: the slot's shows all day
             day += [h[:2] for _a, f, _l in slots for h in f if h[:2] not in day]
             slots = [(a, [], ls) for a, _f, ls in slots if ls]
-        if len(day) + sum(len(f) for _a, f, _l in slots) < NET_SHOWS and not libs:
+        if len(day) + sum(len(f) for _a, f, _l in slots) < net.get("min", NET_SHOWS) and not libs:
             continue
         sources = [{"section": s, "kind": "show", "value": k} for s, k in day]
         sources += [{"section": lib.key, "kind": "all"} for lib in libs]
@@ -1477,6 +1505,8 @@ def starter(index) -> list:
             sources += [{"section": lib.key, "kind": "all", "airs": airs} for lib in ls]
         used |= whole | {lib.key for _a, _f, ls in slots for lib in ls}
         bumps = [{"section": s.key, "kind": "all"} for s in _libs(index, net.get("bumps", ""), True)]
+        bumps += [{"section": s, "kind": "show", "value": k, "specials": True} for s, k in
+                  day + [h[:2] for _a, f, _l in slots for h in f] if (s, k) in shorts]   # its shows' shorts
         brk = {"ads": ads if net.get("ads", True) else [], "bumps": bumps, "pad": 30, "mid": "off", "length": 120}
         add(net["name"], net["group"], net.get("order", "round_robin_shuffle"), sources,
             breaks=brk if brk["ads"] or brk["bumps"] else {})
@@ -1502,8 +1532,10 @@ def starter(index) -> list:
                      ((k, sum(1 for i in sec.items if i["show_key"] == k)) for k in sec.shows)
                      if n >= MARATHON_EPISODES and not set(sec.shows[k]["genres"]) & NOT_247),
                     key=lambda t: (-t[0], t[1].shows[t[2]]["title"]))
-    for _n, sec, k in ranked[:MARATHONS]:
-        add(f"{sec.shows[k]['title']} 24/7", "24/7", "playlist", [{"section": sec.key, "kind": "show", "value": k}])
+    picks = [(sec.key, k) for _n, sec, k in ranked[:MARATHONS]]
+    picks += [h[:2] for h in found(ALWAYS_247) if h[:2] not in picks]
+    for s, k in picks:
+        add(f"{index.sections[s].shows[k]['title']} 24/7", "24/7", "playlist", [{"section": s, "kind": "show", "value": k}])
 
     taken = {s.get("section") for c in out for s in c["sources"]}
     for s in index.programme_sections():

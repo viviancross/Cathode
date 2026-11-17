@@ -24,7 +24,16 @@
   HBO Comedy (comedies and your stand-up specials), HBO Signature (dramas,
   romance, crime, documentaries) and HBO Zone (action, sci-fi, horror;
   nothing for kids).
-- **A few 24/7 channels**, for the shows with the most episodes.
+- **A few 24/7 channels**, for the shows with the most episodes, and one for
+  10 Minute Power Hour; a Defunctland Channel for Defunctland and DefunctTV.
+- **Every title has a home.** The shows that never aired on these networks
+  went where you placed them (Archer and Letterkenny on Comedy Central, the
+  Penn & Teller shows and Criss Angel on Spike TV, The Muppet Show on Disney
+  Channel, the anime on Toonami, and so on).
+- **A show's shorts are its network's bumpers** (the Tracey Ullman Simpsons
+  shorts on Fox, the Pete & Pete shorts on Nickelodeon), and its longer
+  specials air after its seasons (the Rugrats holiday specials, The Office
+  Christmas specials) instead of being left out.
 - **Your current lineup changes over once.** The old starter channels you
   never edited are swapped for the new ones on the next start; any you
   changed stay as they are. Libraries you hid from On Demand still feed
