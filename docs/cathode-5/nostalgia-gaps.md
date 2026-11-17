@@ -86,4 +86,11 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 ## H. Platforms
 - [x] On Demand: collections, recommended rows, trailers, theme songs
 - [x] Cast to another Cathode
-- [ ] Finish the Android TV and Fire TV build (branch android-tv)
+- [x] Finish the Android TV and Fire TV build (branch android-tv, eefcbff; not built yet)
+  - 5.3 merged in; two APKs: the main one (every feature, arm64 + 32-bit ARM,
+    API 26-35) and the onn one (`CATHODE_FLAVOR=onn`: `paths.LOW_POWER` trims,
+    32-bit ARM only) for the 2023 onn 4K Google TV box
+  - Fire TV: its remote profile (picked on Amazon devices), Menu, Play/Pause,
+    Rewind and Fast Forward keys, a normal launcher entry
+  - Build: `docker run ... -e CATHODE_FLAVOR=onn -e CATHODE_WORK=/work/onn ...`
+    for the onn one (its own work folder: a different set of architectures)
