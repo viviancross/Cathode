@@ -742,6 +742,56 @@ def style_items(app):
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
         Item("Edit colors", submenu=lambda: color_items(app)),
+        Item("Screen bug", submenu=lambda: bug_items(app),
+             value=lambda: f"{cfg.bug_opacity}%, {cfg.bug_corner}" if cfg.bug_on else "Off",
+             help="The channel's logo in a corner of the picture, as stations ran theirs."),
+    ]
+
+
+BUG_SIZES = [(5, "Tiny"), (7, "Small"), (9, "Medium"), (12, "Large"), (16, "Huge")]
+BUG_OPACITY = [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100]
+BUG_MARGINS = [(2, "Close"), (4, "Normal"), (6, "Wide"), (9, "Wider")]
+
+
+def bug_items(app):
+    """The screen bug: on or off, its corner, size, opacity, distance from
+    the edge, white or in colour, and whether it stays up during breaks."""
+    from . import logos
+    from .skins import Skin
+    cfg = app.config
+
+    def set_and(fn):
+        def run(d=1):
+            fn(d)
+            cfg.save()
+            app.invalidate()
+        return run
+
+    def step(name, options, d):
+        keys = [k if not isinstance(k, tuple) else k[0] for k in options]
+        cur = getattr(cfg, name)
+        i = keys.index(cur) if cur in keys else 0
+        setattr(cfg, name, keys[max(0, min(len(keys) - 1, i + d))])
+    corners = [(c, c.capitalize()) for c in Skin.BUG_CORNERS]
+    return [
+        Item("Screen bug", set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on)),
+             value=lambda: "On" if cfg.bug_on else "Off", adjust=set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on))),
+        Item("Corner", value=lambda: _label(corners, cfg.bug_corner),
+             adjust=set_and(lambda d: setattr(cfg, "bug_corner", _cycle(corners, cfg.bug_corner, d)))),
+        Item("Size", value=lambda: _label(BUG_SIZES, cfg.bug_size), adjust=set_and(lambda d: step("bug_size", BUG_SIZES, d))),
+        Item("Opacity", value=lambda: f"{cfg.bug_opacity}%", adjust=set_and(lambda d: step("bug_opacity", BUG_OPACITY, d))),
+        Item("Distance from the edge", value=lambda: _label(BUG_MARGINS, cfg.bug_margin),
+             adjust=set_and(lambda d: step("bug_margin", BUG_MARGINS, d))),
+        Item("Look", value=lambda: "White" if cfg.bug_white else "In its colors",
+             adjust=set_and(lambda d: setattr(cfg, "bug_white", not cfg.bug_white)),
+             help="White: the logo's shape in white, as most stations ran theirs."),
+        Item("During breaks", value=lambda: "Shown" if cfg.bug_in_breaks else "Hidden",
+             adjust=set_and(lambda d: setattr(cfg, "bug_in_breaks", not cfg.bug_in_breaks)),
+             help="Cathode's own channels take the bug down for commercials and bumpers."),
+        Item("Your logos", enabled=False, value=lambda: logos.folder(cfg),
+             help="Put a picture named for a channel in this folder (Nickelodeon.gif, 107.png; GIF and APNG "
+                  "animate) and it's that channel's logo. Name one 'Nickelodeon bug.png' for its screen bug. "
+                  "A channel's edit page can pick one too."),
     ]
 
 
@@ -1423,6 +1473,21 @@ def channel_edit_items(app, ch):
         lu.edit(cfg, ch, kids=not e().get("kids"))
         _lineup_changed(app)
 
+    def pick(kind, d):
+        """A picture from the logos folder for this channel's logo or bug,
+        in turn: as it comes, each file, and for a bug, none at all."""
+        from . import logos
+        names = sorted(os.path.basename(p) for p in logos.files(cfg).values())
+        options = [""] + (["off"] if kind == "bug" else []) + names
+        cur = e().get(kind, "")
+        lu.edit(cfg, ch, **{kind: options[((options.index(cur) if cur in options else 0) + d) % len(options)]})
+        cfg.save()
+        app.invalidate()
+
+    def picked(kind):
+        v = e().get(kind, "")
+        return "None" if v == "off" else v or ("Its logo" if kind == "bug" else "Automatic")
+
     def packs_page():
         def flip(p):
             keys = p.setdefault("keys", [])
@@ -1440,6 +1505,11 @@ def channel_edit_items(app, ch):
         Item("Number", renumber, value=lambda: f"{e().get('number', orig[1]):g}",
              help=f"As it came: {orig[1]:g}. A taken number is shared: the guide lists them side by side."),
         Item("Packs", submenu=packs_page, value=lambda: str(sum(ch.url in (p.get("keys") or []) for p in lu.packs(cfg)))),
+        Item("Logo", lambda: pick("logo", 1), value=lambda: picked("logo"), adjust=lambda d: pick("logo", d),
+             help="A picture from your logos folder (Settings > Look > Screen bug shows where). Automatic: one "
+                  "named for the channel, else the guide's or the playlist's."),
+        Item("Screen bug", lambda: pick("bug", 1), value=lambda: picked("bug"), adjust=lambda d: pick("bug", d),
+             help="What this channel shows in the corner: its logo, a picture of its own, or nothing."),
         Item("On kids' profiles", kids, value=lambda: "Shown" if e().get("kids") else "-", adjust=kids,
              help="Kids' profiles see only the channels shown here (and library channels set to kids' ratings)."),
         Item("As it came", reset, enabled=bool(e()), help="Its own name and number, shown."),

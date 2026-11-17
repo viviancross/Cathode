@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pygame
 
 from .. import palette
+from ..logos import url_for
 from . import Skin
 
 # SMPTE colour bars, top two thirds (75%).
@@ -168,9 +169,7 @@ class Classic(Skin):
         nb = pygame.Rect(bx + 8, by + 8, int(bh * 1.1), bh - 16)
         pygame.draw.rect(c, p["CHNUM_BG"], nb)
         pygame.draw.rect(c, p["OSD_BORDER"], (nb.x, nb.y, nb.w, 5))
-        epg = self.app.epg
-        url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
-        logo = self.logo(url or ch.logo, nb.w - 10, nb.h - 10)
+        logo = self.logo(url_for(self.app, ch), nb.w - 10, nb.h - 10)
 
         info_x = nb.right + 20
         next_x = int(W * 0.45)
@@ -1027,7 +1026,7 @@ class Classic(Skin):
             t.draw(c, "*", f_small, p["YELLOW"], pad + cw - 8, y + 4, align="right")
         epg = self.app.epg
         cid = epg.resolve_channel_id(ch.epg_id, ch.name)
-        logo = self.logo(epg.icon_url(cid) or ch.logo, cw - 12, int(rh * 0.5))
+        logo = self.logo(url_for(self.app, ch), cw - 12, int(rh * 0.5))
         num = str(ch.number)
         if logo:
             c.blit(logo, logo.get_rect(center=(pad + cw // 2, y + int(rh * 0.28))))

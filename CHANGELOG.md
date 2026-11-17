@@ -40,6 +40,17 @@
   the networks named for them.
 - Fixed: Cathode could close when the lineup shrank under the channel being
   watched.
+- **Your own channel logos**, animated ones too (GIF and APNG). Put a picture
+  in the logos folder in Cathode's settings folder, named for the channel or
+  its number (Nickelodeon.gif, 107.png), or pick one on the channel's edit
+  page. Every channel Cathode makes has a logo of its own (its name on a
+  coloured plate, in logos/made, yours to replace).
+- **Screen bugs.** The channel's logo sits faintly in a corner of the picture
+  while you watch: 15% in the bottom right to start. Settings > Look > Screen
+  bug sets the corner, size, opacity, distance from the edge, a white
+  version, and whether it stays up during breaks (it goes for commercials
+  and bumpers to start). A channel can have a bug picture of its own
+  ("Nickelodeon bug.png", or picked on its edit page) or none.
 - **The guide fills in for library channels.** In 5.0 drawing up the day's
   commercial breaks took minutes, so the guide stayed empty for a long time
   after a start. It takes seconds now.

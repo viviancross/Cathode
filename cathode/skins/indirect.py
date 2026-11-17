@@ -207,9 +207,8 @@ class InDirectHD(BoxSkin):
         W, H = self.canvas
         b, t, X, Y = self.b, self.text, self.X, self.Y
         self._band(c, self.R(0, 0, 1280, 131))
-        epg = self.app.epg
-        url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
-        logo = self.logo(url or ch.logo, X(110), Y(62))
+        from ..logos import url_for
+        logo = self.logo(url_for(self.app, ch), X(110), Y(62))
         if logo:
             c.blit(logo, logo.get_rect(center=(X(155), Y(92))))
         else:

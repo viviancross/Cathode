@@ -7,6 +7,7 @@ import os
 import re
 import time
 import weakref
+from datetime import datetime, timezone
 from typing import Optional
 
 import pygame
@@ -341,6 +342,7 @@ class Skin:
         self.text = Text()
         self._logo_surfaces = {}
         self._anim_due = 0.0        # when the next animated-logo frame is wanted
+        self._bug_tick = None       # the redraw at the end of what's on (the bug comes and goes with breaks)
         self.hits = []          # [(Rect, fn)] clickable this frame, in canvas pixels
         self.canvas = type(self).canvas
         self.grow = 0               # canvas rows past the design height (16:9 on a squarer window)
@@ -764,12 +766,66 @@ class Skin:
         self.hits.append((pygame.Rect(rect), fn))
 
     def draw(self, canvas, screen):
+        if screen.name == "live":
+            self.draw_bug(canvas, screen)      # under the banner, as a station's bug was under the box's
         fn = getattr(self, f"draw_{screen.name}", None)
         if fn:
             fn(canvas, screen)
         card = getattr(screen, "card", None)
         if card and getattr(screen, "phase", "") != "cover" and time.monotonic() < card["until"]:
             self.draw_music_card(canvas, card)
+
+    BUG_CORNERS = ("bottom right", "bottom left", "top right", "top left")
+
+    def draw_bug(self, c, live):
+        """The screen bug: the channel's logo (or its own bug picture) in a
+        corner of the picture, faint, while it's watched with nothing over it;
+        hidden during a break unless asked for. Size and distance from the
+        edge are shares of the screen's height."""
+        cfg, app = self.app.config, self.app
+        ch = live.channel
+        if (not getattr(cfg, "bug_on", False) or ch is None or live.message or live.phase != "watch" or live.standby
+                or getattr(live, "signoff", None) or getattr(live, "page", None) is not None
+                or getattr(app, "top", lambda: live)() is not live):
+            return
+        if not cfg.bug_in_breaks and self._in_break(ch):
+            return
+        from ..logos import url_for
+        W, H = self.canvas
+        size = max(8, H * cfg.bug_size // 100)
+        img = self.logo(url_for(app, ch, "bug"), size * 5 // 2, size)
+        if img is None:
+            return
+        img = img.copy()
+        if cfg.bug_white:                       # the classic bug: a white shape
+            img.fill((255, 255, 255, 0), special_flags=pygame.BLEND_RGB_MAX)
+        img.fill((255, 255, 255, round(255 * cfg.bug_opacity / 100)), special_flags=pygame.BLEND_RGBA_MULT)
+        m = H * cfg.bug_margin // 100
+        corner = cfg.bug_corner if cfg.bug_corner in self.BUG_CORNERS else "bottom right"
+        x = m if corner.endswith("left") else W - m - img.get_width()
+        y = m if corner.startswith("top") else H - m - img.get_height()
+        c.blit(img, (x, y))
+
+    def _in_break(self, ch) -> bool:
+        """A Cathode channel is in a break now (a commercial, a bumper, the
+        slate); its end asks for a redraw, so the bug comes back on time."""
+        from .. import libchannels as lc, spelunkr, videochannels as vc
+        if not vc.is_video(ch):
+            return False
+        cid = vc.cid_of(ch)
+        sched = (getattr(self.app, "schedules", {}) or {}).get(cid) or spelunkr.SCHEDULES.get(cid) \
+            or lc.SCHEDULES.get(cid)
+        try:
+            at = sched.at(datetime.now(timezone.utc)) if sched else None
+        except Exception:
+            return False
+        if not at:
+            return False
+        brk = (at.get("entry") or {}).get("kind") in ("ad", "bump", "brb")
+        wait = (at["stop"] - datetime.now(timezone.utc)).total_seconds() + 0.2
+        if 0 < wait < 86400 and (self._bug_tick is None or self._bug_tick[0] <= time.monotonic()):
+            self._bug_tick = self.app.after(wait, self.app.invalidate)
+        return brk
 
     def draw_music_card(self, c, card):
         """A music channel's lower-third as its song starts and ends: the

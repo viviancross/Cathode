@@ -184,13 +184,11 @@ class BoxSkin(Classic):
             self.hit(r, lambda i=i: s["press"](i))
 
     def channel_logo(self, ch, w: int, h: int):
-        """The channel's logo (the guide data's, else the playlist's) fitted
-        to w x h; None when it has none or it's still loading."""
-        if not ch:
-            return None
-        epg = getattr(self.app, "epg", None)
-        url = epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else ""
-        return self.logo(url or ch.logo, w, h)
+        """The channel's logo (yours, the guide data's, the playlist's, or the
+        one Cathode drew for a channel it made) fitted to w x h; None when it
+        has none or it's still loading."""
+        from ..logos import url_for
+        return self.logo(url_for(self.app, ch), w, h) if ch else None
 
     def wall_cells(self, s, cols, rows=2):
         """[(index into s.rows, slot)] for the posters a wall shows: the
@@ -335,6 +333,8 @@ class BoxSkin(Classic):
         return (W, H) if W == 1280 else (1280, round(1280 * H / W))
 
     def draw(self, canvas, screen):
+        if screen.name == "live":
+            self.draw_bug(canvas, screen)      # under the banner
         fn = getattr(self, f"draw_{screen.name}", None)
         if not fn:
             return

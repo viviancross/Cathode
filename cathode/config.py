@@ -171,6 +171,15 @@ class Config:
     library_channels: list = field(default_factory=list)
     library_starter_done: bool = False      # the starter lineup was made once
     library_starter_make: int = 0           # which make of it (libchannels.STARTER_MAKE; 2: network replicas)
+    # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
+    # logos and bugs go in the settings folder's logos folder (logos.py).
+    bug_on: bool = True
+    bug_corner: str = "bottom right"        # bottom right | bottom left | top right | top left
+    bug_size: int = 9                       # its height, % of the screen's
+    bug_opacity: int = 15                   # %
+    bug_margin: int = 4                     # from the edges, % of the screen's height
+    bug_white: bool = False                 # a white shape (the classic bug), not the logo's colours
+    bug_in_breaks: bool = False             # shown during a channel's breaks too
     guide_days: int = 2             # days of listings the guide holds for timeline channels (2, 7, 14, 30)
     content_groups: list = field(default_factory=list)  # named sets of library sources a channel can name
     channel_edits: dict = field(default_factory=dict)   # channel address -> {"hide", "name", "number", "kids"} (lineup.py)

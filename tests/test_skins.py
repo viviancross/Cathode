@@ -4,6 +4,7 @@ nobody happened to open."""
 
 import os
 import sys
+import time
 import unittest
 from unittest import mock
 from datetime import datetime, timedelta, timezone
@@ -412,3 +413,120 @@ class TestProgrammeInfo(unittest.TestCase):
         short = skin.fit_facts(f, "6:00", p, skin.width(f, "6:00   Dec 19, 1999   TV-1"))
         self.assertEqual(short, "6:00   Dec 19, 1999")                    # a fact dropped whole, never cut
         self.assertEqual(skin.text.wrap(f, "a   b\nc", 10_000, 2), ["a   b c"])
+
+
+class TestLogosAndBug(unittest.TestCase):
+    """Your logos (a folder, or a pick on the channel's page), one of its
+    own for a channel Cathode made, animated GIF and APNG, and the screen
+    bug: the logo at 15% in the bottom right while the channel is watched."""
+
+    def setUp(self):
+        import tempfile
+        from cathode import logos
+        self.tmp = tempfile.mkdtemp()
+        self._folder = logos.folder
+        logos.folder = lambda config: os.path.join(self.tmp, "logos")
+        logos._listing["dir"] = None
+        os.makedirs(os.path.join(self.tmp, "logos"))
+        pygame.font.init()
+
+    def tearDown(self):
+        import shutil
+        from cathode import logos
+        logos.folder = self._folder
+        logos._listing["dir"] = None
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def picture(self, name, color=(255, 0, 0, 255), frames=1):
+        from PIL import Image
+        p = os.path.join(self.tmp, "logos", name)
+        ims = [Image.new("RGBA", (40, 20), color if k % 2 == 0 else (0, 0, 255, 255)) for k in range(frames)]
+        ims[0].save(p, save_all=frames > 1, append_images=ims[1:], duration=100, loop=0)
+        return p
+
+    def test_whose_logo(self):
+        from cathode import logos, lineup
+        app = FakeApp()
+        ch = app.channels[1]                                    # "Channel 4", from a playlist: no logo
+        self.assertEqual(logos.url_for(app, ch), "")
+        p = self.picture("channel 4.png")
+        logos._listing["dir"] = None
+        self.assertEqual(logos.url_for(app, ch), p)             # named for it
+        self.assertEqual(logos.url_for(app, ch, "bug"), p)      # its bug: its logo
+        bug = self.picture("Channel-4 Bug.gif")
+        logos._listing["dir"] = None
+        self.assertEqual(logos.url_for(app, ch, "bug"), bug)
+        lineup.edit(app.config, ch, bug="off")
+        self.assertEqual(logos.url_for(app, ch, "bug"), "")
+        num = self.picture("4.png")
+        logos._listing["dir"] = None
+        lineup.edit(app.config, ch, logo="4.png", bug=None)
+        self.assertEqual(logos.url_for(app, ch), num)           # picked on its page
+        made = Channel(number=101, name="Cartoon Network", url="cathode://video/lib.ab12", epg_id="x")
+        p = logos.url_for(app, made)                             # one of its own, drawn once
+        self.assertTrue(p.endswith(os.path.join("made", "cartoonnetwork.png")) and os.path.exists(p))
+
+    def test_animated_gif_and_apng(self):
+        from PIL import Image
+        from cathode.logos import Animation, LogoStore
+        store = LogoStore(os.path.join(self.tmp, "cache"))
+        for name in ("a.gif", "a.png"):                         # (a PNG with frames is an APNG)
+            with Image.open(self.picture(name, frames=3)) as f:
+                im = store._decode(f)
+            self.assertIsInstance(im, Animation, name)
+            self.assertEqual((len(im.frames), im.at(0.15)[0]), (3, 1))
+
+    def test_the_bug(self):
+        from cathode import logos
+        from cathode.logos import LogoStore
+        from cathode.skins import skin_classes
+        pygame.display.init()
+        app = FakeApp()
+        app.logos = LogoStore(os.path.join(self.tmp, "cache"))
+        self.picture("channel 4.png", color=(255, 255, 255, 255))
+        logos._listing["dir"] = None
+        live = app.live
+        live.idx, live.phase, live.message = 1, "watch", ""
+        live.banner_until = 0
+        app.top = lambda: live
+        skin = skin_classes()["plate_hd"](app)
+        app.skin = skin
+        W, H = skin.canvas
+
+        def draw():
+            c = pygame.Surface((W, H), pygame.SRCALPHA)
+            skin.draw(c, live)                                  # (the live screen, banner down)
+            return c
+        for _ in range(100):                                    # the logo loads off the UI thread
+            if skin.logo(logos.url_for(app, live.channel, "bug"), 10, 10) is not None:
+                break
+            time.sleep(0.02)
+        c = draw()
+        m, size = H * 4 // 100, H * 9 // 100
+        x, y = W - m - 2, H - m - size // 2                     # inside it, bottom right
+        self.assertAlmostEqual(c.get_at((x, y))[3], 38, delta=3)        # 15%
+        self.assertEqual(c.get_at((m + 2, H - m - size // 2))[3], 0)  # not bottom left
+        app.config.bug_corner, app.config.bug_opacity = "top left", 50
+        c = draw()
+        self.assertAlmostEqual(c.get_at((m + 2, m + 2))[3], 128, delta=3)
+        app.top = lambda: object()                              # a menu over the picture: no bug
+        self.assertEqual(draw().get_at((m + 2, m + 2))[3], 0)
+        app.top = lambda: live
+        skin._in_break = lambda ch: True                        # a commercial: no bug, unless asked for
+        self.assertEqual(draw().get_at((m + 2, m + 2))[3], 0)
+        app.config.bug_in_breaks = True
+        self.assertGreater(draw().get_at((m + 2, m + 2))[3], 0)
+        app.config.bug_on = False
+        self.assertEqual(draw().get_at((m + 2, m + 2))[3], 0)
+        app.config.bug_on, app.config.bug_in_breaks = True, False
+        app.config.bug_corner, app.config.bug_opacity = "bottom right", 15
+        for name, cls in skin_classes().items():                # every skin's way of drawing the live screen
+            skin = app.skin = cls(app)
+            skin.reload()
+            W, H = skin.canvas
+            m, size = H * 4 // 100, H * 9 // 100
+            for _ in range(100):
+                if skin.logo(logos.url_for(app, live.channel, "bug"), size * 5 // 2, size) is not None:
+                    break
+                time.sleep(0.02)
+            self.assertAlmostEqual(draw().get_at((W - m - 2, H - m - size // 2))[3], 38, delta=3, msg=name)
