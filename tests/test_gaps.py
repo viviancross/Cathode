@@ -524,9 +524,12 @@ class TestAdminWeb(unittest.TestCase):
         self.assertEqual(web.api_v1(app, "/api/v1/tune", {"number": ["x"]})[0], 400)
         self.assertEqual(web.api_v1(app, "/api/v1/nope", {})[0], 404)
 
-    def test_the_continuous_stream_is_off_unless_turned_on(self):
+    def test_what_is_off_unless_turned_on(self):
+        from cathode import ownchannels
         from cathode.config import Config
-        self.assertFalse(Config("").broadcast_stream)
+        cfg = Config("")
+        self.assertEqual((cfg.broadcast_stream, cfg.announcer, cfg.theme_music, cfg.api_key), (False, False, False, ""))
+        self.assertEqual(ownchannels.DEFAULT.get("videostore"), "off")
 
     def test_the_stream_sends_each_piece_in_turn(self):
         import io
