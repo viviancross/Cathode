@@ -19,6 +19,9 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
   Hide Empty, Hide Starter, Hide All.
 - **Logo From a Web Address** on every channel's page.
 - **A stream address as a channel** (Add Custom Channel).
+- **The guide's programme options:** INFO on a programme, then SELECT: watch
+  the channel, browse what it plays (with when each is next on), add the
+  show to another channel, edit the channel.
 - A title in two places can keep the better copy (4K over HD).
 
 ## 5.2

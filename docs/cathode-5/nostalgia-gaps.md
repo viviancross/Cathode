@@ -20,7 +20,7 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Channel sort and manual reorder
 - [x] Hide empty / hide starter / hide all
 - [x] Find a title on channels
-- [ ] Guide long-press: browse channel, add show to a channel
+- [x] Guide long-press (INFO, then SELECT): browse channel, add show to a channel
 - [x] Logo from a web address
 - [x] A single live stream URL as a channel
 - [x] Preferred copy for duplicates

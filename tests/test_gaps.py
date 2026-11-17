@@ -177,6 +177,18 @@ class TestMenus(Temp):
         copy = pages["Copy From Another Channel"]
         copy[0].action()
         self.assertEqual(a["sources"], b["sources"])
+        pushed = []
+        app.push = pushed.append
+        ch = app.channels[-1]
+        start = datetime.now(timezone.utc)
+        prog = type("P", (), {"start": start})()
+        menus.open_guide_options(app, ch, prog)
+        rows = {it.label: it for it in pushed[-1].items}
+        self.assertIn("Browse this channel", rows)
+        self.assertTrue(rows["Browse this channel"].submenu())
+        add = next(it for k, it in rows.items() if k.startswith("Add "))
+        add.submenu()[0].action()                               # onto Comedy
+        self.assertEqual(len(a["sources"]), 2)
         menus.move_channel(app, app.channels[-1], -1)            # Drama up past Comedy
         self.assertEqual(len(app.config.channel_edits), 2)
 

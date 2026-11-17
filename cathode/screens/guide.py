@@ -259,6 +259,9 @@ class ProgramInfo(Screen):
         return out
 
     def handle(self, a: str) -> bool:
-        if a in (R.INFO, R.BACK, R.EXIT, R.SELECT):
+        if a == R.SELECT:                   # NostalgiaTV's long-press: what to do with this channel and title
+            from .. import menus
+            menus.open_guide_options(self.app, self.channel, self.program)
+        elif a in (R.INFO, R.BACK, R.EXIT):
             self.app.pop(self)
         return a not in _PASS_THROUGH

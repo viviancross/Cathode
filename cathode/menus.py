@@ -502,6 +502,74 @@ def channel_editor(app, ch):
     return channel_edit_items(app, ch)
 
 
+def _entry_at(ch, prog):
+    """The library title a guide cell stands for (None for other channels)."""
+    from datetime import timedelta
+    from . import libchannels as lc, videochannels as vc
+    if prog is None or not vc.is_video(ch):
+        return None, None
+    tl = lc.SCHEDULES.get(vc.cid_of(ch))
+    got = tl.at(prog.start + timedelta(seconds=1)) if tl is not None else None
+    e = (got or {}).get("entry") or {}
+    return tl, (e if e.get("plex") else None)
+
+
+def open_guide_options(app, ch, prog):
+    """SELECT on a programme's info in the guide (NostalgiaTV's long-press):
+    watch, browse what the channel plays, put the show on another channel,
+    edit the channel."""
+    from . import libchannels as lc, videochannels as vc
+    if ch is None:
+        return
+    tl, e = _entry_at(ch, prog)
+
+    def watch():
+        while len(app.screens) > 1 and app.top() is not app.live:
+            app.pop(app.top())
+        if ch in app.channels:
+            app.live.tune(app.channels.index(ch))
+
+    def add_to(c):
+        src = {"kind": "show", "value": e["show_key"]} if e.get("show_key") else \
+            {"kind": "title", "value": [e["plex"]]}
+        if any(s.get("kind") == src["kind"] and s.get("value") == src["value"] for s in c.get("sources") or []):
+            app.toast(f"{c.get('name')} already has it.")
+            return
+        c.setdefault("sources", []).append(src)
+        c["starter"] = False
+        app.config.save()
+        lc.rebuild(app)
+        app.toast(f"{e['title']} added to {c.get('name') or 'that channel'}.")
+    rows = [Item("Watch this channel", watch, close=True)]
+    if tl is not None:
+        rows.append(Item("Browse this channel", submenu=lambda: browse_channel(app, ch, tl),
+                         help="Every show and movie it plays, with when each is next on."))
+    if e is not None:
+        rows.append(Item(f"Add {e['title']} to a channel", submenu=lambda: [
+            Item(c.get("name") or "Library Channel", lambda c=c: add_to(c), close=True)
+            for c in app.config.library_channels if not vc.SCHEME + lc.PREFIX + c["id"] == ch.url] or
+            [Item("No other library channels", enabled=False)],
+            help="Puts this show (or movie) on another library channel too."))
+    rows.append(Item("Edit this channel", lambda: open_channel_editor(app, ch)))
+    app.push(Menu(app, f"{ch.number:g}  {ch.name}", rows))
+
+
+def browse_channel(app, ch, tl):
+    """A channel's titles, each with its next airing in the days drawn up."""
+    from datetime import datetime, timezone
+    nxt = {}
+    for start, e in tl.coming(400, datetime.now(timezone.utc)):
+        if e.get("kind") == "show":
+            nxt.setdefault(e.get("title"), start)
+    titles = sorted({g["title"] for g in tl.groups}, key=lambda t: (t not in nxt, t.lower()))
+
+    def when(t):
+        s = nxt.get(t)
+        return s.astimezone().strftime("%a %I:%M %p").replace(" 0", " ") if s else "Later"
+    return [Item(t, value=lambda t=t: when(t), help="When it's next on this channel.") for t in titles] or \
+        [Item("Nothing yet", enabled=False)]
+
+
 def open_channel_editor(app, ch):
     """The editor over live TV (Options > Edit this channel)."""
     if ch is not None:
