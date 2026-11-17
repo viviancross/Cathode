@@ -11,7 +11,7 @@ BUTTONS = {
     "download": ["play", "dvr", "back"],       # what works offline, and nothing else
 }
 LABELS = {"play": "PLAY", "playall": "PLAY ALL", "seasons": "SEASONS", "shuffle": "SHUFFLE",
-          "queue": "+ QUEUE", "back": "BACK"}
+          "queue": "+ QUEUE", "back": "BACK", "trailer": "TRAILER"}
 PRIMARY = {"play", "playall"}
 
 
@@ -32,6 +32,50 @@ class ItemInfo(Screen):
         self.on_watchlist = on_watchlist
         self.focus = 0
         self.od.listeners.append(self.app.invalidate)
+        self._theme()
+
+    def _theme(self):
+        """A show's theme song, quietly, while its page is up (as Plex plays
+        it): fetched once into the cache, played through pygame's mixer."""
+        path = self.detail.get("theme")
+        if not path or not getattr(self.app.config, "theme_music", True) or self.kind == "download":
+            return
+        import hashlib
+        import os
+        from .. import paths
+        f = os.path.join(paths.cache_dir(), "themes", hashlib.sha1(path.encode()).hexdigest()[:16] + ".mp3")
+
+        def work():
+            if not os.path.exists(f):
+                os.makedirs(os.path.dirname(f), exist_ok=True)
+                data = self.od.client().raw(path)
+                with open(f, "wb") as fh:
+                    fh.write(data)
+            return f
+
+        def play(fn):
+            if self not in self.app.screens:
+                return
+            try:
+                import pygame
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=1024)
+                pygame.mixer.music.load(fn)
+                pygame.mixer.music.set_volume(0.35 * self.app.video.volume / 100)
+                pygame.mixer.music.play()
+                self._playing = True
+            except Exception as e:
+                print(f"[ondemand] theme song: {e!r}")
+        self.od.run(work, play, lambda _e: None)
+
+    def _theme_off(self):
+        if getattr(self, "_playing", False):
+            self._playing = False
+            try:
+                import pygame
+                pygame.mixer.music.fadeout(600)
+            except Exception:
+                pass
 
     def video_box(self):
         return self.app.skin.page_video_box(self)
@@ -41,7 +85,10 @@ class ItemInfo(Screen):
         return str(self.detail.get("rating_key") or "")
 
     def buttons(self):
-        return BUTTONS.get(self.kind, BUTTONS["default"])
+        bs = list(BUTTONS.get(self.kind, BUTTONS["default"]))
+        if self.detail.get("trailer") and self.kind != "download":
+            bs.insert(len(bs) - 1, "trailer")
+        return bs
 
     def label(self, b: str) -> str:
         if b == "play" and self.kind != "download":
@@ -53,6 +100,7 @@ class ItemInfo(Screen):
         return LABELS.get(b, b.upper())
 
     def close(self):
+        self._theme_off()
         if self.app.invalidate in self.od.listeners:
             self.od.listeners.remove(self.app.invalidate)
         self.app.pop(self)
@@ -64,7 +112,12 @@ class ItemInfo(Screen):
     def press(self, b: str):
         from .menu import Item, Menu
         d = self.detail
-        if b == "play":
+        if b != "back":
+            self._theme_off()
+        if b == "trailer":
+            self.od.play_detail({"rating_key": d["trailer"], "title": f"{d.get('title', '')}: Trailer",
+                                 "type": "clip"}, False)
+        elif b == "play":
             off = d.get("offset", 0)
             if off > 5:
                 self.app.push(Menu(self.app, "RESUME?", [

@@ -120,6 +120,21 @@ def act(app, body: dict) -> str:
             return "not a channel"
         app.post(_channel_json, app, str(body.get("id", "")), new)
         return "ok"
+    if what == "cast":                  # another Cathode sent something to watch here
+        if body.get("kind") == "channel":
+            ch = next((c for c in app.channels if c.url == body.get("url")), None) or \
+                next((c for c in app.channels if str(c.number) == str(body.get("number"))), None)
+            if ch is None:
+                return "this Cathode hasn't that channel"
+            app.post(lambda: app.live.tune(app.channels.index(ch)))
+            return "ok"
+        if body.get("kind") == "ondemand" and body.get("rk"):
+            od = getattr(app, "ondemand", None)
+            if od is None or not od.signed_in:
+                return "this Cathode isn't linked to Plex"
+            app.post(lambda: od.play(str(body["rk"]), str(body.get("title") or ""), "", resume=True))
+            return "ok"
+        return "not understood"
     if what == "import":
         return import_doc(app, body.get("doc"), "replace" if body.get("mode") == "replace" else "merge")
     return "not understood"

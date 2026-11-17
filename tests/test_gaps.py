@@ -551,3 +551,18 @@ class TestAdminWeb(unittest.TestCase):
             out = io.BytesIO()
             broadcast.stream(None, TL(), out, None)
         self.assertEqual(got, [("1", 1), ("1", 2), ("1", 3), ("2", 12), ("2", 13), ("2", 14)])   # (the slate: nothing)
+
+
+class TestCast(unittest.TestCase):
+    def test_a_cast_tunes_the_channel_here(self):
+        from types import SimpleNamespace as NS
+        from cathode import web
+        from cathode.playlist import Channel
+        chans = [Channel(number=4, name="Four", url="u4"), Channel(number=7, name="Seven", url="u7")]
+        tuned, posted = [], []
+        app = NS(channels=chans, live=NS(tune=tuned.append), post=lambda fn, *a: fn(*a),
+                 ondemand=NS(signed_in=False))
+        self.assertEqual(web.act(app, {"do": "cast", "kind": "channel", "url": "u7", "number": 7}), "ok")
+        self.assertEqual(tuned, [1])
+        self.assertIn("hasn't", web.act(app, {"do": "cast", "kind": "channel", "url": "x", "number": 99}))
+        self.assertIn("Plex", web.act(app, {"do": "cast", "kind": "ondemand", "rk": "5"}))

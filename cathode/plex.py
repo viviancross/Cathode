@@ -434,6 +434,32 @@ class PlexClient:
         """Auth header for artwork fetched off this server."""
         return {"X-Plex-Token": self._server_token} if self._server_token else {}
 
+    def hubs(self, section_key: str) -> list:
+        """A library's recommended rows (Plex's hubs: Recently Added, Top
+        Rated, Because You Watched...): [{title, rows}]."""
+        d = self._get(f"{self.server}/hubs/sections/{section_key}?count=30", token=self._server_token)
+        out = []
+        for h in (d.get("MediaContainer") or {}).get("Hub") or []:
+            rows = [_meta_row(m) for m in h.get("Metadata") or []]
+            if rows:
+                out.append({"title": h.get("title", "?"), "rows": rows})
+        return out
+
+    def collections(self, section_key: str) -> list:
+        d = self._get(f"{self.server}/library/sections/{section_key}/collections", token=self._server_token)
+        return [dict(_meta_row(m), type="collection", rating_key=str(m.get("ratingKey")),
+                     meta=f"{m.get('childCount', '')} titles") for m in _container(d, "Metadata")]
+
+    def collection_items(self, rating_key: str, sort: str = "") -> list:
+        d = self._get(f"{self.server}/library/collections/{rating_key}/children", token=self._server_token)
+        return [_meta_row(m) for m in _container(d, "Metadata")]
+
+    def raw(self, path: str) -> bytes:
+        """A file off the server (a theme song)."""
+        req = urllib.request.Request(f"{self.server}{path}", headers=self._headers(self._server_token))
+        with urllib.request.urlopen(req, timeout=20, context=_SSL) as r:
+            return r.read()
+
     def item_detail(self, rating_key: str) -> dict:
         """Full metadata for the info screen."""
         return self._shape_detail(self._metadata(rating_key), rating_key)
@@ -490,6 +516,8 @@ class PlexClient:
             "offset": int(m.get("viewOffset", 0)) // 1000, "poster": poster,
             "poster_headers": {"X-Plex-Token": self._server_token} if poster else {},
             "guid": m.get("guid", ""), "type": m.get("type", ""),
+            "trailer": (m.get("primaryExtraKey") or "").rsplit("/", 1)[-1],
+            "theme": m.get("theme") or m.get("grandparentTheme") or "",
             "grandparent_key": (str(m["grandparentRatingKey"])
                                 if m.get("grandparentRatingKey") else ""),
         }

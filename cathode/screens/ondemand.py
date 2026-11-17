@@ -368,6 +368,21 @@ class OnDemandScreen(Screen):
             g = row.get("genre_id")
             self.open(lambda s, k=rk, g=g: c().section_filter(k, genre_id=g, sort=s), title,
                       key=f"sec:{rk}")
+        elif t == "hubs":
+            def hubs_done(hubs):
+                self.status = ""
+                self.push("RECOMMENDED", [_row("hub", h["title"].upper(), rows=h["rows"]) for h in hubs]
+                          or [_row("none", "NOTHING RECOMMENDED YET")])
+            self.status = "LOADING..."
+            self.od.run(lambda k=rk: c().hubs(k), hubs_done, self.error)
+        elif t == "hub":
+            self.push(title, row.get("rows") or [], sortable=False)
+        elif t == "collections":
+            self.open(lambda s, k=rk: c().collections(k), "COLLECTIONS", sortable=False)
+        elif t == "collection":
+            self.open(lambda s, k=rk: c().collection_items(k), title, sortable=False)
+        elif t == "none":
+            pass
         elif t == "folderview":
             self._folder(f"/library/sections/{rk}/folder", "FOLDERS", rk)
         elif t == "folder":
@@ -394,7 +409,8 @@ class OnDemandScreen(Screen):
                 return []
 
         def done(genres):
-            rows = [_row("all", "ALL MOVIES" if stype == "movie" else "ALL SHOWS", rating_key=rk)]
+            rows = [_row("all", "ALL MOVIES" if stype == "movie" else "ALL SHOWS", rating_key=rk),
+                    _row("hubs", "RECOMMENDED", rating_key=rk), _row("collections", "COLLECTIONS", rating_key=rk)]
             rows += [_row("genre", g["title"].upper(), rating_key=rk, genre_id=g["id"]) for g in genres]
             self.push(title, rows)
         self.od.run(work, done)

@@ -84,6 +84,6 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Continuous broadcast stream with breaks for other apps (off by default: Admin > Continuous Streams)
 
 ## H. Platforms
-- [ ] On Demand: collections, recommended rows, trailers, theme songs
-- [ ] Cast to another Cathode
+- [x] On Demand: collections, recommended rows, trailers, theme songs
+- [x] Cast to another Cathode
 - [ ] Finish the Android TV and Fire TV build (branch android-tv)

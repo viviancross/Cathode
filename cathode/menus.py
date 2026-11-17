@@ -1626,6 +1626,9 @@ def open_options(app):
         *([Item("Start From the Beginning", live.start_over, close=True,
                 help="This programme from its start; the channel rejoins the schedule after it. PAUSE and REW "
                      "work on library channels too.")] if live.library_title() else []),
+        Item("Cast to Another Cathode", enabled=ch is not None,
+             submenu=lambda: cast_items(app, {"kind": "channel", "number": ch.number, "url": ch.url} if ch else {}),
+             help="This channel on another Cathode on your network (the TV in the other room)."),
         Item("Edit this channel", lambda: open_channel_editor(app, ch), close=True, enabled=ch is not None,
              help="Its name, number, logo and bug; for a library or YouTube channel what it plays and how."),
     ]))
@@ -1638,6 +1641,11 @@ def playback_menu(app, pb):
         Item(f"Play queue ({len(app.ondemand.queue.items)})", submenu=lambda: queue_items(app)),
         Item("Main Menu", lambda: open_main(app), close=True,
              help="Settings and the rest, over the title. The guide stops it and goes back to TV."),
+        Item("Cast to Another Cathode", submenu=lambda: cast_items(app, {"kind": "ondemand", "rk": pb.rk,
+                                                                          "title": getattr(pb, "title", ""),
+                                                                          "pos": getattr(pb, "pos", 0.0),
+                                                                          "dur": getattr(pb, "dur", 0.0)}, pb),
+             help="This, from where it is, on another Cathode on your network; it stops here."),
         Item("Stop", pb.stop, close=True),
     ]))
 
@@ -2498,6 +2506,36 @@ def _lock(app, url):
     live = getattr(app, "live", None)
     if live is not None and live.channel is not None and live.channel.url == url:
         live.tune(live.idx)
+
+
+def cast_items(app, what: dict, pb=None):
+    """The other Cathodes on the network (sync finds them); SELECT sends
+    them this: a channel to tune, or an On Demand title from where it is."""
+    import threading
+    import urllib.request
+    sy = getattr(app, "sync", None)
+    peers = sy.others() if sy is not None else []
+
+    def send(p):
+        if what.get("kind") == "ondemand" and app.ondemand.signed_in:
+            app.ondemand.report(what["rk"], what.get("pos", 0.0), what.get("dur", 0.0), "stopped")   # (its resume point)
+        body = json.dumps(dict(what, do="cast")).encode()
+
+        def work():
+            try:
+                req = urllib.request.Request(f"http://{p['ip']}:{p['port']}/api/do", data=body, method="POST",
+                                             headers={"Content-Type": "application/json"})
+                said = json.loads(urllib.request.urlopen(req, timeout=8).read() or b"{}").get("said", "")
+            except Exception as e:
+                said = f"no answer ({e.__class__.__name__})"
+            app.post(lambda: app.toast(f"{p['name']}: {'playing it' if said == 'ok' else said}.", 5.0))
+            if said == "ok" and pb is not None:
+                app.post(pb.stop)
+        threading.Thread(target=work, daemon=True).start()
+    if not peers:
+        return [Item("No other Cathodes found", enabled=False,
+                     help="Another Cathode on the same network, with Sync and the Phone remote on (Settings > Admin).")]
+    return [Item(p["name"] or p["ip"], lambda p=p: send(p), close=True) for p in peers]
 
 
 def unlock_channel(app, ch):
