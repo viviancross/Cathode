@@ -1045,12 +1045,55 @@ def preference_items(app):
              help="The screen bug: the channel's logo in a corner of the picture, as stations ran theirs. A "
                   "channel's own page sets its own."),
         Item("Display", submenu=lambda: display_items(app), help="Full screen, and which screen to use."),
+        Item("On Screen", submenu=lambda: on_screen_items(app),
+             help="The up-next countdown, the rating box, the tuning screen, seasonal decorations, a TV's frame."),
         Item("Start-up", submenu=lambda: startup_items(app),
              help="The start-up screen, the screensaver, the box's sounds, the update check."),
         Item("Audio output", submenu=lambda: audio_items(app)),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("Weather", submenu=lambda: weather_items(app)),
         Item("YouTube", submenu=lambda: youtube_items(app), help="Video quality, and what plays YouTube."),
+    ]
+
+
+BUG_MODES = [("always", "Always"), ("change", "On change"), ("periodic", "Periodic")]
+BUG_ANCHORS = [("screen", "Screen"), ("picture", "4:3 picture")]
+UPNEXT = [(0, "Off"), (10, "10 seconds"), (20, "20 seconds"), (30, "30 seconds"), (60, "A minute")]
+TUNE_SCREENS = [("box", "The box's own"), ("static", "Static"), ("black", "Black"), ("blue", "Blue"),
+                ("logo", "Channel logo")]
+
+
+def on_screen_items(app):
+    from .skins import overlays
+    cfg = app.config
+
+    def cyc(name, options):
+        def f(d=1):
+            setattr(cfg, name, _cycle(options, getattr(cfg, name), d))
+            cfg.save()
+            app.invalidate()
+        return f
+
+    def flip(name):
+        def f(d=1):
+            setattr(cfg, name, not getattr(cfg, name))
+            cfg.save()
+            app.invalidate()
+        return f
+    return [
+        Item("Up Next Countdown", value=lambda: _label(UPNEXT, cfg.upnext_seconds), adjust=cyc("upnext_seconds", UPNEXT),
+             help="Over a programme's last seconds on Cathode's channels: what's next and how long till it."),
+        Item("Rating Box", value=lambda: "On" if cfg.rating_box else "Off", adjust=flip("rating_box"),
+             help="The programme's rating (TV-PG, TV-14...) in a box top left as it starts, as networks ran it."),
+        Item("Tuning Screen", value=lambda: _label(TUNE_SCREENS, cfg.tune_screen), adjust=cyc("tune_screen", TUNE_SCREENS),
+             help="What covers a channel change: the box's own (snow on the analog ones, black on the digital), "
+                  "static, black, blue, or the channel's logo."),
+        Item("Seasonal Decorations", value=lambda: ("On" + (f" ({overlays.season()})" if overlays.season() else ""))
+             if cfg.decorations else "Off", adjust=flip("decorations"),
+             help="Snow in December, leaves in the autumn, hearts for Valentine's, stars for the Fourth, on the "
+                  "guide."),
+        Item("Bezel", value=lambda: _label(overlays.BEZELS, cfg.bezel), adjust=cyc("bezel", overlays.BEZELS),
+             help="A television's frame round the screen: wood grain, black plastic or silver."),
     ]
 
 
@@ -1709,6 +1752,13 @@ def bug_items(app):
         Item("During breaks", value=lambda: "Shown" if cfg.bug_in_breaks else "Hidden",
              adjust=set_and(lambda d: setattr(cfg, "bug_in_breaks", not cfg.bug_in_breaks)),
              help="Cathode's own channels take the bug down for commercials and bumpers."),
+        Item("Logo Mode", value=lambda: _label(BUG_MODES, cfg.bug_mode),
+             adjust=set_and(lambda d: setattr(cfg, "bug_mode", _cycle(BUG_MODES, cfg.bug_mode, d))),
+             help="Always; On change: fifteen seconds after you tune and as each programme starts; Periodic: half "
+                  "a minute in every ten, as stations flashed theirs."),
+        Item("Anchor", value=lambda: _label(BUG_ANCHORS, cfg.bug_anchor),
+             adjust=set_and(lambda d: setattr(cfg, "bug_anchor", _cycle(BUG_ANCHORS, cfg.bug_anchor, d))),
+             help="The screen's corner, or a 4:3 picture's corner on a wide screen (inside the black bars)."),
         Item("Your logos", enabled=False, value=lambda: logos.folder(cfg),
              help="Put a picture named for a channel in this folder (Nickelodeon.gif, 107.png; GIF and APNG "
                   "animate) and it's that channel's logo. Name one 'Nickelodeon bug.png' for its screen bug. "

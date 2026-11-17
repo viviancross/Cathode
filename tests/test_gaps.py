@@ -353,3 +353,50 @@ class TestDedupe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOnScreen(unittest.TestCase):
+    def test_overlays_draw_in_every_skin(self):
+        import time as _t
+        import pygame
+        from tests.test_skins import FakeApp
+        from cathode.skins import skin_classes, overlays
+        from cathode.screens.guide import Guide
+        from datetime import date
+        self.assertEqual(overlays.season(date(2026, 12, 20)), "snow")
+        self.assertEqual(overlays.season(date(2027, 1, 3)), "snow")
+        self.assertEqual(overlays.season(date(2026, 5, 3)), "")
+        for name, cls in skin_classes().items():
+            app = FakeApp()
+            skin = cls(app)
+            app.skin = skin
+            live = app.live
+            live.idx, live.phase, live.message = 1, "watch", None
+            app.top = lambda: live
+            live.rating = {"text": "TV-14", "until": _t.monotonic() + 9}
+            live.upnext = {"title": "Rugrats", "at": datetime.now(timezone.utc) + timedelta(seconds=20)}
+            c = pygame.Surface(skin.canvas, pygame.SRCALPHA)
+            for bez in ("off", "wood", "black", "silver"):
+                app.config.bezel = bez
+                skin.draw(c, live)
+                overlays.draw_bezel(skin, c)
+            app.config.tune_screen = "logo"
+            live.phase = "cover"
+            skin.draw(c, live)
+            self.assertEqual(live.cover()[0], "black")
+            skin.draw(c, Guide(app))
+            skin.draw_signoff(c, {"name": "N", "back": datetime.now(timezone.utc), "style": "next",
+                                  "next": {"title": "Doug", "episode": "S1E1 - Pilot"}})
+
+    def test_logo_modes(self):
+        import time as _t
+        from types import SimpleNamespace as NS
+        from cathode.skins import overlays
+        cfg = NS(bug_mode="change")
+        skin = NS(app=NS(config=cfg, after=lambda *a: None, invalidate=lambda: None))
+        live = NS(tuned_at=_t.monotonic(), prog_at=0.0)
+        self.assertTrue(overlays.bug_shown(skin, live))
+        live.tuned_at = _t.monotonic() - 60
+        self.assertFalse(overlays.bug_shown(skin, live))
+        cfg.bug_mode = "always"
+        self.assertTrue(overlays.bug_shown(skin, live))

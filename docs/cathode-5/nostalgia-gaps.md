@@ -47,13 +47,13 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Music clips as commercials
 
 ## D. On screen
-- [ ] Up-next countdown
-- [ ] Logo modes: on change, periodic, always
-- [ ] Rating box at programme start
-- [ ] Logo anchored to the 4:3 picture edge
-- [ ] Seasonal decorations
-- [ ] Tuning screen choices
-- [ ] Bezels (TV frame round the picture)
+- [x] Up-next countdown
+- [x] Logo modes: on change, periodic, always
+- [x] Rating box at programme start
+- [x] Logo anchored to the 4:3 picture edge
+- [x] Seasonal decorations
+- [x] Tuning screen choices
+- [x] Bezels (TV frame round the picture)
 
 ## E. Playback
 - [ ] Mark channel viewing watched in Plex; now-playing status

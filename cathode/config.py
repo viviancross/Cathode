@@ -178,6 +178,13 @@ class Config:
     brb_text: str = ""              # the break slate's line ("" = "We'll be right back")
     brb_image: str = ""             # a picture behind the break slate and the coming-up-next card (logos folder or a path)
     announcer: bool = False         # the coming-up-next card spoken (announcer.py)
+    upnext_seconds: int = 30        # the up-next countdown over a programme's last seconds (0: none)
+    bug_mode: str = "always"        # the screen bug: always | change (a while after a tune or a programme starts) | periodic
+    bug_anchor: str = "screen"      # its corner: the screen's | "picture": a 4:3 picture's in a wide screen
+    rating_box: bool = True         # the programme's rating (TV-PG...) in a box as it starts
+    decorations: bool = True        # snow, leaves, hearts... on the guide in their season
+    tune_screen: str = "box"        # what covers a channel change: box (the skin's) | static | black | blue | logo
+    bezel: str = "off"              # a television's frame round the picture: off | wood | black | silver
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
     # logos and bugs go in the settings folder's logos folder (logos.py).
     bug_on: bool = True

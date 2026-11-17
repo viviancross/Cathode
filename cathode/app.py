@@ -852,6 +852,9 @@ class App:
                         skin.paint(canvas, "note", lambda c: skin.draw_note(c, self.note_text))
                     if time.monotonic() < self.toast_until:
                         skin.paint(canvas, "toast", lambda c: skin.draw_toast(c, self.toast_text))
+                    if getattr(self.config, "bezel", "off") != "off":
+                        from .skins import overlays
+                        overlays.draw_bezel(skin, canvas)
                     if tube:
                         draw_tube(canvas, *tube)
                     self.gfx.upload_ui(canvas, nearest=self.skin.nearest)

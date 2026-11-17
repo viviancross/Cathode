@@ -549,7 +549,7 @@ class TestOnTheAir(Temp):
         tl = lc.SCHEDULES[self.cid]
         e = tl.at(now)["entry"]
         self.assertEqual((on.title, on.episode, on.category, on.rating), ("Alpha", e["episode_text"], "Comedy", "TV-Y7"))
-        self.assertEqual(on.episode, f"S{e['season']}E{e['episode']} - {e['name']}")     # "S2E1 - Alpha 2x1"
+        self.assertEqual(on.episode, f"S{e['season']}E{e['episode']} - {e['name']}" if e['season'] else e['name'])  # "S2E1 - Alpha 2x1"
         self.assertEqual((on.description, on.minutes), ("Things happen.", 22))
         self.assertTrue(all(a.stop == b.start for a, b in zip(progs, progs[1:])))
         self.assertIsNotNone(cur if cur is not None else on)

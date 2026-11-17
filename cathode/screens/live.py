@@ -48,6 +48,10 @@ class LiveTV(Screen):
         self._page_timer = None
         self.vplayer = None         # a video channel's player (videochannels.Player) while one is tuned
         self.card = None            # the video channel's lower-third: {artist, song, label, until}
+        self.upnext = None          # a timeline channel's next programme: {"title", "at"} (the countdown)
+        self.rating = None          # the programme's rating box: {"text", "until"}
+        self.tuned_at = 0.0         # when the channel was tuned (monotonic): the bug's "on change" mode
+        self.prog_at = 0.0          # when this programme started, here (monotonic)
 
     # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
     # only once the presses stop: a server that starts a transcode per tune
@@ -106,6 +110,7 @@ class LiveTV(Screen):
         idx %= len(self.channels)
         if self.phase != "idle" and idx != self.idx:
             self.prev = self.idx
+        self.tuned_at, self.upnext, self.rating = time.monotonic(), None, None
         self._log_watch()
         self.idx = idx
         if not retry:
@@ -276,8 +281,11 @@ class LiveTV(Screen):
     # ── What the compositor and skin read ─────────────────────────────────
 
     def cover(self):
-        """(kind, alpha) over the video, or None."""
-        kind = self.app.skin.tune_cover
+        """(kind, alpha) over the video, or None. The tuning screen is the
+        skin's own unless one is chosen (blue and the logo are drawn over
+        black by the skin)."""
+        pick = getattr(self.app.config, "tune_screen", "box")
+        kind = pick if pick in ("static", "black") else "black" if pick in ("blue", "logo") else self.app.skin.tune_cover
         if self.phase == "cover":
             return (kind, 1.0)
         if self.phase == "reveal":
@@ -290,8 +298,7 @@ class LiveTV(Screen):
         return None
 
     def animating(self) -> bool:
-        return self.phase == "reveal" or (self.phase == "cover"
-                                          and self.app.skin.tune_cover == "static")
+        return self.phase == "reveal" or (self.phase == "cover" and (self.cover() or ("",))[0] == "static")
 
     def banner_visible(self) -> bool:
         return time.monotonic() < self.banner_until

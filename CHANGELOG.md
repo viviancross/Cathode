@@ -48,6 +48,14 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
     marks, or at the quiet moments where a show faded out for its own
     breaks (each title's sound read once in the background, a few seconds
     each; halfway until then).
+- **On screen** (Settings > Preferences > On Screen, and Channel Logo):
+  - the Up Next Countdown over a programme's last seconds;
+  - the Rating Box (TV-PG...) top left as a programme starts;
+  - Logo Mode: always, on change, or periodic; Anchor: the screen's corner
+    or a 4:3 picture's;
+  - the Tuning Screen: the box's own, static, black, blue or the logo;
+  - Seasonal Decorations on the guide (snow, leaves, hearts, stars);
+  - a Bezel: a television's wood, black or silver frame round it all.
 - A day with a "we'll be right back" slate in it is no longer drawn up
   again at every start.
 

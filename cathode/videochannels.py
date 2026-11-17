@@ -30,6 +30,7 @@ from .playlist import Channel
 
 SCHEME = "cathode://video/"
 MAX_SKIPS = 40                  # library titles that may fail in a row before the stand-by card
+RATING_SECONDS = 12              # the rating box as a programme starts
 CARD_SECONDS = 8.0              # the lower-third at a video's start and before its end
 AHEAD = 20.0                    # seconds before a video is due that its stream is resolved
 GRACE = 20.0                    # a video due this recently starts from its top, not its offset
@@ -616,6 +617,17 @@ class Player:
             self.app.video.play(s["video"], headers=s.get("headers"), audio=s.get("audio"),
                                 start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)))   # (a transcode starts at its base)
         self.live.radio = e.get("radio")       # a music channel's song: the card that stands in for a picture
+        if e.get("kind", "show") == "show" and not e.get("part"):
+            self.live.prog_at = time.monotonic() - offset
+            if e.get("rating") and getattr(self.app.config, "rating_box", True) and (offset < 60 or not cont):
+                self.live.rating = {"text": e["rating"], "until": time.monotonic() + RATING_SECONDS}
+                self.app.after(RATING_SECONDS + 0.05, self.app.invalidate)
+        self.live.upnext = self._upnext(cur)
+        secs = int(getattr(self.app.config, "upnext_seconds", 0) or 0)
+        if self.live.upnext and secs:
+            left = (self.live.upnext["at"] - datetime.now(timezone.utc)).total_seconds() - secs
+            if left > 0:
+                self.app.after(left, self.app.invalidate)
         artist, title = (self.ch.name, e["title"]) if e.get("kind") and not e.get("yt") else \
             parse_title(e["title"], e.get("uploader", ""))
         c = entry(self.app.config, self.cid) or {}
@@ -642,6 +654,26 @@ class Player:
             delay = max(0.5, left - AHEAD)
             self.app.after(delay, lambda: gen == self.gen and threading.Thread(
                 target=lambda: _resolve_quietly(nxt["entry"]["id"]), daemon=True).start())
+
+    def _upnext(self, cur) -> Optional[dict]:
+        """The next programme (past breaks and the slate): its title and when
+        it starts, for the up-next countdown."""
+        sched = self.sched
+        if sched is None or not hasattr(sched, "at"):
+            return None
+        at = cur["stop"]
+        for _ in range(30):
+            nxt = sched.at(at + timedelta(seconds=0.5))
+            if nxt is None:
+                return None
+            e = nxt["entry"]
+            if e.get("kind", "show") == "show" and not e.get("part"):
+                ep = e.get("episode_text") or ""
+                return {"title": e.get("title", "") + (f": {ep}" if ep else ""), "at": nxt["start"]}
+            if e.get("kind") == "signoff":
+                return None
+            at = nxt["stop"]
+        return None
 
     def _check_ahead(self, gen, e):
         from . import libchannels

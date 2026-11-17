@@ -333,8 +333,11 @@ class BoxSkin(Classic):
         return (W, H) if W == 1280 else (1280, round(1280 * H / W))
 
     def draw(self, canvas, screen):
-        if screen.name == "live":
-            self.draw_bug(canvas, screen)      # under the banner
+        self.draw_under(canvas, screen)        # (the bug under the banner)
+        self._draw_box(canvas, screen)
+        self.draw_over(canvas, screen)
+
+    def _draw_box(self, canvas, screen):
         fn = getattr(self, f"draw_{screen.name}", None)
         if not fn:
             return

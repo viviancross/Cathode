@@ -793,12 +793,28 @@ class Skin:
         """Register a clickable region while drawing."""
         self.hits.append((pygame.Rect(rect), fn))
 
-    def draw(self, canvas, screen):
+    def draw_under(self, canvas, screen):
+        """Over the picture, under the box's own drawing: the screen bug,
+        the rating box, the up-next countdown, a chosen tuning screen."""
         if screen.name == "live":
+            from . import overlays
+            overlays.draw_tune_screen(self, canvas, screen)
             self.draw_bug(canvas, screen)      # under the banner, as a station's bug was under the box's
+            overlays.draw_rating(self, canvas, screen)
+            overlays.draw_upnext(self, canvas, screen)
+
+    def draw_over(self, canvas, screen):
+        """After the box's drawing: the guide's seasonal decorations."""
+        if screen.name == "guide":
+            from . import overlays
+            overlays.draw_decorations(self, canvas)
+
+    def draw(self, canvas, screen):
+        self.draw_under(canvas, screen)
         fn = getattr(self, f"draw_{screen.name}", None)
         if fn:
             fn(canvas, screen)
+        self.draw_over(canvas, screen)
         card = getattr(screen, "card", None)
         if card and getattr(screen, "phase", "") != "cover" and time.monotonic() < card["until"]:
             self.draw_music_card(canvas, card)
@@ -821,6 +837,9 @@ class Skin:
         own = self.own_bug(ch)
         if own.get("off") or (not cfg.bug_in_breaks and self._in_break(ch)):
             return
+        from . import overlays
+        if not overlays.bug_shown(self, live):
+            return
         from ..logos import url_for
         W, H = self.canvas
         size = max(8, H * cfg.bug_size // 100)
@@ -837,6 +856,9 @@ class Skin:
             (H * cfg.bug_margin // 100,) * 2
         corner = own.get("corner") or cfg.bug_corner
         corner = corner if corner in self.BUG_CORNERS else "bottom right"
+        if getattr(cfg, "bug_anchor", "screen") == "picture":
+            mx += overlays.picture_inset(self)      # (a 4:3 picture's corner in a wide screen)
+        mx, my = mx + overlays.frame(self), my + overlays.frame(self)
         x = mx if corner.endswith("left") else W - mx - img.get_width()
         y = my if corner.startswith("top") else H - my - img.get_height()
         c.blit(img, (x, y))
