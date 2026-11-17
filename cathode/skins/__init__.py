@@ -861,9 +861,9 @@ class Skin:
             if im is None:
                 return None
             if isinstance(im, Animation):
-                surf = (im, [self._surface(f) for f in im.frames])
+                surf = (im, [self._surface(self._edged(f)) for f in im.frames])
             else:
-                surf = self._surface(im)
+                surf = self._surface(self._edged(im))
             if len(self._logo_surfaces) > 512:
                 self._logo_surfaces.clear()
             self._logo_surfaces[key] = surf
@@ -873,6 +873,29 @@ class Skin:
             self._next_frame(wait)
             return frames[i]
         return surf
+
+    @staticmethod
+    def _edged(im):
+        """A dark one-colour logo (Fox's, HBO's) vanishes on a dark backdrop:
+        a thin white edge round it keeps it readable on any. A logo with its
+        own backdrop, or colours, or light ink, is left as it is."""
+        from PIL import Image, ImageFilter, ImageStat
+        im = im.convert("RGBA")
+        alpha = im.getchannel("A")
+        hist = alpha.histogram()
+        if hist[0] < sum(hist) * 0.05:
+            return im                           # no clear background: its own backdrop
+        solid = alpha.point(lambda v: 255 if v > 128 else 0)
+        stat = ImageStat.Stat(im.convert("L"), mask=solid)
+        if not stat.count[0] or stat.mean[0] > 70 or stat.stddev[0] > 45:
+            return im
+        r = max(1, round(min(im.size) / 40))
+        out = Image.new("RGBA", (im.width + 2 * r, im.height + 2 * r), (255, 255, 255, 0))
+        edge = Image.new("L", out.size, 0)
+        edge.paste(alpha, (r, r))
+        out.putalpha(edge.filter(ImageFilter.MaxFilter(2 * r + 1)))
+        out.alpha_composite(im, (r, r))
+        return out
 
     @staticmethod
     def _surface(im):

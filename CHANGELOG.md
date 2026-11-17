@@ -43,8 +43,14 @@
 - **Your own channel logos**, animated ones too (GIF and APNG). Put a picture
   in the logos folder in Cathode's settings folder, named for the channel or
   its number (Nickelodeon.gif, 107.png), or pick one on the channel's edit
-  page. Every channel Cathode makes has a logo of its own (its name on a
-  coloured plate, in logos/made, yours to replace).
+  page.
+- **The networks wear their real logos**, from the years the replicas
+  recall where there's one to be had (the Nickelodeon splat, the Cartoon
+  Network checkerboard, Kids' WB, Fox Kids, Nick GAS, Noggin, Toon Disney,
+  the 1986 NBC peacock), fetched once from Wikimedia and kept. The 24/7
+  channels wear the show's title art from your Plex server; TV Guide and
+  Local Weather theirs. A dark one-colour logo (Fox, HBO, CBS) gets a thin
+  white edge so it reads on a dark guide.
 - **Screen bugs.** The channel's logo sits faintly in a corner of the picture
   while you watch: 15% in the bottom right to start. Settings > Look > Screen
   bug sets the corner, size, opacity, distance from the edge, a white

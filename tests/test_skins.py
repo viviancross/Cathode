@@ -462,9 +462,16 @@ class TestLogosAndBug(unittest.TestCase):
         logos._listing["dir"] = None
         lineup.edit(app.config, ch, logo="4.png", bug=None)
         self.assertEqual(logos.url_for(app, ch), num)           # picked on its page
-        made = Channel(number=101, name="Cartoon Network", url="cathode://video/lib.ab12", epg_id="x")
-        p = logos.url_for(app, made)                             # one of its own, drawn once
-        self.assertTrue(p.endswith(os.path.join("made", "cartoonnetwork.png")) and os.path.exists(p))
+        from cathode import libchannels as lc
+        net = Channel(number=101, name="Cartoon Network", url="cathode://video/lib.ab12", epg_id="x",
+                      logo=lc.LOGOS["Cartoon Network"])
+        self.assertIn("Cartoon_Network_logo_%281992-2004%29", logos.url_for(app, net))     # the network's real one
+        show = Channel(number=102, name="The Simpsons 24/7", url="cathode://video/lib.cd34", epg_id="y",
+                       logo="/library/metadata/7/clearLogo/1")
+        self.assertEqual(logos.url_for(app, show), "")                 # its title art needs the Plex server
+        app.ondemand = NS(signed_in=True, client=lambda: NS(server="http://plex:32400",
+                                                            photo_url=lambda path, w, h: f"http://plex:32400/photo{path}"))
+        self.assertEqual(logos.url_for(app, show), "http://plex:32400/photo/library/metadata/7/clearLogo/1")
 
     def test_animated_gif_and_apng(self):
         from PIL import Image

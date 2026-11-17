@@ -143,7 +143,7 @@ def add_to(chans: list, config) -> list:
         if want == "auto":
             nxt = num + 1
         ch = Channel(number=num, name=c.get("name") or "Library Channel", url=vc.SCHEME + PREFIX + c["id"],
-                     epg_id=vc.epg_id(PREFIX + c["id"]), group=c.get("group") or "Library")
+                     logo=c.get("logo", ""), epg_id=vc.epg_id(PREFIX + c["id"]), group=c.get("group") or "Library")
         at = next((i for i, o in enumerate(out) if o.number > num), len(out))
         out.insert(at, ch)
     return out
@@ -1143,13 +1143,58 @@ def _bisect(a, x):
 # whether it ran commercials. Then the HBO channels from the movies, a few
 # 24/7 channels, and any library nothing else took.
 
-STARTER_MAKE = 3                # 3: every title placed; 2: network replicas; 1: genres, decades, studios
+STARTER_MAKE = 4                # 4: their real logos; 3: every title placed; 2: network replicas; 1: genres...
 SATURDAY_MORNING = {"from": 7, "to": 12, "days": [5]}
 WEEKDAY_AFTERNOON = {"from": 16, "to": 18, "days": [0, 1, 2, 3, 4]}
 NET_SHOWS, SLOT_SHOWS, HBO_MOVIES = 4, 3, 20
 MARATHON_EPISODES, MARATHONS = 150, 5
 ALWAYS_247 = "10 Minute Power Hour"             # a 24/7 whatever its length
 NOT_247 = {"News", "Talk Show", "Talk", "Sport"}
+
+# The networks' own logos (their 1990s-2000s marks where Wikimedia has them), fetched by each Cathode
+# and cached; a picture of yours in the logos folder wins. The 24/7s wear the show's title art from Plex.
+LOGOS = {
+    'ABC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/1971_ABC_logo.svg/960px-1971_ABC_logo.svg.png',
+    'CBS': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/CBS_logo.svg/960px-CBS_logo.svg.png',
+    'NBC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_Peacock_1986.svg/960px-NBC_Peacock_1986.svg.png',
+    'Fox': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Fox_Broadcasting_Company_logo_%282019%29.svg/960px-Fox_Broadcasting_Company_logo_%282019%29.svg.png',
+    'The WB': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/The_WB_logo.svg/960px-The_WB_logo.svg.png',
+    'UPN': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/UPN_Logo_%282000-2002%29.svg/960px-UPN_Logo_%282000-2002%29.svg.png',
+    'Nickelodeon': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bb/Nickelodeon_1985_%28Splat%29.svg/960px-Nickelodeon_1985_%28Splat%29.svg.png',
+    'Nicktoons': 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Nicktoons-Network-original-balloon-text-logo.png',
+    'Nick GAS': 'https://thumb.wikimedia.org/wikipedia/en/thumb/9/9f/Nick_GAS.svg/960px-Nick_GAS.svg.png',
+    'Noggin': 'https://thumb.wikimedia.org/wikipedia/en/thumb/0/01/Noggin_logo_2000.svg/960px-Noggin_logo_2000.svg.png',
+    'Cartoon Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Cartoon_Network_logo_%281992-2004%29.svg/960px-Cartoon_Network_logo_%281992-2004%29.svg.png',
+    'Boomerang': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Boomerang_tv_logo_%282000%29.svg/960px-Boomerang_tv_logo_%282000%29.svg.png',
+    'Disney Channel': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/2002_Disney_Channel_logo.svg/960px-2002_Disney_Channel_logo.svg.png',
+    'Toon Disney': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Toon_Disney_logo.svg/960px-Toon_Disney_logo.svg.png',
+    "Kids' WB": 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Kids_WB_%28SVG_Version%29.svg/960px-Kids_WB_%28SVG_Version%29.svg.png',
+    'Fox Kids': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/FOX_Kids_logo.svg/960px-FOX_Kids_logo.svg.png',
+    'Adult Swim': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e4/Adult_Swim_2003_logo.svg/960px-Adult_Swim_2003_logo.svg.png',
+    'Comedy Central': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Comedy_Central.svg/960px-Comedy_Central.svg.png',
+    'MTV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/MTV_1981_logo_%28no_outline%29.svg/960px-MTV_1981_logo_%28no_outline%29.svg.png',
+    'VH1': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/VH1_94-2003_logo.svg/960px-VH1_94-2003_logo.svg.png',
+    'TBS': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/TBS_Superstation_logo_%282003-2004%29.svg/960px-TBS_Superstation_logo_%282003-2004%29.svg.png',
+    'G4': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/G4_2002.svg/960px-G4_2002.svg.png',
+    'Spike TV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Spike_TV_logo.svg/960px-Spike_TV_logo.svg.png',
+    'Food Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Food_Network_Logo.svg/960px-Food_Network_Logo.svg.png',
+    'Game Show Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/71/GSN_2004_logo.svg/960px-GSN_2004_logo.svg.png',
+    'BBC America': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/BBC_America.svg/960px-BBC_America.svg.png',
+    'USA Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/USA_Network_1996.svg/960px-USA_Network_1996.svg.png',
+    'IFC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fc/Independent_Film_Channel_%28IFC%29_logo.svg/960px-Independent_Film_Channel_%28IFC%29_logo.svg.png',
+    'truTV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/TruTV_logo.svg/960px-TruTV_logo.svg.png',
+    'Animal Planet': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Animal_Planet_logo_%28black_and_green%29.svg/960px-Animal_Planet_logo_%28black_and_green%29.svg.png',
+    'WWE Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/WWE_Network_logo.svg/960px-WWE_Network_logo.svg.png',
+    'HBO': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/960px-HBO_logo.svg.png',
+    'HBO2': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/HBO2_logo.svg/960px-HBO2_logo.svg.png',
+    'HBO Family': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/HBO_Family_logo.svg/960px-HBO_Family_logo.svg.png',
+    'HBO Comedy': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/HBO_Comedy_2000.svg/960px-HBO_Comedy_2000.svg.png',
+    'HBO Signature': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/HBO_Signature.svg/960px-HBO_Signature.svg.png',
+    'HBO Zone': 'https://upload.wikimedia.org/wikipedia/commons/6/6a/HBO_Zone_logo.png',
+    'Christmas Specials': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Freeform%27s_25_Days_Of_Christmas_logo.svg/960px-Freeform%27s_25_Days_Of_Christmas_logo.svg.png',
+    'Defunctland Channel': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Defunctland_logo.png/960px-Defunctland_logo.png',
+    '10 Minute Power Hour 24/7': 'https://upload.wikimedia.org/wikipedia/commons/3/38/Game_Grumps_logo_2018.png',
+}
 
 NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patterns on a library's name), ads, order
     {"name": "ABC", "group": "Broadcast",
@@ -1463,6 +1508,10 @@ def starter(index) -> list:
     def add(name, group, order, sources, **more):
         # the same id from the same library on any Cathode: two never edited air the same days
         cid = hashlib.sha1(json.dumps([name, sources], sort_keys=True).encode()).hexdigest()[:8]
+        logo = LOGOS.get(name) or more.pop("logo", "")
+        more.pop("logo", None)              # (the network's own wins over the show's title art)
+        if logo:
+            more["logo"] = logo             # (a Plex path for a show's title art: the app asks its server)
         out.append(new_channel(name, sources, order, starter=True, group=group, id=cid, **more))
 
     shows = {}                                      # title key -> [(section, show key, episodes)]
@@ -1535,7 +1584,8 @@ def starter(index) -> list:
     picks = [(sec.key, k) for _n, sec, k in ranked[:MARATHONS]]
     picks += [h[:2] for h in found(ALWAYS_247) if h[:2] not in picks]
     for s, k in picks:
-        add(f"{index.sections[s].shows[k]['title']} 24/7", "24/7", "playlist", [{"section": s, "kind": "show", "value": k}])
+        sh = index.sections[s].shows[k]
+        add(f"{sh['title']} 24/7", "24/7", "playlist", [{"section": s, "kind": "show", "value": k}], logo=sh.get("logo", ""))
 
     taken = {s.get("section") for c in out for s in c["sources"]}
     for s in index.programme_sections():

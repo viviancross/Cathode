@@ -370,6 +370,9 @@ class TestLineup(Temp):
             self.assertEqual((by["Noggin"]["sources"], by["Noggin"]["breaks"]),
                              ([{"section": "50", "kind": "all"}], {}))                     # no commercials
             self.assertEqual(by["HBO"]["breaks"], {})
+            self.assertEqual(by["Nickelodeon"]["logo"], lc.LOGOS["Nickelodeon"])         # their real logos
+            self.assertNotIn("logo", by["Home Videos"])
+            self.assertEqual(by["The Simpsons 24/7"].get("logo", ""), "")              # (no title art in this library)
             self.assertEqual({i["title"] for g in lc.groups(by["HBO Family"], idx) for i in g["items"]}, {"Pups"})
             zone = [s for s in by["HBO Zone"]["sources"] if s.get("exclude")]
             self.assertEqual(zone[0]["value"], lc.KIDS)

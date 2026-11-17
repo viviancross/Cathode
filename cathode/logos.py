@@ -95,6 +95,7 @@ class LogoStore:
         self._orig: Dict[str, Optional[Image.Image]] = {}   # url -> RGBA or Animation (None = failed)
         self._resized: Dict[Tuple[str, int, int], Optional[Image.Image]] = {}
         self._inflight = set()
+        self._later: Dict[str, float] = {}  # url -> when to ask again (the server said not now)
         self._auth: Dict[str, dict] = {}    # url -> extra request headers (e.g. Plex token)
         self._lock = threading.Lock()
         threading.Thread(target=self._prune_disk, daemon=True).start()
@@ -155,8 +156,9 @@ class LogoStore:
         return im.resize((nw, nh), Image.LANCZOS)
 
     def _ensure_fetch(self, url: str):
+        import time
         with self._lock:
-            if url in self._inflight or url in self._orig:
+            if url in self._inflight or url in self._orig or self._later.get(url, 0) > time.monotonic():
                 return
             self._inflight.add(url)
         threading.Thread(target=self._fetch, args=(url,), daemon=True).start()
@@ -226,6 +228,14 @@ class LogoStore:
         except Exception as e:
             print(f"[logos] couldn't load {url.split('?')[0]}: {e!r}")
             img = None
+            import time
+            import urllib.error
+            code = getattr(e, "code", None)
+            if code in (429, 500, 502, 503, 504) or (code is None and isinstance(e, (urllib.error.URLError, OSError))):
+                with self._lock:                # (too many asks, or the network: again in a minute)
+                    self._later[url] = time.monotonic() + 60
+                    self._inflight.discard(url)
+                return
         with self._lock:
             self._orig[url] = img
             while len(self._orig) > self._ORIG_MAX:
@@ -244,16 +254,11 @@ class LogoStore:
 # Yours first: a file in the settings folder's logos folder named for the
 # channel (its name or number: "Nickelodeon.gif", "107.png"; "<name> bug.png"
 # for its screen bug), or the one picked on its edit page. Then the guide's,
-# then the playlist's; a channel Cathode made has one of its own, drawn once
-# into logos/made (a file there can be replaced).
+# then the channel's own (the playlist's; a starter network's real logo; a
+# 24/7's title art from Plex).
 
 EXTS = (".png", ".apng", ".gif", ".webp", ".jpg", ".jpeg")
 _listing = {"dir": None, "at": 0.0, "files": {}}
-BADGES = {"nickelodeon": (242, 113, 33), "nicktoons": (242, 113, 33), "nickgas": (110, 180, 40),
-          "noggin": (60, 160, 220), "cartoonnetwork": (24, 24, 24), "boomerang": (40, 80, 170),
-          "adultswim": (10, 10, 10), "disneychannel": (20, 80, 180), "toondisney": (120, 60, 170),
-          "comedycentral": (240, 190, 20), "mtv": (200, 30, 40), "vh1": (150, 30, 160), "hbo": (16, 16, 16),
-          "g4": (90, 40, 140), "foodnetwork": (215, 40, 40), "bbcamerica": (30, 30, 30)}
 
 
 def _key(s: str) -> str:
@@ -308,54 +313,8 @@ def custom(config, ch, kind: str = "logo") -> str:
     return ""
 
 
-def badge(config, ch) -> str:
-    """A logo of its own for a channel Cathode made: its name on a plate in a
-    colour of its own, drawn once into logos/made."""
-    from PIL import ImageDraw, ImageFont
-    from .paths import asset
-    k = _key(ch.name) or "channel"
-    if not folder(config):
-        return ""
-    path = os.path.join(folder(config), "made", f"{k}.png")
-    if os.path.exists(path):
-        return path
-    hue = BADGES.get(k) or BADGES.get(next((b for b in BADGES if k.startswith(b)), ""))
-    if hue is None:
-        n = int(hashlib.sha1(k.encode()).hexdigest()[:6], 16)
-        palette = [(200, 40, 50), (230, 120, 30), (40, 140, 70), (30, 110, 190), (110, 60, 170), (190, 50, 130),
-                   (20, 140, 140), (90, 90, 100), (160, 110, 40), (50, 70, 160)]
-        hue = palette[n % len(palette)]
-    W, H, pad = 512, 256, 28
-    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.rounded_rectangle((4, 4, W - 5, H - 5), radius=44, fill=(*hue, 255),
-                        outline=tuple(min(255, c + 70) for c in hue) + (255,), width=6)
-    ink = (20, 20, 20, 255) if 0.299 * hue[0] + 0.587 * hue[1] + 0.114 * hue[2] > 150 else (255, 255, 255, 255)
-    words, font_path = ch.name.split() or ["?"], asset("fonts", "Barlow-Bold.ttf")
-    for size in range(150, 20, -6):
-        f = ImageFont.truetype(font_path, size)
-        lines = [" ".join(words)]
-        if d.textlength(lines[0], font=f) > W - 2 * pad and len(words) > 1:     # two lines, split near the middle
-            cut = min(range(1, len(words)), key=lambda i: abs(len(" ".join(words[:i])) - len(" ".join(words[i:]))))
-            lines = [" ".join(words[:cut]), " ".join(words[cut:])]
-        asc, desc = f.getmetrics()
-        if all(d.textlength(ln, font=f) <= W - 2 * pad for ln in lines) and len(lines) * (asc + desc) <= H - 2 * pad:
-            break
-    y = (H - len(lines) * (asc + desc)) // 2
-    for ln in lines:
-        d.text(((W - d.textlength(ln, font=f)) // 2, y), ln, font=f, fill=ink)
-        y += asc + desc
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        im.save(path)
-    except OSError:
-        return ""
-    return path
-
-
 def url_for(app, ch, kind: str = "logo") -> str:
     """Where a channel's logo (or its screen bug) comes from; "" for none."""
-    from . import ownchannels, videochannels as vc
     if ch is None:
         return ""
     cfg = app.config
@@ -365,5 +324,9 @@ def url_for(app, ch, kind: str = "logo") -> str:
     if mine:
         return mine
     epg = getattr(app, "epg", None)
-    url = (epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else "") or ch.logo
-    return url or (badge(cfg, ch) if vc.is_video(ch) or ownchannels.is_own(ch) else "")
+    url = (epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else "") or ch.logo or ""
+    if url.startswith("/library/"):         # a show's title art on the Plex server
+        od = getattr(app, "ondemand", None)
+        c = od.client() if od is not None and getattr(od, "signed_in", False) else None
+        url = c.photo_url(url, 600, 300) if c is not None and c.server else ""
+    return url

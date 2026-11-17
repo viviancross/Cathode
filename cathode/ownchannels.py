@@ -26,6 +26,12 @@ KINDS = {
 }
 
 
+# Their logos: TV Guide's, and The Weather Channel's from the years of Local on the 8s.
+LOGOS = {"tvguide": "https://upload.wikimedia.org/wikipedia/commons/c/c0/TV_Guide_Logo.png",
+         "weather": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/The_Weather_Channel_logo_1996-2005.svg/"
+                    "960px-The_Weather_Channel_logo_1996-2005.svg.png"}
+
+
 def is_own(ch) -> bool:
     """One of these page channels (a music channel is cathode:// too, but not one)."""
     return ch.url.startswith(SCHEME) and kind_of(ch) in KINDS
@@ -62,7 +68,7 @@ def add_to(chans: list, config) -> list:
             num += 1
         taken.add(num)
         nxt = max(nxt, num + 1)
-        ch = Channel(number=num, name=name, url=SCHEME + kind, epg_id=f"cathode.{kind}")
+        ch = Channel(number=num, name=name, url=SCHEME + kind, epg_id=f"cathode.{kind}", logo=LOGOS.get(kind, ""))
         at = next((i for i, c in enumerate(out) if c.number > num), len(out))
         out.insert(at, ch)
     return out
