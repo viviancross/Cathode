@@ -140,7 +140,12 @@ def draw_alert_crawl(skin, c, live):
     c.set_clip(clip)
     pygame.draw.rect(c, (255, 255, 255), (0, y0, lw, h))
     skin.text.draw(c, lab, f, (170, 0, 0), 0, y0 + H // 80)
-    skin.app.after(0.05, skin.app.invalidate)
+    skin.app.after(0.1 if _box() else 0.05, skin.app.invalidate)
+
+
+def _box() -> bool:
+    from .. import paths
+    return getattr(paths, "ANDROID", False)
 
 
 def bug_shown(skin, live) -> bool:
