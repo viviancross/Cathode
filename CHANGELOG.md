@@ -2,6 +2,35 @@
 
 ## 5.1
 
+- **The starter lineup is network replicas.** Cathode knows which networks
+  aired which shows, and makes ABC, CBS, NBC, Fox and The WB; Nickelodeon,
+  Nicktoons, Nick GAS, Noggin, Cartoon Network, Boomerang, Disney Channel,
+  Toon Disney, Kids' WB and Fox Kids; Adult Swim, Comedy Central, MTV, VH1,
+  TBS, G4, Spike TV, USA, IFC, truTV, Food Network, Game Show Network, BBC
+  America, Animal Planet and WWE Network. A network appears only when your
+  library has enough of its shows.
+  - Each network gets the libraries named for it: its bumpers between the
+    programmes (CN Bumps on Cartoon Network, Adult Swim IDs on Adult Swim),
+    and its own content (Pop-Up Video on VH1, stand-up on Comedy Central,
+    the wrestling libraries on WWE Network, Noggin's blocks, The Chris
+    Gethard Show on truTV).
+  - **Dayparts:** Nick at Nite's sitcoms on Nickelodeon from 8 PM to 6 AM,
+    Toonami on Cartoon Network weekday afternoons, Saturday mornings on ABC,
+    CBS and NBC, the classic shorts on Disney Channel first thing in the
+    morning.
+  - **No commercials** where the channel ran none: Disney Channel and Toon
+    Disney show only their idents, Noggin and HBO nothing.
+- **HBO channels from your movies:** HBO, HBO2, HBO Family (G and PG),
+  HBO Comedy (comedies and your stand-up specials), HBO Signature (dramas,
+  romance, crime, documentaries) and HBO Zone (action, sci-fi, horror;
+  nothing for kids).
+- **A few 24/7 channels**, for the shows with the most episodes.
+- **Your current lineup changes over once.** The old starter channels you
+  never edited are swapped for the new ones on the next start; any you
+  changed stay as they are. Libraries you hid from On Demand still feed
+  the networks named for them.
+- Fixed: Cathode could close when the lineup shrank under the channel being
+  watched.
 - **The guide fills in for library channels.** In 5.0 drawing up the day's
   commercial breaks took minutes, so the guide stayed empty for a long time
   after a start. It takes seconds now.

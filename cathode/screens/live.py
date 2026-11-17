@@ -71,7 +71,8 @@ class LiveTV(Screen):
 
     @property
     def channel(self):
-        return self.channels[self.idx] if self.channels else None
+        chans = self.channels           # (a lineup that just shrank can leave idx past its end, for a moment)
+        return chans[self.idx] if chans and 0 <= self.idx < len(chans) else None
 
     def _log_watch(self):
         """The channel being left into the watch history (a minute or more of it)."""

@@ -1826,8 +1826,9 @@ def library_channel_items(app):
                       help="Commercials from your commercials libraries on every library and YouTube channel that "
                            "has none, bumpers named for each channel's studio, lined up with the half hours."))
     items.append(Item("Add the starter lineup", make_starter,
-                      help="Channels made from what your library holds: genres, decades, studios, long-running "
-                           "shows, movies. Ones you already have (by name) are left alone."))
+                      help="Network replicas made from what your library holds (each with the shows it aired, "
+                           "its bumpers and dayparts), HBO channels from your movies, a few 24/7 channels. "
+                           "Ones you already have (by name) are left alone."))
     if any(c.get("starter") for c in cfg.library_channels):
         items.append(Item("Remove the starter lineup",
                           submenu=lambda: _confirm(app, "Remove its channels", drop_starter, "Keep them"),

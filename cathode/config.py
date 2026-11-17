@@ -170,6 +170,7 @@ class Config:
     # after the lineup. See libchannels.new_channel() for an entry's fields.
     library_channels: list = field(default_factory=list)
     library_starter_done: bool = False      # the starter lineup was made once
+    library_starter_make: int = 0           # which make of it (libchannels.STARTER_MAKE; 2: network replicas)
     guide_days: int = 2             # days of listings the guide holds for timeline channels (2, 7, 14, 30)
     content_groups: list = field(default_factory=list)  # named sets of library sources a channel can name
     channel_edits: dict = field(default_factory=dict)   # channel address -> {"hide", "name", "number", "kids"} (lineup.py)

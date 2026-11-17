@@ -46,6 +46,35 @@ def index(stamp="s1"):
     return library.Index([tv, mv, ads])
 
 
+def networks_index():
+    """A library a few networks can be made from: Nickelodeon's shows (and
+    Nick at Nite's sitcoms), its bumpers, the commercials, Noggin's blocks,
+    movies, a long-running show, and a library no network takes."""
+    tv = library.Section("51", "TV Shows", "show", "s1")
+    for key, title, n in (("1", "Rugrats", 3), ("2", "Doug", 3), ("3", "Hey Arnold!", 3), ("4", "SpongeBob SquarePants", 3),
+                          ("5", "Full House", 2), ("6", "The Cosby Show", 2), ("7", "Roseanne", 2), ("8", "The Simpsons", 8),
+                          ("9", "Obscure Local Show", 2)):
+        tv.add_show({"ratingKey": key, "title": title, "year": 1995, "Genre": [{"tag": "Comedy"}], "studio": "",
+                     "contentRating": "TV-PG"})
+        for e in range(1, n + 1):
+            tv.add_item({"type": "episode", "ratingKey": f"{key}0{e:02d}", "grandparentRatingKey": key,
+                         "grandparentTitle": title, "parentIndex": 1, "index": e, "title": f"{title} {e}",
+                         "duration": 1320000, "contentRating": "TV-PG"})
+    mv = library.Section("38", "Movies", "movie", "s1")
+    for key, title, genre, rating in (("901", "Heist", "Action", "R"), ("902", "Laughs", "Comedy", "PG-13"),
+                                      ("903", "Space", "Science Fiction", "PG-13"), ("904", "Pups", "Action", "G")):
+        mv.add_item({"type": "movie", "ratingKey": key, "title": title, "year": 1999, "duration": 6000000,
+                     "Genre": [{"tag": genre}], "contentRating": rating})
+    secs = [tv, mv]
+    for key, title, secs_long in (("26", "Nickelodeon Bumpers", 15), ("3", "Classic Commercials", 30),
+                                  ("50", "Noggin", 3600), ("60", "Home Videos", 1200)):
+        s = library.Section(key, title, "clip", "s1")
+        for n in range(3):
+            s.add_item({"type": "movie", "ratingKey": f"{key}{n}", "title": f"{title} {n}", "duration": secs_long * 1000})
+        secs.append(s)
+    return library.Index(secs)
+
+
 def chan(name="Chan", order="cyclic_shuffle", *sources, **kw):
     return lc.new_channel(name, sources or [{"kind": "all"}], order, **kw)
 
@@ -308,28 +337,68 @@ class TestLineup(Temp):
         self.assertEqual([c.name for c in vc.add_to([], cfg)][:1], ["Comedy"])    # no playlist: Cathode's own, from 1
         self.assertEqual(vc.entry(cfg, lc.PREFIX + cfg.library_channels[0]["id"])["name"], "Comedy")
 
-    def test_the_starter_lineup_follows_the_library(self):
-        old = (lc.MAIN_SHOWS, lc.GENRE_SHOWS, lc.DECADE_SHOWS, lc.STUDIO_SHOWS, lc.GENRE_MOVIES, lc.DECADE_MOVIES,
-               lc.MARATHON_EPISODES)
-        lc.MAIN_SHOWS, lc.GENRE_SHOWS, lc.DECADE_SHOWS, lc.STUDIO_SHOWS = 3, 2, 2, 2
-        lc.GENRE_MOVIES, lc.DECADE_MOVIES, lc.MARATHON_EPISODES = 1, 2, 6
+    def test_the_starter_lineup_is_network_replicas(self):
+        old = (lc.HBO_MOVIES, lc.MARATHON_EPISODES)
+        lc.HBO_MOVIES, lc.MARATHON_EPISODES = 1, 6
         try:
-            idx = index()
+            idx = networks_index()
+            idx.sections["26"].hidden = idx.sections["50"].hidden = True    # hidden from On Demand: still the network's
             made = lc.starter(idx)
-            names = [c["name"] for c in made]
-            self.assertEqual(names, ["Laugh Track", "The '90s", "Slimetime", "Alpha", "Movies", "Action Movies",
-                                     "Comedy Movies", "Sci-Fi Movies", "'90s Movies"])     # placeholders of our own
+            by = {c["name"]: c for c in made}
+            self.assertEqual([c["name"] for c in made],
+                             ["Nickelodeon", "Nicktoons", "Noggin", "HBO", "HBO Family", "HBO Comedy", "HBO Zone",
+                              "The Simpsons 24/7", "Home Videos"])
+            self.assertEqual([c["group"] for c in made],
+                             ["Kids", "Kids", "Kids", "Premium", "Premium", "Premium", "Premium", "24/7", "Libraries"])
             self.assertTrue(all(c["starter"] for c in made))
             for c in made:
                 self.assertTrue(lc.groups(c, idx), c["name"])           # none of them empty
+            nick = by["Nickelodeon"]
+            day = [idx.sections["51"].shows[s["value"]]["title"] for s in nick["sources"] if not s.get("airs")]
+            night = [idx.sections["51"].shows[s["value"]]["title"] for s in nick["sources"] if s.get("airs")]
+            self.assertEqual(sorted(day), ["Doug", "Hey Arnold!", "Rugrats", "SpongeBob SquarePants"])
+            self.assertEqual(sorted(night), ["Full House", "Roseanne", "The Cosby Show"])     # Nick at Nite
+            self.assertEqual(nick["sources"][-1]["airs"], {"from": 20, "to": 6})
+            self.assertEqual(nick["breaks"]["bumps"], [{"section": "26", "kind": "all"}])   # its own bumpers
+            self.assertEqual(nick["breaks"]["ads"], [{"section": "3", "kind": "all"}])
+            self.assertEqual(by["Nicktoons"]["breaks"]["bumps"], [])                       # none of its own
+            self.assertEqual((by["Noggin"]["sources"], by["Noggin"]["breaks"]),
+                             ([{"section": "50", "kind": "all"}], {}))                     # no commercials
+            self.assertEqual(by["HBO"]["breaks"], {})
+            self.assertEqual({i["title"] for g in lc.groups(by["HBO Family"], idx) for i in g["items"]}, {"Pups"})
+            zone = [s for s in by["HBO Zone"]["sources"] if s.get("exclude")]
+            self.assertEqual(zone[0]["value"], lc.KIDS)
+            self.assertEqual({i["title"] for g in lc.groups(by["HBO Zone"], idx) for i in g["items"]}, {"Heist", "Space"})
             app = FakeApp([])
-            app.config.library_channels = [chan("Laugh Track")]         # one of yours by that name: left alone
+            app.config.library_channels = [chan("Nickelodeon")]         # one of yours by that name: left alone
             self.assertEqual(lc.add_starter(app.config, idx), 8)
             self.assertEqual(lc.add_starter(app.config, idx), 0)
             self.assertFalse(app.config.library_channels[0]["starter"])
+            self.assertEqual(app.config.library_starter_make, lc.STARTER_MAKE)
         finally:
-            (lc.MAIN_SHOWS, lc.GENRE_SHOWS, lc.DECADE_SHOWS, lc.STUDIO_SHOWS, lc.GENRE_MOVIES, lc.DECADE_MOVIES,
-             lc.MARATHON_EPISODES) = old
+            lc.HBO_MOVIES, lc.MARATHON_EPISODES = old
+
+    def test_an_older_starter_lineup_is_renewed_once(self):
+        idx = networks_index()
+        app = FakeApp([])
+        app.library, app.toast, app.post = idx, lambda *a, **k: None, lambda fn, *a, **k: fn(*a, **k)
+        cfg = app.config
+        cfg.library_starter_done, cfg.library_starter_make = True, 0
+        cfg.library_channels = [chan("Laugh Track", starter=True), chan("Mine", starter=False)]
+        old_place, old_load = lc.place, library.load
+        lc.place = lambda app: None
+        library.load = lambda app, done, fresh=False: done(idx, "")
+        try:
+            lc.start(app)
+            names = [c["name"] for c in cfg.library_channels]
+            self.assertNotIn("Laugh Track", names)                      # the old make's, never edited: replaced
+            self.assertEqual(names[:2], ["Mine", "Nickelodeon"])         # yours kept
+            self.assertEqual(cfg.library_starter_make, lc.STARTER_MAKE)
+            n = len(names)
+            lc.start(app)                                               # once only
+            self.assertEqual(len(cfg.library_channels), n)
+        finally:
+            lc.place, library.load = old_place, old_load
 
 
 class FakeVideo2:
