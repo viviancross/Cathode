@@ -24,6 +24,7 @@ from . import paths
 VERSION = 2                     # 2: quality, audio, score, air dates, title art
 PAGE = 2000
 SUMMARY = 400               # characters of a summary kept
+QUALITY = {"4K": 4, "1080p": 3, "HD": 2, "SD": 1}
 BREAK_MEDIAN = 150          # an Other Videos library of clips shorter than this (median) is break material
 
 
@@ -195,6 +196,9 @@ class Index:
     def __init__(self, sections=()):
         self.sections = {s.key: s for s in sections}
         self._by_id = None
+        self.collections: dict = {}     # Plex's: key -> {title, section, keys}
+        self.playlists: dict = {}       # Plex's video playlists: key -> {title, keys}
+        self.watched: set = set()       # rating keys of what's been watched
 
     def programme_sections(self) -> list:
         """The libraries channels are made from unasked: not the bumpers and
@@ -213,25 +217,31 @@ class Index:
     def count(self) -> int:
         return sum(len(s.items) for s in self.sections.values())
 
-    def dedupe(self):
-        """A film or episode in two places is kept from the first: Plex, then
-        Jellyfin and Emby, then folders (clips are never folded together)."""
+    def dedupe(self, prefer: str = "plex"):
+        """A film or episode in two places is kept once: from the first place
+        (Plex, then Jellyfin and Emby, then folders), or with prefer
+        "quality" the better picture (4K, 1080p, HD, SD), the first place on
+        a tie. Clips are never folded together."""
         def rank(sec):
             return 0 if sec.key[:1].isdigit() else 1 if sec.key.startswith("j") else 2
-        seen = {}
+
+        def key(i):
+            if i["type"] == "episode":
+                return ("e", i["title"].lower(), i["season"], i["episode"])
+            if i["type"] == "movie":
+                return ("m", i["title"].lower(), i["year"])
+            return None
+        best = {}
         for sec in sorted(self.sections.values(), key=lambda s: (rank(s), s.key)):
-            keep = []
-            for i in sec.items:
-                if i["type"] == "episode":
-                    k = ("e", i["title"].lower(), i["season"], i["episode"])
-                elif i["type"] == "movie":
-                    k = ("m", i["title"].lower(), i["year"])
-                else:
-                    keep.append(i)
+            for n, i in enumerate(sec.items):
+                k = key(i)
+                if k is None:
                     continue
-                if seen.setdefault(k, rank(sec)) == rank(sec):
-                    keep.append(i)
-            sec.items = keep
+                score = (-QUALITY.get(i.get("q", ""), 0) if prefer == "quality" else 0, rank(sec))
+                if k not in best or score < best[k][0]:
+                    best[k] = (score, i["id"])
+        for sec in self.sections.values():
+            sec.items = [i for i in sec.items if key(i) is None or best[key(i)][1] == i["id"]]
         self._by_id = None
 
 
@@ -261,7 +271,7 @@ def fetch(client, meta: dict, progress=None) -> Section:
     return sec
 
 
-def build(clients, hidden=(), fresh: bool = False, progress=None) -> Index:
+def build(clients, hidden=(), fresh: bool = False, progress=None, prefer: str = "plex") -> Index:
     """The index: each library from its file when its place's stamp matches
     it, fetched (and written) when it doesn't. `clients`: Plex, Jellyfin or
     Emby servers, folders (one, or a list). Libraries hidden in the
@@ -290,8 +300,39 @@ def build(clients, hidden=(), fresh: bool = False, progress=None) -> Index:
             sec.title, sec.hidden = meta["title"], meta["key"] in hidden
             out.append(sec)
     idx = Index(out)
-    idx.dedupe()
+    idx.dedupe(prefer)
+    _extras(idx, clients if isinstance(clients, (list, tuple)) else [clients])
     return idx
+
+
+def _extras(idx, clients):
+    """Plex's collections, playlists and watched titles on the index: asked
+    of the server, else as they were last read."""
+    got = None
+    for client in clients:
+        if hasattr(client, "extras"):
+            try:
+                got = client.extras([{"key": s.key, "kind": s.kind} for s in idx.sections.values()
+                                     if _owned(client, s.key)])
+            except Exception as e:
+                print(f"[library] collections and playlists not read: {e!r}")
+    path = os.path.join(_dir(), "extras.json")
+    if got is not None:
+        try:
+            with open(path + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(got, f, separators=(",", ":"))
+            os.replace(path + ".tmp", path)
+        except OSError:
+            pass
+    else:
+        try:
+            with open(path, encoding="utf-8") as f:
+                got = json.load(f)
+        except (OSError, ValueError):
+            got = {}
+    idx.collections = got.get("collections") or {}
+    idx.playlists = got.get("playlists") or {}
+    idx.watched = set(got.get("watched") or [])
 
 
 def _owned(client, key: str) -> bool:
@@ -318,7 +359,11 @@ def cached(hidden=()) -> Optional[Index]:
             if sec:
                 sec.hidden = sec.key in hidden
                 out.append(sec)
-    return Index(out) if out else None
+    if not out:
+        return None
+    idx = Index(out)
+    _extras(idx, [])
+    return idx
 
 
 def load(app, done=None, fresh: bool = False):
@@ -348,7 +393,8 @@ def load(app, done=None, fresh: bool = False):
                 except Exception as e:
                     print(f"[library] Plex didn't answer ({e!r}): what was read of it last")
                     clients.insert(0, _Gone())
-            idx = build(clients, hidden=set(app.config.plex_hidden_libraries or []), fresh=fresh, progress=progress)
+            idx = build(clients, hidden=set(app.config.plex_hidden_libraries or []), fresh=fresh, progress=progress,
+                        prefer=getattr(app.config, "dedupe_prefer", "plex"))
         except Exception as e:
             err = repr(e)
             print(f"[library] couldn't read the library ({e!r}): using what was read last")

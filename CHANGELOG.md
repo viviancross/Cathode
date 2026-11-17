@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.3
+
+NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
+
+- **More to put on a channel:** a show's seasons, or episodes picked one
+  by one; a Plex collection; a Plex video playlist (Content > Add Content).
+  Copy another channel's content; clear it.
+- **Programming rows on every library channel:** Watched Filter (all,
+  unwatched, watched, from Plex), Specials on or off, Episode Start (first
+  or a random episode), Start Shows Over, Max Movies Per Day, Restrict
+  Ratings After (TV-MA, R, NC-17 only late), Random Marathons, Redirect
+  (another channel's programmes in set hours).
+- **Multi-part episodes air together:** Part 2 straight after Part 1.
+- **Channels tab:** Find a Title (which channels play it), Bulk Edit
+  (tick channels, set one thing on all), Sort By number, name or kind, and
+  LEFT/RIGHT on a channel moves it up or down the lineup. Hidden Channels:
+  Hide Empty, Hide Starter, Hide All.
+- **Logo From a Web Address** on every channel's page.
+- **A stream address as a channel** (Add Custom Channel).
+- A title in two places can keep the better copy (4K over HD).
+
 ## 5.2
 
 - **Menus laid out as NostalgiaTV's**, drawn by each box in its own style.

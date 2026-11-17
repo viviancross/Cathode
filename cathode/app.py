@@ -574,9 +574,26 @@ class App:
         """The lineup from the playlist's channels: Cathode's own, video and
         library channels placed among them (lineup_all, every one), then
         your edits (channels, what's shown)."""
+        chans = [c for c in chans if not getattr(c, "own_stream", False)] + self._streams(chans)
         self.lineup_all = videochannels.add_to(ownchannels.add_to(chans, self.config), self.config)
         self.channels = lineup.apply(self.lineup_all, self.config)
         self._cats = None
+
+    def _streams(self, chans) -> list:
+        """Channels that are one stream address each (Add Custom Channel >
+        A stream address): at their number, or the next free after the last."""
+        from .playlist import Channel
+        taken = {c.number for c in chans if not getattr(c, "own_stream", False)}
+        out = []
+        for s in getattr(self.config, "stream_channels", None) or []:
+            n = s.get("number") or int(max(taken, default=0)) + 1
+            while n in taken:
+                n += 1
+            taken.add(n)
+            ch = Channel(number=n, name=s.get("name") or "Stream", url=s["url"], group="Streams", logo=s.get("logo", ""))
+            ch.own_stream = True
+            out.append(ch)
+        return out
 
     def relineup(self):
         """Your lineup edits applied again, the channel on kept on."""

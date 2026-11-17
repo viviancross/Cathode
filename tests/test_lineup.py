@@ -86,8 +86,9 @@ class TestMaker(unittest.TestCase):
         self.assertNotIn("Ch4", [c.name for c in shown[-1]])
         self.assertEqual(page["Channel Visible"].value(), "No")
         hidden = menus.hidden_items(app)
-        self.assertEqual([it.label for it in hidden], ["Show All", "4  Ch4"])
-        hidden[1].action()                                             # Restore
+        self.assertEqual([it.label for it in hidden], ["Hide Empty Channels", "Hide Starter Channels", "Hide All",
+                                                       "Show All", "4  Ch4"])
+        hidden[4].action()                                             # Restore
         self.assertNotIn("u4", cfg.channel_edits)
         page["Favorite"].action()
         self.assertEqual(page["Favorite"].value(), "Yes")

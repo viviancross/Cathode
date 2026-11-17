@@ -1,6 +1,7 @@
 """What MENU opens: the box's menu tree. Settings apply as they change and
 are saved straight away."""
 
+import json
 import os
 import time
 
@@ -448,6 +449,11 @@ def channels_tab(app):
     own, the starter lineup; then every channel, each opening its editor."""
     from . import lineup as lu
     cfg = app.config
+
+    def sort(d):
+        cfg.channel_sort = _cycle(CHANNEL_SORTS, cfg.channel_sort, d)
+        cfg.save()
+        _lists_changed(app)
     rows = [
         Item("Add Custom Channel", submenu=lambda: add_channel_items(app),
              help="A channel of your own: from your library (shows, movies, genres, decades...) or from YouTube."),
@@ -465,10 +471,23 @@ def channels_tab(app):
         Item("Starter Lineup", submenu=lambda: starter_items(app),
              value=lambda: str(sum(1 for c in cfg.library_channels if c.get("starter"))),
              help="The channels Cathode makes from your library: your Tunarr lineup and a few of its own."),
+        Item("Find a Title", lambda: find_title(app),
+             help="Type part of a show's or a movie's title: the channels that play it."),
+        Item("Bulk Edit", submenu=lambda: bulk_items(app),
+             help="Pick several library channels, then set one thing on all of them at once."),
+        Item("Sort By", value=lambda: _label(CHANNEL_SORTS, cfg.channel_sort), adjust=sort,
+             help="The list below by number, by name or by kind. LEFT/RIGHT on a channel moves it up or down the "
+                  "lineup."),
     ]
+    chans = _lineup_all(app)
+    if cfg.channel_sort == "name":
+        chans = sorted(chans, key=lambda ch: ch.name.lower())
+    elif cfg.channel_sort == "kind":
+        chans = sorted(chans, key=lambda ch: (_kind(app, ch), ch.number))
     return rows + [Item(f"{ch.number:g}  {ch.name}", submenu=lambda ch=ch: channel_editor(app, ch),
-                        value=lambda ch=ch: _kind(app, ch), help="SELECT: everything about this channel.")
-                   for ch in _lineup_all(app)]
+                        value=lambda ch=ch: _kind(app, ch), adjust=lambda d, ch=ch: move_channel(app, ch, d),
+                        help="SELECT: everything about this channel. LEFT/RIGHT moves it down or up the lineup.")
+                   for ch in chans]
 
 
 def channel_editor(app, ch):
@@ -527,7 +546,156 @@ def add_channel_items(app):
              "Link Plex first (Settings > Servers), or add Jellyfin, Emby or a folder there."),
         Item("From YouTube", lambda: make("video"),
              help="Playlists, channels and @handles, mixed, on a timeline."),
+        Item("A stream address", lambda: add_stream(app),
+             help="One live stream (an .m3u8, a .ts, an rtsp:// camera, a radio station) as a channel."),
+        Item("Stream channels", submenu=lambda: stream_items(app), value=lambda: str(len(cfg.stream_channels)),
+             enabled=bool(cfg.stream_channels), help="The stream addresses you've added: SELECT one to remove it."),
     ]
+
+
+def add_stream(app):
+    cfg = app.config
+
+    def got_url(url):
+        url = (url or "").strip()
+        if not url:
+            return
+        if "://" not in url:
+            app.toast("A stream address has its scheme: https://, rtsp://, udp://...")
+            return
+
+        def got_name(name):
+            if name is None:
+                return
+            cfg.stream_channels.append({"name": name.strip() or "Stream", "url": url})
+            cfg.save()
+            app.place_own_channels()
+            _lists_changed(app)
+            app.toast(f"{name.strip() or 'Stream'} added.")
+        app.push(Keyboard(app, "Channel Name", got_name))
+    app.push(Keyboard(app, "Stream address", got_url, hint="https://.../live.m3u8"))
+
+
+def stream_items(app):
+    cfg = app.config
+
+    def drop(s):
+        cfg.stream_channels.remove(s)
+        cfg.save()
+        app.place_own_channels()
+        _lists_changed(app)
+        app.top().back()
+    return [Item(s.get("name") or "Stream", submenu=lambda s=s: _confirm(app, "Remove it", lambda: drop(s)),
+                 help=s["url"][:80]) for s in cfg.stream_channels] or [Item("None yet", enabled=False)]
+
+
+CHANNEL_SORTS = [("number", "Number"), ("name", "Name"), ("kind", "Kind")]
+
+
+def move_channel(app, ch, d):
+    """A channel swapped with its neighbour in the lineup (their numbers
+    traded), the list following it."""
+    from . import lineup as lu
+    chans = sorted(_lineup_all(app), key=lambda c: c.number)
+    if ch not in chans:
+        return
+    k = chans.index(ch) + (1 if d > 0 else -1)
+    if not 0 <= k < len(chans):
+        return
+    other = chans[k]
+    a, b = ch.number, other.number
+    lu.edit(app.config, ch, number=b)
+    lu.edit(app.config, other, number=a)
+    _lineup_changed(app)
+    m = app.top()
+    if m is not None and getattr(m, "pages", None):
+        items = m.pages[-1][1]
+        at = next((n for n, it in enumerate(items) if it.label.endswith(f"  {ch.name}")), None)
+        if at is not None:
+            m.pages[-1][2] = at
+
+
+def find_title(app):
+    """Which channels play a title: each library and YouTube channel's
+    titles searched; SELECT one to open its page."""
+    from . import libchannels as lc, videochannels as vc
+
+    def got(text):
+        text = (text or "").strip().lower()
+        if not text:
+            return
+        hits = []
+        for ch in _lineup_all(app):
+            tl = lc.SCHEDULES.get(vc.cid_of(ch)) if vc.is_video(ch) else None
+            names = sorted({g["title"] for g in getattr(tl, "groups", None) or [] if text in g["title"].lower()})
+            if names:
+                hits.append((ch, names))
+        app.top().open("FIND A TITLE", [
+            Item(f"{ch.number:g}  {ch.name}", submenu=lambda ch=ch: channel_editor(app, ch),
+                 value=f"{len(names)}", help="Has " + ", ".join(names[:6]) + ("..." if len(names) > 6 else ""))
+            for ch, names in hits] or [Item("No channel plays that", enabled=False)])
+    app.push(Keyboard(app, "Find a title", got, hint="Part of a show's or a movie's title."))
+
+
+def bulk_items(app):
+    """Bulk Edit: tick library channels, then one setting for them all."""
+    from . import libchannels as lc
+    cfg = app.config
+    picked: set = set()
+
+    def flip(c):
+        picked.symmetric_difference_update({c["id"]})
+
+    def chosen():
+        return [c for c in cfg.library_channels if c["id"] in picked]
+
+    def apply(key, value):
+        cs = chosen()
+        for c in cs:
+            if value is None:
+                c.pop(key, None)
+            else:
+                c[key] = value
+            c["starter"] = False
+        cfg.save()
+        lc.rebuild(app)
+        app.toast(f"Set on {len(cs)} channels.")
+
+    def hide(on):
+        from types import SimpleNamespace as NS
+        from . import lineup as lu, videochannels as vc
+        for c in chosen():
+            lu.edit(cfg, NS(url=vc.SCHEME + lc.PREFIX + c["id"]), hide=on or None)
+        _lineup_changed(app)
+
+    def choices(key, options):
+        return [Item(label, lambda v=v: apply(key, v), close=False) for v, label in options]
+
+    def settings():
+        if not picked:
+            return [Item("Tick some channels first", enabled=False)]
+        return [
+            Item("Audience", submenu=lambda: choices("content", lc.CONTENT)),
+            Item("Sorting Method", submenu=lambda: choices("order", lc.ORDERS)),
+            Item("On the air", submenu=lambda: [Item(lab, lambda v=v: apply("hours", v), close=False)
+                                                for v, lab in lc.HOURS]),
+            Item("Commercials", submenu=lambda: [Item("On (each channel's usual)", lambda: apply("breaks", None)),
+                                                 Item("Off", lambda: apply("breaks", {}))]),
+            Item("Watched Filter", submenu=lambda: choices("watched", lc.WATCHED)),
+            Item("Specials", submenu=lambda: choices("specials", [(True, "On"), (False, "Off")])),
+            Item("Max Movies Per Day", submenu=lambda: choices("max_movies", MAX_MOVIES)),
+            Item("Restrict Ratings After", submenu=lambda: [Item(lab, lambda v=v: apply("mature_from", v), close=False)
+                                                            for v, lab in MATURE_FROM]),
+            Item("Random Marathons", submenu=lambda: choices("marathons", [(True, "On"), (False, "Off")])),
+            Item("Premieres", submenu=lambda: choices("premieres", lc.PREMIERES)),
+            Item("Hide them", lambda: hide(True)),
+            Item("Show them", lambda: hide(False)),
+        ]
+    return [Item("Set on the ticked channels", submenu=settings, value=lambda: str(len(picked)),
+                 help="What to set on every ticked channel.")] + [
+        Item(c.get("name") or "Library Channel", lambda c=c: flip(c), adjust=lambda d, c=c: flip(c),
+             value=lambda c=c: "Ticked" if c["id"] in picked else "", help="SELECT ticks it; again unticks it.")
+        for c in cfg.library_channels]
 
 
 def hidden_items(app):
@@ -540,11 +708,31 @@ def hidden_items(app):
         for ch in chs:
             lu.edit(cfg, ch, hide=None)
         _lineup_changed(app)
+    def hide(chs):
+        for ch in chs:
+            lu.edit(cfg, ch, hide=True)
+        _lineup_changed(app)
+
+    def empty():
+        from . import libchannels as lc, videochannels as vc
+        return [ch for ch in _lineup_all(app) if vc.is_video(ch) and vc.cid_of(ch) in lc.SCHEDULES
+                and not lc.SCHEDULES[vc.cid_of(ch)].entries]
+
+    def starters():
+        from . import libchannels as lc
+        ids = {lc.PREFIX + c["id"] for c in cfg.library_channels if c.get("starter")}
+        return [ch for ch in _lineup_all(app) if ch.url.split("://", 1)[-1] in ids]
+    rows = [Item("Hide Empty Channels", lambda: hide(empty()),
+                 help="Library and YouTube channels with nothing to play."),
+            Item("Hide Starter Channels", lambda: hide(starters()),
+                 help="The starter lineup's channels you haven't changed."),
+            Item("Hide All", submenu=lambda: _confirm(app, "Hide every channel", lambda: hide(_lineup_all(app))),
+                 help="Every channel hidden, to show again the ones you want.")]
     if not hid:
-        return [Item("No hidden channels", enabled=False,
-                     help="Hide one on its page (Channel Visible): it's skipped by channel up and down and left "
-                          "out of the guide.")]
-    return [Item("Show All", lambda: show(hid), help="Every hidden channel back in the lineup.")] + [
+        return rows + [Item("No hidden channels", enabled=False,
+                            help="Hide one on its page (Channel Visible): it's skipped by channel up and down and "
+                                 "left out of the guide.")]
+    return rows + [Item("Show All", lambda: show(hid), help="Every hidden channel back in the lineup.")] + [
         Item(f"{ch.number:g}  {ch.name}", lambda ch=ch: show([ch]), value=lambda: "Restore",
              help="SELECT shows it again.") for ch in hid]
 
@@ -1986,9 +2174,30 @@ def _lineup_rows(app, url, fallback=None) -> list:
              adjust=lambda d: _pick(app, url, "logo", d),
              help="A picture from your logos folder (a GIF or APNG moves). Automatic: one named for the channel, "
                   "else the one it came with."),
+        Item("Logo From a Web Address", lambda: _logo_url(app, url),
+             help="A picture's address (https://...png, .gif, .svg): the channel's logo. Empty: back to automatic."),
         Item("Screen Bug", submenu=lambda: channel_bug_items(app, url, fallback), value=bug_value,
              help="The logo in the corner on this channel: on or off, its picture, where, how big, how faint."),
     ]
+
+
+def _logo_url(app, url):
+    from types import SimpleNamespace as NS
+    from . import lineup as lu
+    cur = (app.config.channel_edits.get(url) or {}).get("logo", "")
+
+    def got(text):
+        if text is None:
+            return
+        text = text.strip()
+        if text and not text.lower().startswith(("http://", "https://")):
+            app.toast("A web address starts with http:// or https://.")
+            return
+        lu.edit(app.config, NS(url=url), logo=text or None)
+        app.config.save()
+        app.invalidate()
+        _lists_changed(app)
+    app.push(Keyboard(app, "Logo's web address", got, initial=cur if cur.startswith("http") else ""))
 
 
 BUG_WIDTHS = [5, 7, 8, 10, 12, 15, 20]          # a channel's own bug: its width, % of the picture's
@@ -2554,6 +2763,7 @@ def library_channel_page(app, cid):
         Item("Audience", value=lambda: _label(lc.CONTENT, c.get("content", "any")), adjust=content,
              help="Adults: anything. Everyone: nothing rated TV-MA, R or NC-17. Kids: only TV-Y, TV-Y7, TV-G and G "
                   "(unrated titles stay off); kids' profiles see the Kids channels."),
+        *programming_items(app, c, save),
         *rows[:-2],
         Item("Premieres", value=lambda: _label(lc.PREMIERES, c.get("premieres", "off")), adjust=premieres,
              help="Each evening at 8, the newest arrival in your library the channel hasn't premiered yet. The "
@@ -2570,6 +2780,108 @@ def library_channel_page(app, cid):
         Item("Make a copy", lambda: _copy_channel(app, cfg.library_channels, c, library_channel_page),
              help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
+    ]
+
+
+MATURE_FROM = [(None, "Any time")] + [(h, f"From {h % 12 or 12} {'PM' if h >= 12 else 'AM'}") for h in (18, 19, 20, 21, 22, 23)]
+MAX_MOVIES = [(0, "No limit")] + [(n, f"{n} a day") for n in (1, 2, 3, 4, 6, 8)]
+
+
+def programming_items(app, c, save):
+    """NostalgiaTV's programming rows: watched filter, specials, where a
+    show starts, movies a day, when grown-ups' titles may air, marathons,
+    a redirect, starting every show over."""
+    from . import libchannels as lc
+
+    def cyc(key, options, default):
+        def f(d):
+            c[key] = _cycle(options, c.get(key, default), d)
+            save(place=False)
+        return f
+
+    def flip(key, default):
+        def f(d=0):
+            c[key] = not c.get(key, default)
+            save(place=False)
+        return f
+
+    def over():
+        c["reset"] = int(c.get("reset", 0)) + 1
+        save(place=False)
+        app.toast("Every show starts again from its first episode, from now.")
+    return [
+        Item("Watched Filter", value=lambda: _label(lc.WATCHED, c.get("watched", "all")),
+             adjust=cyc("watched", lc.WATCHED, "all"),
+             help="Everything, only what you haven't watched in Plex yet, or only what you have. Read again with "
+                  "the library."),
+        Item("Specials", value=lambda: "On" if c.get("specials", True) else "Off", adjust=flip("specials", True),
+             help="Season 0: a show's specials, after its seasons. Off: the seasons only."),
+        Item("Episode Start", value=lambda: _label(lc.EPISODE_START, c.get("episode_start", "first")),
+             adjust=cyc("episode_start", lc.EPISODE_START, "first"),
+             help="Where a show new to the channel starts: its first episode, or one picked at random. Then it "
+                  "carries on in order."),
+        Item("Start Shows Over", over,
+             help="Every show on the channel back to its first episode, from now."),
+        Item("Max Movies Per Day", value=lambda: _label(MAX_MOVIES, int(c.get("max_movies") or 0)),
+             adjust=cyc("max_movies", MAX_MOVIES, 0),
+             help="Once the broadcast day has had this many movies, only shows until 4 AM."),
+        Item("Restrict Ratings After", value=lambda: _label(MATURE_FROM, c.get("mature_from")),
+             adjust=cyc("mature_from", MATURE_FROM, None),
+             help="TV-MA, R and NC-17 titles only from this hour until 6 AM, as networks kept them to late night."),
+        Item("Random Marathons", value=lambda: "On" if c.get("marathons") else "Off", adjust=flip("marathons", False),
+             help="On about one day in three, from an hour picked at random: four to eight episodes of one show "
+                  "back to back. The guide marks them."),
+        Item("Redirect", submenu=lambda: redirect_items(app, c, save),
+             value=lambda: _redirect_value(app, c),
+             help="In set hours the channel carries another one's programmes (a simulcast), as stations did "
+                  "overnight."),
+    ]
+
+
+REDIRECT_HOURS = [[0, 6], [1, 6], [2, 6], [22, 6], [18, 6], [6, 18], [20, 23]]
+
+
+def _redirect_value(app, c):
+    r = c.get("redirect") or {}
+    ch = next((x for x in app.channels if x.url.endswith(r.get("to") or "-")), None) if r.get("to") else None
+    return f"{ch.number:g} {_hours_label(r)}" if ch else "Off"
+
+
+def _hours_label(r):
+    def h(x):
+        return f"{x % 12 or 12} {'PM' if x >= 12 else 'AM'}"
+    return f"{h(r.get('from', 0))}-{h(r.get('until', 6))}"
+
+
+def redirect_items(app, c, save):
+    """The channel to carry, and the hours it's carried."""
+    from . import libchannels as lc, videochannels as vc
+    me = vc.cid_of(_by_url(app, vc.SCHEME + lc.PREFIX + c["id"])) if c.get("id") else ""
+    r = c.get("redirect") or {}
+
+    def pick(ch):
+        if ch is None:
+            c.pop("redirect", None)
+        else:
+            c["redirect"] = {"to": vc.cid_of(ch), "from": r.get("from", 0), "until": r.get("until", 6)}
+        save(place=False)
+        app.top().back()
+
+    def hours(d):
+        if not c.get("redirect"):
+            return
+        cur = [c["redirect"].get("from", 0), c["redirect"].get("until", 6)]
+        k = REDIRECT_HOURS.index(cur) if cur in REDIRECT_HOURS else -1
+        c["redirect"]["from"], c["redirect"]["until"] = REDIRECT_HOURS[(k + d) % len(REDIRECT_HOURS)]
+        save(place=False)
+    chans = [ch for ch in app.channels if vc.is_video(ch) and vc.cid_of(ch) != me]
+    return [
+        Item("Hours", value=lambda: _hours_label(c.get("redirect") or {}) if c.get("redirect") else "-", adjust=hours,
+             help="When the other channel's programmes are carried."),
+        Item("No redirect", lambda: pick(None), help="The channel's own programmes all day."),
+        *[Item(f"{ch.number:g}  {ch.name}", lambda ch=ch: pick(ch),
+               value=lambda ch=ch: "On" if (c.get("redirect") or {}).get("to") == vc.cid_of(ch) else "")
+          for ch in chans],
     ]
 
 
@@ -2602,7 +2914,8 @@ def library_source_items(app, cid):
     def same(src, section, kind):
         """(Shows and titles are one of a kind wherever they are: any library.)"""
         return not src.get("exclude") and src.get("kind") == kind and (
-            kind in ("show", "title") or (src.get("section") or "") == (section or ""))
+            kind in ("show", "title", "season", "collection", "playlist")
+            or (src.get("section") or "") == (section or ""))
 
     def has(section, kind, v):
         for src in c.get("sources") or []:
@@ -2687,6 +3000,41 @@ def library_source_items(app, cid):
         return [row(g["name"], "", "group", g["id"]) for g in cfg.content_groups] or [
             Item("No content groups yet", enabled=False, help="Make one under Settings > Channels > Content Groups.")]
 
+    def episodes(sec, key, season):
+        its = [i for i in sec.items if i["show_key"] == key and i["season"] == season]
+        return [row(f"E{i['episode']}  {i['name']}", sec.key, "title", i["plex"]) for i in its] or \
+            [Item("(nothing here)", enabled=False)]
+
+    def seasons(sec, key):
+        got = sorted({i["season"] for i in sec.items if i["show_key"] == key}, key=lambda s: (s == 0, s))
+        out = [row("The whole show", "", "show", key)]
+        for s in got:
+            name = f"Season {s}" if s else "Specials"
+            out.append(row(name, "", "season", f"{key}:{s}", help="SELECT adds the season; again takes it out."))
+            out.append(Item(f"  {name}: pick episodes", submenu=lambda s=s: episodes(sec, key, s)))
+        return out
+
+    def shows():
+        rows = [(sh["title"], sec, k) for sec in index.sections.values() if sec.kind == "show" and not sec.breaks
+                for k, sh in sec.shows.items()]
+        rows.sort(key=lambda r: r[0].lower())
+        return [Item(t, submenu=lambda sec=sec, k=k: seasons(sec, k)) for t, sec, k in rows] or \
+            [Item("(no shows)", enabled=False)]
+
+    def copy_from():
+        def take(o):
+            c["sources"] = json.loads(json.dumps(o.get("sources") or []))
+            changed()
+            app.toast(f"Content copied from {o.get('name') or 'that channel'}.")
+        return [Item(o.get("name") or "Library Channel", lambda o=o: take(o), close=False,
+                     help=f"{len(o.get('sources') or [])} sources. Takes the place of this channel's content.")
+                for o in cfg.library_channels if o is not c] or [Item("No other channels", enabled=False)]
+
+    def clear():
+        c["sources"] = []
+        changed()
+        app.top().back()
+
     def add_rows():
         rows = [Item("Add by Search", search, help="Type part of a title: the shows and movies that have it."),
                 Item("Add by Library", submenu=libraries, help="A whole library, or a slice of one."),
@@ -2695,7 +3043,17 @@ def library_source_items(app, cid):
                 Item("Add by Studio", submenu=lambda: values("", "studio"),
                      help="A studio or network from every library."),
                 Item("Add by Show", submenu=lambda: values("", "show")),
-                Item("Add by Rating", submenu=lambda: ratings(""))]
+                Item("Add by Season or Episode", submenu=shows,
+                     help="A show's seasons, or episodes picked one by one."),
+                Item("Add by Collection", submenu=lambda: values("", "collection"),
+                     help="A Plex collection: its shows and movies."),
+                Item("Add by Playlist", submenu=lambda: values("", "playlist"),
+                     help="A Plex video playlist: its episodes and movies."),
+                Item("Add by Rating", submenu=lambda: ratings("")),
+                Item("Copy From Another Channel", submenu=copy_from,
+                     help="Another library channel's content in place of this one's."),
+                Item("Clear Content", submenu=lambda: _confirm(app, "Take everything out", clear, "Keep it"),
+                     help="Every source taken out.")]
         if c in cfg.library_channels:
             rows.append(Item("Add by Group", submenu=groups,
                              help="A content group: change it and every channel with it follows."))

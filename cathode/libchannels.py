@@ -55,7 +55,11 @@ ORDERS = [("mix", "Mix"), ("random", "Random"), ("cyclic_shuffle", "Cyclic Shuff
           ("round_robin_cyclic", "Round Robin Cyclic"), ("playlist", "Playlist Order")]
 BLOCKS = {"block_shuffle": 2, "block_cyclic": 2, "marathon_shuffle": 12, "marathon_cyclic": 12}
 KINDS = [("all", "Everything"), ("genre", "Genre"), ("decade", "Decade"), ("studio", "Studio"),
-         ("rating", "Rating"), ("show", "Show"), ("title", "Title")]
+         ("rating", "Rating"), ("show", "Show"), ("title", "Title"), ("season", "Season"),
+         ("collection", "Collection"), ("playlist", "Playlist")]
+ITEM_KINDS = ("title", "season", "playlist")    # kinds that pick episodes, not whole shows
+WATCHED = [("all", "Everything"), ("unwatched", "Unwatched only"), ("watched", "Watched only")]
+EPISODE_START = [("first", "First episode"), ("random", "A random episode")]
 KIDS = ["TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "G"]
 MATURE = ["TV-MA", "R", "NC-17"]
 OFF = "-off-"                   # an off-the-air stretch among the days drawn up
@@ -69,7 +73,8 @@ CLIP_MAX = 600                  # break material: clips up to ten minutes
 FLOOR = 0.05                    # Mix, automatic weighting: no source under this share of the airtime
 # What a channel's days are drawn from: a change to any of them redraws today onward.
 SIG_KEYS = ("sources", "order", "block", "seed", "hours", "content", "words_out", "words_in", "weighting",
-            "min_seconds", "max_seconds", "skip_shorts", "skip_live", "premieres", "breaks")
+            "min_seconds", "max_seconds", "skip_shorts", "skip_live", "premieres", "breaks", "specials", "watched",
+            "max_movies", "mature_from", "marathons", "episode_start", "reset", "pins", "title_weights", "balance")
 NEW_DAYS = 14                   # a title added this recently is new (the guide says so; premieres pick from them)
 PREMIERE_HOUR = 20              # premieres air at the first programme from 8 PM
 PREMIERES = [("off", "Off"), ("prime", "8 PM, the newest arrival")]
@@ -255,21 +260,31 @@ def _match(src: dict, obj: dict) -> bool:
         return obj["rating"] in (val or [])
     if kind == "show":
         return obj.get("key") == val
-    if kind == "title":                 # picked titles (a movie, a clip) by rating key
+    if kind == "title":                 # picked titles (a movie, a clip, an episode) by rating key
         return obj.get("plex") in (val if isinstance(val, list) else [val])
+    if kind == "season":                # "show key:season number"
+        key, _, n = str(val).partition(":")
+        return obj.get("show_key") == key and str(obj.get("season")) == n
+    if kind in ("collection", "playlist"):
+        return (obj.get("key") or obj.get("plex")) in src.get("_keys", ())
     return True
 
 
 def _matching(src: dict, index):
     """The library's titles a source matches (long enough for a programme)."""
     only = src.get("only")
+    if src.get("kind") in ("collection", "playlist"):
+        src = dict(src, _keys=set(((getattr(index, src["kind"] + "s", None) or {}).get(src.get("value")) or {})
+                                  .get("keys") or ()))
     for sec in index.sections.values():
         if (src.get("section") and sec.key != src["section"]) or (
                 not src.get("section") and (sec.breaks or sec.hidden or (sec.kind == "music" and only != "music"))):
             continue
         if only and sec.kind != only:
             continue
-        if sec.kind in ("show", "music"):
+        if sec.kind in ("show", "music") and src.get("kind") in ITEM_KINDS:
+            yield from (i for i in sec.items if i["duration"] >= MIN_SECONDS and _match(src, i))
+        elif sec.kind in ("show", "music"):
             keys = {k for k, sh in sec.shows.items() if _match(src, sh)}
             yield from (i for i in sec.items if i["show_key"] in keys and i["duration"] >= MIN_SECONDS)
         elif src.get("kind") != "show":
@@ -343,13 +358,20 @@ def groups(c: dict, index) -> list:
     the first `k`) and weight `w`, for time slots and Mix."""
     srcs = c.get("sources") or []
     banned = {i["id"] for s in srcs if s.get("exclude") for i in _matching(s, index)}
+    seen_ = getattr(index, "watched", None) or set()
+    want = c.get("watched", "all")
+    if want != "all" and seen_:
+        banned |= {i["id"] for s in srcs if not s.get("exclude") for i in _matching(s, index)
+                   if (i["plex"] in seen_) != (want == "watched")}
+    no_specials = c.get("specials", True) is False
     out, seen = {}, set()
     for k, src in enumerate(srcs):
         if src.get("exclude"):
             continue
         w = max(0.0, float(src.get("weight", 1) or 0))
         for i in _matching(src, index):
-            if i["id"] in banned or not _rated(c, i["rating"]) or not _words(c, f"{i['title']} {i['name']}"):
+            if i["id"] in banned or not _rated(c, i["rating"]) or not _words(c, f"{i['title']} {i['name']}") or (
+                    no_specials and i["type"] == "episode" and not i["season"]):
                 continue
             gid = "s" + i["show_key"] if i["type"] in ("episode", "track") else "m" + i["plex"]
             g = out.get(gid)
@@ -434,8 +456,9 @@ class Rotor:
     dict that goes to disk with the schedule, so the rotation carries on."""
 
     def __init__(self, cid: str, order: str, block: int, groups_: list, state: dict, skip=(),
-                 weighting: str = "auto", sources=()):
+                 weighting: str = "auto", sources=(), start: str = "first", balance: str = "duration"):
         self.cid, self.order, self.all, self.state = cid, order, groups_, state
+        self.start, self.balance = start, balance
         self.skip = skip            # titles off the air (they couldn't play)
         self.block = max(1, int(block or BLOCKS.get(order, 1)))
         self.weighting = weighting
@@ -584,7 +607,10 @@ class Rotor:
         if pos is None:
             pos = self._ipos[g["id"]] = {i["id"]: n for n, i in enumerate(g["items"])}
         at = pos.get(ptr.get(g["id"]))
-        i = g["items"][0 if at is None else (at + 1) % len(g["items"])]
+        if at is None and self.start == "random":
+            i = g["items"][self._rng("start", g["id"]).randrange(len(g["items"]))]
+        else:
+            i = g["items"][0 if at is None else (at + 1) % len(g["items"])]
         ptr[g["id"]] = i["id"]
         return i
 
@@ -678,6 +704,10 @@ class Timeline:
         by_len = lambda pool: (sorted(pool, key=lambda i: i["duration"]), sorted(i["duration"] for i in pool))  # noqa: E731
         self._ads, self._bumps = by_len(self.ads), by_len(self.bumps)
         self.sig = signature(c)
+        self._then = _parts(self.groups)            # part one -> (part two, its group)
+        self._gids = frozenset(g["id"] for g in self.groups)
+        self._movies = frozenset(g["id"] for g in self.groups if g["items"][0]["type"] == "movie")
+        self._mature = frozenset(g["id"] for g in self.groups if g["items"][0]["rating"] in MATURE)
         self._slotted = any(s.get("airs") or s.get("season") for s in c.get("sources") or [] if not s.get("exclude"))
         self.days: list = []        # [{"day", "start", "state": as it began, "slots": [[start, id, seconds]]}]
         self.state: dict = {}       # as the last day ended
@@ -810,6 +840,44 @@ class Timeline:
         del done[:max(0, len(done) - 500)]
         return i
 
+    def _limit(self, elig, t: float, state: dict):
+        """A time slot's groups less the movies once the day has had its
+        most, and the grown-ups' titles before their hour."""
+        cut = set()
+        most = int(self.c.get("max_movies") or 0)
+        if most and state.get("movies", 0) >= most:
+            cut |= self._movies
+        late = self.c.get("mature_from")
+        if late is not None and on_air({"hours": [int(late), 6]}, t) is False:
+            cut |= self._mature
+        if not cut:
+            return elig
+        return frozenset((self._gids if elig is None else elig) - cut)
+
+    def _marathon(self, t: float, name: str, state: dict, rotor, elig) -> Optional[dict]:
+        """Random marathons: on about one day in three, from an hour picked at
+        random, four to eight episodes of one show back to back."""
+        m = state.get("mara")
+        if m and m.get("left", 0) > 0:
+            g = next((g for g in self.groups if g["id"] == m["g"]), None)
+            if g is not None and (elig is None or g["id"] in elig):
+                m["left"] -= 1
+                return rotor._next_in(g)
+            state.pop("mara", None)
+        if not self.c.get("marathons") or state.get("mara_day") == name:
+            return None
+        rnd = random.Random(f"{self.cid}:mara:{name}")
+        if rnd.random() > 0.35 or datetime.fromtimestamp(t).hour < rnd.randint(10, 19):
+            return None
+        state["mara_day"] = name
+        shows = [g for g in self.groups if len(g["items"]) >= 6 and (elig is None or g["id"] in elig)
+                 and g["items"][0]["type"] == "episode"]
+        if not shows:
+            return None
+        g = rnd.choice(shows)
+        state["mara"] = {"g": g["id"], "left": rnd.randint(4, 8) - 1}
+        return rotor._next_in(g)
+
     def _eligible(self, t: float):
         """The groups that may air at a moment: those of the sources whose
         time slot it is, if any's is; else those of the sources without a
@@ -890,9 +958,16 @@ class Timeline:
         if not start - 86400 <= t < end:
             t = start                   # a gap in the days (the box was off): from the day's top
         seed = self.c.get("seed", 0)                # (a refresh's: the days drawn differently)
+        if state.get("reset", 0) != self.c.get("reset", 0):
+            for k in ("ptr", "cycle", "pos", "slots", "mc", "played", "group", "left"):
+                state.pop(k, None)              # every show from its start again
+            state["reset"] = self.c.get("reset", 0)
+        if state.get("mday") != name:
+            state["mday"], state["movies"] = name, 0
         rotor = Rotor(f"{self.cid}:{seed}" if seed else self.cid, self.c.get("order", "cyclic_shuffle"),
                       self.c.get("block", 0), self.groups, state, self.dropped, self.c.get("weighting", "auto"),
-                      self.c.get("sources") or [])
+                      self.c.get("sources") or [], self.c.get("episode_start", "first"),
+                      self.c.get("balance", "duration"))
         slots = []
 
         def off(a, b):                  # off the air from a to b (one stretch with any just before)
@@ -906,10 +981,15 @@ class Timeline:
                 off(t, b)
                 t = b
                 continue
-            elig = self._eligible(t)
+            elig = self._limit(self._eligible(t), t, state)
             prem = self._premiere(t, state, elig)
             if prem is not None:
                 t = self._place(prem, t, slots, state, {"premiere": 1})
+                t = self._then_parts(prem, t, slots, state)
+                continue
+            mara = self._marathon(t, name, state, rotor, elig)
+            if mara is not None:
+                t = self._place(mara, t, slots, state, {"flag": "Marathon"})
                 continue
             i = rotor.next(elig) if elig is None or elig else None
             if i is None:
@@ -920,10 +1000,23 @@ class Timeline:
                 t = b
                 continue
             t = self._place(i, t, slots, state)
+            t = self._then_parts(i, t, slots, state)
         state["t"] = t
         self.days.append({"day": name, "start": start, "state": before, "slots": slots})
         self._dirty = True
         self.rev, self.by = self.rev + 1, _sync.ME
+
+    def _then_parts(self, i: dict, t: float, slots: list, state: dict) -> float:
+        """Part two (and three...) straight after part one."""
+        if i["type"] == "movie":
+            state["movies"] = state.get("movies", 0) + 1
+        while i["id"] in self._then and on_air(self.c, t):
+            i, gid = self._then[i["id"]]
+            if i["id"] in self.dropped:
+                break
+            state.setdefault("ptr", {})[gid] = i["id"]
+            t = self._place(i, t, slots, state)
+        return t
 
     def _cover(self, t: float):
         """Days drawn up until they reach past `t`; old ones let go."""
@@ -945,9 +1038,16 @@ class Timeline:
 
     # ── What the Player and the guide ask ─────────────────────────────────
 
-    def at(self, now: datetime) -> Optional[dict]:
-        """{"entry", "offset", "start", "stop"} on the air at `now` (UTC)."""
+    def at(self, now: datetime, _depth: int = 0) -> Optional[dict]:
+        """{"entry", "offset", "start", "stop"} on the air at `now` (UTC).
+        In a redirect's hours, the channel it carries then."""
         t = now.timestamp()
+        r = self.c.get("redirect") or {}
+        if r.get("to") and r["to"] != self.cid and _depth < 3 and r.get("from", 0) != r.get("until", 0) and on_air({"hours": [r.get("from", 0), r.get("until", 0)]}, t):
+            other = SCHEDULES.get(r["to"])
+            got = other.at(now, _depth + 1) if other is not None else None
+            if got:
+                return dict(got, redirect=r["to"])
         with self.lock:
             self._cover(t)
             n = _bisect(self._starts, t) - 1
@@ -1091,6 +1191,35 @@ class Timeline:
                 if k not in self.dropped:
                     self.drop(k)
         return True
+
+
+_PART = re.compile(r"^(.*?)[\s,:;-]*(?:\(\s*(?:part\s*)?(\d+|one|two|three|four|i{1,3}|iv)\s*\)|\bpart\s+(\d+|one|two|three|four|i{1,3}|iv))"
+                   r"\s*$", re.I)
+_NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "i": 1, "ii": 2, "iii": 3, "iv": 4}
+
+
+def _part(name: str):
+    """'The Best of Both Worlds, Part II' -> ('the best of both worlds', 2)."""
+    m = _PART.match(name or "")
+    if not m:
+        return None
+    n = (m.group(2) or m.group(3)).lower()
+    return m.group(1).strip().lower(), int(n) if n.isdigit() else _NUMS[n]
+
+
+def _parts(groups_: list) -> dict:
+    """Each multi-part episode's part one (two...) -> (the next part, its
+    group): neighbours in the show's order with one name and parts n, n+1."""
+    out = {}
+    for g in groups_:
+        its = g["items"]
+        for a, b in zip(its, its[1:]):
+            if a["type"] != "episode":
+                break
+            pa, pb = _part(a["name"]), _part(b["name"])
+            if pa and pb and pa[0] == pb[0] and pb[1] == pa[1] + 1:
+                out[a["id"]] = (b, g["id"])
+    return out
 
 
 def beats(theirs: dict, mine: dict) -> bool:
@@ -1545,8 +1674,18 @@ def options(index, section: str, kind: str) -> list:
     maker: genres and studios by how much they hold, decades and shows in
     order."""
     n, names = {}, {}
+    if kind in ("collection", "playlist"):
+        got = getattr(index, kind + "s", None) or {}
+        return sorted(((k, d["title"], len(d.get("keys") or [])) for k, d in got.items()
+                       if not section or d.get("section", section) == section), key=lambda r: r[1].lower())
     for sec in index.sections.values():
         if (section and sec.key != section) or (not section and (sec.breaks or sec.hidden or sec.kind == "music")):
+            continue
+        if kind == "season":
+            for i in sec.items if sec.kind == "show" else ():
+                v = f"{i['show_key']}:{i['season']}"
+                n[v] = n.get(v, 0) + 1
+                names[v] = f"{i['title']}: " + (f"Season {i['season']}" if i["season"] else "Specials")
             continue
         rows = sec.shows.values() if sec.kind in ("show", "music") else sec.items
         for r in rows:
@@ -1562,12 +1701,16 @@ def options(index, section: str, kind: str) -> list:
             elif kind == "title":
                 vals = [] if sec.kind in ("show", "music") else [r["plex"]]
                 names[r.get("plex")] = f"{r['title']} ({r['year']})" if r.get("year") else r["title"]
+
             else:
                 vals = []
             for v in vals:
                 n[v] = n.get(v, 0) + 1
     if kind == "decade":
         return [(v, f"{v}s", k) for v, k in sorted(n.items())]
+    if kind == "season":
+        return sorted(((v, names[v], k) for v, k in n.items()),
+                      key=lambda r: (r[1].rsplit(":", 1)[0].lower(), int(r[0].rsplit(":", 1)[1]) or 999))
     if kind in ("show", "title"):
         return sorted(((v, names[v], k) for v, k in n.items()), key=lambda r: r[1].lower())
     return [(v, str(v), k) for v, k in sorted(n.items(), key=lambda kv: (-kv[1], str(kv[0])))]
@@ -1587,8 +1730,16 @@ def source_label(index, src: dict) -> str:
     if kind == "title":
         vals = val if isinstance(val, list) else [val]
         if len(vals) == 1 and sec:
-            return next((i["title"] for i in sec.items if i["plex"] == vals[0]), "A title")
+            i = next((i for i in sec.items if i["plex"] == vals[0]), None)
+            return (f"{i['title']}: {i['name']}" if i.get("name") else i["title"]) if i else "A title"
         return f"{where}: {len(vals)} titles"
+    if kind == "season":
+        key, _, s = str(val).partition(":")
+        show = ((sec.shows.get(key) or {}).get("title") if sec else None) or "A show"
+        return f"{show}: " + (f"Season {s}" if s != "0" else "Specials")
+    if kind in ("collection", "playlist"):
+        d = (getattr(index, kind + "s", None) or {}).get(val) if index else None
+        return f"{kind.title()}: {(d or {}).get('title') or 'gone'}"
     if kind == "decade":
         return f"{where}: {val}s"
     if kind == "rating":

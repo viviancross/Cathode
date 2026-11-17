@@ -211,6 +211,33 @@ class PlexClient:
                         "stamp": f"{d.get('scannedAt', '')}:{d.get('contentChangedAt', '')}"})
         return out
 
+    def extras(self, metas) -> dict:
+        """What channels can take beyond the libraries' titles: collections
+        {key: {title, section, keys}} (their members' rating keys: shows or
+        movies), video playlists {key: {title, keys}} (items, in order), and
+        the rating keys of what's been watched."""
+        tok, out = self._server_token, {"collections": {}, "playlists": {}, "watched": []}
+        slim = "&excludeElements=Media,Genre,Role,Director,Writer,Country,Image,Guid,Collection,Label"
+        for s in metas:
+            if s.get("kind") not in ("movie", "show"):
+                continue
+            k = s["key"]
+            for m in _container(self._get(f"{self.server}/library/sections/{k}/collections", token=tok), "Metadata"):
+                rk = str(m.get("ratingKey"))
+                kids = _container(self._get(f"{self.server}/library/collections/{rk}/children?{slim[1:]}", token=tok),
+                                  "Metadata")
+                out["collections"][rk] = {"title": m.get("title", "?"), "section": k,
+                                          "keys": [str(x.get("ratingKey")) for x in kids]}
+            data = self._get(f"{self.server}/library/sections/{k}/all?type={4 if s['kind'] == 'show' else 1}"
+                             f"&unwatched=0{slim}", token=tok, timeout=60)
+            out["watched"] += [str(m.get("ratingKey")) for m in _container(data, "Metadata")]
+        for m in _container(self._get(f"{self.server}/playlists?playlistType=video", token=tok), "Metadata"):
+            rk = str(m.get("ratingKey"))
+            items = _container(self._get(f"{self.server}/playlists/{rk}/items?{slim[1:]}", token=tok, timeout=60),
+                               "Metadata")
+            out["playlists"][rk] = {"title": m.get("title", "?"), "keys": [str(x.get("ratingKey")) for x in items]}
+        return out
+
     def section_page(self, section_key: str, type_: int, start: int, size: int) -> tuple:
         """(rows, total) for one page of a library's items of a type (1 movie,
         2 show, 4 episode), as the server sends them, slimmed."""

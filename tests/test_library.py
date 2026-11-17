@@ -728,14 +728,15 @@ class TestMaker(Temp):
                     self.assertIsInstance(it.value(), str)
         self.assertEqual([it.label for it in pages[0]],
                          ["Add Custom Channel", "Live TV Sources", "Channel Packs", "Hidden Channels", "Content Groups",
-                          "Cathode's channels", "Starter Lineup", "1  Ch1", "101  Comedy"])
+                          "Cathode's channels", "Starter Lineup", "Find a Title", "Bulk Edit", "Sort By", "1  Ch1",
+                      "101  Comedy"])
         self.assertEqual((pages[0][-1].value(), pages[0][-2].value()), ("Library", "Playlist"))
         rows = {it.label: it for it in pages[1]}
         self.assertEqual(rows["Content"].value(), "14 titles, 6 h")    # (Alpha's special: after its seasons)
         self.assertEqual((rows["Sorting Method"].value(), rows["Block Size"].value()), ("Block Shuffle", "2 episodes"))
-        self.assertEqual([it.label for it in pages[1]][:8],
+        self.assertEqual([it.label for it in pages[1]][:9],
                          ["Channel Name", "Channel Number", "Favorite", "Channel Visible", "Channel Packs",
-                          "Custom Logo", "Screen Bug", "Audience"])                  # NostalgiaTV's order
+                          "Custom Logo", "Logo From a Web Address", "Screen Bug", "Audience"])                  # NostalgiaTV's order
         self.assertEqual(pages[2][0].label, "Everything: Comedy")
         genres = {it.label: it for it in pages[4]}
         self.assertEqual((genres["Comedy"].value(), genres["Action"].value()), ("Added", "1"))   # ticked in already
