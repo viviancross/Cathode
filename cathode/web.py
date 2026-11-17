@@ -80,7 +80,7 @@ def made(app) -> list:
     out = []
     for kind, lst in (("library", app.config.library_channels), ("video", app.config.video_channels)):
         for c in lst:
-            out.append({"kind": kind, "id": c["id"], "name": c.get("name") or "", "order": c.get("order") or
+            out.append({"kind": kind, "id": c["id"], "name": c.get("name") or "", "raw": c, "order": c.get("order") or
                         ("mix" if kind == "video" else "cyclic_shuffle"), "hours": c.get("hours"),
                         "breaks": bool(lc.breaks_of(c, app.library)),
                         "mid": lc.breaks_of(c, app.library).get("mid", "off"),
@@ -111,7 +111,176 @@ def act(app, body: dict) -> str:
     if what == "channel":
         app.post(_channel, app, str(body.get("id", "")), body)
         return "ok"
+    if what == "channel_json":
+        try:
+            new = json.loads(body.get("json") or "")
+        except ValueError as e:
+            return f"not JSON: {e}"
+        if not isinstance(new, dict):
+            return "not a channel"
+        app.post(_channel_json, app, str(body.get("id", "")), new)
+        return "ok"
+    if what == "import":
+        return import_doc(app, body.get("doc"), "replace" if body.get("mode") == "replace" else "merge")
     return "not understood"
+
+
+def _channel_json(app, cid, new):
+    """A channel's whole settings, as the browser's editor sent them (its id kept)."""
+    from . import libchannels as lc
+    for lst in (app.config.library_channels, app.config.video_channels):
+        for n, c in enumerate(lst):
+            if c["id"] == cid:
+                new["id"] = cid
+                lst[n] = new
+                app.config.save()
+                lc.place(app)
+                app.place_own_channels()
+                return
+
+
+# ── Export and import ────────────────────────────────────────────────────
+
+EXPORTED = ("library_channels", "video_channels", "content_groups", "channel_edits", "packs", "stream_channels",
+            "own_channels")
+
+
+def export(app) -> dict:
+    """The channels as a file another Cathode (or this one, later) takes in:
+    library and YouTube channels, content groups, the lineup's edits, packs,
+    stream channels. No tokens, no accounts."""
+    from . import __version__
+    cfg = app.config
+    return {"cathode": "channels", "v": 1, "version": __version__,
+            **{k: json.loads(json.dumps(getattr(cfg, k, None) or ({} if k in ("channel_edits", "own_channels") else [])))
+               for k in EXPORTED}}
+
+
+def import_doc(app, doc: dict, mode: str = "merge") -> str:
+    """Channels taken in from export(): "replace" swaps every list for the
+    file's; "merge" adds the file's, one with the same id (a group, a
+    channel) or name (a pack) taking the place of what's here."""
+    if not isinstance(doc, dict) or doc.get("cathode") != "channels":
+        return "not a Cathode channels file"
+    cfg = app.config
+    n = 0
+    for k in EXPORTED:
+        theirs = doc.get(k)
+        if theirs is None:
+            continue
+        mine = getattr(cfg, k)
+        if isinstance(mine, dict):
+            if not isinstance(theirs, dict):
+                continue
+            setattr(cfg, k, dict(theirs) if mode == "replace" else dict(mine, **theirs))
+            n += len(theirs)
+            continue
+        if not isinstance(theirs, list):
+            continue
+        if mode == "replace":
+            setattr(cfg, k, [x for x in theirs if isinstance(x, dict)])
+        else:
+            key = "name" if k == "packs" else "url" if k == "stream_channels" else "id"
+            have = {x.get(key): i for i, x in enumerate(mine)}
+            for x in theirs:
+                if not isinstance(x, dict):
+                    continue
+                if x.get(key) in have:
+                    mine[have[x[key]]] = x
+                else:
+                    mine.append(x)
+        n += len(theirs)
+    cfg.save()
+    from . import libchannels as lc
+    app.post(lambda: (app.place_own_channels(), lc.place(app), app.relineup()))
+    return f"{n} taken in ({mode})"
+
+
+# ── What's playing on the servers; the log ───────────────────────────────
+
+def sessions(app) -> list:
+    """Plex's dashboard: who is watching what, where, how far through."""
+    od = getattr(app, "ondemand", None)
+    if od is None or not getattr(od, "signed_in", False):
+        return []
+    c = od.client()
+    if not c.server:
+        c.discover_server(prefer=app.config.plex_server_id)
+    d = c._get(f"{c.server}/status/sessions", token=c.admin_token or c._server_token)
+    out = []
+    for m in (d.get("MediaContainer") or {}).get("Metadata") or []:
+        title = m.get("title", "")
+        if m.get("grandparentTitle"):
+            title = f"{m['grandparentTitle']}: {title}"
+        dur, off = int(m.get("duration") or 0), int(m.get("viewOffset") or 0)
+        out.append({"title": title, "user": (m.get("User") or {}).get("title", ""),
+                    "player": (m.get("Player") or {}).get("title") or (m.get("Player") or {}).get("product", ""),
+                    "state": (m.get("Player") or {}).get("state", ""), "progress": round(100 * off / dur) if dur else 0,
+                    "transcode": "TranscodeSession" in m})
+    return out
+
+
+def log_tail(lines: int = 400) -> str:
+    """The end of cathode.log, tokens and keys blanked."""
+    import os
+    import re
+    from . import paths
+    try:
+        with open(os.path.join(paths.cache_dir(), "cathode.log"), encoding="utf-8", errors="replace") as f:
+            text = "".join(f.readlines()[-lines:])
+    except OSError:
+        return "(no log yet)"
+    return re.sub(r"(?i)((?:x-plex-token|token|api_key|key)[=:]\s*)[A-Za-z0-9_\-]{8,}", r"\1<hidden>", text)
+
+
+# ── The API for other things (Home Assistant) ────────────────────────────
+
+def api_ok(app, headers, query) -> bool:
+    """A request to /api/v1 carries the API key (Authorization: Bearer, or
+    X-Api-Key, or ?key=); with no key set, that API is off."""
+    import hmac
+    want = getattr(app.config, "api_key", "")
+    if not want:
+        return False
+    got = (headers.get("Authorization") or "").removeprefix("Bearer ").strip() or headers.get("X-Api-Key") or \
+        (query.get("key") or [""])[0]
+    return hmac.compare_digest(str(got), want)
+
+
+def api_v1(app, path: str, query: dict):
+    """/api/v1/state | /now | /channels | /tune?number= | /key?k= | /volume?level= -> (code, body)."""
+    live = getattr(app, "live", None)
+    on = live.channel if live is not None else None
+    if path == "/api/v1/state":
+        cur = live.programs()[0] if live is not None and on is not None and live.programs() else None
+        return 200, {"channel": {"number": on.number, "name": on.name} if on else None,
+                     "programme": {"title": cur.title, "episode": cur.episode} if cur else None,
+                     "volume": app.video.volume, "muted": app.video.muted, "paused": bool(app.video.paused)}
+    if path == "/api/v1/channels":
+        return 200, [{"number": c.number, "name": c.name} for c in app.channels]
+    if path == "/api/v1/now":
+        return 200, state(app)["channels"]
+    if path == "/api/v1/tune":
+        try:
+            number = float((query.get("number") or [""])[0])
+        except ValueError:
+            return 400, {"error": "number"}
+        app.post(_tune, app, number)
+        return 200, {"ok": True}
+    if path == "/api/v1/key":
+        key = KEYS.get((query.get("k") or [""])[0])
+        if key is None:
+            return 400, {"error": "keys: " + ", ".join(KEYS)}
+        app.post(app.press, key)
+        return 200, {"ok": True}
+    if path == "/api/v1/volume":
+        try:
+            level = int((query.get("level") or [""])[0])
+        except ValueError:
+            return 400, {"error": "level"}
+        app.post(lambda: setattr(app.video, "volume", max(0, min(100, level))))
+        return 200, {"ok": True}
+    return 404, {"error": "not found"}
 
 
 def _tune(app, number):
@@ -177,7 +346,7 @@ def m3u(app, base: str) -> str:
         cid = vc.cid_of(ch)
         out.append(f'#EXTINF:-1 tvg-id="{escape(ch.epg_id)}" tvg-chno="{ch.number:g}" tvg-name="{escape(ch.name)}" '
                    f'group-title="Cathode",{ch.name}')
-        out.append(f"{base}/stream/{cid}")
+        out.append(f"{base}/live/{cid}.ts" if getattr(app.config, "broadcast_stream", False) else f"{base}/stream/{cid}")
     return "\n".join(out) + "\n"
 
 
@@ -208,7 +377,9 @@ def hdhr(app, base: str, what: str):
                 "BaseURL": base, "LineupURL": f"{base}/lineup.json", "TunerCount": 4}
     if what == "status":
         return {"ScanInProgress": 0, "ScanPossible": 0, "Source": "Cable", "SourceList": ["Cable"]}
-    return [{"GuideNumber": f"{ch.number:g}", "GuideName": ch.name, "URL": f"{base}/stream/{vc.cid_of(ch)}"}
+    live = getattr(app.config, "broadcast_stream", False)
+    return [{"GuideNumber": f"{ch.number:g}", "GuideName": ch.name,
+             "URL": f"{base}/live/{vc.cid_of(ch)}.ts" if live else f"{base}/stream/{vc.cid_of(ch)}"}
             for ch in timeline_channels(app)]
 
 
@@ -252,7 +423,8 @@ main{padding:16px;max-width:720px;margin:0 auto}.pad{display:grid;grid-template-
 </style></head><body>
 <header><b>Cathode</b><span id="on"></span><nav>
 <button data-tab="remote" class="on">Remote</button><button data-tab="channels">Channels</button>
-<button data-tab="lineup">Lineup</button><button data-tab="made">My channels</button></nav></header>
+<button data-tab="lineup">Lineup</button><button data-tab="made">My channels</button>
+<button data-tab="playing">Now playing</button><button data-tab="log">Log</button><button data-tab="admin">Admin</button></nav></header>
 <main>
 <section id="remote">
 <div class="row"><button data-k="guide">Guide</button><button data-k="menu">Menu</button><button data-k="info">Info</button><button data-k="options">Options</button></div>
@@ -265,6 +437,17 @@ main{padding:16px;max-width:720px;margin:0 auto}.pad{display:grid;grid-template-
 <section id="channels" hidden></section>
 <section id="lineup" hidden></section>
 <section id="made" hidden></section>
+<section id="playing" hidden><p>What your Plex server is playing, everywhere.</p><div id="sess"></div></section>
+<section id="log" hidden><button id="relog">Refresh</button><pre id="logtext" style="white-space:pre-wrap;font-size:12px"></pre></section>
+<section id="admin" hidden><h3>Export and import</h3><p><a href="/api/export" download="cathode-channels.json">Download your channels</a>
+(library and YouTube channels, groups, lineup edits, packs).</p>
+<p><input type="file" id="imp" accept=".json"> <select id="impmode"><option value="merge">Merge</option><option value="replace">Replace</option></select>
+<button id="impgo">Import</button> <span id="impsaid"></span></p>
+<h3>API</h3><p>Home Assistant and scripts: <code>/api/v1/state</code>, <code>/api/v1/tune?number=</code>, <code>/api/v1/key?k=</code>,
+<code>/api/v1/volume?level=</code>, <code>/api/v1/channels</code>, with the key from Settings &gt; Admin &gt; API key as
+<code>Authorization: Bearer &lt;key&gt;</code>.</p>
+<h3>Streams for other apps</h3><p><a href="/lineup.m3u">lineup.m3u</a> &middot; <a href="/xmltv.xml">xmltv.xml</a> &middot;
+with Continuous Streams on (Settings &gt; Admin), each channel continuous, breaks and all, at <code>/live/&lt;channel&gt;.ts</code>.</p></section>
 </main>
 <script>
 let S=null;const $=s=>document.querySelector(s);
@@ -289,7 +472,18 @@ function made(){if(!S)return;$('#made').innerHTML=(S.made||[]).map(c=>`<div clas
  document.querySelectorAll('.mc').forEach(d=>{const id=d.dataset.id,c=S.made.find(x=>x.id==id);
  d.querySelector('.o').onchange=e=>post({do:'channel',id,order:e.target.value});d.querySelector('.h').onchange=e=>post({do:'channel',id,hours:c.hourses[e.target.value][0]});
  d.querySelector('.b').onchange=e=>post({do:'channel',id,breaks:e.target.checked});d.querySelector('.m').onchange=e=>post({do:'channel',id,mid:e.target.value});});}
-let drawn=false;function load(){fetch('/api/state').then(r=>r.json()).then(s=>{S=s;draw();if(!drawn){lineup();made();drawn=true;}});}
+function sess(){fetch('/api/sessions').then(r=>r.json()).then(l=>{$('#sess').innerHTML=l.map(s=>`<div class="ch"><span class="t">${esc(s.title)}
+ <small>${esc(s.user)} on ${esc(s.player)} &middot; ${esc(s.state)} &middot; ${s.progress}%${s.transcode?' &middot; transcoding':''}</small></span></div>`).join('')||'<p>Nothing playing.</p>';});}
+function logs(){fetch('/api/log').then(r=>r.text()).then(t=>{$('#logtext').textContent=t;});}
+$('#relog').onclick=logs;
+$('#impgo').onclick=()=>{const f=$('#imp').files[0];if(!f)return;f.text().then(t=>{let d;try{d=JSON.parse(t)}catch(e){$('#impsaid').textContent='not JSON';return}
+ post({do:'import',doc:d,mode:$('#impmode').value}).then(r=>r.json()).then(j=>{$('#impsaid').textContent=j.said;load();});});};
+document.querySelector('[data-tab=playing]').addEventListener('click',sess);document.querySelector('[data-tab=log]').addEventListener('click',logs);
+function editors(){document.querySelectorAll('.mc').forEach(d=>{if(d.querySelector('textarea'))return;const c=S.made.find(x=>x.id==d.dataset.id);
+ const t=document.createElement('details');t.innerHTML=`<summary>Everything (JSON)</summary><textarea rows="14" style="width:100%;font:12px monospace">${esc(JSON.stringify(c.raw,null,1))}</textarea><button>Save</button> <span></span>`;
+ t.querySelector('button').onclick=()=>post({do:'channel_json',id:c.id,json:t.querySelector('textarea').value}).then(r=>r.json()).then(j=>{t.querySelector('span').textContent=j.said;});
+ d.appendChild(t);});}
+let drawn=false;function load(){fetch('/api/state').then(r=>r.json()).then(s=>{S=s;draw();if(!drawn){lineup();made();editors();drawn=true;}});}
 load();setInterval(load,20000);
 </script></body></html>
 """

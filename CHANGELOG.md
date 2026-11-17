@@ -83,6 +83,19 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
     the parent PIN is entered;
   - Pop-Up Trivia on a library channel: facts about the programme in
     bubbles (who directed, who plays whom, when it first aired).
+- **Admin and the web page:**
+  - Export Channels and Import Channels (merge or replace), in Settings >
+    Admin and on the phone page;
+  - a playlist's Number Offset, Auto-Refresh and Check Streams (which
+    channels answer);
+  - the phone page's Now Playing (what your Plex server is playing,
+    everywhere), its Log, and the full channel editor (every setting, as
+    JSON) under My channels;
+  - an API Key for Home Assistant and scripts: /api/v1/state, /tune, /key,
+    /volume, /channels;
+  - Continuous Streams (off unless turned on): each library channel as one
+    stream, programmes and breaks back to back, at /live/<channel>.ts;
+    lineup.m3u and the HDHomeRun tuner point there while it's on.
 - A day with a "we'll be right back" slate in it is no longer drawn up
   again at every start.
 

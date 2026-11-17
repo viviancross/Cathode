@@ -3,6 +3,7 @@ episode, collection and playlist; the watched filter; specials; parts back
 to back; movies a day; grown-ups' hours; marathons; redirects; starting
 over; the better copy of a duplicate; stream channels; the menus for them."""
 
+import json
 import os
 import sys
 import unittest
@@ -488,3 +489,65 @@ class TestSpecialChannels(Temp):
         app.live = None
         menus._lock(app, "u1")
         self.assertTrue(app.config.channel_edits["u1"]["locked"])
+
+
+class TestAdminWeb(unittest.TestCase):
+    def app(self):
+        from types import SimpleNamespace as NS
+        from cathode.config import Config
+        cfg = Config("")
+        cfg.library_channels = [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}]
+        return NS(config=cfg, post=lambda *a: None, channels=[], live=None,
+                  video=NS(volume=50, muted=False, paused=False), press=lambda k: None)
+
+    def test_export_import(self):
+        from cathode import web
+        app = self.app()
+        doc = web.export(app)
+        self.assertNotIn("plex_token", json.dumps(doc))
+        doc["library_channels"] = [{"id": "b", "name": "B2"}, {"id": "c", "name": "C"}]
+        self.assertIn("merge", web.import_doc(app, doc, "merge"))
+        self.assertEqual([c["name"] for c in app.config.library_channels], ["A", "B2", "C"])
+        web.import_doc(app, doc, "replace")
+        self.assertEqual([c["id"] for c in app.config.library_channels], ["b", "c"])
+        self.assertEqual(web.import_doc(app, {"x": 1}), "not a Cathode channels file")
+
+    def test_the_api_needs_its_key(self):
+        from cathode import web
+        app = self.app()
+        self.assertFalse(web.api_ok(app, {}, {}))                    # no key set: off
+        app.config.api_key = "s3cret"
+        self.assertFalse(web.api_ok(app, {"Authorization": "Bearer nope"}, {}))
+        self.assertTrue(web.api_ok(app, {"Authorization": "Bearer s3cret"}, {}))
+        self.assertTrue(web.api_ok(app, {}, {"key": ["s3cret"]}))
+        self.assertEqual(web.api_v1(app, "/api/v1/key", {"k": ["up"]})[0], 200)
+        self.assertEqual(web.api_v1(app, "/api/v1/tune", {"number": ["x"]})[0], 400)
+        self.assertEqual(web.api_v1(app, "/api/v1/nope", {})[0], 404)
+
+    def test_the_continuous_stream_is_off_unless_turned_on(self):
+        from cathode.config import Config
+        self.assertFalse(Config("").broadcast_stream)
+
+    def test_the_stream_sends_each_piece_in_turn(self):
+        import io
+        from unittest import mock
+        from cathode import broadcast
+        now = datetime.now(timezone.utc)
+        slots_ = [(now - timedelta(seconds=10), now + timedelta(seconds=20), {"plex": "1", "in": 0}),
+                  (now + timedelta(seconds=20), now + timedelta(seconds=25), {"id": "-brb-", "kind": "brb"}),
+                  (now + timedelta(seconds=25), now + timedelta(seconds=41), {"plex": "2", "in": 100})]
+
+        class TL:
+            cid = "x"
+
+            def at(self, when):
+                for s, st, e in slots_:
+                    if s <= when < st:
+                        return {"start": s, "stop": st, "entry": e, "offset": (when - s).total_seconds()}
+        got = []
+        with mock.patch.object(broadcast, "_session", lambda c, rk, at, sid: (rk, [k * 8.0 for k in range(40)])), \
+                mock.patch.object(broadcast, "_segment", lambda c, base, k: got.append((base, k)) or b"G" * 188), \
+                mock.patch.object(broadcast, "_stop", lambda c, sid: None):
+            out = io.BytesIO()
+            broadcast.stream(None, TL(), out, None)
+        self.assertEqual(got, [("1", 1), ("1", 2), ("1", 3), ("2", 12), ("2", 13), ("2", 14)])   # (the slate: nothing)

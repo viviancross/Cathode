@@ -195,6 +195,8 @@ class Config:
     start_on: str = "last"          # at start-up: last (channel) | first (channel) | ondemand | guide
     plex_version: str = "first"     # an item with several files: first | best | smallest
     visualizer: str = "off"         # a music channel's picture: off (the album card) | waves | bars | spectrum
+    broadcast_stream: bool = False  # /live/<channel>.ts: each library channel as one continuous stream (off unless turned on)
+    api_key: str = ""               # for /api/v1 (Home Assistant and the like): "" = that API off
     weather_radar: bool = True      # the weather channel's radar page (RainViewer over Esri's map)
     weather_alerts: bool = True     # NWS alerts (US): their page, and a crawl over live TV for severe ones
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own

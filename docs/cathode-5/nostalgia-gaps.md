@@ -75,13 +75,13 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] In-show pop-ups and trivia
 
 ## G. Admin web
-- [ ] Channel export / import (merge or replace)
-- [ ] Playlist auto-refresh, number offset, health
-- [ ] Dashboard of what's playing on the servers
-- [ ] Log viewer
-- [ ] Full channel editor in the browser
-- [ ] API keys and endpoints (Home Assistant)
-- [ ] Continuous broadcast stream with breaks for other apps
+- [x] Channel export / import (merge or replace)
+- [x] Playlist auto-refresh, number offset, health
+- [x] Dashboard of what's playing on the servers
+- [x] Log viewer
+- [x] Full channel editor in the browser
+- [x] API keys and endpoints (Home Assistant)
+- [x] Continuous broadcast stream with breaks for other apps (off by default: Admin > Continuous Streams)
 
 ## H. Platforms
 - [ ] On Demand: collections, recommended rows, trailers, theme songs

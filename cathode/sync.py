@@ -359,11 +359,17 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         from . import web
         s = self.sync
+        u = urllib.parse.urlparse(self.path)
+        if web.local(self.client_address[0]) and u.path.startswith("/api/v1/"):
+            if not web.api_ok(s.app, self.headers, urllib.parse.parse_qs(u.query)):
+                return self._send(b'{"error": "key"}', 401)
+            code, body = web.api_v1(s.app, u.path, urllib.parse.parse_qs(u.query))
+            return self._send(json.dumps(body).encode(), code)
         if not web.local(self.client_address[0]) or not s.app.config.web_remote or self.path != "/api/do":
             return self._send(b"{}", 403 if self.path == "/api/do" else 404)
         n = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(min(n, 8192)).decode("utf-8") or "{}")
+            body = json.loads(self.rfile.read(min(n, 4 << 20)).decode("utf-8") or "{}")
         except ValueError:
             return self._send(b"{}", 400)
         said = web.act(s.app, body if isinstance(body, dict) else {})
@@ -382,6 +388,17 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._type(web.PAGE.encode(), "text/html; charset=utf-8")
             if cfg.web_remote and u.path == "/api/state":
                 return self._send(json.dumps(web.state(s.app)).encode())
+            if cfg.web_remote and u.path == "/api/export":
+                return self._type(json.dumps(web.export(s.app), indent=1).encode(), "application/json")
+            if cfg.web_remote and u.path == "/api/sessions":
+                return self._send(json.dumps(web.sessions(s.app)).encode())
+            if cfg.web_remote and u.path == "/api/log":
+                return self._type(web.log_tail().encode(), "text/plain; charset=utf-8")
+            if u.path.startswith("/api/v1/"):
+                if not web.api_ok(s.app, self.headers, q):
+                    return self._send(b'{"error": "key"}', 401)
+                code, body = web.api_v1(s.app, u.path, q)
+                return self._send(json.dumps(body, default=str).encode(), code)
             if cfg.share_channels:
                 base = f"http://{self.headers.get('Host') or web.my_address() + ':' + str(s.port)}"
                 if u.path in ("/lineup.m3u", "/channels.m3u"):
@@ -392,6 +409,23 @@ class _Handler(BaseHTTPRequestHandler):
                                    ("/lineup_status.json", "status")):
                     if u.path == name:
                         return self._send(json.dumps(web.hdhr(s.app, base, what)).encode())
+                if u.path.startswith("/live/") and u.path.endswith(".ts"):
+                    if not getattr(cfg, "broadcast_stream", False):
+                        return self._send(b"{}", 404)
+                    from . import broadcast
+                    tl = lc.SCHEDULES.get(urllib.parse.unquote(u.path[len("/live/"):-3]))
+                    od = getattr(s.app, "ondemand", None)
+                    if tl is None or od is None or not od.signed_in:
+                        return self._send(b"{}", 404)
+                    client = od.client()
+                    if not client.server:
+                        client.discover_server(prefer=cfg.plex_server_id)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "video/mp2t")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    broadcast.stream(s.app, tl, self.wfile, client)
+                    return
                 if u.path.startswith("/stream/"):
                     to = web.stream_url(s.app, urllib.parse.unquote(u.path[len("/stream/"):]))
                     if not to:

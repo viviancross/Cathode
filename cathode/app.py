@@ -518,9 +518,21 @@ class App:
             self.post(self._playlist_loaded, url, epg_url, chans, err)
         threading.Thread(target=work, daemon=True).start()
 
+    def _playlist(self, url) -> dict:
+        return next((pl for pl in self.config.playlists if pl.get("playlist_url") == url), {})
+
+    def _offset(self, url, chans):
+        """A playlist's number offset (its page sets it): 1 becomes 101."""
+        k = self._playlist(url).get("offset") or 0
+        if k:
+            for ch in chans:
+                ch.number += k
+        return chans
+
     def _playlist_loaded(self, url, epg_url, chans, err):
         from .screens.live import LiveTV
         live = self.find(LiveTV)
+        chans = self._offset(url, chans)
         if err:
             print(f"[cathode] {err}")
             live.message = err
@@ -555,6 +567,9 @@ class App:
         minutes (as the site polls it: new channels, new versions), the
         rest with the guide."""
         from . import spelunkr
+        hours = self._playlist(self.config.playlist_url).get("refresh_hours")
+        if hours:
+            return float(hours) * 3600
         return spelunkr.REFRESH if self.config.playlist_url == spelunkr.URL else self.EPG_REFRESH
 
     def refresh_lineup(self):
@@ -568,6 +583,7 @@ class App:
         def work():
             try:
                 chans, _agent, _used = m3u.load_as(url, user_agent=self.agent)
+                chans = self._offset(url, chans)
             except Exception as e:
                 print(f"[cathode] lineup refresh failed: {e!r}")
                 chans = []

@@ -1287,6 +1287,22 @@ def admin_items(app):
              help="The library channels for other apps on your network: /lineup.m3u and /xmltv.xml at the Phone "
                   "remote's address, and as an HDHomeRun tuner there. Their players get the programme on the air "
                   "through Plex's transcoder; the address carries your Plex token."),
+        Item("Continuous Streams", lambda: web_toggle("broadcast_stream"),
+             value=lambda: "On" if cfg.broadcast_stream else "Off", adjust=lambda d: web_toggle("broadcast_stream"),
+             help="Off unless you turn it on. With sharing on too: each library channel as one stream for other "
+                  "apps (Plex's or Jellyfin's live TV, VLC), programmes and breaks back to back, transcoded to "
+                  "H.264 by Plex, at /live/<channel>.ts; the lineup.m3u and the HDHomeRun tuner point there."),
+        Item("Export Channels", lambda: _export_channels(app),
+             help="Your library and YouTube channels, groups, lineup edits and packs to a file in the settings "
+                  "folder's exports, for another Cathode (or Import later). No sign-ins."),
+        Item("Import Channels", submenu=lambda: import_items(app),
+             help="Channels from an export: merged in (one with the same id replaces this one's) or in place of "
+                  "all of yours."),
+        Item("API Key", lambda: _new_api_key(app), value=lambda: (cfg.api_key[:6] + "...") if cfg.api_key else "Off",
+             adjust=lambda d: _new_api_key(app, off=True) if cfg.api_key else _new_api_key(app),
+             help="For Home Assistant and scripts: /api/v1/state, /tune?number=, /key?k=, /volume?level= at the "
+                  "Phone remote's address, with the key as 'Authorization: Bearer'. SELECT makes a new key (it's "
+                  "shown in full once); LEFT/RIGHT turns the API off."),
         Item("Back up settings", lambda: _back_up(app),
              help="Every setting to a file in the settings folder's backups (one is also made by itself each week). "
                   "Your Plex, Jellyfin and Emby sign-ins aren't in it; playlist links are."),
@@ -1301,6 +1317,47 @@ def admin_items(app):
 
 
 # ── On Demand ─# ── On Demand ─────────────────────────────────────────────────────────────
+
+def _exports_dir():
+    d = os.path.join(os.path.dirname(_config_path()), "exports")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _export_channels(app):
+    from . import web
+    path = os.path.join(_exports_dir(), f"channels-{time.strftime('%Y%m%d-%H%M%S')}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(web.export(app), f, indent=1)
+    app.toast(f"Exported to {path}", 8.0)
+
+
+def import_items(app):
+    from . import web
+    files = sorted((n for n in os.listdir(_exports_dir()) if n.endswith(".json")), reverse=True)
+
+    def take(name, mode):
+        try:
+            with open(os.path.join(_exports_dir(), name), encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError) as e:
+            app.toast(f"That file didn't read: {e}")
+            return
+        app.toast(web.import_doc(app, doc, mode).capitalize() + ".", 6.0)
+    return [Item(n, submenu=lambda n=n: [Item("Merge into my channels", lambda: take(n, "merge"), close=True),
+                                        *_confirm(app, "Replace all my channels", lambda: take(n, "replace"),
+                                                  "Keep mine", close=True)])
+            for n in files] or [Item("No exports yet", enabled=False,
+                                     help=f"Put a channels file in {_exports_dir()}.")]
+
+
+def _new_api_key(app, off=False):
+    import secrets
+    cfg = app.config
+    cfg.api_key = "" if off else secrets.token_urlsafe(24)
+    cfg.save()
+    app.toast("The API is off." if off else f"API key: {cfg.api_key}", 4.0 if off else 20.0)
+
 
 def open_ondemand(app, recordings=False):
     from .screens.ondemand import OnDemandScreen, RECORDINGS, LIBRARIES
@@ -3947,8 +4004,67 @@ def playlist_items(app, pl):
         Item("Guide address", lambda: edit("epg_url", "Guide address", GUIDE_HINT),
              value=lambda: _short(pl.get("epg_url", ""))),
         Item("Rename it", rename),
+        Item("Number Offset", value=lambda: f"+{pl.get('offset', 0)}" if pl.get("offset") else "None",
+             adjust=lambda d: _pl_set(app, pl, "offset", max(0, min(9000, int(pl.get("offset") or 0) + d * 100))),
+             help="Added to every channel's number (channel 4 becomes 104), so two lineups can sit side by side."),
+        Item("Auto-Refresh", value=lambda: _label(REFRESHES, pl.get("refresh_hours") or 0),
+             adjust=lambda d: _pl_set(app, pl, "refresh_hours", _cycle(REFRESHES, pl.get("refresh_hours") or 0, d)),
+             help="How often the playlist is read again for channels added or gone (as the guide, by default)."),
+        Item("Check Streams", lambda: check_streams(app, pl),
+             help="Each channel's stream asked for, a few at a time: which answer and which are dead."),
         Item("Delete it", submenu=lambda: _confirm(app, "Delete it", delete)),
     ]
+
+
+REFRESHES = [(0, "With the guide"), (1, "Every hour"), (3, "Every 3 hours"), (6, "Every 6 hours"), (12, "Every 12 hours"),
+             (24, "Daily")]
+
+
+def _pl_set(app, pl, key, value):
+    pl[key] = value or None
+    if not value:
+        pl.pop(key, None)
+    app.config.save()
+    if key == "offset" and pl.get("playlist_url") == app.config.playlist_url:
+        app.switch_playlist(pl)
+
+
+def check_streams(app, pl):
+    """Playlist health: every channel's stream asked for its first bytes,
+    eight at a time; the dead ones listed."""
+    import threading
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+    from .net import SSL
+    url = pl.get("playlist_url", "")
+    app.toast("Checking the streams...", 4.0)
+
+    def ok(ch):
+        if not ch.url.lower().startswith(("http://", "https://")):
+            return True
+        try:
+            req = urllib.request.Request(ch.url, headers={"User-Agent": app.agent, "Range": "bytes=0-4095"})
+            with urllib.request.urlopen(req, timeout=8, context=SSL) as r:
+                return bool(r.read(1024))
+        except Exception:
+            return False
+
+    def work():
+        from . import playlist as m3u
+        try:
+            chans, _a, _u = m3u.load_as(url, user_agent=app.agent)
+        except Exception as e:
+            app.post(lambda: app.toast(f"The playlist didn't load: {e}", 6.0))
+            return
+        with ThreadPoolExecutor(8) as ex:
+            res = list(ex.map(ok, chans))
+        dead = [ch for ch, good in zip(chans, res) if not good]
+
+        def show():
+            app.push(Menu(app, "STREAM HEALTH", [Item(f"{len(chans) - len(dead)} of {len(chans)} answer", enabled=False)]
+                          + [Item(f"{ch.number:g}  {ch.name}", value=lambda: "Dead", enabled=False) for ch in dead]))
+        app.post(show)
+    threading.Thread(target=work, daemon=True).start()
 
 
 def _reopen(app, items):
