@@ -56,15 +56,15 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Bezels (TV frame round the picture)
 
 ## E. Playback
-- [ ] Mark channel viewing watched in Plex; now-playing status
-- [ ] Start the programme from its beginning
-- [ ] Pause and skip back on library channels
-- [ ] Are you still watching auto sign-off
-- [ ] Forced / foreign-audio subtitles, default languages
-- [ ] Audio normalization and passthrough
-- [ ] Custom mpv.conf
-- [ ] Start on first channel or On Demand
-- [ ] Preferred version (of an item with several files)
+- [x] Mark channel viewing watched in Plex; now-playing status
+- [x] Start the programme from its beginning
+- [x] Pause and skip back on library channels
+- [x] Are you still watching auto sign-off
+- [x] Forced / foreign-audio subtitles, default languages
+- [x] Audio normalization and passthrough
+- [x] Custom mpv.conf
+- [x] Start on first channel or On Demand
+- [x] Preferred version (of an item with several files)
 
 ## F. Special channels
 - [ ] Weather radar, hazards, more forecast screens

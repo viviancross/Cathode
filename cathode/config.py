@@ -185,6 +185,15 @@ class Config:
     decorations: bool = True        # snow, leaves, hearts... on the guide in their season
     tune_screen: str = "box"        # what covers a channel change: box (the skin's) | static | black | blue | logo
     bezel: str = "off"              # a television's frame round the picture: off | wood | black | silver
+    plex_scrobble: bool = True      # library channels: what's watched marked in Plex, and playing shown in its dashboard
+    still_watching: int = 4         # hours with no button pressed before "Are you still watching?" (0: never)
+    sub_mode: str = ""              # "" (the Subtitles switch), "forced": only forced / foreign-dialogue tracks
+    sub_lang: str = ""              # preferred subtitle languages, "en,es" ("" = any)
+    audio_lang: str = ""            # preferred audio languages, "en,ja" ("" = the file's default)
+    audio_normalize: bool = False   # loud and quiet evened out (dynaudnorm)
+    audio_passthrough: bool = False # AC3/DTS... to the receiver as they are
+    start_on: str = "last"          # at start-up: last (channel) | first (channel) | ondemand | guide
+    plex_version: str = "first"     # an item with several files: first | best | smallest
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
     # logos and bugs go in the settings folder's logos folder (logos.py).
     bug_on: bool = True

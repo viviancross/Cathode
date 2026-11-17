@@ -89,10 +89,22 @@ class LiveTV(Screen):
         self._watch_since = time.time()
         self._watch_title = ""
 
+    def wake(self):
+        """Back from an auto sign-off: the channel tuned again."""
+        if self.message.startswith("Signed off"):
+            self.message = ""
+            self.tune(self.idx)
+
     def channels_loaded(self):
         self.message = ""
-        want = self.app.start_channel or self.app.config.last_channel
+        cfg = self.app.config
+        start_on = getattr(cfg, "start_on", "last")
+        want = self.app.start_channel or (cfg.last_channel if start_on != "first" else None)
         self.tune(self.number_to_idx(want) if want else 0)
+        if not self.app.start_channel and start_on in ("ondemand", "guide") and not getattr(self, "_started", False):
+            self._started = True
+            from .. import menus
+            self.app.after(0.5, lambda: self.app.press(R.GUIDE) if start_on == "guide" else menus.open_ondemand(self.app))
 
     def number_to_idx(self, number: int) -> int:
         for i, ch in enumerate(self.channels):
@@ -493,7 +505,9 @@ class LiveTV(Screen):
                 self._paused_at = now
                 v.paused = True
         elif a in (R.REW, R.REPLAY):
-            step = min(10.0 if a == R.REW else 7.0, v.buffered_behind() or 10.0)
+            step = 10.0 if a == R.REW else 7.0
+            if not self.library_title():                # a stream: only as far back as the buffer holds
+                step = min(step, v.buffered_behind() or 10.0)
             v.seek(-step)
             self.behind += step
         elif a == R.FF:
@@ -509,6 +523,28 @@ class LiveTV(Screen):
                 return
         self.trick_until = now + self.TRICK_IDLE
         self._trick_tick()
+
+    def library_title(self):
+        """The library title playing on a library channel (its entry), or None."""
+        cur = (getattr(self.vplayer, "cur", None) or {}) if self.vplayer else {}
+        e = cur.get("entry") or {}
+        return e if e.get("plex") and e.get("kind", "show") == "show" else None
+
+    def start_over(self) -> bool:
+        """The programme on a library channel from its beginning (its part's,
+        when breaks split it): the channel runs that far behind until it's
+        over, then rejoins the schedule."""
+        e = self.library_title()
+        if e is None:
+            return False
+        cur = self.vplayer.cur
+        back = (datetime.now(timezone.utc) - cur["start"]).total_seconds() - self.behind_now()
+        if back > 1:
+            self.app.video.seek(-back)
+            self.behind += back
+        self.trick_until = time.monotonic() + self.TRICK_IDLE
+        self._trick_tick()
+        return True
 
     def behind_now(self) -> float:
         paused = self.app.video.paused

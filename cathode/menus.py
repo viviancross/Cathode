@@ -1050,6 +1050,11 @@ def preference_items(app):
         Item("Start-up", submenu=lambda: startup_items(app),
              help="The start-up screen, the screensaver, the box's sounds, the update check."),
         Item("Audio output", submenu=lambda: audio_items(app)),
+        Item("Sound", submenu=lambda: sound_items(app),
+             help="Audio languages, evening loud and quiet out, passthrough to a receiver."),
+        Item("Playback", submenu=lambda: playback_items(app),
+             help="What starts at start-up, the sign-off after hours untouched, Plex's watched marks, which "
+                  "copy plays."),
         Item("Remote control", submenu=lambda: remote_items(app)),
         Item("Weather", submenu=lambda: weather_items(app)),
         Item("YouTube", submenu=lambda: youtube_items(app), help="Video quality, and what plays YouTube."),
@@ -1095,6 +1100,79 @@ def on_screen_items(app):
         Item("Bezel", value=lambda: _label(overlays.BEZELS, cfg.bezel), adjust=cyc("bezel", overlays.BEZELS),
              help="A television's frame round the screen: wood grain, black plastic or silver."),
     ]
+
+
+def _langs(app, attr, prompt):
+    cfg = app.config
+
+    def got(text):
+        if text is None:
+            return
+        setattr(cfg, attr, ",".join(w.strip().lower() for w in text.split(",") if w.strip()))
+        cfg.save()
+        app.video.apply_audio(cfg)
+    app.push(Keyboard(app, f"{prompt} (commas between; empty = any)", got, initial=getattr(cfg, attr)))
+
+
+def sound_items(app):
+    cfg = app.config
+
+    def flip(attr):
+        def f(d=1):
+            setattr(cfg, attr, not getattr(cfg, attr))
+            cfg.save()
+            app.video.apply_audio(cfg)
+        return f
+    return [
+        Item("Audio Languages", lambda: _langs(app, "audio_lang", "Audio languages"),
+             value=lambda: cfg.audio_lang or "The file's own",
+             help="The soundtrack to pick first where a title has several: en, ja..."),
+        Item("Normalize Volume", value=lambda: "On" if cfg.audio_normalize else "Off", adjust=flip("audio_normalize"),
+             help="Loud commercials and quiet films evened out, as a TV's auto volume did."),
+        Item("Passthrough", value=lambda: "On" if cfg.audio_passthrough else "Off", adjust=flip("audio_passthrough"),
+             help="Dolby Digital and DTS sent to a receiver as they are, for it to decode."),
+    ]
+
+
+START_ON = [("last", "The last channel"), ("first", "The first channel"), ("guide", "The guide"),
+            ("ondemand", "On Demand")]
+STILL = [(0, "Never")] + [(h, f"After {h} hours") for h in (2, 3, 4, 6, 8)]
+VERSIONS = [("first", "The first"), ("best", "The best picture"), ("smallest", "The smallest")]
+DEDUPE = [("plex", "From Plex first"), ("quality", "The better copy")]
+
+
+def playback_items(app):
+    cfg = app.config
+
+    def cyc(attr, options):
+        def f(d=1):
+            setattr(cfg, attr, _cycle(options, getattr(cfg, attr), d))
+            cfg.save()
+        return f
+    return [
+        Item("Start On", value=lambda: _label(START_ON, cfg.start_on), adjust=cyc("start_on", START_ON),
+             help="What Cathode opens on."),
+        Item("Are You Still Watching", value=lambda: _label(STILL, cfg.still_watching),
+             adjust=cyc("still_watching", STILL),
+             help="After this long with no button pressed, it asks; no answer in a minute and it signs off "
+                  "(the picture stops, and the Plex session with it)."),
+        Item("Mark Watched in Plex", value=lambda: "On" if cfg.plex_scrobble else "Off",
+             adjust=lambda d: (setattr(cfg, "plex_scrobble", not cfg.plex_scrobble), cfg.save()),
+             help="A library channel's programme seen nine tenths through is marked watched in Plex, and what's "
+                  "playing shows in Plex's dashboard."),
+        Item("Preferred Version", value=lambda: _label(VERSIONS, cfg.plex_version), adjust=cyc("plex_version", VERSIONS),
+             help="A title with several files in Plex: the first, the best picture, or the smallest."),
+        Item("Duplicates", value=lambda: _label(DEDUPE, cfg.dedupe_prefer), adjust=cyc("dedupe_prefer", DEDUPE),
+             help="A title in two places (Plex and Jellyfin, two libraries): which copy channels play. Read "
+                  "again with the library."),
+        Item("mpv.conf", enabled=False, value=lambda: os.path.join(os.path.dirname(_config_path()), "mpv.conf"),
+             help="Any mpv option Cathode has no setting for: put it in this file (key=value lines) and restart."),
+    ]
+
+
+def _config_path():
+    from .paths import config_path
+    return config_path()
 
 
 def startup_items(app):
@@ -1390,6 +1468,12 @@ def subtitle_items(app):
         style("Color", "sub_color", SUB_COLORS, lambda c: v.sub_style(color=c)),
         style("Background", "sub_back", SUB_BACKS, lambda b: v.sub_style(back=b)),
         style("Font", "sub_font", fonts, lambda f: v.sub_style(font=f or "sans-serif")),
+        Item("Forced Only", value=lambda: "On" if cfg.sub_mode == "forced" else "Off",
+             adjust=lambda d: (setattr(cfg, "sub_mode", "" if cfg.sub_mode == "forced" else "forced"), cfg.save(),
+                               v.apply_subtitles(cfg.subtitles, cfg.sub_mode)),
+             help="Only the subtitles a film forces on (its foreign-language dialogue), whatever the switch above."),
+        Item("Languages", lambda: _langs(app, "sub_lang", "Subtitle languages"), value=lambda: cfg.sub_lang or "Any",
+             help="The languages to pick first, in order, by their two-letter codes: en, es, fr..."),
     ]
     from .screens.playback import Playback
     pb = app.find(Playback)
@@ -1478,6 +1562,9 @@ def open_options(app):
              adjust=app.cycle_format),
         Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles(),
              help="Step through this channel's subtitles."),
+        *([Item("Start From the Beginning", live.start_over, close=True,
+                help="This programme from its start; the channel rejoins the schedule after it. PAUSE and REW "
+                     "work on library channels too.")] if live.library_title() else []),
         Item("Edit this channel", lambda: open_channel_editor(app, ch), close=True, enabled=ch is not None,
              help="Its name, number, logo and bug; for a library or YouTube channel what it plays and how."),
     ]))

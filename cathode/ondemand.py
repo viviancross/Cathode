@@ -150,6 +150,7 @@ class OnDemand:
                 self._client = plex.PlexClient(cfg.plex_client_id,
                                                token=cfg.plex_user_token or cfg.plex_token,
                                                admin_token=cfg.plex_token, version=__version__)
+            self._client.version_pref = getattr(self.app.config, "plex_version", "first")
             return self._client
 
     def reset(self):

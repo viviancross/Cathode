@@ -32,4 +32,7 @@ class Screensaver(Screen):
 
     def handle(self, a: str) -> bool:
         self.app.pop(self)
+        live = getattr(self.app, "live", None)
+        if live is not None and hasattr(live, "wake"):
+            live.wake()
         return True

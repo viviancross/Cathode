@@ -313,10 +313,28 @@ class Video:
                             "external": bool(t.get("external")), "file": t.get("external-filename", "")})
         return out
 
-    def apply_subtitles(self, on: bool):
+    def apply_audio(self, cfg):
+        """The sound settings: preferred languages, loudness evened out,
+        passthrough of AC3 and DTS to a receiver."""
+        try:
+            self.player["alang"] = getattr(cfg, "audio_lang", "") or ""
+            self.player["slang"] = getattr(cfg, "sub_lang", "") or ""
+            self.player["af"] = "lavfi=[dynaudnorm=f=250:g=15]" if getattr(cfg, "audio_normalize", False) else ""
+            self.player["audio-spdif"] = "ac3,eac3,dts,dts-hd,truehd" if getattr(cfg, "audio_passthrough", False) else ""
+        except Exception as e:
+            print(f"[video] sound settings: {e!r}")
+
+    def apply_subtitles(self, on: bool, mode: str = ""):
         """The subtitles setting, on a stream that just started: on keeps a
-        chosen track or picks the first; off shows none."""
+        chosen track or picks the first; off shows none. "forced": only a
+        forced track (the foreign dialogue in a film), whatever the switch."""
         subs = self.tracks("sub")
+        if mode == "forced":
+            forced = [t for t in self.prop("track-list") or [] if t.get("type") == "sub" and t.get("forced")]
+            want = forced[0]["id"] if forced else None
+            if want != next((t["id"] for t in subs if t["selected"]), None):
+                self.set_track("sub", want)
+            return
         if not on:
             if any(t["selected"] for t in subs):
                 self.set_track("sub", None)

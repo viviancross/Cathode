@@ -291,7 +291,36 @@ class App:
         if (self.config.screensaver and idle >= self.IDLE_SCREENSAVER and static
                 and not isinstance(top, (Boot, Screensaver)) and top.name != "playback"):
             self.push(Screensaver(self))
+        self._still_watching(idle)
         self.after(10.0, self._idle_check)
+
+    def _still_watching(self, idle: float):
+        """NostalgiaTV's auto sign-off: after the hours set with no button
+        pressed, "Are you still watching?"; no answer in a minute and the
+        picture stops (the Plex session with it) for the screensaver."""
+        hours = int(getattr(self.config, "still_watching", 0) or 0)
+        live = getattr(self, "live", None)
+        if not hours or live is None or self.top() is not live or live.phase != "watch" or idle < hours * 3600:
+            return
+        from .screens.menu import Item, Menu
+        from .screens.screensaver import Screensaver
+        asked = self.last_input
+
+        def off():
+            if self.last_input != asked or self.top() is live:
+                return
+            while len(self.screens) > 1 and self.top() is not live:
+                self.pop(self.top())
+            if live.vplayer:
+                live.vplayer.stop()
+            self.video.stop()
+            live.phase = "idle"
+            live.message = "Signed off. Press any button to watch again."
+            self.push(Screensaver(self))
+        self.push(Menu(self, "ARE YOU STILL WATCHING?", [
+            Item("Yes, keep watching", lambda: None, close=True),
+            Item("Sign off now", off, close=True)]))
+        self.after(60.0, off)
 
     def cycle_format(self, d: int = 1):
         """The FORMAT key: the next picture format, on every screen, kept
@@ -730,7 +759,7 @@ class App:
             self.toast("The audio output went away, so sound is on the default one.", 6.0)
             return
         if kind in ("video_started", "tracks_changed"):
-            self.video.apply_subtitles(self.config.subtitles)
+            self.video.apply_subtitles(self.config.subtitles, getattr(self.config, "sub_mode", ""))
         for s in reversed(self.screens):
             s.on_video(kind, **data)
         self.invalidate()
@@ -758,11 +787,12 @@ class App:
         self.skin = load_skin(self.config.skin, self)
         self.video = Video(self._video_post, self.gfx.renderer,
                            user_agent=self.config.user_agent, volume=self.config.volume,
-                           extra=_mpv_extra(self.config.mpv_extra_args),
+                           extra=dict(_mpv_conf(), **_mpv_extra(self.config.mpv_extra_args)),
                            log_path=os.path.join(paths.cache_dir(), "mpv.log") if self.config.mpv_verbose_log else "")
         self.video.attach_gl(self.gfx.get_proc_address)
         self.video.muted = self.config.muted
         self.video.set_format(self.config.picture_format)
+        self.video.apply_audio(self.config)
         cfg = self.config
         self.video.sub_style(font=cfg.sub_font or None, size=cfg.sub_size, color=cfg.sub_color, back=cfg.sub_back)
         if self.config.audio_device:
@@ -1047,6 +1077,22 @@ def load_error_text(e: Exception, what: str = "playlist") -> str:
     if isinstance(e, ValueError):
         return f"that isn't a {what} address"
     return f"it isn't a {what} Cathode can read"
+
+
+def _mpv_conf() -> dict:
+    """mpv.conf in the settings folder (key=value lines, # comments), for
+    whatever mpv option Cathode has no setting for."""
+    out = {}
+    try:
+        with open(os.path.join(os.path.dirname(paths.config_path()), "mpv.conf"), encoding="utf-8") as f:
+            for line in f:
+                line = line.split("#", 1)[0].strip()
+                if line and not line.startswith("["):
+                    k, _, v = line.lstrip("-").partition("=")
+                    out[k.strip().replace("-", "_")] = v.strip() or "yes"
+    except OSError:
+        pass
+    return out
 
 
 def _mpv_extra(args) -> dict:

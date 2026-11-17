@@ -49,6 +49,7 @@ class PlexClient:
         self.version = version
         self.server = ""          # chosen server base URL
         self._server_token = ""   # token to use against that server
+        self.version_pref = "first"     # an item with several files: first | best | smallest
 
     # ── HTTP ──────────────────────────────────────────────────────────────
 
@@ -255,17 +256,18 @@ class PlexClient:
         starts at its top)."""
         data = self._get(f"{self.server}/library/metadata/{rating_key}", token=self._server_token)
         items = _container(data, "Metadata")
-        part = _first_part(items[0]) if items else None
+        k, media = _pick_media(items[0], self.version_pref) if items else (0, {})
+        part = next((p for p in media.get("Part") or [] if p.get("key")), None)
         if not part:
             raise PlexError("No playable file for this item.")
-        media = (items[0].get("Media") or [{}])[0]
         if not media.get("container") and not part.get("Stream"):
             # The server never managed to read it (a download cut short, a damaged file).
             raise PlexError("The server can't read this file.")
         kbps = _QUALITY.get(quality)
         headers = {"X-Plex-Token": self._server_token}
         if kbps:
-            return {"video": self._transcode_url(rating_key, kbps, int(at)), "headers": headers, "base": float(int(at))}
+            return {"video": self._transcode_url(rating_key, kbps, int(at), k), "headers": headers,
+                    "base": float(int(at))}
         return {"video": f"{self.server}{part['key']}", "headers": headers, "base": 0.0}
 
     def is_other_videos(self, section: dict) -> bool:
@@ -678,7 +680,7 @@ class PlexClient:
         except Exception:
             pass
 
-    def _transcode_url(self, rating_key: str, kbps: int, offset: int) -> str:
+    def _transcode_url(self, rating_key: str, kbps: int, offset: int, media: int = 0) -> str:
         # Token is sent as a header (see play_info), not in the query string.
         q = urllib.parse.urlencode({
             "path": f"/library/metadata/{rating_key}",
@@ -686,7 +688,7 @@ class PlexClient:
             "directPlay": "0", "directStream": "1",
             "maxVideoBitrate": str(kbps), "videoQuality": "100",
             "offset": str(offset),
-            "mediaIndex": "0", "partIndex": "0",
+            "mediaIndex": str(media), "partIndex": "0",
             "X-Plex-Client-Identifier": self.client_id,
             "X-Plex-Session-Identifier": self.client_id,
         })
@@ -729,6 +731,25 @@ def _search_metadata(data: dict) -> list:
         if isinstance(m, dict):
             out.append(m)
     return out
+
+
+def _pick_media(meta: dict, pref: str = "first") -> tuple:
+    """(index, Media) of an item with several files: the first, the best
+    picture (then bitrate), or the smallest."""
+    ms = [m for m in meta.get("Media") or [] if any(p.get("key") for p in m.get("Part") or [])]
+    if not ms:
+        return 0, {}
+    rank = {"4k": 4, "2160": 4, "1080": 3, "720": 2, "576": 1, "480": 1, "sd": 1}
+
+    def score(m):
+        return (rank.get(str(m.get("videoResolution") or "").lower(), 0), int(m.get("bitrate") or 0))
+    if pref == "best":
+        m = max(ms, key=score)
+    elif pref == "smallest":
+        m = min(ms, key=lambda m: sum(int(p.get("size") or 0) for p in m.get("Part") or []) or score(m)[1])
+    else:
+        m = ms[0]
+    return (meta.get("Media") or []).index(m), m
 
 
 def _first_part(meta: dict) -> Optional[dict]:

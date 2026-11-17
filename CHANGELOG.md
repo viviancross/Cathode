@@ -56,6 +56,19 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
   - the Tuning Screen: the box's own, static, black, blue or the logo;
   - Seasonal Decorations on the guide (snow, leaves, hearts, stars);
   - a Bezel: a television's wood, black or silver frame round it all.
+- **Playback:**
+  - library channels mark what you watch in Plex (nine tenths seen) and
+    show in Plex's dashboard as playing;
+  - PAUSE and REW work on library channels: the programme runs on as far
+    behind, then the channel rejoins its schedule; Options > Start From the
+    Beginning;
+  - Are You Still Watching: after hours untouched (4 by default) it asks,
+    and with no answer in a minute signs off;
+  - subtitles: Forced Only, preferred Languages; Sound: audio languages,
+    Normalize Volume, Passthrough;
+  - mpv.conf beside the settings for any other mpv option;
+  - Start On the last channel, the first, the guide or On Demand;
+  - Preferred Version of a title with several files; Duplicates.
 - A day with a "we'll be right back" slate in it is no longer drawn up
   again at every start.
 

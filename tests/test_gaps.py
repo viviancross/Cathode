@@ -400,3 +400,49 @@ class TestOnScreen(unittest.TestCase):
         self.assertFalse(overlays.bug_shown(skin, live))
         cfg.bug_mode = "always"
         self.assertTrue(overlays.bug_shown(skin, live))
+
+
+class TestPlayback(unittest.TestCase):
+    def test_preferred_version(self):
+        from cathode.plex import _pick_media
+        meta = {"Media": [{"videoResolution": "720", "bitrate": 3000, "Part": [{"key": "/a", "size": 9}]},
+                          {"videoResolution": "1080", "bitrate": 8000, "Part": [{"key": "/b", "size": 20}]},
+                          {"videoResolution": "sd", "bitrate": 900, "Part": [{"key": "/c", "size": 3}]}]}
+        self.assertEqual(_pick_media(meta, "first")[0], 0)
+        self.assertEqual(_pick_media(meta, "best")[0], 1)
+        self.assertEqual(_pick_media(meta, "smallest")[0], 2)
+
+    def test_mpv_conf(self):
+        import tempfile
+        from unittest import mock
+        from cathode import app as appmod
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "mpv.conf"), "w") as f:
+            f.write("# mine\nvolume-max=150\n--deband\n[profile]\n")
+        with mock.patch("cathode.paths.config_path", lambda: os.path.join(d, "config.json")):
+            self.assertEqual(appmod._mpv_conf(), {"volume_max": "150", "deband": "yes"})
+
+    def test_watched_in_plex_after_most_of_it(self):
+        from types import SimpleNamespace as NS
+        from cathode import videochannels as vc
+        calls = []
+        client = NS(report_timeline=lambda *a: calls.append(("t",) + a), scrobble=lambda rk: calls.append(("s", rk)))
+        app = NS(config=NS(plex_scrobble=True), ondemand=NS(signed_in=True, client=lambda: client),
+                 video=NS(paused=False), after=lambda *a: None)
+        p = vc.Player.__new__(vc.Player)
+        p.app, p._watch = app, None
+        e = {"plex": "55", "kind": "show", "duration": 1000.0}
+        import threading as th
+        real = th.Thread
+        th.Thread = lambda target, daemon=True: NS(start=target)
+        try:
+            p._watching(e, 0.0)
+            p._watch["t0"] -= 950                      # 950 s of it seen
+            p._watching({"kind": "ad"}, 0.0)           # a break
+            p._watching(dict(e, **{"in": 950.0}), 0.0)
+            p._watch["t0"] -= 40
+            p._watch_done(p._watch)
+        finally:
+            th.Thread = real
+        self.assertIn(("s", "55"), calls)
+        self.assertTrue(any(c[0] == "t" and c[-1] == "stopped" for c in calls))

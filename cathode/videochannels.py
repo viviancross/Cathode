@@ -564,6 +564,7 @@ class Player:
         live = self.live
         self.app.video.stop()
         e = cur["entry"]
+        self._watch_hold()
         kind = e.get("style") or e["kind"]
         if kind == "brb" and e["duration"] < 5:
             kind = "gap"                    # a few seconds between clips: black, not a flash of the slate
@@ -642,7 +643,10 @@ class Player:
             self._timer = self.app.after(left - CARD_SECONDS, lambda: gen == self.gen and self._card_again())
         # The next is due at the stop whatever this one has left (a late start
         # ends late): its tail goes, so the lateness doesn't pile up video by video.
-        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self.start(cont=True))
+        # (Paused or rewound, it runs on as far behind; the one after rejoins the schedule.)
+        self._waited = 0.0
+        self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self._due(gen))
+        self._watching(e, offset)
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
@@ -654,6 +658,86 @@ class Player:
             delay = max(0.5, left - AHEAD)
             self.app.after(delay, lambda: gen == self.gen and threading.Thread(
                 target=lambda: _resolve_quietly(nxt["entry"]["id"]), daemon=True).start())
+
+    def _due(self, gen):
+        """The programme's slot is over: on to the next, unless it was paused
+        or rewound (live.behind_now()), when it plays out first."""
+        try:
+            behind = self.live.behind_now()
+        except AttributeError:
+            behind = 0.0
+        extra = behind - self._waited
+        if extra > 1 and (self.cur or {}).get("entry", {}).get("plex"):
+            self._waited = behind
+            self._stop_timer = self.app.after(extra, lambda: gen == self.gen and self._due(gen))
+            return
+        self._waited = 0.0
+        if behind:
+            self.live.behind, self.live._paused_at = 0.0, time.monotonic()
+            if getattr(self.app.video, "paused", False):
+                self.app.video.paused = False
+        self.start(cont=True)
+
+    # ── Plex: what's playing, and what's been watched ─────────────────────
+
+    def _watching(self, e, offset):
+        """A library title: Plex told it's playing (its dashboard shows it)
+        every half minute, and marked watched once most of it has been seen
+        here. The parts of a title split by breaks count as one."""
+        w = getattr(self, "_watch", None)
+        if e.get("kind", "show") != "show":
+            self._watch_hold()                  # a break: what was seen so far kept, the clock stopped
+            return
+        rk = e.get("plex")
+        if w and w["rk"] != rk:
+            self._watch_done(w)
+            w = None
+        if not rk or not getattr(self.app.config, "plex_scrobble", True) or not str(rk).isdigit():
+            self._watch = None
+            return
+        if w is None:
+            w = self._watch = {"rk": rk, "dur": float(e.get("duration") or 0), "seen": 0.0, "pos": 0.0, "done": False}
+        w["from"], w["t0"] = offset + e.get("in", 0), time.monotonic()
+        self._report(w, "playing")
+
+    # ponytail: the position is reckoned from the clock, a pause counted as watched; mpv's time-pos if that matters
+    def _watch_pos(self, w) -> float:
+        if w.get("t0") is None:
+            return w["from"]
+        return min(w["dur"], w["from"] + time.monotonic() - w["t0"])
+
+    def _watch_hold(self):
+        w = getattr(self, "_watch", None)
+        if w and w.get("t0") is not None:
+            pos = self._watch_pos(w)
+            w["seen"] += pos - w["from"]
+            w["from"], w["t0"] = pos, None
+
+    def _report(self, w, state):
+        if w is not self._watch and state == "playing":
+            return
+        od = getattr(self.app, "ondemand", None)
+        if od is None or not getattr(od, "signed_in", False):
+            return
+        pos = self._watch_pos(w)
+        if state == "playing" and (getattr(self.app.video, "paused", False) or w.get("t0") is None):
+            state = "paused"
+        threading.Thread(target=lambda: od.client().report_timeline(w["rk"], pos, w["dur"], state), daemon=True).start()
+        if state != "stopped":
+            self.app.after(30.0, lambda: self._report(w, "playing"))
+
+    def _watch_done(self, w):
+        """Left: Plex told it stopped; marked watched when nine tenths of it
+        went by here (from wherever it was joined, the rest seen too)."""
+        self._watch_hold()
+        pos = w["from"]
+        self._report(w, "stopped")
+        od = getattr(self.app, "ondemand", None)
+        if (not w["done"] and w["dur"] and pos >= 0.9 * w["dur"] and w["seen"] >= 0.5 * w["dur"]
+                and od is not None and getattr(od, "signed_in", False)):
+            w["done"] = True
+            threading.Thread(target=lambda: od.client().scrobble(w["rk"]), daemon=True).start()
+            print(f"[library] watched: {w['rk']}")
 
     def _upnext(self, cur) -> Optional[dict]:
         """The next programme (past breaks and the slate): its title and when
@@ -742,6 +826,9 @@ class Player:
 
     def stop(self):
         self.gen += 1
+        if getattr(self, "_watch", None):
+            self._watch_done(self._watch)
+            self._watch = None
         self.app.cancel(self._timer)
         self.app.cancel(self._stop_timer)
         self.live.card = None
