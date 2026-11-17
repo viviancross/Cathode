@@ -22,7 +22,8 @@ def open_main(app):
     app.push(Menu(app, "MAIN MENU", main_items(app)))
 
 
-WELCOME_HELP = "Have your Tunarr or ErsatzTV address ready (or your provider's M3U link)."
+WELCOME_HELP = "Your Plex library as cable TV, or an M3U list."
+PLAYLIST_HELP = "Your Tunarr or ErsatzTV address, or your provider's M3U link."
 
 # Beside each box's name on the wizard's first page, and what it is.
 LOOK_NOTES = {"classic": "Retro CRT", "indirect": "1997, 4:3", "indirect_hd": "2007, HD",
@@ -101,7 +102,8 @@ DESCRIPTIONS.update({
     "Who's watching": "Switch to another Plex Home user.",
     "Unlink Plex account": "Sign this Cathode out of Plex.",
     # The welcome
-    "Set up your channels": "Type in the channel list link (M3U) your IPTV provider gave you.",
+    "From my Plex library": "Cathode makes its channels from your Plex library.",
+    "From Tunarr, ErsatzTV or an M3U link": "Type in your server's address or the link your provider gave you.",
     "Server": "The Tunarr or ErsatzTV this playlist comes from.",
     "Playlist address": "Where the channels come from: your provider's M3U link, or a file.",
     "Guide address": "Where the listings come from: your provider's XMLTV link. Optional.",
@@ -109,34 +111,128 @@ DESCRIPTIONS.update({
 })
 
 
+def first_run(app) -> bool:
+    """Nothing set up yet: the setup never finished, no playlist of yours,
+    no library channels."""
+    from . import lineup as lu, spelunkr
+    cfg = app.config
+    return not cfg.setup_done and cfg.playlist_url in ("", lu.NONE) and not cfg.library_channels \
+        and not [p for p in cfg.playlists if not spelunkr.is_shipped(p)]
+
+
 def open_welcome(app):
-    """First run, as a wizard: 1/3 the box, 2/3 its colours, 3/3 the
-    channels. The look pages redraw in whatever the cursor is on; BACK steps
-    back a page. Once the look is chosen, coming back here (MENU with no
-    channels yet) goes straight to the channels."""
+    """First run, as a wizard: 1/4 the box, 2/4 its colours, 3/4 the
+    channels (made from your Plex library, linked right there, or a
+    playlist), 4/4 your area for the weather; then, for Plex, the library
+    read and the lineup it made, ready to watch. The look pages redraw in
+    whatever the cursor is on; BACK steps back a page. Once the look is
+    chosen, coming back here goes straight to the channels."""
+    from . import libchannels as lc, lineup as lu
     from .skins import skin_classes
+    cfg = app.config
     m = Menu(app, "", [])
+
+    def finish(first=None):
+        cfg.setup_done = True
+        cfg.save()
+        m.close()
+        if first is not None and app.live is not None:
+            app.live.tune(first)
+
+    def area(then):
+        def zip_code():
+            def got(text):
+                if text is not None:
+                    cfg.weather_zip = text.strip()
+                    cfg.save()
+                    if getattr(app, "weather", None) is not None:
+                        app.weather.configure(cfg.weather_zip, cfg.weather_units, cfg.weather_country)
+                    app.invalidate()
+            app.push(Keyboard(app, "ZIP or postal code", got, initial=cfg.weather_zip))
+        m.open("4/4 YOUR AREA", [
+            Item("ZIP or postal code", zip_code, value=lambda: cfg.weather_zip or "Not set",
+                 help="For the Weather channel and the forecast in the guide. You can skip it; Settings > "
+                      "System > Weather has it, and the country."),
+            Item("Continue", then)])
+
+    def build():
+        state = {"done": False}
+
+        def progress():
+            p = getattr(app, "library_progress", None)
+            if p:
+                title, d, t = p
+                return f"{title}: {d:,} of {t:,}" if t else title
+            return "Asking your server..."
+
+        def built(index, err=""):
+            if state["done"]:
+                return
+            state["done"] = True
+            if not cfg.library_channels and index is not None:      # (a starter lineup taken out before)
+                lc.add_starter(cfg, index)
+                cfg.save()
+                lc.place(app)
+            n = len(cfg.library_channels)
+            if not n:
+                m.open("NO CHANNELS YET", [
+                    Item("Try again", lambda: (m.back(), build())),
+                    Item("Use a playlist instead", setup),
+                    Item("Finish for now", finish)])
+                m.items[0].help = f"Cathode couldn't make channels from your Plex library. {err}".strip()
+                return
+            first = next((i for i, ch in enumerate(app.channels or []) if lc.is_library(ch)), None)
+            libs = [ch for ch in app.channels or [] if lc.is_library(ch)]
+            names = ", ".join(ch.name for ch in libs[:8])
+            at = f" from {libs[0].number:g}" if libs else ""
+            m.open("YOUR LINEUP IS READY", [
+                Item("Start watching", lambda: finish(first), value=lambda: f"{n} channels",
+                     help=f"{n} channels{at}: {names}{'...' if n > 8 else ''}. Change them under Settings > "
+                          "Channels > Library Channels.")])
+
+        def tick():
+            if state["done"] or m not in app.screens:
+                return
+            if not app.ondemand.signed_in:
+                built(None, "Plex isn't linked.")
+                return
+            if not getattr(app, "library_loading", False) and cfg.library_channels and \
+                    getattr(app, "library", None) is not None:
+                built(app.library)          # (a read already under way finished first)
+                return
+            app.invalidate()
+            app.after(0.5, tick)
+        m.open("BUILDING YOUR CHANNELS", [
+            Item("Reading your Plex library", enabled=False, value=progress,
+                 help="Networks with the shows they aired, HBO from your movies, 24/7s. A big library takes a "
+                      "minute or two the first time; after that it's quick.")])
+        lc.start(app, done=built)
+        app.after(0.5, tick)
+
+    def plex():
+        if cfg.playlist_url != lu.NONE:
+            cfg.playlist_url, cfg.epg_url = lu.NONE, ""
+            cfg.save()
+            app.switch_playlist({"playlist_url": lu.NONE, "epg_url": ""})
+        if app.ondemand.signed_in:
+            area(build)
+            return
+        from .screens.ondemand import OnDemandScreen
+        s = OnDemandScreen(app)                 # the plex.tv/link code, who's watching, the server
+        s.then = lambda: area(build)
+        app.push(s)
 
     def setup():
         def added(entry):
-            app.config.setup_done = True
-            app.config.save()
             from .screens.boot import Boot
-            app.push(Boot(app))
+            area(lambda: (finish(), app.push(Boot(app))))
         add_playlist(app, on_added=added, first_run=True)
 
     def channels(title, extra=()):
-        def plex_only():
-            from . import lineup as lu
-            app.config.playlist_url, app.config.epg_url = lu.NONE, ""
-            app.config.setup_done = True
-            app.config.save()
-            app.switch_playlist({"playlist_url": lu.NONE, "epg_url": ""})
-            m.close()
-            app.toast("Link Plex under On Demand: Cathode makes channels from your library.", 8.0)
-        return [title, [Item("Set up your channels", setup),
-                        Item("No playlist: my Plex library", plex_only,
-                             help="No Tunarr or M3U: channels made from your Plex library and YouTube."), *extra,
+        return [title, [Item("From my Plex library", plex, value=lambda: "Recommended",
+                             help="Cathode makes a cable lineup from your library: networks with the shows they "
+                                  "aired and their bumpers, HBO from your movies, 24/7s. You'll link Plex next."),
+                        Item("From Tunarr, ErsatzTV or an M3U link", setup, help=PLAYLIST_HELP), *extra,
                         Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart,
                                                                           "Keep going", close=True)),
                         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit,
@@ -153,11 +249,11 @@ def open_welcome(app):
 
         def chosen(k):
             show(k)
-            app.config.look_chosen = True
-            app.config.save()
-            m.pages.append(channels("3/3 YOUR CHANNELS"))
+            cfg.look_chosen = True
+            cfg.save()
+            m.pages.append(channels("3/4 YOUR CHANNELS"))
         keys = [k for k, _ in choices]
-        m.open("2/3 CHOOSE COLORS", [Item(label, lambda k=k: chosen(k), preview=lambda k=k: show(k),
+        m.open("2/4 CHOOSE COLORS", [Item(label, lambda k=k: chosen(k), preview=lambda k=k: show(k),
                                           help="The box's own colors, as it looked. Recommended." if k == "native"
                                           else "Cathode 3's colors, kept readable on this box.")
                                      for k, label in choices])
@@ -165,10 +261,10 @@ def open_welcome(app):
 
     def restart():
         m.close()
-        app.config.look_chosen = False
+        cfg.look_chosen = False
         open_welcome(app)
 
-    if app.config.look_chosen:
+    if cfg.look_chosen:
         m.pages = [channels("WELCOME TO CATHODE", [Item("Change the look", restart)])]
     else:
         names = list(skin_classes())
@@ -177,8 +273,8 @@ def open_welcome(app):
                  for k, cls in skin_classes().items()]
 
         def choose_box():
-            m.open("1/3 CHOOSE YOUR BOX", boxes)
-            m.cursor = names.index(app.config.skin) if app.config.skin in names else 0
+            m.open("1/4 CHOOSE YOUR BOX", boxes)
+            m.cursor = names.index(cfg.skin) if cfg.skin in names else 0
         m.pages = [["WELCOME TO CATHODE", [Item("Start", choose_box, help=WELCOME_HELP)], 0]]
     app.push(m)
 
@@ -2466,7 +2562,7 @@ def add_playlist(app, on_added=None, first_run=False):
     """The playlist's address, an optional guide address, then its name. On
     first run they're the wizard's step 3, numbered 3a to 3c."""
     entry = {"name": "My Channels"}
-    step = (lambda n, s: f"3/3  {s}") if first_run else (lambda n, s: s)
+    step = (lambda n, s: f"3/4  {s}") if first_run else (lambda n, s: s)
 
     def ask_url(initial=""):
         kb = Keyboard(app, step("a", "Server address"), got_address, initial=initial, url=True, hint=SERVER_HINT)
@@ -2716,8 +2812,7 @@ def weather_items(app):
 def handles_menu_button(app, action) -> bool:
     """MENU from anywhere that doesn't use it opens the main menu."""
     if action == R.MENU and not isinstance(app.top(), (Menu, Keyboard)):
-        from . import spelunkr
-        if not app.config.playlist_url and not [p for p in app.config.playlists if not spelunkr.is_shipped(p)]:
+        if first_run(app):
             open_welcome(app)           # nothing set up yet (Spelunkr comes with it): straight to setting it up
         else:
             open_main(app)

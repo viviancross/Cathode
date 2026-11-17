@@ -34,6 +34,7 @@ class OnDemandScreen(Screen):
         self.auth_code = self.auth_link = ""
         self._pin_id = None
         self._poll = None
+        self.then = None              # the first-run setup's next step, once Plex is linked and answers
         self.od.listeners.append(self._recordings_changed)
         if start == RECORDINGS:
             self.open_recordings(root=True)
@@ -194,6 +195,11 @@ class OnDemandScreen(Screen):
             if servers is not None:
                 cfg.plex_servers = servers
             cfg.save()
+            if self.then:                   # linked for the setup: back to it
+                then, self.then = self.then, None
+                self.app.pop(self)
+                then()
+                return
             hidden = set(cfg.plex_hidden_libraries)
             rows = [_row("search", "SEARCH..."), _row("ondeck", "CONTINUE WATCHING"),
                     _row("watchlist", "MY WATCHLIST")]

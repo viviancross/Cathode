@@ -288,20 +288,22 @@ class TestFirstRun(unittest.TestCase):
         menus.open_welcome(app)
         m = app.top()
         self.assertEqual(m.title, "WELCOME TO CATHODE")         # what's coming, and what to have ready
+        self.assertIn("Plex library", m.items[0].help)
         self.assertIn("M3U", m.items[0].help)
         m.handle(R.SELECT)
-        self.assertEqual(m.title, "1/3 CHOOSE YOUR BOX")
+        self.assertEqual(m.title, "1/4 CHOOSE YOUR BOX")
         m.handle(R.DOWN)
         self.assertEqual(skins, ["indirect"])           # the page redrew as that box
         m.handle(R.SELECT)
-        self.assertEqual(m.title, "2/3 CHOOSE COLORS")
+        self.assertEqual(m.title, "2/4 CHOOSE COLORS")
         m.handle(R.DOWN)
         self.assertEqual(app.skin.theme, "blue")       # recoloured on the way past
         m.handle(R.SELECT)
-        self.assertEqual(m.title, "3/3 YOUR CHANNELS")
+        self.assertEqual(m.title, "3/4 YOUR CHANNELS")
+        self.assertEqual(m.items[0].label, "From my Plex library")         # first, and recommended
         self.assertTrue(app.config.look_chosen)
         m.handle(R.BACK)
-        self.assertEqual(m.title, "2/3 CHOOSE COLORS")
+        self.assertEqual(m.title, "2/4 CHOOSE COLORS")
         app2 = SetupApp()
         app2.config.look_chosen = True
         menus.open_welcome(app2)
@@ -341,10 +343,76 @@ class TestFirstRun(unittest.TestCase):
         self.assertIn("Name", prompts[2])
         self.assertEqual(app.switched[0]["name"], "Sports")
 
+    def plex_app(self, signed_in):
+        from types import SimpleNamespace as NS
+        app = SetupApp(url="cathode://none")                     # a new Cathode: its own channels
+        app.ondemand = NS(signed_in=signed_in)
+        app.live = NS(tune=lambda i: setattr(app, "tuned", i))
+        app.after = lambda t, fn: None
+        app.save = None
+        app.channels = []
+        app.toast = lambda *a: None
+        return app
+
+    def test_the_plex_library_path_links_reads_and_hands_over_the_lineup(self):
+        from unittest import mock
+        from cathode import menus, libchannels as lc
+        from cathode.playlist import Channel
+        app = self.plex_app(signed_in=True)
+        app.config.look_chosen = True
+        self.assertTrue(menus.first_run(app))
+        menus.open_welcome(app)
+        m = app.top()
+        made = []
+
+        def start(app, done=None, fresh=False):         # the library read: a lineup made, placed, then done
+            app.config.library_channels = [lc.new_channel("ABC", starter=True), lc.new_channel("CBS", starter=True)]
+            app.channels = [Channel(number=1, name="TV Guide", url="cathode://tvguide", epg_id="g")] + [
+                Channel(number=101 + k, name=c["name"], url=f"cathode://video/lib.{c['id']}", epg_id=c["id"])
+                for k, c in enumerate(app.config.library_channels)]
+            made.append(True)
+            done(object(), "")
+        with mock.patch.object(lc, "start", start):
+            m.activate(0)                                       # From my Plex library: linked already
+            self.assertEqual(m.title, "4/4 YOUR AREA")
+            m.activate(0)
+            self._type(app, "90210")
+            self.assertEqual(app.config.weather_zip, "90210")
+            m.activate(1)                                       # Continue
+        self.assertEqual(made, [True])
+        self.assertEqual(m.title, "YOUR LINEUP IS READY")
+        for page in m.pages:                                    # every row's value reads (as the skins draw them)
+            for it in page[1]:
+                self.assertIsInstance(it.value() if it.value else "", str)
+        self.assertIn("2 channels from 101: ABC, CBS", m.items[0].help)
+        m.activate(0)                                           # Start watching: on the first network
+        self.assertEqual(app.tuned, 1)
+        self.assertTrue(app.config.setup_done)
+        self.assertFalse(menus.first_run(app))
+
+    def test_plex_not_linked_yet_signs_in_first(self):
+        from cathode import menus
+        from cathode.screens import ondemand
+        app = self.plex_app(signed_in=False)
+        app.config.look_chosen = True
+        menus.open_welcome(app)
+        m = app.top()
+        pushed = []
+        old = ondemand.OnDemandScreen
+        ondemand.OnDemandScreen = lambda app: pushed.append(type("S", (), {"then": None})()) or pushed[-1]
+        try:
+            m.activate(0)
+        finally:
+            ondemand.OnDemandScreen = old
+        self.assertIs(app.top(), pushed[0])                     # the plex.tv/link code first
+        app.pop(pushed[0])
+        pushed[0].then()                                        # linked: on to the area
+        self.assertEqual(m.title, "4/4 YOUR AREA")
+
     def test_menu_reopens_the_welcome_until_channels_are_set_up(self):
         from cathode import menus
         with mock.patch.object(menus, "open_welcome") as welcome, mock.patch.object(menus, "open_main") as main:
-            app = SetupApp()
+            app = SetupApp(url="cathode://none")                 # (Cathode's own channels: the default now)
             app.push(object())
             menus.handles_menu_button(app, R.MENU)
             app2 = SetupApp(playlists=[{"name": "Mine", "playlist_url": "x"}], url="x")

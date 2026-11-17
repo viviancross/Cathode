@@ -27,7 +27,7 @@ def _video_prefill():
 class Config:
     _path: str = field(default="", repr=False)
 
-    playlist_url: str = ""
+    playlist_url: str = "cathode://none"   # lineup.NONE: Cathode's own channels, the Plex library's among them
     epg_url: str = ""
     last_channel: int = 1
 

@@ -2,6 +2,15 @@
 
 ## 5.1
 
+- **A new first-run setup, Plex first.** Welcome, your box, its colours,
+  then your channels: "From my Plex library" (recommended) links your Plex
+  account right there (the plex.tv/link code, who's watching), asks for
+  your ZIP code for the weather (optional), reads your library with its
+  progress on screen, and shows the lineup it made ("44 channels from 101:
+  ABC, CBS, NBC...") before you start watching on the first network. A
+  Tunarr, ErsatzTV or M3U playlist is the other choice, as before.
+- **A new Cathode starts on its own channels**: the ones it makes from your
+  Plex library (and the TV Guide and Weather channels), no playlist needed.
 - **The starter lineup is network replicas.** Cathode knows which networks
   aired which shows, and makes ABC, CBS, NBC, Fox and The WB; Nickelodeon,
   Nicktoons, Nick GAS, Noggin, Cartoon Network, Boomerang, Disney Channel,

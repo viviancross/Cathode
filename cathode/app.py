@@ -783,16 +783,19 @@ class App:
                                                f"The old file was kept as {self.config._load_error}.", 10.0))
         for t, button in self.script:
             self.after(t, partial(self.press, button))
+        from . import menus
+        first = menus.first_run(self)
         if self.config.playlist_url:
             # The saved playlist's own agent, if its provider wanted a player's.
             self.use_agent(next((pl.get("user_agent", "") for pl in self.config.playlists
                                  if pl.get("playlist_url") == self.config.playlist_url), ""))
             self.load_playlist(self.config.playlist_url, self.config.epg_url)
-            if self.config.boot_sequence and getattr(self.skin, "boot_scenes", None) != []:
+            if self.config.boot_sequence and getattr(self.skin, "boot_scenes", None) != [] and not first:
                 from .screens.boot import Boot
                 self.push(Boot(self))
+            if first:                       # a new Cathode: the setup, over Cathode's own channels
+                menus.open_welcome(self)
         else:
-            from . import menus
             self.live.message = f"No channels yet. Press {self.press_hint(R.MENU)} to set up your channels."
             menus.open_welcome(self)
 
