@@ -74,7 +74,33 @@ FLOOR = 0.05                    # Mix, automatic weighting: no source under this
 # What a channel's days are drawn from: a change to any of them redraws today onward.
 SIG_KEYS = ("sources", "order", "block", "seed", "hours", "content", "words_out", "words_in", "weighting",
             "min_seconds", "max_seconds", "skip_shorts", "skip_live", "premieres", "breaks", "specials", "watched",
-            "max_movies", "mature_from", "marathons", "episode_start", "reset", "pins", "title_weights", "balance")
+            "max_movies", "mature_from", "marathons", "episode_start", "reset", "pins", "title_weights", "balance",
+            "premiere_times", "premiere_days", "premiere_count", "premiere_preroll", "seasonal")
+# Holidays (the seasonal cycler): words in an episode's or a movie's title, and when they're in season
+# (from month/day to month/day). A title with one airs only then, and more often then.
+HOLIDAYS = [
+    ("Halloween", re.compile(r"halloween|treehouse of horror|trick.or.treat", re.I), (10, 1), (10, 31)),
+    ("Thanksgiving", re.compile(r"thanksgiving", re.I), (11, 1), (11, 30)),
+    ("Christmas", re.compile(r"christmas|x-?mas\b|santa\b|grinch|hanukkah|chanukah|kwanzaa|nutcracker", re.I),
+     (11, 25), (12, 31)),
+    ("New Year", re.compile(r"new year'?s", re.I), (12, 26), (1, 2)),
+    ("Valentine's Day", re.compile(r"valentine", re.I), (2, 1), (2, 14)),
+    ("St. Patrick's Day", re.compile(r"st\.? patrick|leprechaun", re.I), (3, 10), (3, 17)),
+    ("Easter", re.compile(r"easter\b", re.I), (3, 20), (4, 25)),
+    ("Fourth of July", re.compile(r"fourth of july|4th of july", re.I), (6, 28), (7, 4)),
+]
+
+
+def holiday(i: dict) -> str:
+    """The holiday a title is for ("" for none), by its words."""
+    text = f"{i.get('name') or ''} {i['title'] if i.get('type') != 'episode' else ''}"
+    return next((h for h, rx, _a, _b in HOLIDAYS if rx.search(text)), "")
+
+
+def in_season(h: str, lt: datetime) -> bool:
+    _n, _rx, a, b = next(x for x in HOLIDAYS if x[0] == h)
+    md = (lt.month, lt.day)
+    return a <= md <= b if a <= b else (md >= a or md <= b)
 NEW_DAYS = 14                   # a title added this recently is new (the guide says so; premieres pick from them)
 PREMIERE_HOUR = 20              # premieres air at the first programme from 8 PM
 PREMIERES = [("off", "Off"), ("prime", "8 PM, the newest arrival")]
@@ -382,7 +408,10 @@ def groups(c: dict, index) -> list:
             if i["id"] not in seen:
                 seen.add(i["id"])
                 g["items"].append(i)
+    tws = c.get("title_weights") or {}
     for g in out.values():
+        if g["id"] in tws:
+            g["tw"] = max(0.0, float(tws[g["id"]] or 0))
         if len(g["items"]) > 1:
             # specials after the seasons; a show's shorts among them are its network's bumpers, not episodes
             g["items"].sort(key=lambda i: (i["season"] == 0, i["season"], i.get("album", ""), i["episode"], i["air"]))
@@ -483,8 +512,9 @@ class Rotor:
             mix = {}
             for g in gs:
                 mix.setdefault(g.get("k", 0), []).extend(g["items"])
-            p = self._pools[key] = (gs, [i for g in gs for i in g["items"]], {g["id"]: n for n, g in enumerate(gs)},
-                                    [len(g["items"]) ** 0.5 * g.get("w", 1.0) for g in gs], mix)
+            items = [i for g in gs if g.get("tw", 1.0) > 0 for i in g["items"] * max(1, round(g.get("tw", 1.0)))]
+            p = self._pools[key] = (gs, items or [i for g in gs for i in g["items"]], {g["id"]: n for n, g in enumerate(gs)},
+                                    [len(g["items"]) ** 0.5 * g.get("w", 1.0) * g.get("tw", 1.0) for g in gs], mix)
         self.groups, self.items, self._gpos, self._weights, self._mix_pools = p
         if not any(self._weights):
             self._weights = None
@@ -563,7 +593,8 @@ class Rotor:
             if not any(share.values()):
                 share = {k: 1.0 for k in ks}
         else:
-            rt = {k: sum(i["duration"] for i in pools[k]) for k in ks}
+            count = self.balance == "count"
+            rt = {k: len(pools[k]) if count else sum(i["duration"] for i in pools[k]) for k in ks}
             total = sum(rt.values()) or 1.0
             share = {k: max(rt[k] / total, FLOOR) for k in ks}
         played = st.setdefault("played", {})
@@ -576,7 +607,8 @@ class Rotor:
         mc[str(k)] = [cyc, pos + 1]
         shuffle = self.shuffles[k] if k < len(self.shuffles) else True
         i = (self._shuffled(f"m{k}", cyc, lst) if shuffle else lst)[pos]
-        played[str(k)] = played.get(str(k), 0.0) + i["duration"]
+        played[str(k)] = played.get(str(k), 0.0) + (1.0 if self.balance == "count" and self.weighting == "auto"
+                                                     else i["duration"])
         return i
 
     def _next_group(self) -> dict:
@@ -698,6 +730,8 @@ class Timeline:
         self.entries = list(self._by_id.values())
         self.brk = brk = breaks_of(c, index)
         self.ads = clips(brk.get("ads"), index) if index is not None and brk else []
+        pr = c.get("premiere_preroll")
+        self._prerolls = clips([{"section": pr, "kind": "all"}], index) if pr and index is not None else []
         self.bumps = clips(brk.get("bumps"), index) if index is not None and brk else []
         for i in self.ads + self.bumps:
             self._by_id.setdefault(i["id"], i)
@@ -705,6 +739,11 @@ class Timeline:
         self._ads, self._bumps = by_len(self.ads), by_len(self.bumps)
         self.sig = signature(c)
         self._then = _parts(self.groups)            # part one -> (part two, its group)
+        self._by_len = sorted(self.entries, key=lambda i: i["duration"])
+        self._lens = [i["duration"] for i in self._by_len]
+        self._hol = {i["id"]: h for i in self.entries for h in (holiday(i),) if h}
+        if len(self._hol) * 2 > len(self.entries) or not c.get("seasonal", True):
+            self._hol = {}                          # (a holiday channel: all year)
         self._gids = frozenset(g["id"] for g in self.groups)
         self._movies = frozenset(g["id"] for g in self.groups if g["items"][0]["type"] == "movie")
         self._mature = frozenset(g["id"] for g in self.groups if g["items"][0]["rating"] in MATURE)
@@ -819,25 +858,109 @@ class Timeline:
             t += b_out["duration"]
         return t
 
-    def _premiere(self, t: float, state: dict, elig) -> Optional[dict]:
-        """At the first programme from 8 PM each day: the newest arrival
-        the channel hasn't premiered yet, if it has premieres on."""
+    def _premiere(self, t: float, state: dict, elig) -> list:
+        """At the first programme from each premiere hour (8 PM unless set)
+        on the premiere nights (every night unless set): the newest arrivals
+        the channel hasn't premiered yet, one or a few back to back."""
         if self.c.get("premieres", "off") == "off":
-            return None
+            return []
         lt = datetime.fromtimestamp(t)
         day = lt.strftime("%Y-%m-%d")
-        if lt.hour < PREMIERE_HOUR or state.get("prem_day") == day:
-            return None
-        state["prem_day"] = day
+        nights = self.c.get("premiere_days")
+        if nights and lt.weekday() not in nights:
+            return []
+        hours = [h for h in self.c.get("premiere_times") or [PREMIERE_HOUR] if lt.hour >= h]
+        if not hours:
+            return []
+        key = f"{day}@{max(hours)}"
+        if state.get("prem_day") and state["prem_day"] in (key, day if max(hours) == PREMIERE_HOUR else key):
+            return []                           # (a plain day: as 5.2 wrote it down)
+        state["prem_day"] = key
         done = state.setdefault("premiered", [])
         fresh = time.time() - NEW_DAYS * 86400
-        new = [i for g in self.groups if elig is None or g["id"] in elig for i in g["items"]
-               if i.get("added", 0) >= fresh and i["id"] not in done and i["id"] not in self.dropped]
-        if not new:
-            return None
-        i = max(new, key=lambda i: (i["added"], i["id"]))
-        done.append(i["id"])
+        new = sorted((i for g in self.groups if elig is None or g["id"] in elig for i in g["items"]
+                      if i.get("added", 0) >= fresh and i["id"] not in done and i["id"] not in self.dropped),
+                     key=lambda i: (-i["added"], i["id"]))[:max(1, int(self.c.get("premiere_count") or 1))]
+        for i in new:
+            done.append(i["id"])
         del done[:max(0, len(done) - 500)]
+        return new
+
+    def _preroll(self, t: float, slots: list, state: dict) -> float:
+        """A premiere's pre-roll: a clip from the library picked for it."""
+        pool = getattr(self, "_prerolls", None)
+        if not pool:
+            return t
+        state["pr"] = state.get("pr", 0) + 1
+        i = pool[random.Random(f"{self.cid}:pr:{state['pr']}").randrange(len(pool))]
+        slots.append([t, i["id"], i["duration"], {"brk": "bump"}])
+        return t + i["duration"]
+
+    def _pins(self, start: float, end: float) -> list:
+        """[(when, pin, key)] the pinned titles due in a broadcast day."""
+        out = []
+        base = datetime.fromtimestamp(start)
+        for n, p in enumerate(self.c.get("pins") or []):
+            try:
+                hh, mm = (int(x) for x in str(p.get("at", "")).split(":"))
+            except ValueError:
+                continue
+            at = base.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if at.timestamp() < start:
+                at += timedelta(days=1)
+            if p.get("days") and at.weekday() not in p["days"]:
+                continue
+            if start <= at.timestamp() < end:
+                out.append((at.timestamp(), p, f"{base:%Y-%m-%d}#{n}"))
+        return sorted(out, key=lambda x: x[0])
+
+    def _pinned(self, p: dict, rotor) -> Optional[dict]:
+        """A pin's title: a show's next episode, or the movie."""
+        src = p.get("src") or {}
+        if src.get("kind") == "show":
+            g = next((g for g in self.groups if g["id"] == "s" + str(src.get("value"))), None)
+            return rotor._next_in(g) if g else None
+        keys = src.get("value") if isinstance(src.get("value"), list) else [src.get("value")]
+        return next((i for i in self.entries if i.get("plex") in keys and i["id"] not in self.dropped), None)
+
+    def _fill(self, t: float, until: float, slots: list, state: dict) -> float:
+        """The time before a pinned title filled: titles that fit (the
+        longest that does, each time), then a break to the minute."""
+        rnd = random.Random(f"{self.cid}:fill:{int(t)}")
+        while until - t > 90:
+            k = _bisect(self._lens, until - t - 30)
+            if not k:
+                break
+            i = self._by_len[max(0, k - 1 - rnd.randrange(min(k, 8)))]
+            if i["id"] in self.dropped:
+                break
+            slots.append([t, i["id"], i["duration"]])
+            t += i["duration"]
+        if until - t > 1:
+            if self.ads or self.bumps:
+                t = self._break(t, slots, state, until)
+            if until - t > 0.01:
+                slots.append([t, BRB, until - t, {"brk": "brb"}])
+        return until
+
+    def _seasonal(self, t: float, state: dict, rotor, elig) -> Optional[dict]:
+        """The seasonal cycler: in a holiday's season, about one programme
+        in four is one of its titles (the next not yet aired)."""
+        if not self._hol:
+            return None
+        lt = datetime.fromtimestamp(t)
+        live = [i for i in self.entries if self._hol.get(i["id"]) and in_season(self._hol[i["id"]], lt)
+                and i["id"] not in self.dropped]
+        if not live:
+            return None
+        state["hn"] = state.get("hn", 0) + 1
+        if random.Random(f"{self.cid}:hol:{state['hn']}").random() > 0.25:
+            return None
+        aired = state.setdefault("hol_aired", [])
+        i = next((i for i in live if i["id"] not in aired), None) or live[0]
+        if i["id"] in aired:
+            aired.clear()
+        aired.append(i["id"])
         return i
 
     def _limit(self, elig, t: float, state: dict):
@@ -964,10 +1087,13 @@ class Timeline:
             state["reset"] = self.c.get("reset", 0)
         if state.get("mday") != name:
             state["mday"], state["movies"] = name, 0
+        lt0 = datetime.fromtimestamp(start + 43200)
+        skip = set(self.dropped) | {k for k, h in self._hol.items() if not in_season(h, lt0)}
         rotor = Rotor(f"{self.cid}:{seed}" if seed else self.cid, self.c.get("order", "cyclic_shuffle"),
-                      self.c.get("block", 0), self.groups, state, self.dropped, self.c.get("weighting", "auto"),
+                      self.c.get("block", 0), self.groups, state, skip, self.c.get("weighting", "auto"),
                       self.c.get("sources") or [], self.c.get("episode_start", "first"),
                       self.c.get("balance", "duration"))
+        pins = [p for p in self._pins(start, end) if p[2] not in (state.get("pins_done") or [])]
         slots = []
 
         def off(a, b):                  # off the air from a to b (one stretch with any just before)
@@ -981,17 +1107,38 @@ class Timeline:
                 off(t, b)
                 t = b
                 continue
+            while pins and pins[0][0] < t - 1800:
+                pins.pop(0)                     # (one long passed: the box was off)
+            if pins and t >= pins[0][0] - 5:
+                at, p, key = pins.pop(0)
+                done = state.setdefault("pins_done", [])
+                done.append(key)
+                del done[:max(0, len(done) - 100)]
+                i = self._pinned(p, rotor)
+                if i is not None:
+                    t = self._place(i, t, slots, state)
+                    t = self._then_parts(i, t, slots, state)
+                continue
             elig = self._limit(self._eligible(t), t, state)
             prem = self._premiere(t, state, elig)
-            if prem is not None:
-                t = self._place(prem, t, slots, state, {"premiere": 1})
-                t = self._then_parts(prem, t, slots, state)
+            if prem:
+                t = self._preroll(t, slots, state)
+                for i in prem:
+                    t = self._place(i, t, slots, state, {"premiere": 1})
+                    t = self._then_parts(i, t, slots, state)
+                continue
+            hol = self._seasonal(t, state, rotor, elig)
+            if hol is not None:
+                t = self._place(hol, t, slots, state)
                 continue
             mara = self._marathon(t, name, state, rotor, elig)
             if mara is not None:
                 t = self._place(mara, t, slots, state, {"flag": "Marathon"})
                 continue
             i = rotor.next(elig) if elig is None or elig else None
+            if i is not None and pins and t + i["duration"] > pins[0][0]:
+                t = self._fill(t, pins[0][0], slots, state)      # (the pinned title starts on the minute)
+                continue
             if i is None:
                 if elig is None:
                     break               # nothing can play at all

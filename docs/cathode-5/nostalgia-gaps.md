@@ -26,11 +26,11 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Preferred copy for duplicates
 
 ## B. Scheduling
-- [ ] Pin a show or movie to an exact start time
-- [ ] Per-title weights; balance by count or duration
-- [ ] Premieres: several times, pinned nights, back-to-back, pre-roll
-- [ ] Seasonal cycler (holiday episodes only in their season)
-- [ ] Hour timeline with ad breaks (running order view)
+- [x] Pin a show or movie to an exact start time
+- [x] Per-title weights; balance by count or duration
+- [x] Premieres: several times, pinned nights, back-to-back, pre-roll
+- [x] Seasonal cycler (holiday episodes only in their season)
+- [x] Hour timeline with ad breaks (running order view)
 
 ## C. Breaks
 - [ ] 5 and 10 minute alignment

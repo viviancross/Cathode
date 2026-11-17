@@ -193,6 +193,71 @@ class TestMenus(Temp):
         self.assertEqual(len(app.config.channel_edits), 2)
 
 
+class TestScheduling(Temp):
+    def test_a_pinned_show_starts_on_the_minute(self):
+        idx = index()
+        c = chan("A", "random", pins=[{"at": "20:00", "days": None, "src": {"kind": "show", "value": "300"}}])
+        tl = tl_of(c, idx)
+        got = slots(tl, 48)
+        eights = [x for t, x in got if datetime.fromtimestamp(t).strftime("%H:%M") == "20:00"]
+        self.assertTrue(eights)
+        self.assertTrue(all(idx.item(x)["show_key"] == "300" for x in eights))
+
+    def test_title_weights_and_count_balance(self):
+        idx = index()
+        tl = tl_of(chan("A", "random", title_weights={"m901": 0, "m902": 0, "m903": 0}), idx)
+        self.assertFalse(any(idx.item(x)["type"] == "movie" for _t, x in slots(tl, 48)))
+        tl = tl_of(chan("A", "mix", {"kind": "show", "value": "100"}, {"section": "38", "kind": "all"},
+                        balance="count"), idx)
+        got = [idx.item(x)["type"] for _t, x in slots(tl, 72)]
+        self.assertGreater(got.count("episode"), got.count("movie"))
+
+    def test_premieres_back_to_back_with_a_pre_roll(self):
+        idx = index()
+        for i in idx.sections["51"].items:
+            i["added"] = int(datetime.now().timestamp())
+        c = chan("A", "random", premieres="prime", premiere_count=2, premiere_times=[21], premiere_preroll="10")
+        tl = tl_of(c, idx)
+        tl.at(datetime.now(timezone.utc) + timedelta(hours=30))
+        prem = [k for k, s in enumerate(tl._slots) if len(s) > 3 and s[3].get("premiere")]
+        self.assertGreaterEqual(len(prem), 2)
+        first = tl._slots[prem[0]]
+        self.assertGreaterEqual(datetime.fromtimestamp(first[0]).hour, 21)
+        self.assertEqual(tl._slots[prem[0] - 1][3].get("brk"), "bump")      # the pre-roll
+
+    def test_holiday_titles_only_in_season(self):
+        idx = index()
+        for i in idx.sections["51"].items:
+            if i["show_key"] == "200":
+                i["name"] = "A Very Bravo Christmas" if i["episode"] == 1 else "Halloween Spooktacular" if i["episode"] == 2                     else i["name"]
+        self.assertEqual(lc.holiday({"type": "episode", "title": "X", "name": "Treehouse of Horror V"}), "Halloween")
+        tl = tl_of(chan("A", "random"), idx)
+        lt = datetime.now()
+        got = {x for _t, x in slots(tl, 48)}
+        for x, h in (("p200101", "Christmas"), ("p200102", "Halloween")):
+            if not lc.in_season(h, lt):
+                self.assertNotIn(x, got)
+
+    def test_the_pages(self):
+        from types import SimpleNamespace
+        from cathode import menus
+        idx = index()
+        c = chan("A", "random")
+        lc.SCHEDULES[lc.PREFIX + c["id"]] = tl_of(c, idx)
+        app = SimpleNamespace(library=idx, toast=lambda *a: None, push=lambda k: None)
+        save = lambda place=True: None       # noqa: E731
+        for items in (menus.premiere_items(app, c, save), menus.pin_items(app, c, save),
+                      menus.weight_items(app, c, save), menus.running_order_items(app, lc.PREFIX + c["id"])):
+            for it in items:
+                if it.value:
+                    self.assertIsInstance(it.value(), str)
+        w = menus.weight_items(app, c, save)
+        w[0].adjust(1)
+        self.assertEqual(c["title_weights"], {"s100": 2})
+        self.assertTrue(any(it.label.startswith("   Break") or it.label.startswith("--")
+                            for it in menus.running_order_items(app, lc.PREFIX + c["id"])))
+
+
 class TestDedupe(unittest.TestCase):
     def test_the_better_copy(self):
         a = library.Section("1", "Movies", "movie")

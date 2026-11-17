@@ -23,6 +23,16 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
   the channel, browse what it plays (with when each is next on), add the
   show to another channel, edit the channel.
 - A title in two places can keep the better copy (4K over HD).
+- **Pinned Times:** a show (its next episode each time) or a movie starts
+  at a set time on set days; the time before it is filled to the minute.
+- **Title Weights** (0 keeps a title off, 2 twice as often) and **Balance**
+  (Mix shares by hours or by number of titles).
+- **Premiere Options:** the hours, the nights, several back to back, a
+  pre-roll clip before them.
+- **Seasonal Episodes:** holiday episodes and movies (Halloween,
+  Thanksgiving, Christmas, Valentine's...) air only in their season, and
+  more often then.
+- **Running Order:** a channel's day hour by hour, its breaks included.
 
 ## 5.2
 

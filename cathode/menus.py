@@ -2622,6 +2622,181 @@ def breaks_items(app, c, save):
     ]
 
 
+BALANCES = [("duration", "By duration"), ("count", "By count")]
+PREMIERE_TIMES = [([20], "8 PM"), ([19], "7 PM"), ([21], "9 PM"), ([22], "10 PM"), ([20, 22], "8 and 10 PM"),
+                  ([9, 20], "9 AM and 8 PM"), ([17, 20], "5 and 8 PM")]
+PREMIERE_DAYS = [(None, "Every night"), ([4], "Fridays"), ([6], "Sundays"), ([4, 5], "Friday and Saturday"),
+                 ([0, 1, 2, 3, 4], "Weeknights"), ([3], "Thursdays")]
+PIN_DAYS = [(None, "Every day"), ([0, 1, 2, 3, 4], "Weekdays"), ([5, 6], "Weekends")] + [
+    ([d], n) for d, n in enumerate(("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays",
+                                    "Sundays"))]
+WEIGHTS = [0, 0.5, 1, 2, 3, 5]
+
+
+def _label_of_list(options, key):
+    return next((lab for k, lab in options if k == key), str(key))
+
+
+def premiere_items(app, c, save):
+    from . import libchannels as lc
+    index = getattr(app, "library", None)
+
+    def cyc(key, options, default):
+        def f(d):
+            keys = [k for k, _ in options]
+            cur = c.get(key, default)
+            c[key] = keys[((keys.index(cur) if cur in keys else 0) + d) % len(keys)]
+            save(place=False)
+        return f
+
+    def preroll(d):
+        secs = [None] + sorted((s.key for s in index.sections.values() if s.kind == "clip"),
+                               key=lambda k: index.sections[k].title.lower()) if index else [None]
+        cur = c.get("premiere_preroll")
+        c["premiere_preroll"] = secs[((secs.index(cur) if cur in secs else 0) + d) % len(secs)]
+        save(place=False)
+
+    def preroll_value():
+        k = c.get("premiere_preroll")
+        return index.sections[k].title if k and index and k in index.sections else "None"
+    return [
+        Item("Premiere Times", value=lambda: _label_of_list(PREMIERE_TIMES, c.get("premiere_times") or [20]),
+             adjust=cyc("premiere_times", PREMIERE_TIMES, [20]), help="The hour (or hours) premieres start from."),
+        Item("Premiere Nights", value=lambda: _label_of_list(PREMIERE_DAYS, c.get("premiere_days")),
+             adjust=cyc("premiere_days", PREMIERE_DAYS, None), help="The nights that have premieres."),
+        Item("Back to Back", value=lambda: str(int(c.get("premiere_count") or 1)),
+             adjust=lambda d: (c.__setitem__("premiere_count", max(1, min(4, int(c.get("premiere_count") or 1) + d))),
+                               save(place=False)),
+             help="How many new arrivals premiere one after another."),
+        Item("Pre-roll", value=preroll_value, adjust=preroll,
+             help="A clip from this library before the premieres (a \"world premiere\" bumper)."),
+    ]
+
+
+def pin_items(app, c, save):
+    """Pinned Times: a show or movie at a set time, on set days."""
+    from . import libchannels as lc
+    tl = lc.SCHEDULES.get(lc.PREFIX + c["id"])
+
+    def add(src, label):
+        def got(text):
+            text = (text or "").strip().upper().replace(".", ":")
+            import re
+            m = re.fullmatch(r"(\d{1,2})(?::(\d\d))?\s*(AM|PM)?", text)
+            if not m:
+                app.toast("A time like 8:00 PM or 20:00.")
+                return
+            h, mi = int(m.group(1)), int(m.group(2) or 0)
+            if m.group(3):
+                h = h % 12 + (12 if m.group(3) == "PM" else 0)
+            if not (0 <= h < 24 and 0 <= mi < 60):
+                app.toast("A time like 8:00 PM or 20:00.")
+                return
+            c.setdefault("pins", []).append({"at": f"{h:02d}:{mi:02d}", "days": None, "src": src, "label": label})
+            save(place=False)
+            _refresh(app, {"Pinned Times": lambda: pin_items(app, c, save)})
+        app.push(Keyboard(app, f"{label} starts at", got, hint="8:00 PM, or 20:00"))
+
+    def titles():
+        if tl is None:
+            return [Item("Nothing on the channel yet", enabled=False)]
+        out = []
+        for g in sorted(tl.groups, key=lambda g: g["title"].lower()):
+            i = g["items"][0]
+            src = {"kind": "show", "value": i["show_key"]} if i["type"] == "episode" else \
+                {"kind": "title", "value": [i["plex"]]}
+            out.append(Item(g["title"], lambda src=src, t=g["title"]: add(src, t)))
+        return out
+
+    def days(p, d):
+        p["days"] = _cycle_list(PIN_DAYS, p.get("days"), d)
+        save(place=False)
+
+    def drop(p):
+        c["pins"].remove(p)
+        save(place=False)
+        app.top().back()
+        _refresh(app, {"Pinned Times": lambda: pin_items(app, c, save)})
+
+    def when(p):
+        h, m = (int(x) for x in p["at"].split(":"))
+        return f"{h % 12 or 12}:{m:02d} {'PM' if h >= 12 else 'AM'}, {_label_of_list(PIN_DAYS, p.get('days')).lower()}"
+    return [Item("Pin a title", submenu=titles, help="A show (its next episode each time) or a movie.")] + [
+        Item(p.get("label") or "A title", submenu=lambda p=p: [
+            Item("Days", value=lambda p=p: _label_of_list(PIN_DAYS, p.get("days")), adjust=lambda d, p=p: days(p, d)),
+            Item("Remove", lambda p=p: drop(p))],
+            value=lambda p=p: when(p), help="SELECT: its days, or remove it.")
+        for p in c.get("pins") or []]
+
+
+def _cycle_list(options, cur, d):
+    keys = [k for k, _ in options]
+    return keys[((keys.index(cur) if cur in keys else 0) + d) % len(keys)]
+
+
+def weight_items(app, c, save):
+    from . import libchannels as lc
+    tl = lc.SCHEDULES.get(lc.PREFIX + c["id"])
+    tws = c.setdefault("title_weights", {})
+
+    def step(g, d):
+        cur = tws.get(g["id"], 1)
+        k = WEIGHTS.index(cur) if cur in WEIGHTS else 2
+        v = WEIGHTS[max(0, min(len(WEIGHTS) - 1, k + d))]
+        if v == 1:
+            tws.pop(g["id"], None)
+        else:
+            tws[g["id"]] = v
+        save(place=False)
+    if tl is None or not tl.groups:
+        return [Item("Nothing on the channel yet", enabled=False)]
+    return [Item(g["title"], value=lambda g=g: f"{tws.get(g['id'], 1):g}", adjust=lambda d, g=g: step(g, d),
+                 help="LEFT/RIGHT: 0 (off the channel), 0.5, 1, 2, 3 or 5 times as often.")
+            for g in sorted(tl.groups, key=lambda g: g["title"].lower())]
+
+
+def running_order_items(app, tid):
+    """Today on the channel, hour by hour: each programme and each break
+    (its length and what's in it)."""
+    from datetime import datetime, timezone, timedelta
+    from . import libchannels as lc
+    tl = lc.SCHEDULES.get(tid)
+    if tl is None:
+        return [Item("Nothing drawn up yet", enabled=False)]
+    now = datetime.now(timezone.utc)
+    tl.at(now + timedelta(hours=24))
+    t0 = now.timestamp() - 3600
+    rows, hour, brk = [], None, None
+
+    def flush():
+        if brk:
+            mins, secs = divmod(int(brk[1]), 60)
+            what = ", ".join(f"{n} {k}{'s' if n > 1 else ''}" for k, n in brk[2].items())
+            rows.append(Item(f"   Break {mins}:{secs:02d}", value=lambda w=brk[0]: w, enabled=False, help=what))
+    for s in list(tl._slots):
+        if s[0] + s[2] < t0 or s[0] > t0 + 25 * 3600:
+            continue
+        lt = datetime.fromtimestamp(s[0])
+        when = f"{lt:%I:%M %p}".lstrip("0")
+        x = s[3] if len(s) > 3 else {}
+        if x.get("brk"):
+            kind = {"ad": "commercial", "bump": "bumper", "brb": "slate"}.get(x["brk"], x["brk"])
+            if brk is None:
+                brk = [when, 0.0, {}]
+            brk[1] += s[2]
+            brk[2][kind] = brk[2].get(kind, 0) + 1
+            continue
+        flush()
+        brk = None
+        if lt.hour != hour:
+            hour = lt.hour
+            rows.append(Item(f"-- {lt:%a} {lt.hour % 12 or 12} {'PM' if lt.hour >= 12 else 'AM'} --", enabled=False))
+        title = "Off the air" if s[1] == lc.OFF else tl.title_of(s[1])
+        rows.append(Item(title, value=lambda w=when: w, help=f"{max(1, round(s[2] / 60))} min." + (" (part)" if x.get("part") else "")))
+    flush()
+    return rows or [Item("Nothing drawn up yet", enabled=False)]
+
+
 def coming_up_items(app, tid):
     from . import libchannels as lc, videochannels as vc
     tl = lc.SCHEDULES.get(tid)
@@ -2836,6 +3011,24 @@ def library_channel_page(app, cid):
         Item("Premieres", value=lambda: _label(lc.PREMIERES, c.get("premieres", "off")), adjust=premieres,
              help="Each evening at 8, the newest arrival in your library the channel hasn't premiered yet. The "
                   "guide marks it, and marks every title added in the last two weeks as New."),
+        Item("Premiere Options", submenu=lambda: premiere_items(app, c, save),
+             help="When premieres air, on which nights, how many back to back, and a pre-roll before them."),
+        Item("Pinned Times", submenu=lambda: pin_items(app, c, save), value=lambda: str(len(c.get("pins") or [])),
+             help="A show or movie that starts at a set time (8:00 PM weeknights, say), the time before it "
+                  "filled to the minute."),
+        Item("Title Weights", submenu=lambda: weight_items(app, c, save),
+             help="How often each show or movie comes round: 0 keeps it off, 2 twice as often."),
+        Item("Balance", value=lambda: _label(BALANCES, c.get("balance", "duration")),
+             adjust=lambda d: (c.__setitem__("balance", _cycle(BALANCES, c.get("balance", "duration"), d)),
+                               save(place=False)),
+             help="Mix with Auto weighting: each source's share by its hours of programmes, or by its number of "
+                  "titles."),
+        Item("Seasonal Episodes", value=lambda: "On" if c.get("seasonal", True) else "Off",
+             adjust=lambda d: (c.__setitem__("seasonal", not c.get("seasonal", True)), save(place=False)),
+             help="Halloween, Thanksgiving, Christmas, Valentine's and other holiday episodes and movies air only "
+                  "in their season, and more often then. (A channel mostly of them is left alone.)"),
+        Item("Running Order", submenu=lambda: running_order_items(app, lc.PREFIX + cid),
+             help="Today hour by hour, the breaks too: what airs when, and how long each break runs."),
         Item("Lower-third", value=lambda: "On" if c.get("card", False) else "Off", adjust=card,
              help="A name card as each programme starts and before it ends."),
         Item("Content", submenu=lambda: library_source_items(app, cid), value=holds,
