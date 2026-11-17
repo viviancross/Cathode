@@ -706,6 +706,23 @@ class Skin:
         """A music channel's picture: the album's art and what's playing, on
         the station's own deep blue (the station's, so one for every skin)."""
         W, H = self.canvas
+        if r.get("viz"):                    # the visualizer is the picture: the song on a lower third
+            f1, f2 = self.fb(max(14, H // 20)), self.f(max(12, H // 28))
+            side = H // 7
+            box = pygame.Rect(H // 16, H - side - H // 12, W // 2, side)
+            band = pygame.Surface(box.size, pygame.SRCALPHA)
+            band.fill((0, 0, 0, 160))
+            c.blit(band, box.topleft)
+            art = self.logo(r.get("art", ""), side, side) if r.get("art") else None
+            x = box.x + H // 40
+            if art is not None:
+                c.blit(art, art.get_rect(midleft=(box.x, box.centery)))
+                x = box.x + side + H // 40
+            self.text.draw(c, self.text.fit(f1, r.get("song", ""), box.right - x - 8), f1, (255, 255, 255), x,
+                           box.y + H // 60)
+            self.text.draw(c, self.text.fit(f2, " - ".join(v for v in (r.get("artist"), r.get("album")) if v),
+                                            box.right - x - 8), f2, (200, 210, 255), x, box.y + side // 2 + H // 80)
+            return
         for y in range(0, H, 4):
             k = y / H
             pygame.draw.rect(c, (int(8 + 18 * k), int(10 + 16 * k), int(40 + 50 * k)), (0, y, W, 4))
@@ -802,6 +819,9 @@ class Skin:
             self.draw_bug(canvas, screen)      # under the banner, as a station's bug was under the box's
             overlays.draw_rating(self, canvas, screen)
             overlays.draw_upnext(self, canvas, screen)
+            overlays.draw_alert_crawl(self, canvas, screen)
+            overlays.draw_popup(self, canvas, screen)
+            overlays.draw_locked(self, canvas, screen)
 
     def draw_over(self, canvas, screen):
         """After the box's drawing: the guide's seasonal decorations."""

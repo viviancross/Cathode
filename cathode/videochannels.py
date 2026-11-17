@@ -615,9 +615,13 @@ class Player:
                     self.live._reveal()
             self._slides(gen, e, offset)
         else:
+            viz = getattr(self.app.config, "visualizer", "off") if e.get("radio") else ""
             self.app.video.play(s["video"], headers=s.get("headers"), audio=s.get("audio"),
-                                start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)))   # (a transcode starts at its base)
+                                start=max(0.0, offset + e.get("in", 0) - s.get("base", 0.0)),   # (a transcode starts at its base)
+                                **({"visual": viz} if viz and viz != "off" else {}))
         self.live.radio = e.get("radio")       # a music channel's song: the card that stands in for a picture
+        if self.live.radio and getattr(self.app.config, "visualizer", "off") != "off":
+            self.live.radio = dict(self.live.radio, viz=True)       # (over the visualizer: a lower third)
         if e.get("kind", "show") == "show" and not e.get("part"):
             self.live.prog_at = time.monotonic() - offset
             if e.get("rating") and getattr(self.app.config, "rating_box", True) and (offset < 60 or not cont):
@@ -647,6 +651,7 @@ class Player:
         self._waited = 0.0
         self._stop_timer = self.app.after(max(0.5, left), lambda: gen == self.gen and self._due(gen))
         self._watching(e, offset)
+        self._popups(gen, e, cur, offset)
         # the next video resolved ahead, so its start is only mpv's open
         sched = self.sched
         nxt = sched.at(cur["stop"] + timedelta(seconds=1)) if sched else None
@@ -738,6 +743,39 @@ class Player:
             w["done"] = True
             threading.Thread(target=lambda: od.client().scrobble(w["rk"]), daemon=True).start()
             print(f"[library] watched: {w['rk']}")
+
+    POPUP_EVERY, POPUP_FOR = 150.0, 9.0
+
+    def _popups(self, gen, e, cur, offset):
+        """Pop-up trivia (a library channel set for it): a fact about the
+        programme in a bubble every couple of minutes, Pop-Up Video's way."""
+        c = entry(self.app.config, self.cid) or {}
+        od = getattr(self.app, "ondemand", None)
+        if (not c.get("popups") or not e.get("plex") or e.get("kind", "show") != "show" or od is None
+                or not getattr(od, "signed_in", False)):
+            return
+        stop = cur["stop"]
+
+        def got(facts):
+            if gen != self.gen or not facts:
+                return
+            import random as _r
+            rnd = _r.Random(str(e.get("plex")))
+            rnd.shuffle(facts)
+            first = max(20.0, 60.0 - offset)
+            left = (stop - datetime.now(timezone.utc)).total_seconds()
+            for n, fact in enumerate(facts):
+                at = first + n * self.POPUP_EVERY
+                if at > left - 45:
+                    break
+                pos = rnd.choice(("top left", "top right", "middle left", "middle right"))
+                self.app.after(at, lambda fact=fact, pos=pos: gen == self.gen and self._pop(fact, pos))
+        od.run(lambda: od.client().trivia(e["plex"]), got, lambda err: None)
+
+    def _pop(self, fact, pos):
+        self.live.popup = {"text": fact, "pos": pos, "until": time.monotonic() + self.POPUP_FOR}
+        self.app.invalidate()
+        self.app.after(self.POPUP_FOR + 0.05, self.app.invalidate)
 
     def _upnext(self, cur) -> Optional[dict]:
         """The next programme (past breaks and the slate): its title and when

@@ -166,8 +166,14 @@ class Video:
 
     # ── Playback ──────────────────────────────────────────────────────────
 
+    VISUALS = {
+        "waves": "[aid1]asplit[ao][a]; [a]showwaves=s=1280x720:mode=cline:rate=30:colors=0x66ccff|0x3355ff[vo]",
+        "bars": "[aid1]asplit[ao][a]; [a]showfreqs=s=1280x720:mode=bar:fscale=log:colors=0x66ccff|0xff66cc[vo]",
+        "spectrum": "[aid1]asplit[ao][a]; [a]showcqt=s=1280x720:fps=30:bar_g=2:sono_g=4[vo]",
+    }
+
     def play(self, url: str, headers: Optional[dict] = None, start: float = 0, sub_delay: float = 0.0,
-             audio: Optional[str] = None):
+             audio: Optional[str] = None, visual: str = ""):
         """Load `url`, replacing whatever plays. Events about any earlier file
         are ignored from here on: only this load's start can reveal it.
         `audio` is a separate audio stream played with it (YouTube's)."""
@@ -178,6 +184,10 @@ class Video:
         self.player["audio-files"] = [audio] if audio else []
         self.player["start"] = str(start) if start > 0 else "none"
         self.player["sub-delay"] = sub_delay     # a transcode's clock starts mid-file
+        try:                                      # a song's picture made from its sound (a visualizer)
+            self.player["lavfi-complex"] = self.VISUALS.get(visual, "")
+        except Exception as e:
+            print(f"[video] visualizer: {e!r}")
         with self._ids:
             self._current = None
             self.player.pause = False
@@ -312,6 +322,23 @@ class Video:
                             "selected": bool(t.get("selected")), "name": name,
                             "external": bool(t.get("external")), "file": t.get("external-filename", "")})
         return out
+
+    SCRAMBLE_V = "@scramble:lavfi=[rgbashift=rh=-28:bh=28:gv=10,hue=H=2*PI*t/2:s=3,negate,gblur=sigma=5]"
+    SCRAMBLE_A = "@scramble:lavfi=[vibrato=f=11:d=1,highpass=f=1200,volume=0.6]"
+
+    def scramble(self, on: bool):
+        """A locked channel's picture and sound scrambled, as a premium
+        channel came through without the box's say-so."""
+        for kind, graph in (("vf", self.SCRAMBLE_V), ("af", self.SCRAMBLE_A)):
+            try:
+                self.player.command(kind, "remove", "@scramble")
+            except Exception:
+                pass
+            if on:
+                try:
+                    self.player.command(kind, "add", graph)
+                except Exception as e:
+                    print(f"[video] scramble: {e!r}")
 
     def apply_audio(self, cfg):
         """The sound settings: preferred languages, loudness evened out,

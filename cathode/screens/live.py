@@ -52,6 +52,7 @@ class LiveTV(Screen):
         self.rating = None          # the programme's rating box: {"text", "until"}
         self.tuned_at = 0.0         # when the channel was tuned (monotonic): the bug's "on change" mode
         self.prog_at = 0.0          # when this programme started, here (monotonic)
+        self.popup = None           # pop-up trivia: {"text", "pos", "until"}
 
     # Surfing (CH+/CH-, paging) moves the banner at once but loads the stream
     # only once the presses stop: a server that starts a transcode per tune
@@ -122,7 +123,11 @@ class LiveTV(Screen):
         idx %= len(self.channels)
         if self.phase != "idle" and idx != self.idx:
             self.prev = self.idx
-        self.tuned_at, self.upnext, self.rating = time.monotonic(), None, None
+        self.tuned_at, self.upnext, self.rating, self.popup = time.monotonic(), None, None, None
+        self.locked = self.is_locked(self.channels[idx])
+        scramble = getattr(self.app.video, "scramble", None)
+        if scramble:
+            scramble(self.locked)
         self._log_watch()
         self.idx = idx
         if not retry:
@@ -385,6 +390,13 @@ class LiveTV(Screen):
             return False
         if self._trick_keys(a):
             return True
+        if a == R.SELECT and self.page is not None and hasattr(self.page, "on_select"):
+            self.page.on_select()               # (the video store: browse it)
+            return True
+        if a == R.SELECT and getattr(self, "locked", False):
+            from .. import menus
+            menus.unlock_channel(self.app, self.channel)
+            return True
         if a in (R.UP, R.CH_UP):
             self.tune(self.idx + 1, settle=True)
         elif a in (R.DOWN, R.CH_DOWN):
@@ -523,6 +535,11 @@ class LiveTV(Screen):
                 return
         self.trick_until = now + self.TRICK_IDLE
         self._trick_tick()
+
+    def is_locked(self, ch) -> bool:
+        """A channel locked (18+) and not unlocked this session."""
+        e = (getattr(self.app.config, "channel_edits", None) or {}).get(ch.url) or {}
+        return bool(e.get("locked")) and ch.url not in getattr(self.app, "unlocked", set())
 
     def library_title(self):
         """The library title playing on a library channel (its entry), or None."""

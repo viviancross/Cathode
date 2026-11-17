@@ -70,6 +70,79 @@ def draw_upnext(skin, c, live):
     skin.app.after(1.0, skin.app.invalidate)
 
 
+def draw_popup(skin, c, live):
+    """A pop-up trivia bubble: white, round, with a tail, as Pop-Up Video's."""
+    p = getattr(live, "popup", None)
+    if not p or time.monotonic() >= p["until"] or not on_live(skin, live):
+        return
+    W, H = skin.canvas
+    f = skin.fb(max(12, H // 28))
+    lines = skin.text.wrap(f, p["text"], W // 3, 4)
+    lh = skin.text.ink(f)[1] + 2
+    w = max(skin.text.width(f, ln) for ln in lines) + H // 14
+    h = lh * len(lines) + H // 18
+    m = H // 10 + frame(skin)
+    x = m if p["pos"].endswith("left") else W - m - w
+    y = m if p["pos"].startswith("top") else H // 2 - h // 2
+    box = pygame.Rect(x, y, w, h)
+    tail_x = box.x + w // 4 if p["pos"].endswith("left") else box.right - w // 4
+    pygame.draw.polygon(c, (0, 0, 0), [(tail_x - H // 40, box.bottom - 2), (tail_x + H // 40, box.bottom - 2),
+                                       (tail_x - H // 60, box.bottom + H // 18)])
+    pygame.draw.rect(c, (0, 0, 0), box.inflate(6, 6), border_radius=h // 3)
+    pygame.draw.rect(c, (255, 255, 255), box, border_radius=h // 3)
+    pygame.draw.polygon(c, (255, 255, 255), [(tail_x - H // 40 + 3, box.bottom - 3), (tail_x + H // 40 - 3, box.bottom - 3),
+                                             (tail_x - H // 60, box.bottom + H // 18 - 5)])
+    yy = box.y + H // 36
+    for ln in lines:
+        skin.text.draw(c, ln, f, (0, 0, 0), box.centerx, yy, align="center")
+        yy += lh
+
+
+def draw_locked(skin, c, live):
+    """Over a locked channel's scrambled picture: what it is and how in."""
+    if not getattr(live, "locked", False) or live.phase not in ("watch", "reveal"):
+        return
+    W, H = skin.canvas
+    f1, f2 = skin.fb(max(16, H // 14)), skin.f(max(12, H // 26))
+    box = pygame.Rect(0, 0, W * 2 // 3, H // 4)
+    box.center = (W // 2, H // 2)
+    s = pygame.Surface(box.size, pygame.SRCALPHA)
+    s.fill((0, 0, 0, 190))
+    c.blit(s, box.topleft)
+    pygame.draw.rect(c, (255, 255, 255), box, max(1, H // 240))
+    skin.text.draw(c, "THIS CHANNEL IS LOCKED", f1, (255, 255, 255), W // 2, box.y + H // 30, align="center")
+    skin.text.draw(c, "Press SELECT and enter the PIN to watch.", f2, (220, 220, 220), W // 2, box.y + H // 7,
+                   align="center")
+
+
+def draw_alert_crawl(skin, c, live):
+    """A severe weather alert crawling along the top of live TV, red, as
+    stations ran them, while the NWS has one out for your area."""
+    if getattr(live, "phase", "") != "watch" or getattr(skin.app, "top", lambda: live)() is not live:
+        return
+    from .. import radar
+    items = [a for a in radar.alerts_now(skin.app) if a.get("severity") in radar.SEVERE]
+    if not items:
+        return
+    W, H = skin.canvas
+    f = skin.fb(max(12, H // 26))
+    text = "     ".join(f"{a['event'].upper()}: {a['headline']}" for a in items)
+    h = skin.text.ink(f)[1] + H // 40
+    y0 = frame(skin)
+    pygame.draw.rect(c, (170, 0, 0), (0, y0, W, h))
+    lab = " WEATHER ALERT "
+    lw = skin.text.width(f, lab)
+    tw = skin.text.width(f, text)
+    x = W - ((time.monotonic() * 90) % (tw + W - lw))
+    clip = c.get_clip()
+    c.set_clip(pygame.Rect(lw, y0, W - lw, h))
+    skin.text.draw(c, text, f, (255, 255, 255), int(x), y0 + H // 80)
+    c.set_clip(clip)
+    pygame.draw.rect(c, (255, 255, 255), (0, y0, lw, h))
+    skin.text.draw(c, lab, f, (170, 0, 0), 0, y0 + H // 80)
+    skin.app.after(0.05, skin.app.invalidate)
+
+
 def bug_shown(skin, live) -> bool:
     """The screen bug's mode: always; on change (fifteen seconds after a
     tune or a programme's start); periodic (half a minute in every ten)."""

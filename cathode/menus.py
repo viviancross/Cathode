@@ -1064,6 +1064,7 @@ def preference_items(app):
 BUG_MODES = [("always", "Always"), ("change", "On change"), ("periodic", "Periodic")]
 BUG_ANCHORS = [("screen", "Screen"), ("picture", "4:3 picture")]
 UPNEXT = [(0, "Off"), (10, "10 seconds"), (20, "20 seconds"), (30, "30 seconds"), (60, "A minute")]
+VISUALIZERS = [("off", "Off (the album card)"), ("waves", "Waves"), ("bars", "Bars"), ("spectrum", "Spectrum")]
 TUNE_SCREENS = [("box", "The box's own"), ("static", "Static"), ("black", "Black"), ("blue", "Blue"),
                 ("logo", "Channel logo")]
 
@@ -1097,6 +1098,9 @@ def on_screen_items(app):
              if cfg.decorations else "Off", adjust=flip("decorations"),
              help="Snow in December, leaves in the autumn, hearts for Valentine's, stars for the Fourth, on the "
                   "guide."),
+        Item("Music Visualizer", value=lambda: _label(VISUALIZERS, cfg.visualizer), adjust=cyc("visualizer", VISUALIZERS),
+             help="A music channel's picture: the album card, or the song drawn from its sound (waves, bars, a "
+                  "spectrum) with the song on a lower third. From the next song."),
         Item("Bezel", value=lambda: _label(overlays.BEZELS, cfg.bezel), adjust=cyc("bezel", overlays.BEZELS),
              help="A television's frame round the screen: wood grain, black plastic or silver."),
     ]
@@ -2413,11 +2417,81 @@ def _lineup_rows(app, url, fallback=None) -> list:
              adjust=lambda d: _pick(app, url, "logo", d),
              help="A picture from your logos folder (a GIF or APNG moves). Automatic: one named for the channel, "
                   "else the one it came with."),
+        Item("Locked (18+)", lambda: _lock(app, url), value=lambda: "Yes" if e().get("locked") else "No",
+             adjust=lambda d: _lock(app, url),
+             help="A locked channel comes through scrambled, picture and sound, until the parent PIN is entered "
+                  "(once a session)."),
         Item("Logo From a Web Address", lambda: _logo_url(app, url),
              help="A picture's address (https://...png, .gif, .svg): the channel's logo. Empty: back to automatic."),
         Item("Screen Bug", submenu=lambda: channel_bug_items(app, url, fallback), value=bug_value,
              help="The logo in the corner on this channel: on or off, its picture, where, how big, how faint."),
     ]
+
+
+def _lock(app, url):
+    from types import SimpleNamespace as NS
+    from . import lineup as lu
+    cfg = app.config
+    on = not (cfg.channel_edits.get(url) or {}).get("locked")
+    if on and not cfg.parent_pin:
+        app.toast("Set a parent PIN first: Settings > Profiles > Parent PIN.", 6.0)
+        return
+    lu.edit(cfg, NS(url=url), locked=on or None)
+    cfg.save()
+    live = getattr(app, "live", None)
+    if live is not None and live.channel is not None and live.channel.url == url:
+        live.tune(live.idx)
+
+
+def unlock_channel(app, ch):
+    """The parent PIN asked for, and the channel unscrambled for the session."""
+    if ch is None:
+        return
+
+    def got(text):
+        if text is None:
+            return
+        if text.strip() != app.config.parent_pin:
+            app.toast("That isn't the PIN.")
+            return
+        if not hasattr(app, "unlocked"):
+            app.unlocked = set()
+        app.unlocked.add(ch.url)
+        app.live.tune(app.live.idx)
+    app.push(Keyboard(app, "Parent PIN", got, hint="The channel is locked."))
+
+
+def open_store(app):
+    """The video store: movies by section; SELECT one to rent it (its page,
+    then WATCH)."""
+    idx = getattr(app, "library", None)
+    movies = [i for s in (idx.sections.values() if idx else []) if s.kind == "movie" and not s.hidden for i in s.items]
+    if not movies:
+        app.toast("The shelves are empty: link Plex first.")
+        return
+
+    def rent(i):
+        od = app.ondemand
+
+        def done(detail):
+            from .screens.iteminfo import ItemInfo
+            app.push(ItemInfo(app, detail, "default"))
+        od.run(lambda: od.client().item_detail(i["plex"]), done, lambda e: app.toast("The store couldn't find it."))
+
+    def shelf(items):
+        return [Item(f"{i['title']}" + (f" ({i['year']})" if i.get("year") else ""), lambda i=i: rent(i),
+                     value=lambda i=i: i.get("rating") or "", help=(i.get("summary") or "")[:240]) for i in items[:300]]
+    by_genre: dict = {}
+    for i in movies:
+        for g in i.get("genres") or ["Other"]:
+            by_genre.setdefault(g, []).append(i)
+    rows = [Item("New Releases", submenu=lambda: shelf(sorted(movies, key=lambda i: -i.get("added", 0))[:40])),
+            Item("Staff Picks", submenu=lambda: shelf(sorted(movies, key=lambda i: -float(i.get("score") or 0))[:40])),
+            Item("A to Z", submenu=lambda: shelf(sorted(movies, key=lambda i: i["title"].lower())))]
+    rows += [Item(g, submenu=lambda g=g: shelf(sorted(by_genre[g], key=lambda i: i["title"].lower())),
+                  value=lambda g=g: str(len(by_genre[g])))
+             for g in sorted(by_genre, key=lambda g: -len(by_genre[g]))[:24]]
+    app.push(Menu(app, "VIDEO STORE", rows))
 
 
 def _logo_url(app, url):
@@ -3331,6 +3405,9 @@ def programming_items(app, c, save):
         Item("Restrict Ratings After", value=lambda: _label(MATURE_FROM, c.get("mature_from")),
              adjust=cyc("mature_from", MATURE_FROM, None),
              help="TV-MA, R and NC-17 titles only from this hour until 6 AM, as networks kept them to late night."),
+        Item("Pop-Up Trivia", value=lambda: "On" if c.get("popups") else "Off", adjust=flip("popups", False),
+             help="Facts about the programme in bubbles every couple of minutes (who directed it, who plays "
+                  "whom, when it first aired), as Pop-Up Video had them."),
         Item("Random Marathons", value=lambda: "On" if c.get("marathons") else "Off", adjust=flip("marathons", False),
              help="On about one day in three, from an hour picked at random: four to eight episodes of one show "
                   "back to back. The guide marks them."),
@@ -4098,6 +4175,13 @@ def weather_items(app):
         Item("Country", value=lambda: cfg.weather_country, adjust=country),
         Item("Units", value=lambda: "Fahrenheit" if cfg.weather_units == "F" else "Celsius",
              adjust=units),
+        Item("Radar", value=lambda: "On" if cfg.weather_radar else "Off",
+             adjust=lambda d: (setattr(cfg, "weather_radar", not cfg.weather_radar), cfg.save()),
+             help="The weather channel's radar page: the last hour's rain over the map (RainViewer, Esri)."),
+        Item("Alerts", value=lambda: "On" if cfg.weather_alerts else "Off",
+             adjust=lambda d: (setattr(cfg, "weather_alerts", not cfg.weather_alerts), cfg.save()),
+             help="The National Weather Service's alerts (US): a page on the weather channel, and a red crawl "
+                  "over live TV when one is severe."),
     ]
 
 

@@ -69,6 +69,20 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
   - mpv.conf beside the settings for any other mpv option;
   - Start On the last channel, the first, the guide or On Demand;
   - Preferred Version of a title with several files; Duplicates.
+- **Special channels:**
+  - the weather channel adds Local Radar (the last hour's frames over the
+    map), Today's Outlook by part of the day and, in the US, the National
+    Weather Service's alerts, with a red crawl over live TV for a severe
+    one (Preferences > Weather: Radar, Alerts);
+  - music channels: a Music Visualizer (waves, bars, spectrum) with the
+    song on a lower third; the sort method Whole Albums;
+  - the Video Store channel (rent mode): your movies on its shelves, SELECT
+    to browse New Releases, Staff Picks or a genre and rent one (Cathode's
+    channels: turn it on);
+  - Locked (18+) on any channel's page: scrambled picture and sound until
+    the parent PIN is entered;
+  - Pop-Up Trivia on a library channel: facts about the programme in
+    bubbles (who directed, who plays whom, when it first aired).
 - A day with a "we'll be right back" slate in it is no longer drawn up
   again at every start.
 

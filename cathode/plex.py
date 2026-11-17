@@ -438,6 +438,35 @@ class PlexClient:
         """Full metadata for the info screen."""
         return self._shape_detail(self._metadata(rating_key), rating_key)
 
+    def trivia(self, rating_key: str) -> list:
+        """Facts about a title for pop-ups: who directed, wrote and starred,
+        when it first aired, its studio, its tagline, its summary's lines."""
+        m = self._metadata(rating_key)
+        out = []
+        names = lambda key, n=3: [r.get("tag", "") for r in (m.get(key) or [])[:n] if r.get("tag")]   # noqa: E731
+        if names("Director"):
+            out.append("Directed by " + " and ".join(names("Director", 2)) + ".")
+        if names("Writer"):
+            out.append("Written by " + " and ".join(names("Writer", 2)) + ".")
+        roles = [(r.get("tag"), r.get("role")) for r in (m.get("Role") or [])[:4] if r.get("tag")]
+        for who, part in roles[:3]:
+            out.append(f"{who} plays {part}." if part else f"Starring {who}.")
+        if m.get("originallyAvailableAt"):
+            from datetime import datetime as _d
+            try:
+                d = _d.strptime(m["originallyAvailableAt"][:10], "%Y-%m-%d")
+                out.append(f"First aired {d:%B} {d.day}, {d.year}." if m.get("type") == "episode" else
+                           f"Released {d:%B} {d.day}, {d.year}.")
+            except ValueError:
+                pass
+        if m.get("studio"):
+            out.append(f"Made by {m['studio']}.")
+        if m.get("tagline"):
+            out.append(f"\"{m['tagline']}\"")
+        import re as _re
+        out += [s.strip() for s in _re.split(r"(?<=[.!?])\s+", m.get("summary") or "") if 20 < len(s.strip()) < 160][:4]
+        return out
+
     def _metadata(self, rating_key: str, query: str = "") -> dict:
         """One Metadata entry for an item, or raise. `query` is appended to the
         request (e.g. "?includeMarkers=1")."""

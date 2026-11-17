@@ -194,6 +194,9 @@ class Config:
     audio_passthrough: bool = False # AC3/DTS... to the receiver as they are
     start_on: str = "last"          # at start-up: last (channel) | first (channel) | ondemand | guide
     plex_version: str = "first"     # an item with several files: first | best | smallest
+    visualizer: str = "off"         # a music channel's picture: off (the album card) | waves | bars | spectrum
+    weather_radar: bool = True      # the weather channel's radar page (RainViewer over Esri's map)
+    weather_alerts: bool = True     # NWS alerts (US): their page, and a crawl over live TV for severe ones
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
     # logos and bugs go in the settings folder's logos folder (logos.py).
     bug_on: bool = True

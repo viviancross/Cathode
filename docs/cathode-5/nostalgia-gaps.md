@@ -67,12 +67,12 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Preferred version (of an item with several files)
 
 ## F. Special channels
-- [ ] Weather radar, hazards, more forecast screens
-- [ ] Severe weather alert crawl
-- [ ] Music visualizers; whole-album order
-- [ ] Rent mode video-store channel
-- [ ] Locked 18+ channel, scrambled picture
-- [ ] In-show pop-ups and trivia
+- [x] Weather radar, hazards, more forecast screens
+- [x] Severe weather alert crawl
+- [x] Music visualizers; whole-album order
+- [x] Rent mode video-store channel
+- [x] Locked 18+ channel, scrambled picture
+- [x] In-show pop-ups and trivia
 
 ## G. Admin web
 - [ ] Channel export / import (merge or replace)

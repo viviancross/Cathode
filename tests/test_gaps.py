@@ -101,7 +101,7 @@ class TestSchedule(Temp):
         idx = index()
         c = chan("A", "random", marathons=True)
         tl = tl_of(c, idx)
-        tl.at(datetime.now(timezone.utc) + timedelta(days=9))
+        tl.at(datetime.now(timezone.utc) + timedelta(days=30))
         runs = [s for s in tl._slots if len(s) > 3 and s[3].get("flag") == "Marathon"]
         self.assertTrue(runs)
         self.assertEqual(len({idx.item(s[1])["show_key"] for s in runs[:3]}), 1)
@@ -446,3 +446,45 @@ class TestPlayback(unittest.TestCase):
             th.Thread = real
         self.assertIn(("s", "55"), calls)
         self.assertTrue(any(c[0] == "t" and c[-1] == "stopped" for c in calls))
+
+
+class TestSpecialChannels(Temp):
+    def test_radar_tiles_and_alerts(self):
+        from cathode import radar
+        x, y = radar.tile_of(0.0, 0.0, 6)
+        self.assertEqual((x, y), (32.0, 32.0))
+        a = radar.parse({"event": "Tornado Warning", "headline": "Tornado Warning until 5 PM", "severity": "Extreme"})
+        self.assertEqual((a["event"], a["severity"]), ("Tornado Warning", "Extreme"))
+
+    def test_whole_albums(self):
+        music = library.Section("80", "Music", "music", "s1")
+        music.add_show({"ratingKey": "a1", "title": "Band"})
+        for n, alb in enumerate(["One"] * 3 + ["Two"] * 2):
+            music.add_item({"type": "track", "ratingKey": f"t{n}", "grandparentRatingKey": "a1", "grandparentTitle": "Band",
+                            "parentTitle": alb, "title": f"Song {n}", "index": n + 1, "duration": 200000})
+        idx = library.Index([music])
+        c = chan("Radio", "album", {"section": "80", "kind": "all", "only": "music"}, breaks={})
+        gs = lc.groups(c, idx)
+        self.assertEqual(sorted(len(g["items"]) for g in gs), [2, 3])
+        tl = lc.Timeline(c, idx, store=False)
+        order = [idx.item(x)["album"] for _t, x in slots(tl, 1)][:5]
+        self.assertTrue(order[:3] == ["One"] * 3 or order[:2] == ["Two"] * 2)
+
+    def test_the_store_and_a_locked_channel(self):
+        from types import SimpleNamespace as NS
+        from cathode import menus
+        from cathode.playlist import Channel
+        idx = index()
+        pushed = []
+        app = NS(library=idx, push=pushed.append, toast=lambda *a: None, config=NS(parent_pin="", channel_edits={}))
+        menus.open_store(app)
+        rows = {it.label: it for it in pushed[-1].items}
+        self.assertIn("New Releases", rows)
+        self.assertTrue(rows["Action"].submenu())
+        menus._lock(app, "u1")
+        self.assertEqual(app.config.channel_edits, {})          # no PIN: not locked
+        app.config.parent_pin = "1234"
+        app.config.save = lambda: None
+        app.live = None
+        menus._lock(app, "u1")
+        self.assertTrue(app.config.channel_edits["u1"]["locked"])

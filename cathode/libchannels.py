@@ -52,7 +52,7 @@ SCHEDULES: dict = {}            # channel id (with its prefix) -> Timeline
 ORDERS = [("mix", "Mix"), ("random", "Random"), ("cyclic_shuffle", "Cyclic Shuffle"), ("block_shuffle", "Block Shuffle"),
           ("block_cyclic", "Block Cyclic"), ("marathon_shuffle", "Marathon Shuffle"),
           ("marathon_cyclic", "Marathon Cyclic"), ("round_robin_shuffle", "Round Robin Shuffle"),
-          ("round_robin_cyclic", "Round Robin Cyclic"), ("playlist", "Playlist Order")]
+          ("round_robin_cyclic", "Round Robin Cyclic"), ("playlist", "Playlist Order"), ("album", "Whole Albums")]
 BLOCKS = {"block_shuffle": 2, "block_cyclic": 2, "marathon_shuffle": 12, "marathon_cyclic": 12}
 KINDS = [("all", "Everything"), ("genre", "Genre"), ("decade", "Decade"), ("studio", "Studio"),
          ("rating", "Rating"), ("show", "Show"), ("title", "Title"), ("season", "Season"),
@@ -433,7 +433,20 @@ def groups(c: dict, index) -> list:
             g["items"].sort(key=lambda i: (i["season"] == 0, i["season"], i.get("album", ""), i["episode"], i["air"]))
             if any(i["season"] for i in g["items"]):
                 g["items"] = [i for i in g["items"] if i["season"] or i["duration"] > CLIP_MAX] or g["items"]
-    return sorted((g for g in out.values() if g["items"]), key=lambda g: (g["title"].lower(), g["id"]))
+    gs = sorted((g for g in out.values() if g["items"]), key=lambda g: (g["title"].lower(), g["id"]))
+    if c.get("order") == "album":           # an album at a time: each artist's albums their own groups
+        split = []
+        for g in gs:
+            albums: dict = {}
+            for i in g["items"]:
+                albums.setdefault(i.get("album") or "", []).append(i)
+            if len(albums) < 2:
+                split.append(g)
+                continue
+            for name, its in albums.items():
+                split.append(dict(g, id=f"{g['id']}/{name}", items=its, src=set(g["src"])))
+        gs = split
+    return gs
 
 
 def yt_groups(c: dict, listings: dict) -> list:
@@ -591,7 +604,7 @@ class Rotor:
         if g is None or st.get("left", 0) <= 0:
             g = self._next_group()
             st["group"] = g["id"]
-            st["left"] = len(g["items"]) if o == "playlist" else self.block
+            st["left"] = len(g["items"]) if o in ("playlist", "album") else self.block
         st["left"] -= 1
         return self._next_in(g)
 
@@ -629,7 +642,7 @@ class Rotor:
 
     def _next_group(self) -> dict:
         o, st, n = self.order, self.st, len(self.groups)
-        if o in ("block_shuffle", "marathon_shuffle"):
+        if o in ("block_shuffle", "marathon_shuffle", "album"):
             # at random, the bigger shows more often, never the one just on
             st["n"] = st.get("n", 0) + 1
             rnd = self._rng("b", st["n"])

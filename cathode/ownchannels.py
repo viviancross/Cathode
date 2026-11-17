@@ -23,7 +23,12 @@ KINDS = {
                 "What's on now and next on every channel, with a look at what's showing."),
     "weather": ("Local Weather", "Local Weather",
                 "Current conditions, the hourly outlook, the extended forecast and the almanac, on the 8s."),
+    "videostore": ("Video Store", "Video Store",
+                   "Your movies on the shelves. Press SELECT to browse and rent one."),
 }
+
+
+DEFAULT = {"videostore": "off"}     # (the store is one to turn on: Settings > Channels > Cathode's channels)
 
 
 # Their logos: TV Guide's, and The Weather Channel's from the years of Local on the 8s.
@@ -57,7 +62,7 @@ def add_to(chans: list, config) -> list:
     taken = {c.number for c in out}
     nxt = int(max((c.number for c in out), default=0)) + 1
     for kind, (name, _t, _d) in KINDS.items():
-        want = (getattr(config, "own_channels", None) or {}).get(kind, "auto")
+        want = (getattr(config, "own_channels", None) or {}).get(kind, DEFAULT.get(kind, "auto"))
         if want == "off":
             continue
         try:
@@ -88,7 +93,7 @@ def fill_guide(epg, now=None, hours: int = 48):
 
 
 def make_page(ch, app):
-    return {"tvguide": TVGuidePage, "weather": WeatherPage}[kind_of(ch)](app)
+    return {"tvguide": TVGuidePage, "weather": WeatherPage, "videostore": StorePage}[kind_of(ch)](app)
 
 
 # ── Pages ─────────────────────────────────────────────────────────────────
@@ -476,7 +481,13 @@ class WeatherPage(Page):
             self._title(s, "Local Weather")
             self._message(s, body, ["Getting the local weather..."])
         else:
-            pages = [self._current, self._hourly, self._extended, self._almanac]
+            from . import radar
+            pages = [self._current, self._hourly, self._outlook, self._extended]
+            if getattr(self.app.config, "weather_radar", True) and radar.place(wx):
+                pages.append(self._radar)
+            if radar.alerts_now(self.app):
+                pages.insert(0, self._alerts)
+            pages.append(self._almanac)
             pages[int((time.monotonic() - self.t0) // self.HOLD) % len(pages)](s, body, data, now)
         self._crawl(s, data, now)
 
@@ -587,6 +598,70 @@ class WeatherPage(Page):
             lit = days[0].get("moon_lit", "")
             t.draw(s, f"Moon: {moon}" + (f" ({lit}% lit)" if lit else ""), f, _WHITE, body.x + 24, body.y + 130)
 
+    def _outlook(self, s, body, d, now):
+        """Today's outlook by part of the day: morning, afternoon, evening,
+        overnight, each its sky, temperature and chance of rain."""
+        t, f, f_small = self.text, self.font(_STAR, 20), self.font(_STAR, 16)
+        self._title(s, "Today's Outlook", d.get("city", ""))
+        hours = {h.get("hour"): h for h in ((d.get("days") or [{}])[0].get("hours") or [])}
+        parts = [("MORNING", 9), ("AFTERNOON", 15), ("EVENING", 18), ("OVERNIGHT", 21)]
+        if not hours:
+            self._message(s, body, ["No outlook yet."])
+            return
+        colw = body.w // len(parts)
+        for i, (label, h) in enumerate(parts):
+            x = body.x + i * colw + colw // 2
+            hh = hours.get(h) or hours[min(hours, key=lambda k: abs(k - h))]
+            t.draw(s, label, f_small, _YELLOW, x, body.y + 16, align="center")
+            draw_weather_icon(s, x - 28, body.y + 44, 56, hh.get("category", "cloudy"), h >= 18)
+            t.draw(s, f"{hh.get('temp', '')}°", self.font(_STAR, 30), _WHITE, x, body.y + 110, align="center")
+            t.draw(s, f"Rain {hh.get('rain', 0)}%", f_small, _WHITE, x, body.y + 150, align="center")
+            for k, line in enumerate(t.wrap(f_small, hh.get("desc", ""), colw - 12, 2)):
+                t.draw(s, line, f_small, _WHITE, x, body.y + 176 + k * 20, align="center")
+
+    def _radar(self, s, body, d, now):
+        """The radar: the last hour's frames looping over the map, the
+        place marked."""
+        from . import radar
+        self._title(s, "Local Radar", d.get("city", ""))
+        p = radar.place(self.app.weather)
+        base, frames, (px, py) = radar.radar(self.app).get(*p)
+        if base is None:
+            self._message(s, body, ["Getting the radar..."])
+            return
+        inner = body.inflate(-8, -8)
+        src = pygame.Rect(0, 0, inner.w, inner.h)
+        src.center = (px, py)
+        src.clamp_ip(base.get_rect())
+        s.blit(base, inner.topleft, src)
+        if frames:
+            k = int((time.monotonic() - self.t0) * 2) % (len(frames) + 2)
+            when, img = frames[min(k, len(frames) - 1)]
+            s.blit(img, inner.topleft, src)
+            stamp = datetime.fromtimestamp(when).strftime("%I:%M %p").lstrip("0")
+            self.text.draw(s, stamp, self.font(_STAR, 16), _WHITE, inner.right - 8, inner.y + 6, align="right",
+                           outline=(0, 0, 0))
+        dot = (inner.x + px - src.x, inner.y + py - src.y)
+        pygame.draw.circle(s, _YELLOW, dot, 5)
+        pygame.draw.circle(s, (0, 0, 0), dot, 5, 1)
+        self.text.draw(s, "Radar: RainViewer  Map: Esri, HERE, Garmin, OpenStreetMap", self.font(_STAR, 12), _WHITE, inner.x + 6,
+                       inner.bottom - 18, outline=(0, 0, 0))
+
+    def _alerts(self, s, body, d, now):
+        from . import radar
+        t, f, f_small = self.text, self.font(_STAR, 20), self.font(_STAR, 16)
+        items = radar.alerts_now(self.app)
+        self._title(s, "Weather Alerts", d.get("city", ""))
+        y = body.y + 14
+        for a in items[:3]:
+            col = (255, 90, 80) if a.get("severity") in radar.SEVERE else _YELLOW
+            t.draw(s, t.fit(f, a["event"].upper(), body.w - 40), f, col, body.x + 20, y)
+            y += 26
+            for line in t.wrap(f_small, a["headline"], body.w - 40, 2):
+                t.draw(s, line, f_small, _WHITE, body.x + 20, y)
+                y += 20
+            y += 10
+
     def _crawl(self, s, d, now):
         W, H = self.size
         t, f = self.text, self.font(_STAR, 20)
@@ -601,6 +676,63 @@ class WeatherPage(Page):
         tw = t.width(f, text)
         x = W - ((time.monotonic() - self.t0) * self.CRAWL % (tw + W))
         t.draw(s, text, f, _WHITE, int(x), band.y + 11)
+
+
+class StorePage(Page):
+    """The video store (NostalgiaTV's rent mode): a shelf of your movies'
+    boxes turning over, a new arrival in the window; SELECT opens the store
+    to browse by section and rent one (it plays as On Demand does)."""
+    fps = 4
+    TURN = 6.0
+
+    def movies(self) -> list:
+        idx = getattr(self.app, "library", None)
+        if idx is None:
+            return []
+        return [i for s in idx.sections.values() if s.kind == "movie" and not s.hidden for i in s.items]
+
+    def draw(self, s, now):
+        W, H = self.size
+        t = self.text
+        s.fill((18, 14, 40))
+        for y in range(0, H, 6):                    # the carpet's stripes
+            pygame.draw.rect(s, (24, 18, 54) if (y // 6) % 2 else (20, 15, 46), (0, y, W, 6))
+        t.draw(s, "VIDEO STORE", self.font(_STAR, 34), (255, 210, 40), W // 2, 10, align="center", outline=(120, 0, 0))
+        movies = self.movies()
+        if not movies:
+            self._note(s, ["The shelves are empty.", "Link Plex (Settings > Servers) and its movies fill them."])
+            return
+        k = int((time.monotonic() - self.t0) // self.TURN)
+        rnd = __import__("random").Random(k)
+        shelf = rnd.sample(movies, min(5, len(movies)))
+        bw, bh = 104, 156
+        x0 = (W - (bw + 14) * len(shelf) + 14) // 2
+        pygame.draw.rect(s, (90, 56, 30), (0, 68 + bh + 4, W, 10))
+        for n, i in enumerate(shelf):
+            x = x0 + n * (bw + 14)
+            od = getattr(self.app, "ondemand", None)
+            img = od.poster(i.get("thumb", ""), bw, bh) if od is not None else None
+            if img is not None:
+                s.blit(pygame.transform.smoothscale(img, (bw, bh)), (x, 66))
+            else:
+                pygame.draw.rect(s, (40, 40, 90), (x, 66, bw, bh))
+                for ln, line in enumerate(t.wrap(self.font(_STAR, 14), i["title"], bw - 8, 4)):
+                    t.draw(s, line, self.font(_STAR, 14), _WHITE, x + bw // 2, 76 + ln * 18, align="center")
+        new = max(movies, key=lambda i: i.get("added", 0))
+        f = self.font(_STAR, 18)
+        t.draw(s, t.fit(f, f"NEW RELEASE:  {new['title']}" + (f" ({new['year']})" if new.get("year") else ""), W - 40),
+               f, _WHITE, W // 2, H - 80, align="center")
+        t.draw(s, "Press SELECT to browse the store", self.font(_STAR, 16), (255, 210, 40), W // 2, H - 46,
+               align="center")
+
+    def _note(self, s, lines):
+        W, H = self.size
+        for n, line in enumerate(lines):
+            self.text.draw(s, line, self.font(_STAR, 20), _WHITE, W // 2, H // 2 - 20 + n * 30, align="center")
+
+    def on_select(self):
+        from . import menus
+        menus.open_store(self.app)
 
 
 # ── Music ─────────────────────────────────────────────────────────────────
@@ -621,7 +753,7 @@ def music_file(kind: str):
             p = os.path.join(d, f"{kind}.{ext}")
             if os.path.isfile(p):
                 return p
-    return None
+    return music_file("tvguide") if kind == "videostore" else None     # (the store plays the guide's tune)
 
 
 def play_music(kind: str, app):
