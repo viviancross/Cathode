@@ -1160,6 +1160,9 @@ def playback_items(app):
              adjust=cyc("still_watching", STILL),
              help="After this long with no button pressed, it asks; no answer in a minute and it signs off "
                   "(the picture stops, and the Plex session with it)."),
+        Item("Theme Songs", value=lambda: "On" if cfg.theme_music else "Off",
+             adjust=lambda d: (setattr(cfg, "theme_music", not cfg.theme_music), cfg.save()),
+             help="On Demand: a show's theme song plays quietly on its page, as Plex plays it."),
         Item("Mark Watched in Plex", value=lambda: "On" if cfg.plex_scrobble else "Off",
              adjust=lambda d: (setattr(cfg, "plex_scrobble", not cfg.plex_scrobble), cfg.save()),
              help="A library channel's programme seen nine tenths through is marked watched in Plex, and what's "
