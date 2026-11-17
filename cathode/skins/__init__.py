@@ -701,8 +701,7 @@ class Skin:
     def fb(self, size: int):
         return self.f(size, bold=True)
 
-    def cell_text(self, title: str, w: int, h: int, font_for, size: int, width=None, lead: int = 2,
-                  sub: str = "") -> tuple:
+    def cell_text(self, title: str, w: int, h: int, font_for, size: int, width=None, lead: int = 2) -> tuple:
         """(font, [lines]) for a guide cell w by h: the whole title on one
         line, the size stepping down to seven tenths; else whole on two
         lines (where two fit the row), stepping down the same way; else at
@@ -710,26 +709,20 @@ class Skin:
         A cell too narrow for three letters carries nothing: the cursor's
         header names the programme. font_for(size) is the skin's face at
         that size; width measures it (a condensed face measures its own).
-        lead: the gap between two lines. sub (the episode, "S5E11 - Name")
-        takes the second line, as NostalgiaTV's cells carry it, when the
-        title fits one and the row has room for two."""
+        lead: the gap between two lines. The title only: the header and INFO
+        give the episode."""
         t = self.text
         width = width or t.width
         f = font_for(size)
         if not title or w < width(f, "MMM"):
             return f, []
-
-        def one(f):
-            if sub and 2 * t.ink(f)[1] + lead <= h:
-                return f, [title, t.clip(f, sub, w, width)]
-            return f, [title]
         if width(f, title) <= w:
-            return one(f)
+            return f, [title]
         sizes = range(size - 1, int(size * 0.7) - 1, -1)
         for s in sizes:
             f = font_for(s)
             if width(f, title) <= w:
-                return one(f)
+                return f, [title]
         for s in (size,) + tuple(sizes):
             f = font_for(s)
             if 2 * t.ink(f)[1] + lead > h:

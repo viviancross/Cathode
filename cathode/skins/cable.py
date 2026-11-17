@@ -109,8 +109,8 @@ class CableSkin(BoxSkin):
     def mid(self, r, f) -> int:
         return r.y + (r.h - self.text.ink(f)[1]) // 2
 
-    def cell_lines(self, title, w, h, size, sub=""):
-        return self.cell_text(title, w, h, lambda s: self.fb(self.Y(s)), size, width=self.width, sub=sub)
+    def cell_lines(self, title, w, h, size):
+        return self.cell_text(title, w, h, lambda s: self.fb(self.Y(s)), size, width=self.width)
 
     # ── Pieces cut from a box's own frames ────────────────────────────────
 
@@ -682,7 +682,7 @@ class CableSkin(BoxSkin):
                     pygame.draw.polygon(c, ink, [(cell.right - X(3), cell.centery), (cell.right - X(8), cell.centery - Y(5)),
                                                  (cell.right - X(8), cell.centery + Y(5))])
                     r -= X(7)
-                f, lines = self.cell_lines(p.title, r - l, rh - Y(4), size, sub=p.episode)
+                f, lines = self.cell_lines(p.title, r - l, rh - Y(4), size)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1)) // 2
                 for line in lines:
@@ -1600,8 +1600,8 @@ class Passage(CableSkin):
                                  ("THEMES", name if g.focus != "category" else f"< {name} >", lambda: g.handle("THEMES")),
                                  ("INFO", "Info", lambda: g.handle("INFO"))], 1 if g.focus == "category" else None)
 
-    def cell_lines(self, title, w, h, size, sub=""):
-        return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width, sub=sub)
+    def cell_lines(self, title, w, h, size):
+        return self.cell_text(title, w, h, lambda s: self.f(self.Y(s)), size, width=self.width)
 
     def label_every(self, col_w, label_w):
         return max(2, super().label_every(col_w, label_w))      # the box labelled the half hours

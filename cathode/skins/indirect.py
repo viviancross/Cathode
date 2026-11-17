@@ -496,7 +496,7 @@ class InDirectHD(BoxSkin):
                     x += self._shadowed(c, "<", f_cell, ink if on else b["mark"], shadow, x, cy) + X(4)
                 more = p.stop > end
                 avail = cell.right - X(6) - x - (X(16) if more else 0)
-                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.fb(Y(s)), 30, sub=p.episode)
+                f, lines = self.cell_text(p.title, avail, rh - Y(4), lambda s: self.fb(Y(s)), 30)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
@@ -1613,7 +1613,7 @@ class InDirect(InDirectHD):
                 self._dss_cell(c, cell, on, airing=p.start <= now < p.stop)
                 ink, shadow = (b["sel_ink"], None) if on else (b["text"], b["shadow"])
                 f, lines = self.cell_text(p.title, cell.w - X(6), rh - Y(2), lambda s: self.fb(Y(s)), 12,
-                                          width=lambda f, s: int(t.width(f, s) * self.SQUEEZE), lead=0, sub=p.episode)
+                                          width=lambda f, s: int(t.width(f, s) * self.SQUEEZE), lead=0)
                 for k, line in enumerate(lines):
                     self._shadowed(c, line, f, ink, shadow, cell.x + X(3), y + Y(2) + k * t.ink(f)[1])
             self.hit((X(24), y, X(273), rh), lambda i=i: (setattr(g, "cursor", g.top + i),

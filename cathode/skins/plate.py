@@ -454,7 +454,7 @@ class PlateHD(BoxSkin):
                 right = min(cell.right, X(1216))         # the lettering stays inside the title-safe area
                 l, r = cell.x + (X(18) if p.start < start else X(6)), right - (X(18) if p.stop > end else X(6))
                 f, lines = self.cell_text(p.title, r - l, rh - Y(6), lambda s: self.fb(Y(s)), 27,
-                                          width=lambda f, s: int(t.width(f, s) * 0.86), sub=p.episode)
+                                          width=lambda f, s: int(t.width(f, s) * 0.86))
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 for line in lines:
@@ -1338,7 +1338,7 @@ class Plate(PlateHD):
                 if p.stop > end:
                     self._crescent(c, cell, mark, left=False)
                     inset_r = X(16)
-                f, lines = self.cell_text(p.title, cell.w - inset_l - inset_r, rh - Y(4), lambda s: self.fb(Y(s)), 17, sub=p.episode)
+                f, lines = self.cell_text(p.title, cell.w - inset_l - inset_r, rh - Y(4), lambda s: self.fb(Y(s)), 17)
                 lh = t.ink(f)[1]
                 ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
                 cx = cell.x + inset_l + (cell.w - inset_l - inset_r) // 2

@@ -405,9 +405,8 @@ class TestProgrammeInfo(unittest.TestCase):
         skin = skin_classes()["passage"](app)
         p = Program("c", "Futurama", datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=30),
                     episode="S2E4 - Xmas Story", rating="TV-14", air="Dec 19, 1999", quality="HD", minutes=22, score="8.0")
-        f, lines = skin.cell_text(p.title, 400, 80, lambda s: skin.f(s), 20, sub=p.episode)
-        self.assertEqual(lines, ["Futurama", "S2E4 - Xmas Story"])
-        self.assertEqual(skin.cell_text(p.title, 400, 22, lambda s: skin.f(s), 20, sub=p.episode)[1], ["Futurama"])
+        f, lines = skin.cell_text(p.title, 400, 80, lambda s: skin.f(s), 20)
+        self.assertEqual(lines, ["Futurama"])                   # a cell: the title alone
         f = skin.f(20)
         self.assertEqual(skin.fit_facts(f, "6:00", p, 10_000), "6:00   Dec 19, 1999   TV-14   HD   22 min   8.0/10")
         short = skin.fit_facts(f, "6:00", p, skin.width(f, "6:00   Dec 19, 1999   TV-1"))

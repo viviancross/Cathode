@@ -1072,7 +1072,7 @@ class Classic(Skin):
             if on_air:
                 pygame.draw.rect(c, p["SEL_TEXT"] if selected else p["CYAN"], (px + 1, y + 2, 4, rh - 4))
                 tx += 4
-            f, lines = self.cell_text(prog.title, px + pw - 4 - tx, rh - 6, self.f, self.TYPE["meta"], sub=prog.episode)
+            f, lines = self.cell_text(prog.title, px + pw - 4 - tx, rh - 6, self.f, self.TYPE["meta"])
             lh = t.ink(f)[1]
             ty = y + (rh - len(lines) * lh - (len(lines) - 1) * 2) // 2
             for line in lines:
