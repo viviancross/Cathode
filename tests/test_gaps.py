@@ -258,6 +258,84 @@ class TestScheduling(Temp):
                             for it in menus.running_order_items(app, lc.PREFIX + c["id"])))
 
 
+def with_ads(idx):
+    long = library.Section("70", "Old Ads Show", "show", "s1")
+    long.add_show({"ratingKey": "7", "title": "Old Ads", "year": 1990})
+    for e in range(1, 3):
+        long.add_item({"type": "episode", "ratingKey": f"70{e}", "grandparentRatingKey": "7", "grandparentTitle": "Old Ads",
+                       "parentIndex": 1, "index": e, "title": f"Reel {e}", "duration": 1800000})
+    ads = library.Section("11", "Classic Commercials", "clip", "s1")
+    for n in range(6):
+        ads.add_item({"type": "movie", "ratingKey": f"6{n}", "title": f"Ad {n}", "duration": 30000})
+    idx.sections.update({"70": long, "11": ads})
+    idx._by_id = None
+    return idx
+
+
+class TestBreaks(Temp):
+    def brk_tl(self, **brk):
+        idx = with_ads(index())
+        b = {"ads": [{"section": "11", "kind": "all"}], "bumps": [{"section": "10", "kind": "all"}], "pad": 30,
+             "mid": "off", "length": 120}
+        b.update(brk)
+        c = chan("A", "random", {"kind": "show", "value": "100"}, {"kind": "show", "value": "200"}, breaks=b)
+        return lc.Timeline(c, idx, store=False), idx
+
+    def breaks(self, tl):
+        tl.at(datetime.now(timezone.utc) + timedelta(hours=8))
+        out, cur = [], []
+        for s in tl._slots:
+            if len(s) > 3 and s[3].get("brk"):
+                cur.append(s)
+            elif cur:
+                out.append(cur)
+                cur = []
+        return out
+
+    def test_so_many_commercials_and_the_next_card(self):
+        tl, _idx = self.brk_tl(count=2, next_card=True)
+        for b in self.breaks(tl)[:5]:
+            self.assertEqual(sum(1 for s in b if s[3]["brk"] == "ad"), 2)
+            self.assertEqual(b[-1][1], lc.NEXT)
+        k = next(n for n, s in enumerate(tl._slots) if s[1] == lc.NEXT)
+        e = tl.at(datetime.fromtimestamp(tl._slots[k][0] + 1, timezone.utc))["entry"]
+        self.assertEqual((e["style"], e["kind"]), ("next", "brb"))
+        self.assertIn(e["next"]["title"], ("Alpha", "Bravo"))
+
+    def test_idents_in_order_and_pieces_of_a_long_video(self):
+        tl, idx = self.brk_tl(idents=[{"section": "10", "kind": "all"}], ad_order="in_order")
+        bs = self.breaks(tl)
+        self.assertTrue(all(b[0][3]["brk"] == "bump" for b in bs))
+        ads = [s[1] for b in bs for s in b if s[3]["brk"] == "ad"]
+        self.assertEqual(ads[:6], [f"p6{n}" for n in range(6)])
+        tl, idx = self.brk_tl(ads=[{"section": "70", "kind": "all", "chunks": True}])
+        pieces = [s for b in self.breaks(tl) for s in b if s[3]["brk"] == "ad"]
+        self.assertTrue(pieces and all(s[1] in ("p701", "p702") and 20 <= s[2] <= 90 and "in" in s[3] for s in pieces))
+
+    def test_mid_breaks_every_ten_minutes_and_at_quiet_moments(self):
+        from cathode import marks
+        tl, idx = self.brk_tl(mid="every10")
+        parts = [s for s in tl._slots if len(s) > 3 and s[3].get("part")]
+        tl.at(datetime.now(timezone.utc) + timedelta(hours=4))
+        parts = [s for s in tl._slots if len(s) > 3 and s[3].get("part")]
+        self.assertTrue(parts and all(s[3]["in"] in (600.0, 1200.0) for s in parts))
+        marks._cache = {"chapters": {}, "silences": {"100101": [[272.7, 2.5], [745.0, 2.0], [800.0, 0.6], [5, 3]]}}
+        try:
+            self.assertEqual(marks.cuts(idx.item("p100101"), "silences"), [272.7, 745.0])
+            self.assertIsNone(marks.cuts(idx.item("p100102"), "silences"))
+        finally:
+            marks._cache = None
+
+    def test_a_day_with_a_slate_is_kept_on_disk(self):
+        idx = index()
+        c = chan("A", "random", breaks={"ads": [], "bumps": [{"section": "10", "kind": "all"}], "pad": 30})
+        tl = lc.Timeline(c, idx)
+        tl.at(datetime.now(timezone.utc))
+        self.assertTrue(any(s[1] == lc.BRB for s in tl._slots))
+        again = lc.Timeline(c, idx)
+        self.assertEqual(again.days[0]["slots"], tl.days[0]["slots"])
+
+
 class TestDedupe(unittest.TestCase):
     def test_the_better_copy(self):
         a = library.Section("1", "Movies", "movie")

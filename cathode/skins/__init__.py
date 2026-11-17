@@ -603,14 +603,27 @@ class Skin:
         if s.get("style") == "gap":
             c.fill((0, 0, 0, 255))
             return
-        if s.get("style") == "brb":
-            for y in range(0, H, 4):
-                k = y / H
-                pygame.draw.rect(c, (int(10 + 20 * k), int(20 + 30 * k), int(70 + 60 * k)), (0, y, W, 4))
+        if s.get("style") in ("brb", "next"):
+            if not self._slate_picture(c):
+                for y in range(0, H, 4):
+                    k = y / H
+                    pygame.draw.rect(c, (int(10 + 20 * k), int(20 + 30 * k), int(70 + 60 * k)), (0, y, W, 4))
             f1, f2 = self.fb(max(16, H // 12)), self.f(max(12, H // 22))
+            nxt = s.get("next") or {}
+            if s.get("style") == "next" and nxt.get("title"):
+                y = int(H * 0.28)
+                self.text.draw(c, f"Coming up next on {s['name']}", f2, (230, 230, 255), W // 2, y, align="center",
+                               outline=(0, 0, 0))
+                self.text.draw(c, self.text.fit(f1, nxt["title"], W - 40), f1, (255, 255, 255), W // 2, y + H // 10,
+                               align="center", outline=(0, 0, 0))
+                if nxt.get("episode"):
+                    self.text.draw(c, self.text.fit(f2, nxt["episode"], W - 40), f2, (230, 230, 255), W // 2,
+                                   y + H // 10 + H // 9, align="center", outline=(0, 0, 0))
+                return
+            line = getattr(self.app.config, "brb_text", "") or "We'll be right back"
             self.text.draw(c, self.text.fit(f1, s["name"], W - 40), f1, (255, 255, 255), W // 2, int(H * 0.36),
                            align="center", outline=(0, 0, 0))
-            self.text.draw(c, "We'll be right back", f2, (230, 230, 255), W // 2, int(H * 0.36) + H // 8,
+            self.text.draw(c, self.text.fit(f2, line, W - 40), f2, (230, 230, 255), W // 2, int(H * 0.36) + H // 8,
                            align="center", outline=(0, 0, 0))
             return
         bw, h1, h2 = W / 7, int(H * 0.67), int(H * 0.75)
@@ -637,6 +650,28 @@ class Skin:
         for (t, f), h in zip(lines, hs):
             self.text.draw(c, self.text.fit(f, t, box.w - 16), f, (255, 255, 255), box.centerx, y, align="center")
             y += h + gap
+
+    def _slate_picture(self, c) -> bool:
+        """The picture chosen for the break slate (Settings > Commercials >
+        Break Screen), over the whole screen; False when there's none."""
+        import os
+        from .. import logos
+        name = getattr(self.app.config, "brb_image", "")
+        if not name:
+            return False
+        path = name if os.path.isabs(name) else os.path.join(logos.folder(self.app.config), name)
+        memo = getattr(self, "_slate_memo", None)
+        if memo is None or memo[0] != (path, c.get_size()):
+            try:
+                img = pygame.image.load(path).convert()
+                img = pygame.transform.smoothscale(img, c.get_size())
+            except (pygame.error, OSError, FileNotFoundError):
+                img = None
+            memo = self._slate_memo = ((path, c.get_size()), img)
+        if memo[1] is None:
+            return False
+        c.blit(memo[1], (0, 0))
+        return True
 
     def draw_qr(self, c, s):
         """A QR code on a white card over the dimmed picture: a title above,

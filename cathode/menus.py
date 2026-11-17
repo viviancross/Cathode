@@ -942,11 +942,45 @@ def commercials_tab(app):
              help="A break during a programme, and every break when they don't line up with the clock."),
         Item("During Programmes", value=lambda: all_value("mid", lc.MIDS, "off"),
              adjust=lambda d: set_all("mid", lc.MIDS, "off", d),
-             help="Breaks inside programmes of fifteen minutes or more: none, one halfway, or one every twenty "
-                  "minutes."),
+             help="Breaks inside programmes of fifteen minutes or more: none, halfway, every so many minutes, "
+                  "at chapter marks or at the quiet moments the show faded out for its own breaks."),
+        Item("Commercials Per Break", value=lambda: all_value("count", lc.COUNTS, 0),
+             adjust=lambda d: set_all("count", lc.COUNTS, 0, d),
+             help="Fill the time, or just this many commercials each break."),
+        Item("Coming Up Next Card", value=lambda: all_value("next_card", [(True, "On"), (False, "Off")], False),
+             adjust=lambda d: set_all("next_card", [(False, "Off"), (True, "On")], False, d),
+             help="The next programme's name on a card at the end of each break."),
+        Item("Announcer", value=lambda: "On" if cfg.announcer else "Off",
+             adjust=lambda d: (setattr(cfg, "announcer", not cfg.announcer), cfg.save()),
+             help="A voice reads the coming-up-next card (Windows' own voice; espeak on Linux, where it's "
+                  "installed)."),
+        Item("Break Screen", submenu=lambda: break_screen_items(app),
+             help="The slate when a break has time no commercial fits: its words and a picture of your own."),
         Item("Channel Configuration", submenu=channel_rows, value=lambda: f"{len(on())} of {len(chans())}",
              help="Which channels have breaks: SELECT one to turn them on or off."),
     ]
+
+
+def break_screen_items(app):
+    from . import logos
+    cfg = app.config
+
+    def words():
+        def got(text):
+            if text is not None:
+                cfg.brb_text = text.strip()
+                cfg.save()
+        app.push(Keyboard(app, "The slate's words (empty = We'll be right back)", got, initial=cfg.brb_text))
+
+    def picture(d):
+        names = [""] + sorted(os.path.basename(p) for p in logos.files(cfg).values())
+        cur = cfg.brb_image if cfg.brb_image in names else ""
+        cfg.brb_image = names[(names.index(cur) + d) % len(names)]
+        cfg.save()
+        app.invalidate()
+    return [Item("Words", words, value=lambda: cfg.brb_text or "We'll be right back"),
+            Item("Picture", lambda: picture(1), value=lambda: cfg.brb_image or "None", adjust=picture,
+                 help="A picture from your logos folder behind the slate and the coming-up-next card.")]
 
 
 def schedule_tab(app):
@@ -2591,7 +2625,8 @@ def breaks_items(app, c, save):
         save(place=False)
 
     def libs(key):
-        secs = sorted((s for s in index.sections.values() if s.breaks or s.kind == "clip"), key=lambda s: s.title.lower())
+        secs = sorted((s for s in index.sections.values() if s.breaks or s.kind in ("clip", "music")),
+                      key=lambda s: s.title.lower())
         return [Item(s.title, lambda s=s: flip(key, s.key), adjust=lambda d, s=s: flip(key, s.key),
                      value=lambda s=s: "On" if any(x.get("section") == s.key for x in b().get(key) or []) else "Off",
                      help=f"{len(s.items):,} clips.") for s in secs] or \
@@ -2618,8 +2653,78 @@ def breaks_items(app, c, save):
              help="A break during a programme, and every break when they don't line up with the clock."),
         Item("During programmes", value=lambda: _label(lc.MIDS, b().get("mid", "off")),
              adjust=lambda d: cycle("mid", lc.MIDS, "off", d),
-             help="Breaks inside programmes of fifteen minutes or more: one halfway, or one every twenty minutes."),
+             help="Breaks inside programmes of fifteen minutes or more: halfway, every so many minutes, at the "
+                  "chapter marks Plex has, or at the quiet moments where the show faded out for its own breaks "
+                  "(each title's sound is read once, in the background; until then, halfway)."),
+        Item("Commercials Per Break", value=lambda: _label(lc.COUNTS, int(b().get("count") or 0)),
+             adjust=lambda d: cycle("count", lc.COUNTS, 0, d),
+             help="Fill the time (to the clock, or the break length), or just this many commercials each break."),
+        Item("Running Order", value=lambda: "In order" if b().get("ad_order") == "in_order" else "Shuffled",
+             adjust=lambda d: (ensure().__setitem__("ad_order", None if b().get("ad_order") == "in_order"
+                                                     else "in_order"), save(place=False)),
+             help="Shuffled, or the commercials one after another in their order, carrying on break to break."),
+        Item("Pick Commercials", submenu=lambda: pick_ads(app, c, save, ensure),
+             help="Commercials one by one from your libraries, instead of whole libraries."),
+        Item("Idents from", submenu=lambda: libs("idents"), value=lambda: str(len(b().get("idents") or [])),
+             help="The station's own IDs: one between programmes, ahead of the bumper and the commercials."),
+        Item("Long Videos as Commercials", submenu=lambda: long_libs(app, c, save, ensure),
+             help="A TV show (or movies, or long clips) of old commercials, cut into 30 to 90 second pieces."),
+        Item("Coming Up Next Card", value=lambda: "On" if b().get("next_card") else "Off",
+             adjust=lambda d: (ensure().__setitem__("next_card", not b().get("next_card")), save(place=False)),
+             help="The next programme's name on a card for eight seconds at the end of the break."),
     ]
+
+
+def pick_ads(app, c, save, ensure):
+    """Commercials ticked one by one: a source of picked titles per library."""
+    from . import libchannels as lc
+    index = app.library
+
+    def srcs():
+        return ensure().setdefault("ads", [])
+
+    def picked(sec):
+        return next((s for s in srcs() if s.get("section") == sec.key and s.get("kind") == "title"), None)
+
+    def flip(sec, i):
+        s = picked(sec)
+        if s is None:
+            s = {"section": sec.key, "kind": "title", "value": []}
+            srcs().append(s)
+        vals = s["value"]
+        (vals.remove if i["plex"] in vals else vals.append)(i["plex"])
+        if not vals:
+            srcs().remove(s)
+        save(place=False)
+
+    def clips(sec):
+        return [Item(i["title"], lambda i=i: flip(sec, i), adjust=lambda d, i=i: flip(sec, i),
+                     value=lambda i=i: "Added" if i["plex"] in ((picked(sec) or {}).get("value") or []) else
+                     f"{int(i['duration'])} s") for i in sorted(sec.items, key=lambda i: i["title"].lower())
+                if i["duration"] <= lc.CLIP_MAX][:400] or [Item("(no short clips)", enabled=False)]
+    return [Item(s.title, submenu=lambda s=s: clips(s), value=lambda s=s: str(len((picked(s) or {}).get("value") or [])))
+            for s in sorted(index.sections.values(), key=lambda s: s.title.lower())
+            if s.breaks or s.kind in ("clip", "music")] or [Item("No libraries of clips", enabled=False)]
+
+
+def long_libs(app, c, save, ensure):
+    index = app.library
+
+    def on(key):
+        return any(s.get("section") == key and s.get("chunks") for s in ensure().get("ads") or [])
+
+    def flip(key):
+        lst = ensure().setdefault("ads", [])
+        have = [s for s in lst if s.get("section") == key and s.get("chunks")]
+        for s in have:
+            lst.remove(s)
+        if not have:
+            lst.append({"section": key, "kind": "all", "chunks": True})
+        save(place=False)
+    return [Item(s.title, lambda s=s: flip(s.key), adjust=lambda d, s=s: flip(s.key),
+                 value=lambda s=s: "On" if on(s.key) else "Off", help=f"{len(s.items):,} titles.")
+            for s in sorted(index.sections.values(), key=lambda s: s.title.lower())] or \
+        [Item("No libraries", enabled=False)]
 
 
 BALANCES = [("duration", "By duration"), ("count", "By count")]

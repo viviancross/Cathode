@@ -33,6 +33,23 @@ NostalgiaTV's features Cathode didn't have (the list picked 2026-11-17).
   Thanksgiving, Christmas, Valentine's...) air only in their season, and
   more often then.
 - **Running Order:** a channel's day hour by hour, its breaks included.
+- **Breaks, as NostalgiaTV has them:**
+  - lined up with the clock to 5 or 10 minutes too;
+  - Commercials Per Break: fill the time, or just so many;
+  - a Running Order for commercials (in order, carrying on break to break);
+  - Pick Commercials one by one;
+  - Idents (the station's IDs) between programmes, apart from bumpers;
+  - Long Videos as Commercials: a show of old ads cut into 30-90 s pieces;
+  - music libraries as commercial material;
+  - the Coming Up Next card at the end of a break, and an Announcer who
+    reads it (Windows' voice; espeak on Linux where installed);
+  - Break Screen: the slate's words and a picture of your own;
+  - mid-show breaks every 10, 15, 20 or 30 minutes, at Plex's chapter
+    marks, or at the quiet moments where a show faded out for its own
+    breaks (each title's sound read once in the background, a few seconds
+    each; halfway until then).
+- A day with a "we'll be right back" slate in it is no longer drawn up
+  again at every start.
 
 ## 5.2
 

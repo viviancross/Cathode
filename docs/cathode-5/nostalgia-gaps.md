@@ -33,18 +33,18 @@ phase by phase, each committed locally with tests. Status: [ ] todo, [x] done.
 - [x] Hour timeline with ad breaks (running order view)
 
 ## C. Breaks
-- [ ] 5 and 10 minute alignment
-- [ ] N commercials between shows; commercials per break
-- [ ] A TV show as commercials (long items cut into break-sized pieces)
-- [ ] Hand-picked commercials, running order
-- [ ] Custom break screens
-- [ ] Coming up next card between shows
-- [ ] Announcer voice
-- [ ] Idents apart from bumpers
-- [ ] Mid-show breaks at chapter markers
-- [ ] Mid-show breaks at silences
-- [ ] Fixed-interval mid-breaks
-- [ ] Music clips as commercials
+- [x] 5 and 10 minute alignment
+- [x] N commercials between shows; commercials per break
+- [x] A TV show as commercials (long items cut into break-sized pieces)
+- [x] Hand-picked commercials, running order
+- [x] Custom break screens
+- [x] Coming up next card between shows
+- [x] Announcer voice
+- [x] Idents apart from bumpers
+- [x] Mid-show breaks at chapter markers
+- [x] Mid-show breaks at silences
+- [x] Fixed-interval mid-breaks
+- [x] Music clips as commercials
 
 ## D. On screen
 - [ ] Up-next countdown

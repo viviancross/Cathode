@@ -175,6 +175,9 @@ class Config:
     stream_channels: list = field(default_factory=list)  # [{"name", "url", "number"}]: one live stream each
     dedupe_prefer: str = "plex"             # a title in two places: "plex" (Plex first) | "quality" (the better copy)
     channel_sort: str = "number"            # Settings > Channels' list: number | name | kind
+    brb_text: str = ""              # the break slate's line ("" = "We'll be right back")
+    brb_image: str = ""             # a picture behind the break slate and the coming-up-next card (logos folder or a path)
+    announcer: bool = False         # the coming-up-next card spoken (announcer.py)
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
     # logos and bugs go in the settings folder's logos folder (logos.py).
     bug_on: bool = True

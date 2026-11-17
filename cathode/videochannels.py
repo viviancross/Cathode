@@ -562,10 +562,14 @@ class Player:
         self.cur = cur
         live = self.live
         self.app.video.stop()
-        kind = cur["entry"]["kind"]
-        if kind == "brb" and cur["entry"]["duration"] < 5:
+        e = cur["entry"]
+        kind = e.get("style") or e["kind"]
+        if kind == "brb" and e["duration"] < 5:
             kind = "gap"                    # a few seconds between clips: black, not a flash of the slate
-        live.signoff = {"name": self.ch.name, "back": cur["stop"], "style": kind}
+        live.signoff = {"name": self.ch.name, "back": cur["stop"], "style": kind, "next": e.get("next") or {}}
+        if kind == "next" and getattr(self.app.config, "announcer", False):
+            from . import announcer
+            announcer.say(announcer.line(self.ch.name, e.get("next")), self.app.config.volume / 100)
         live.standby = False
         if live.phase == "cover":
             live._reveal()
