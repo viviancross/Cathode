@@ -104,7 +104,7 @@ def fill(app):
     from . import libchannels as lc
     from . import paths
     todo = [(k, i) for k, i in wanted(lc.SCHEDULES)[:PER_RUN]
-            if not (k == "silences" and getattr(paths, "ANDROID", False))]   # (a TV box: halfway instead)
+            if not (k == "silences" and getattr(paths, "LOW_POWER", False))]   # (a TV box: halfway instead)
     if not todo:
         return
     _busy = True

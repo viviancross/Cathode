@@ -145,7 +145,7 @@ def draw_alert_crawl(skin, c, live):
 
 def _box() -> bool:
     from .. import paths
-    return getattr(paths, "ANDROID", False)
+    return getattr(paths, "LOW_POWER", False)
 
 
 def bug_shown(skin, live) -> bool:

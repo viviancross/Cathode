@@ -185,7 +185,7 @@ class Video:
         self.player["start"] = str(start) if start > 0 else "none"
         self.player["sub-delay"] = sub_delay     # a transcode's clock starts mid-file
         try:                                      # a song's picture made from its sound (a visualizer)
-            self.player["lavfi-complex"] = (self.VISUALS_LIGHT if getattr(paths, "ANDROID", False) else self.VISUALS).get(visual, "")
+            self.player["lavfi-complex"] = (self.VISUALS_LIGHT if getattr(paths, "LOW_POWER", False) else self.VISUALS).get(visual, "")
         except Exception as e:
             print(f"[video] visualizer: {e!r}")
         with self._ids:
@@ -336,7 +336,7 @@ class Video:
     def scramble(self, on: bool):
         """A locked channel's picture and sound scrambled, as a premium
         channel came through without the box's say-so."""
-        light = getattr(paths, "ANDROID", False)             # (a TV box: no blur, its GPU is small)
+        light = getattr(paths, "LOW_POWER", False)             # (a TV box: no blur, its GPU is small)
         for kind, graph in (("vf", self.SCRAMBLE_V_LIGHT if light else self.SCRAMBLE_V), ("af", self.SCRAMBLE_A)):
             try:
                 self.player.command(kind, "remove", "@scramble")

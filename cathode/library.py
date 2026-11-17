@@ -23,7 +23,7 @@ from . import paths
 
 VERSION = 2                     # 2: quality, audio, score, air dates, title art
 PAGE = 2000
-SUMMARY = 160 if getattr(paths, "ANDROID", False) else 400     # characters of a summary kept (a TV box's memory: fewer)
+SUMMARY = 160 if getattr(paths, "LOW_POWER", False) else 400     # characters of a summary kept (a TV box's memory: fewer)
 QUALITY = {"4K": 4, "1080p": 3, "HD": 2, "SD": 1}
 BREAK_MEDIAN = 150          # an Other Videos library of clips shorter than this (median) is break material
 
