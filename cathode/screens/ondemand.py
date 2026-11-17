@@ -216,7 +216,7 @@ class OnDemandScreen(Screen):
             if self.od.downloads.items():
                 self.show_libraries([self._recordings_row()], "OFFLINE")
             else:
-                self.error(f"{msg} Press SELECT to try again, or check Settings > On Demand.")
+                self.error(f"{msg} Press SELECT to try again, or check Settings > Servers > Plex.")
         self.od.run(work, done, fail)
 
     def begin_auth(self):

@@ -5,7 +5,7 @@ Settings ask a kids' profile for the parent PIN. Every profile watches the
 same schedules: a channel shows the same programme whoever's watching.
 
 And the watch history: each time you leave a channel you watched for a
-minute or more, what it was, kept a month, for Settings > System."""
+minute or more, what it was, kept a month, for Settings > Profiles."""
 
 from __future__ import annotations
 

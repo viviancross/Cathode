@@ -276,20 +276,20 @@ class TestMaker(Temp):
         vid_page = menus.video_channel_page(app, vid)
         pages = [lib_page, vid_page, menus.library_source_page(app, lid, 0), menus.video_source_page(app, vid, 0),
                  menus.coming_up_items(app, lc.PREFIX + lid), menus.skipped_items(app, lc.PREFIX + lid),
-                 menus.channel_items(app)]
+                 menus.source_items(app), menus.channels_tab(app)]
         for items in pages:
             for it in items:
                 self.assertTrue(it.label)
                 if it.value:
                     self.assertIsInstance(it.value(), str, it.label)
         rows = {it.label: it for it in lib_page}
-        self.assertEqual(rows["Sort method"].value(), "Block Shuffle")
-        self.assertEqual(rows["Block length"].value(), "2 episodes")
+        self.assertEqual(rows["Sorting Method"].value(), "Block Shuffle")
+        self.assertEqual(rows["Block Size"].value(), "2 episodes")
         self.assertEqual(rows["Weighting"].value(), "-")
         rows["On the air"].adjust(1)
         self.assertEqual(app.config.library_channels[0]["hours"], [6, 2])
         self.assertEqual(rows["On the air"].value(), "6 AM to 2 AM")
-        rows["Ratings"].adjust(1)
+        rows["Audience"].adjust(1)
         self.assertEqual(app.config.library_channels[0]["content"], "family")
         self.assertEqual(len(pages[4]), 30)                         # coming up: thirty programmes
         src = {it.label: it for it in pages[2]}
@@ -300,7 +300,7 @@ class TestMaker(Temp):
         self.assertEqual((s["airs"], s["season"], s["exclude"]), ({"from": 6, "to": 12}, [12], True))
         self.assertEqual(src["Airs"].value(), "Mornings")
         vrows = {it.label: it for it in vid_page}
-        self.assertEqual((vrows["Sort method"].value(), vrows["Weighting"].value()), ("Mix", "Auto"))
+        self.assertEqual((vrows["Sorting Method"].value(), vrows["Weighting"].value()), ("Mix", "Auto"))
         vsrc = {it.label: it for it in pages[3]}
         self.assertEqual((vsrc["Plays as"].value(), vsrc["Newest only"].value()), ("Separate videos", "All"))
         vsrc["Newest only"].adjust(2)
@@ -320,8 +320,8 @@ class TestMaker(Temp):
         rows["Make a copy"].action()
         self.assertEqual([c["name"] for c in app.config.library_channels], ["Chan", "Chan (copy)"])
         self.assertNotEqual(app.config.library_channels[1]["id"], lid)
-        guide = next(it for it in pages[6] if it.label == "Guide listings")
-        self.assertEqual(guide.value(), "2 days")
+        guide = next(it for it in menus.schedule_tab(app) if it.label == "Schedule Length")
+        self.assertEqual(guide.value(), "2 Days")
         guide.adjust(1)
         self.assertEqual(app.config.guide_days, 7)
 

@@ -807,11 +807,13 @@ class Skin:
         c.blit(img, (x, y))
 
     def own_bug(self, ch) -> dict:
-        """A library channel's own screen bug settings ({} for the usual)."""
+        """A channel's own screen bug look ({} for the usual): a library
+        channel's (Tunarr's), then what its page set."""
         from .. import libchannels as lc, videochannels as vc
-        if not vc.is_video(ch):
-            return {}
-        return (lc.entry(self.app.config, vc.cid_of(ch)) or {}).get("bug") or {}
+        cfg = self.app.config
+        own = dict((lc.entry(cfg, vc.cid_of(ch)) or {}).get("bug") or {}) if vc.is_video(ch) else {}
+        own.update(((getattr(cfg, "channel_edits", None) or {}).get(ch.url) or {}).get("bug_look") or {})
+        return own
 
     def _in_break(self, ch) -> bool:
         """A Cathode channel is in a break now (a commercial, a bumper, the

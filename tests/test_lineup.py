@@ -71,23 +71,41 @@ class TestMaker(unittest.TestCase):
         app.relineup = lambda: shown.append(lineup.apply(cs, cfg))
         pushed = []
         app.push = pushed.append
-        app.top = lambda: SimpleNamespace(pages=[["EDIT LINEUP", [], 0], ["CH4", [], 0]], refresh=lambda *a: None,
+        app.top = lambda: SimpleNamespace(pages=[["Channels", [], 0], ["4  Ch4", [], 0]], refresh=lambda *a: None,
                                           back=lambda: None)
         app.toast = lambda *a, **k: None
-        rows = menus.lineup_items(app)
-        self.assertEqual([it.label for it in rows][:4], ["Packs", "Show every hidden channel", "2  Ch2", "4  Ch4"])
-        page = {it.label: it for it in menus.channel_edit_items(app, cs[1])}
-        page["Show in the lineup"].action()
+        app.ondemand = SimpleNamespace(signed_in=False)
+        app.toggle_favorite = lambda ch: cfg.favorites.append(ch.number)
+        app.invalidate = lambda: None
+        rows = menus.channels_tab(app)
+        self.assertIn("2  Ch2", [it.label for it in rows])
+        self.assertEqual(rows[0].label, "Add Custom Channel")
+        page = {it.label: it for it in menus.channel_editor(app, cs[1])}
+        page["Channel Visible"].action()
         self.assertEqual(cfg.channel_edits["u4"], {"hide": True})
         self.assertNotIn("Ch4", [c.name for c in shown[-1]])
-        self.assertEqual(page["Show in the lineup"].value(), "Hidden")
-        page["Number"].action()
+        self.assertEqual(page["Channel Visible"].value(), "No")
+        hidden = menus.hidden_items(app)
+        self.assertEqual([it.label for it in hidden], ["Show All", "4  Ch4"])
+        hidden[1].action()                                             # Restore
+        self.assertNotIn("u4", cfg.channel_edits)
+        page["Favorite"].action()
+        self.assertEqual(page["Favorite"].value(), "Yes")
+        page["Channel Number"].action()
         pushed[-1].on_done("10.5")                                     # typed on the keyboard
         self.assertEqual(cfg.channel_edits["u4"].get("number"), 10.5)
+        bug = {it.label: it for it in page["Screen Bug"].submenu()}    # the channel's own bug look
+        bug["Position"].adjust(1)
+        bug["Opacity"].adjust(1)
+        self.assertEqual(cfg.channel_edits["u4"]["bug_look"], {"corner": "bottom left", "opacity": 20})
+        bug["Show It"].action()
+        self.assertTrue(cfg.channel_edits["u4"]["bug_look"]["off"])
+        bug["As It Came"].action()
+        self.assertNotIn("bug_look", cfg.channel_edits["u4"])
         page["As it came"].action()
         self.assertNotIn("u4", cfg.channel_edits)
         cfg.packs = [{"name": "Kids", "keys": []}]
-        packs = page["Packs"].submenu()
+        packs = page["Channel Packs"].submenu()
         packs[0].action()
         self.assertEqual(cfg.packs[0]["keys"], ["u4"])
         pp = {it.label: it for it in menus.pack_page(app, cfg.packs[0])}

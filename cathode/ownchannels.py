@@ -471,7 +471,7 @@ class WeatherPage(Page):
             hint = getattr(self.app, "press_hint", None)
             self._title(s, "Local Weather")
             self._message(s, body, ["No zip code set.", f"Press {hint('MENU') if hint else 'MENU'}, then "
-                                    "Settings > System > Weather, to add yours."])
+                                    "Settings > Preferences > Weather, to add yours."])
         elif data is None:
             self._title(s, "Local Weather")
             self._message(s, body, ["Getting the local weather..."])

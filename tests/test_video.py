@@ -268,7 +268,7 @@ class TestMaker(unittest.TestCase):
         for lst in ({}, listings(PLa=("Hits", songs(5)), **{"@Bob": ("Bob", episodes(3, "Bob"))})):
             app.listings = lst
             vc.rebuild(app)
-            pages = [menus.video_channel_items(app)]
+            pages = [menus.channels_tab(app), menus.youtube_items(app)]
             cid = app.config.video_channels[0]["id"]
             pages.append(menus.video_channel_page(app, cid))
             pages.append(menus.video_source_items(app, cid))
@@ -279,9 +279,10 @@ class TestMaker(unittest.TestCase):
                     self.assertTrue(it.label)
                     if it.value:
                         self.assertIsInstance(it.value(), str)
-            self.assertEqual([it.label for it in pages[0]][:2], ["Mix", "Video Channel"])
-        self.assertEqual([it.label for it in pages[2]][:2], ["Hits", "Bob"])
-        self.assertEqual(pages[1][2].value(), "2")              # Sources: 2
+            self.assertEqual([it.label for it in pages[0]][-2:], ["2  Mix", "3  Video Channel"])
+            self.assertEqual(pages[0][-1].value(), "YouTube")
+        self.assertEqual([it.label for it in pages[3]][:2], ["Hits", "Bob"])
+        self.assertEqual({it.label: it for it in pages[2]}["Content"].value(), "2")       # its sources: 2
         self.assertEqual(menus.video_channel_page(app, "nope")[0].enabled, False)
         self.assertEqual(menus.video_source_page(app, cid, 9)[0].enabled, False)
 

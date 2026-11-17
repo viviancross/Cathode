@@ -270,7 +270,7 @@ class TestFirstRun(unittest.TestCase):
         pl = {"name": "Old", "playlist_url": "a"}
         app = SetupApp(playlists=[pl], url="a")
         app.toast = lambda *a: None
-        m = Menu(app, "CHANNELS", menus.channel_items(app))
+        m = Menu(app, "Live TV Sources", menus.source_items(app))
         app.push(m)
         m.activate(0)                                   # the playlist's page
         rename = next(i for i, it in enumerate(m.items) if it.label.startswith("Rename"))

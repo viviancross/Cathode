@@ -74,7 +74,7 @@ NEW_DAYS = 14                   # a title added this recently is new (the guide 
 PREMIERE_HOUR = 20              # premieres air at the first programme from 8 PM
 PREMIERES = [("off", "Off"), ("prime", "8 PM, the newest arrival")]
 WEIGHTINGS = [("auto", "Auto"), ("equal", "Equal"), ("manual", "Manual")]
-CONTENT = [("any", "Anything"), ("family", "Nothing rated for grown-ups"), ("kids", "Kids' ratings only")]
+CONTENT = [("any", "Adults"), ("family", "Everyone"), ("kids", "Kids")]     # NostalgiaTV's Audience
 # When a channel is on the air: [sign on, sign off] hours, or None for always.
 HOURS = [(None, "Always"), ([6, 2], "6 AM to 2 AM"), ([6, 0], "6 AM to midnight"), ([5, 1], "5 AM to 1 AM"),
          ([7, 23], "7 AM to 11 PM"), ([6, 18], "Daytime, 6 AM to 6 PM"), ([18, 6], "Nights, 6 PM to 6 AM"),
@@ -1435,8 +1435,8 @@ def start(app, fresh: bool = False, done=None):
                 cfg.save()
                 _sync.quiet(app)                # Cathode's doing, not an edit: another Cathode's lists still win
                 if n:
-                    app.toast(f"{n} channels made from your Plex library. Settings > Channels > "
-                              "Library Channels to change them.", 10.0)
+                    app.toast(f"{n} channels made from your Plex library. Settings > Channels "
+                              "to change them.", 10.0)
             elif cfg.library_starter_make < STARTER_MAKE:
                 # an older make of the starter lineup: its channels nobody edited become this one's
                 old = any(c.get("starter") for c in cfg.library_channels)

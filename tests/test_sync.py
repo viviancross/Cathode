@@ -297,7 +297,7 @@ class TestHello(unittest.TestCase):
         from cathode import menus
         app = App("me")
         app.ondemand = None
-        row = next(it for it in menus.channel_items(app) if it.label == "Sync with other Cathodes")
+        row = next(it for it in menus.admin_items(app) if it.label == "Sync with other Cathodes")
         self.assertEqual(row.value(), "Off")                        # not started in a test
         app.sync = sync.Sync(app)
         app.sync.peers = {"d": {"id": "d", "ip": "x", "port": 1, "name": "steamdeck", "seen": time.monotonic()}}

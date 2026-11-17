@@ -305,10 +305,10 @@ class LiveTV(Screen):
             return "No description for this program."
         app = self.app
         if not app.config.epg_url:
-            return "This playlist has no guide. Add its address in Settings > Channels."
+            return "This playlist has no guide. Add its address in Settings > Channels > Live TV Sources."
         if not ownchannels.real_ids(app.epg):
-            return ("The guide didn't load. Check its address in Settings > Channels." if app.epg_failed
-                    else "The guide has nothing in it. Check its address in Settings > Channels.")
+            return ("The guide didn't load. Check its address in Settings > Channels > Live TV Sources." if app.epg_failed
+                    else "The guide has nothing in it. Check its address in Settings > Channels > Live TV Sources.")
         ch = self.channel
         if ch and not app.epg.resolve_channel_id(ch.epg_id, ch.name):
             return "The guide doesn't list this channel."

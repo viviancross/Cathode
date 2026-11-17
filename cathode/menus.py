@@ -47,12 +47,18 @@ DESCRIPTIONS.update({
     "Refresh guide": "Fetch the TV guide again now.",
     "My Recordings": "What you've downloaded to watch here.",
     "Button Guide": "What every button does, on this box.",
-    "Settings": "Picture, channels, subtitles, buttons and more.",
+    "Settings": "Channels, commercials, the schedule, the look and the rest.",
     "Exit Cathode": "Close Cathode.",
     "Restart Cathode": "Close Cathode and start it again.",
     # Settings
     "Picture & Style": "The box, its colors and lettering, screen effects.",
-    "Channels": "Your playlists and their guides.",
+    "Channels": "Add, edit, hide and group channels; where they come from.",
+    "Commercials": "What every channel's breaks are made of, and which channels have them.",
+    "Schedule": "Draw the schedule up afresh, read the library again, how far ahead.",
+    "Design": "The box, its colors and lettering, screen effects.",
+    "Preferences": "Subtitles, the channel logo, the screen, start-up, sound, the remote, weather.",
+    "Servers": "Plex, Jellyfin, Emby and folders.",
+    "Admin": "The phone remote, other Cathodes, backups, diagnostics, updates.",
     "Cathode's channels": "A TV Guide channel and a Weather channel of Cathode's own, in the lineup.",
     "Display": "Full screen, and which screen to use.",
     "Remote control": "Your remote, and which button does what.",
@@ -83,7 +89,7 @@ DESCRIPTIONS.update({
     "Audio output": "Which speakers or HDMI the sound uses.",
     "Video Channels": "YouTube playlists and channels, mixed, as channels of videos on a timeline.",
     "Library Channels": "Channels made from your Plex library: genres, decades, studios, shows, movies.",
-    "Plays": "What the channel draws from.",
+    "Content": "What the channel plays.",
     "Weather": "Local weather in the guide's header and on the Weather channel.",
     "Check for updates": "See if there's a newer Cathode.",
     "Check at start-up": "Look for a newer Cathode each time it opens.",
@@ -188,7 +194,7 @@ def open_welcome(app):
             m.open("YOUR LINEUP IS READY", [
                 Item("Start watching", lambda: finish(first), value=lambda: f"{n} channels",
                      help=f"{n} channels{at}: {names}{'...' if n > 8 else ''}. Change them under Settings > "
-                          "Channels > Library Channels.")])
+                          "Channels.")])
 
         def tick():
             if state["done"] or m not in app.screens:
@@ -322,11 +328,57 @@ def main_items(app):
         *([Item("Who's watching", submenu=lambda: who_items(app),
                 value=lambda: _who_name(app))]
           if app.config.profiles else []),
+        Item("Channel Search", lambda: channel_search(app), enabled=bool(app.channels),
+             help="Type part of a channel's name or its number."),
+        Item("Sleep Timer", lambda: sleep_step(app, 1), value=lambda: sleep_value(app), adjust=lambda d: sleep_step(app, d),
+             help="Cathode closes when it runs out, as a TV switches itself off. SELECT or RIGHT for longer."),
         Item("Settings", lambda: _pin_then(app, lambda: app.top().open("Settings", settings_items(app)))),
         Item("Button Guide", submenu=lambda: button_guide_items(app)),
         Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart, "Keep watching", close=True)),
         Item("Exit Cathode", submenu=lambda: _confirm(app, "Exit Cathode", app.quit, "Keep watching", close=True)),
     ]
+
+
+def channel_search(app):
+    """A channel by part of its name or its number, tuned with SELECT."""
+    def got(text):
+        text = (text or "").strip().lower()
+        if not text:
+            return
+        hits = [ch for ch in app.channels if text in ch.name.lower() or f"{ch.number:g}".startswith(text)][:60]
+
+        def tune(ch):
+            leave_ondemand(app)
+            if ch in app.channels:
+                app.live.tune(app.channels.index(ch))
+        app.top().open("CHANNEL SEARCH", [Item(f"{ch.number:g}  {ch.name}", lambda ch=ch: tune(ch), close=True)
+                                          for ch in hits] or [Item("No channel has that", enabled=False)])
+    app.push(Keyboard(app, "Channel name or number", got))
+
+
+SLEEP = [0, 30, 60, 120, 240, 360, 480]          # minutes; 0 off
+
+
+def sleep_value(app) -> str:
+    left = getattr(app, "_sleep_at", 0) - time.time()
+    if left <= 0:
+        return "Off"
+    m = int(left // 60) + 1
+    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}"
+
+
+def sleep_step(app, d):
+    """Off, 30 minutes, an hour, 2, 4, 6, 8 hours, round again: Cathode
+    closes when it runs out."""
+    cur = getattr(app, "_sleep_for", 0) if getattr(app, "_sleep_at", 0) > time.time() else 0
+    to = SLEEP[(SLEEP.index(cur) + d) % len(SLEEP)] if cur in SLEEP else SLEEP[1]
+    app._sleep_for, app._sleep_at = to, (time.time() + to * 60) if to else 0
+    app._sleep_gen = gen = getattr(app, "_sleep_gen", 0) + 1
+    if to:
+        app.after(to * 60, lambda: gen == app._sleep_gen and app.quit())
+        app.toast(f"Sleep timer: {sleep_value(app)}.")
+    else:
+        app.toast("Sleep timer off.")
 
 
 def _confirm(app, yes: str, do, keep: str = "Keep it", close: bool = False):
@@ -337,21 +389,503 @@ def _confirm(app, yes: str, do, keep: str = "Keep it", close: bool = False):
 
 
 def settings_items(app):
+    """Settings, laid out as NostalgiaTV's tabs: Channels, Commercials,
+    Schedule, Design, Preferences, Servers, Profiles, Admin."""
     return [
-        Item("Picture & Style", submenu=lambda: style_items(app)),
-        Item("Channels", submenu=lambda: channel_items(app)),
-        Item("Display", submenu=lambda: display_items(app)),
-        Item("Subtitles", submenu=lambda: subtitle_items(app), help="Subtitle language, size and look."),
-        Item("On Demand", submenu=lambda: ondemand_settings(app), help="Plex quality, libraries and your account."),
-        Item("Remote control", submenu=lambda: remote_items(app)),
-        Item("System", submenu=lambda: system_items(app)),
+        Item("Channels", submenu=lambda: channels_tab(app)),
+        Item("Commercials", submenu=lambda: commercials_tab(app)),
+        Item("Schedule", submenu=lambda: schedule_tab(app)),
+        Item("Design", submenu=lambda: style_items(app)),
+        Item("Preferences", submenu=lambda: preference_items(app)),
+        Item("Servers", submenu=lambda: server_items(app)),
         Item("Profiles", submenu=lambda: profile_items(app),
              help="Who's watching: each profile its own look and favourites; kids' profiles; the parent PIN; the "
                   "watch history."),
+        Item("Admin", submenu=lambda: admin_items(app)),
     ]
 
 
-# ── On Demand ─────────────────────────────────────────────────────────────
+def _lineup_all(app) -> list:
+    """Every channel in the lineup, the hidden ones too."""
+    return getattr(app, "lineup_all", None) or getattr(app, "channels", None) or []
+
+
+def _by_url(app, url):
+    return next((ch for ch in _lineup_all(app) if ch.url == url), None)
+
+
+def _refresh(app, pages: dict):
+    """Pages further back in the menu made again (a page's rows are made
+    as it opens): a channel added, renamed or taken out shows on them."""
+    m = app.top() if callable(getattr(app, "top", None)) else None
+    for pg in getattr(m, "pages", None) or []:
+        fn = pages.get(pg[0])
+        if fn is not None:
+            pg[1] = fn()
+            pg[2] = max(0, min(pg[2], len(pg[1]) - 1))
+
+
+def _lists_changed(app):
+    _refresh(app, {"Channels": lambda: channels_tab(app), "Hidden Channels": lambda: hidden_items(app)})
+
+
+def _kind(app, ch) -> str:
+    from . import libchannels as lc, ownchannels, videochannels as vc
+    if (app.config.channel_edits.get(ch.url) or {}).get("hide"):
+        return "Hidden"
+    if lc.is_library(ch):
+        return "Library"
+    if vc.is_video(ch) and vc.entry(app.config, vc.cid_of(ch)):
+        return "YouTube"
+    if ch.url.startswith(ownchannels.SCHEME):
+        return "Cathode"
+    return "Playlist"
+
+
+def channels_tab(app):
+    """Settings > Channels, as NostalgiaTV's: a channel of your own first,
+    where the rest come from, packs, hidden ones, content groups, Cathode's
+    own, the starter lineup; then every channel, each opening its editor."""
+    from . import lineup as lu
+    cfg = app.config
+    rows = [
+        Item("Add Custom Channel", submenu=lambda: add_channel_items(app),
+             help="A channel of your own: from your library (shows, movies, genres, decades...) or from YouTube."),
+        Item("Live TV Sources", submenu=lambda: source_items(app), value=lambda: str(len(cfg.playlists)),
+             help="Where the rest of the lineup comes from: Tunarr, ErsatzTV, an M3U link, an HDHomeRun tuner."),
+        Item("Channel Packs", submenu=lambda: pack_items(app), value=lambda: str(len(lu.packs(cfg))),
+             help="Named sets of channels, each a tab in the guide's categories (THEMES, or OPTIONS)."),
+        Item("Hidden Channels", submenu=lambda: hidden_items(app),
+             value=lambda: str(sum(1 for e in cfg.channel_edits.values() if e.get("hide"))),
+             help="Channels you've hidden, to show again."),
+        Item("Content Groups", submenu=lambda: content_group_items(app), value=lambda: str(len(cfg.content_groups)),
+             help="Named sets of content (Saturday cartoons, 90s sitcoms) to add to any channel: change the group "
+                  "and every channel with it follows."),
+        Item("Cathode's channels", submenu=lambda: own_channel_items(app)),
+        Item("Starter Lineup", submenu=lambda: starter_items(app),
+             value=lambda: str(sum(1 for c in cfg.library_channels if c.get("starter"))),
+             help="The channels Cathode makes from your library: your Tunarr lineup and a few of its own."),
+    ]
+    return rows + [Item(f"{ch.number:g}  {ch.name}", submenu=lambda ch=ch: channel_editor(app, ch),
+                        value=lambda ch=ch: _kind(app, ch), help="SELECT: everything about this channel.")
+                   for ch in _lineup_all(app)]
+
+
+def channel_editor(app, ch):
+    """One page for everything about a channel, as NostalgiaTV's channel
+    editor: a library or YouTube channel's whole make-up; any other its
+    name, number, place in the lineup, logo and bug."""
+    from . import libchannels as lc, videochannels as vc
+    if lc.is_library(ch):
+        return library_channel_page(app, vc.cid_of(ch)[len(lc.PREFIX):])
+    if vc.is_video(ch) and vc.entry(app.config, vc.cid_of(ch)):
+        return video_channel_page(app, vc.cid_of(ch))
+    return channel_edit_items(app, ch)
+
+
+def open_channel_editor(app, ch):
+    """The editor over live TV (Options > Edit this channel)."""
+    if ch is not None:
+        app.push(Menu(app, f"{ch.number:g}  {ch.name}", channel_editor(app, ch)))
+
+
+def add_channel_items(app):
+    """Add Custom Channel: from the library or from YouTube; named, then
+    straight to what it plays."""
+    from . import libchannels as lc, videochannels as vc
+    cfg = app.config
+    linked = bool(app.ondemand.signed_in or cfg.media_servers or cfg.local_folders)
+
+    def make(kind):
+        def got(text):
+            if text is None:
+                return
+            text = text.strip() or "New Channel"
+            if kind == "library":
+                c = lc.new_channel(text)
+                cfg.library_channels.append(c)
+                cfg.save()
+                lc.place(app)
+            else:
+                c = vc.new_channel(text)
+                cfg.video_channels.append(c)
+                cfg.save()
+                app.place_own_channels()
+            m = app.top()
+            m.back()                                    # (off this page: the new channel is on the list)
+            _lists_changed(app)
+            if kind == "library":
+                m.open(text.upper(), library_channel_page(app, c["id"]))
+                m.open("Content", library_source_items(app, c["id"]))
+            else:
+                m.open(text.upper(), video_channel_page(app, c["id"]))
+                m.open("Content", video_source_items(app, c["id"]))
+        app.push(Keyboard(app, "Channel Name", got, hint="Then add what it plays."))
+    return [
+        Item("From my library", lambda: make("library"), enabled=linked,
+             help="Shows, movies, a library, genres, decades, studios: on a timeline, with breaks." if linked else
+             "Link Plex first (Settings > Servers), or add Jellyfin, Emby or a folder there."),
+        Item("From YouTube", lambda: make("video"),
+             help="Playlists, channels and @handles, mixed, on a timeline."),
+    ]
+
+
+def hidden_items(app):
+    """Hidden Channels: each shown again with SELECT, or all at once."""
+    from . import lineup as lu
+    cfg = app.config
+    hid = [ch for ch in _lineup_all(app) if (cfg.channel_edits.get(ch.url) or {}).get("hide")]
+
+    def show(chs):
+        for ch in chs:
+            lu.edit(cfg, ch, hide=None)
+        _lineup_changed(app)
+    if not hid:
+        return [Item("No hidden channels", enabled=False,
+                     help="Hide one on its page (Channel Visible): it's skipped by channel up and down and left "
+                          "out of the guide.")]
+    return [Item("Show All", lambda: show(hid), help="Every hidden channel back in the lineup.")] + [
+        Item(f"{ch.number:g}  {ch.name}", lambda ch=ch: show([ch]), value=lambda: "Restore",
+             help="SELECT shows it again.") for ch in hid]
+
+
+def starter_items(app):
+    """The starter lineup: made again (what's missing of it), or taken out."""
+    from . import libchannels as lc
+    cfg = app.config
+
+    def make():
+        if getattr(app, "library", None) is None:
+            app.toast("Still reading your library. Try again in a moment.")
+            return
+        n = lc.add_starter(cfg, app.library)
+        cfg.library_starter_done = True
+        cfg.save()
+        lc.place(app)
+        _lists_changed(app)
+        _refresh(app, {"Starter Lineup": lambda: starter_items(app)})
+        app.toast(f"{n} channels added." if n else "Every starter channel is already here.")
+
+    def drop():
+        cfg.library_channels[:] = [c for c in cfg.library_channels if not c.get("starter")]
+        cfg.save()
+        lc.place(app)
+        _lists_changed(app)
+        _refresh(app, {"Starter Lineup": lambda: starter_items(app)})
+    rows = [Item("Add the starter lineup", make,
+                 help="Your channels as your Tunarr had them (their numbers, shows, movies, bumpers, logos and "
+                      "screen bugs, with Cathode's dayparts), a few of Cathode's own, and every show or movie "
+                      "nothing else has put on the channel it belongs on. Ones you already have (by name) are "
+                      "left alone.")]
+    if any(c.get("starter") for c in cfg.library_channels):
+        rows.append(Item("Remove the starter lineup",
+                         submenu=lambda: _confirm(app, "Remove its channels", drop, "Keep them"),
+                         help="Takes out every channel the starter lineup made that you haven't changed. Channels "
+                              "you made or changed stay."))
+    return rows
+
+
+def commercials_tab(app):
+    """Settings > Commercials, as NostalgiaTV's: what every channel's breaks
+    are made of, at once (each channel's page can still set its own), and
+    which channels have breaks."""
+    from . import libchannels as lc
+    cfg, index = app.config, getattr(app, "library", None)
+    if index is None:
+        return [Item("Link Plex first", enabled=False,
+                     help="Commercials and bumpers come from your Plex libraries of clips.")]
+
+    def chans():
+        return list(cfg.library_channels) + list(cfg.video_channels)
+
+    def on():
+        return [c for c in chans() if lc.breaks_of(c, index)]
+
+    def done():
+        cfg.save()
+        lc.place(app)
+        app.invalidate()
+
+    def set_all(key, options, default, d):
+        w = on()
+        if not w:
+            app.toast("No channel has breaks: turn them on under Channel Configuration.")
+            return
+        to = _cycle(options, lc.breaks_of(w[0], index).get(key, default), d)
+        for c in w:
+            c["breaks"] = dict(lc.breaks_of(c, index), **{key: to})
+        done()
+
+    def all_value(key, options, default):
+        got = {lc.breaks_of(c, index).get(key, default) for c in on()}
+        return _label(options, got.pop()) if len(got) == 1 else "Mixed" if got else "-"
+
+    def has(c, skey):
+        return any(x.get("section") == skey for x in lc.breaks_of(c, index).get("ads") or [])
+
+    def lib_value(skey):
+        w = on()
+        n = sum(has(c, skey) for c in w)
+        return "Off" if not n else "On" if n == len(w) else f"{n} of {len(w)}"
+
+    def flip_lib(skey):
+        w = on()
+        add = not all(has(c, skey) for c in w)
+        for c in w:
+            b = dict(lc.breaks_of(c, index))
+            b["ads"] = [x for x in b.get("ads") or [] if x.get("section") != skey] + (
+                [{"section": skey, "kind": "all"}] if add else [])
+            c["breaks"] = b
+        done()
+
+    def libs():
+        secs = sorted((x for x in index.sections.values() if x.breaks or x.kind == "clip"),
+                      key=lambda x: x.title.lower())
+        return [Item(x.title, lambda x=x: flip_lib(x.key), adjust=lambda d, x=x: flip_lib(x.key),
+                     value=lambda x=x: lib_value(x.key), help=f"{len(x.items):,} clips. SELECT: on every channel "
+                                                               "with breaks, or off them all.")
+                for x in secs] or [Item("No libraries of clips", enabled=False)]
+
+    def flip(c, want=None):
+        now = bool(lc.breaks_of(c, index))
+        if want is None:
+            want = not now
+        if want == now:
+            return
+        if want:
+            c.pop("breaks", None)                   # back to the defaults
+            if not lc.breaks_of(c, index):
+                c["breaks"] = lc.default_breaks(c, index)
+        else:
+            c["breaks"] = {}
+
+    def flip_one(c):
+        flip(c)
+        done()
+
+    def every(want):
+        for c in chans():
+            flip(c, want)
+        done()
+
+    def channel_rows():
+        return [Item("Enable All", lambda: every(True), help="Breaks on every library and YouTube channel."),
+                Item("Disable All", lambda: every(False), help="No breaks anywhere.")] + [
+            Item(c.get("name") or "Channel", lambda c=c: flip_one(c), adjust=lambda d, c=c: flip_one(c),
+                 value=lambda c=c: "On" if lc.breaks_of(c, index) else "Off") for c in chans()]
+    lengths = [(n, f"{n // 60}:{n % 60:02d}") for n in lc.BREAK_LENGTHS]
+    return [
+        Item("Commercial Libraries", submenu=libs,
+             help="The libraries every channel's commercials come from. Bumpers are each channel's own (its page)."),
+        Item("Commercial Alignment", value=lambda: all_value("pad", lc.PADS, 30),
+             adjust=lambda d: set_all("pad", lc.PADS, 30, d),
+             help="Breaks fill to the next quarter hour, half hour or hour, so programmes start on time. No: "
+                  "every break is the length below."),
+        Item("Break Length", value=lambda: all_value("length", lengths, 120),
+             adjust=lambda d: set_all("length", lengths, 120, d),
+             help="A break during a programme, and every break when they don't line up with the clock."),
+        Item("During Programmes", value=lambda: all_value("mid", lc.MIDS, "off"),
+             adjust=lambda d: set_all("mid", lc.MIDS, "off", d),
+             help="Breaks inside programmes of fifteen minutes or more: none, one halfway, or one every twenty "
+                  "minutes."),
+        Item("Channel Configuration", submenu=channel_rows, value=lambda: f"{len(on())} of {len(chans())}",
+             help="Which channels have breaks: SELECT one to turn them on or off."),
+    ]
+
+
+def schedule_tab(app):
+    """Settings > Schedule, as NostalgiaTV's: the schedule drawn up afresh,
+    the library read again, how far ahead the guide goes."""
+    from . import libchannels as lc, videochannels as vc
+    cfg = app.config
+    days = [(2, "2 Days"), (7, "7 Days"), (14, "14 Days"), (30, "30 Days")]
+
+    def length(d):
+        cfg.guide_days = _cycle(days, int(cfg.guide_days or 2), d)
+        cfg.save()
+        vc.rebuild(app)
+
+    def refresh_all():
+        t = int(time.time())
+        for c in list(cfg.library_channels) + list(cfg.video_channels):
+            c["seed"] = t
+        cfg.save()
+        lc.rebuild(app)
+        vc.rebuild(app)
+        app.toast("Every channel drawn up again from now.", 6.0)
+
+    def reread():
+        app.toast("Reading your library...", 120.0)
+        lc.start(app, fresh=True, done=lambda idx, err: (
+            app.toast(f"{idx.count():,} titles in {len(idx.sections)} libraries." if idx and not err
+                      else "Couldn't reach your Plex server.", 6.0)))
+
+    def library_value():
+        if getattr(app, "library_loading", False):
+            p = getattr(app, "library_progress", None)
+            return f"Reading {p[0]}" if p else "Reading..."
+        lib = getattr(app, "library", None)
+        return f"{lib.count():,} titles" if lib else "Not read yet"
+    rows = [
+        Item("Refresh Schedule", submenu=lambda: _confirm(app, "Refresh every channel", refresh_all,
+                                                          "Keep the schedule"),
+             help="Every library and YouTube channel drawn up again from now, in a fresh order: what's on now "
+                  "changes. (A change to a channel applies by itself; this is a new shuffle.)"),
+        Item("Refresh Library & Schedule", reread, value=library_value,
+             help="Asks your server for everything it holds; new arrivals go on their channels. It checks for "
+                  "changes by itself every few hours."),
+        Item("Schedule Length", value=lambda: _label(days, int(cfg.guide_days or 2)), adjust=length,
+             help="How far ahead the library and YouTube channels are drawn up and listed in the guide. Further "
+                  "takes longer and more memory."),
+    ]
+    if cfg.epg_url:
+        rows.append(Item("Refresh Listings", lambda: (app.load_epg(), app.toast("Loading the guide...")),
+                         close=True, help="Fetch your playlist's guide again now."))
+    return rows
+
+
+def preference_items(app):
+    """Settings > Preferences: subtitles, the channel logo, the screen,
+    start-up, sound, the remote, the weather, YouTube."""
+    cfg = app.config
+    return [
+        Item("Subtitles", submenu=lambda: subtitle_items(app), help="Subtitle language, size and look."),
+        Item("Channel Logo", submenu=lambda: bug_items(app),
+             value=lambda: f"{cfg.bug_opacity}%, {cfg.bug_corner}" if cfg.bug_on else "Off",
+             help="The screen bug: the channel's logo in a corner of the picture, as stations ran theirs. A "
+                  "channel's own page sets its own."),
+        Item("Display", submenu=lambda: display_items(app), help="Full screen, and which screen to use."),
+        Item("Start-up", submenu=lambda: startup_items(app),
+             help="The start-up screen, the screensaver, the box's sounds, the update check."),
+        Item("Audio output", submenu=lambda: audio_items(app)),
+        Item("Remote control", submenu=lambda: remote_items(app)),
+        Item("Weather", submenu=lambda: weather_items(app)),
+        Item("YouTube", submenu=lambda: youtube_items(app), help="Video quality, and what plays YouTube."),
+    ]
+
+
+def startup_items(app):
+    from . import sounds
+    cfg = app.config
+    return [
+        Item("Start-up screen", value=lambda: "On" if cfg.boot_sequence else "Off",
+             adjust=lambda d: (setattr(cfg, "boot_sequence", not cfg.boot_sequence), cfg.save())),
+        Item("Screensaver", value=lambda: "On" if cfg.screensaver else "Off",
+             adjust=lambda d: (setattr(cfg, "screensaver", not cfg.screensaver), cfg.save())),
+        *([Item("Sound effects", value=lambda: _label(sounds.LEVELS, cfg.sound_effects),
+                adjust=lambda d: (setattr(cfg, "sound_effects", _cycle(sounds.LEVELS, cfg.sound_effects, d)), cfg.save(),
+                                  app.sound("key")),
+                help="The box's key sounds and its error bonk, as the HR20 had them.")]
+          if getattr(app.skin, "ui_sounds", False) else []),
+        Item("Check for updates at start-up", value=lambda: "Yes" if cfg.update_check else "No",
+             adjust=lambda d: (setattr(cfg, "update_check", not cfg.update_check), cfg.save())),
+    ]
+
+
+def youtube_items(app):
+    from . import ytdl
+    cfg = app.config
+    heights = [(h, f"{h}p") for h in (1080, 720, 480, 360)]
+
+    def quality(d):
+        cfg.video_quality = _cycle(heights, int(cfg.video_quality or 1080), d)
+        cfg.save()
+    return [
+        Item("Video quality", value=lambda: _label(heights, int(cfg.video_quality or 1080)), adjust=quality,
+             help="The tallest picture a video plays in. If videos stop to buffer, go lower: 720p takes about half "
+                  "the bandwidth of 1080p. Takes effect at the next video."),
+        Item("YouTube support", lambda: app.check_ytdl(manual=True), value=lambda: f"yt-dlp {ytdl.version()}",
+             help="yt-dlp resolves the videos. YouTube changes break it now and then: SELECT fetches the newest "
+                  "release (checked weekly on its own); it takes over at the next start."),
+    ]
+
+
+def server_items(app):
+    """Settings > Servers: Plex, and Jellyfin, Emby and folders."""
+    cfg = app.config
+    od = app.ondemand
+    plex = Item("Plex", submenu=lambda: ondemand_settings(app), value=lambda: "Linked",
+                help="Quality, which libraries On Demand shows, who's watching, unlinking.") if od.signed_in else         Item("Link Plex", lambda: open_ondemand(app), close=True,
+             help="Link your Plex account: the library channels and On Demand come from it.")
+    return [plex,
+            Item("Jellyfin, Emby and folders", submenu=lambda: places_items(app),
+                 value=lambda: str(len(cfg.media_servers) + len(cfg.local_folders)),
+                 help="More places for library channels to draw from, beside Plex.")]
+
+
+def admin_items(app):
+    """Settings > Admin: the phone remote, other Cathodes, sharing the
+    channels, backups, diagnostics, updates."""
+    from . import __version__, update_flow
+    from .screens.diagnostics import Diagnostics
+    cfg = app.config
+
+    def sync_value():
+        sy = getattr(app, "sync", None)
+        if not cfg.lan_sync or sy is None:
+            return "Off"
+        names = sorted(p["name"] for p in sy.others())
+        return ("On: " + ", ".join(names))[:32] if names else "On, none found"
+
+    def sync_toggle(d=0):
+        from . import sync
+        cfg.lan_sync = not cfg.lan_sync
+        cfg.save()
+        sync.restart(app)
+
+    def web_toggle(key):
+        from . import sync
+        setattr(cfg, key, not getattr(cfg, key))
+        cfg.save()
+        sync.restart(app)
+
+    def web_value():
+        from . import web
+        sy = getattr(app, "sync", None)
+        if not cfg.web_remote or sy is None or not sy.port:
+            return "Off"
+        return f"http://{web.my_address()}:{sy.port}"
+
+    def show_qr():
+        from . import sync
+        if not cfg.web_remote:
+            cfg.web_remote = True
+            cfg.save()
+            sync.restart(app)
+        addr = web_value()
+        if addr == "Off":
+            app.toast("The phone remote couldn't start: is another app using its port?", 6.0)
+            return
+        from .screens.qrcode import QrCode
+        app.push(QrCode(app, addr, "Phone remote", "Point your phone's camera here, on the same Wi-Fi."))
+    return [
+        Item("Phone remote", show_qr, value=web_value, adjust=lambda d: web_toggle("web_remote"),
+             help="SELECT shows its address as a QR code: point a phone's camera at it (on your network) for a "
+                  "remote, the channels with what's on (tap to tune), and the lineup and channel settings. "
+                  "LEFT/RIGHT turns it on or off."),
+        Item("Sync with other Cathodes", sync_toggle, value=sync_value, adjust=sync_toggle,
+             help="Every Cathode on your network keeps the same channels: the lists, the library channels' "
+                  "schedules and the YouTube lists. The same channel shows the same thing on each. The last edit "
+                  "made on any of them wins."),
+        Item("Share channels with other apps", lambda: web_toggle("share_channels"),
+             value=lambda: "On" if cfg.share_channels else "Off", adjust=lambda d: web_toggle("share_channels"),
+             help="The library channels for other apps on your network: /lineup.m3u and /xmltv.xml at the Phone "
+                  "remote's address, and as an HDHomeRun tuner there. Their players get the programme on the air "
+                  "through Plex's transcoder; the address carries your Plex token."),
+        Item("Back up settings", lambda: _back_up(app),
+             help="Every setting to a file in the settings folder's backups (one is also made by itself each week). "
+                  "Your Plex, Jellyfin and Emby sign-ins aren't in it; playlist links are."),
+        Item("Restore settings", submenu=lambda: restore_items(app),
+             help="Put the settings back as a backup has them. Sign-ins stay as they are."),
+        Item("Diagnostics", lambda: app.push(Diagnostics(app)), close=True),
+        Item("Save diagnostics", lambda: _save_diagnostics(app),
+             help="One zip on your Desktop to attach to a bug report: logs, settings without passwords, system."),
+        Item("Check for updates", lambda: update_flow.open_check(app)),
+        Item(f"Cathode {__version__}", enabled=False),
+    ]
+
+
+# ── On Demand ─# ── On Demand ─────────────────────────────────────────────────────────────
 
 def open_ondemand(app, recordings=False):
     from .screens.ondemand import OnDemandScreen, RECORDINGS, LIBRARIES
@@ -611,6 +1145,8 @@ def open_options(app):
              adjust=app.cycle_format),
         Item("Subtitles", app.cycle_subtitles, value=subs, adjust=lambda d: app.cycle_subtitles(),
              help="Step through this channel's subtitles."),
+        Item("Edit this channel", lambda: open_channel_editor(app, ch), close=True, enabled=ch is not None,
+             help="Its name, number, logo and bug; for a library or YouTube channel what it plays and how."),
     ]))
 
 
@@ -838,9 +1374,6 @@ def style_items(app):
         Item("Motion", value=lambda: "On" if cfg.motion_enabled else "Off",
              adjust=set_and(lambda d: setattr(cfg, "motion_enabled", not cfg.motion_enabled))),
         Item("Edit colors", submenu=lambda: color_items(app)),
-        Item("Screen bug", submenu=lambda: bug_items(app),
-             value=lambda: f"{cfg.bug_opacity}%, {cfg.bug_corner}" if cfg.bug_on else "Off",
-             help="The channel's logo in a corner of the picture, as stations ran theirs."),
     ]
 
 
@@ -872,8 +1405,8 @@ def bug_items(app):
     return [
         Item("Screen bug", set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on)),
              value=lambda: "On" if cfg.bug_on else "Off", adjust=set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on)),
-             help="The channel's logo, faint, in a corner. Channels with a bug of their own (the ones made from "
-                  "your Tunarr setup) keep its corner, size and opacity."),
+             help="The channel's logo, faint, in a corner, on every channel. A channel with a look of its own "
+                  "(your Tunarr ones; any, from its page's Screen Bug) keeps its corner, size and opacity."),
         Item("Corner", value=lambda: _label(corners, cfg.bug_corner),
              adjust=set_and(lambda d: setattr(cfg, "bug_corner", _cycle(corners, cfg.bug_corner, d)))),
         Item("Size", value=lambda: _label(BUG_SIZES, cfg.bug_size), adjust=set_and(lambda d: step("bug_size", BUG_SIZES, d))),
@@ -944,7 +1477,10 @@ def _scanlines(cfg, d):
 
 # ── Channels ──────────────────────────────────────────────────────────────
 
-def channel_items(app):
+def source_items(app):
+    """Live TV Sources: your playlists (SELECT one for its page), one more,
+    or none (only Cathode's own channels)."""
+    from . import lineup as lu
     cfg = app.config
     items = []
     for pl in cfg.playlists:
@@ -956,85 +1492,11 @@ def channel_items(app):
                            "(hdhomerun://its address)."))
 
     def no_playlist():
-        from . import lineup as lu
         app.config.playlist_url, app.config.epg_url = lu.NONE, ""
         app.config.save()
         app.switch_playlist({"playlist_url": lu.NONE, "epg_url": ""})
-    from . import lineup as _lu
-    items.append(Item(("> " if cfg.playlist_url == _lu.NONE else "  ") + "No playlist", no_playlist, close=True,
+    items.append(Item(("> " if cfg.playlist_url == lu.NONE else "  ") + "No playlist", no_playlist, close=True,
                       help="Only Cathode's own channels: the library, YouTube, TV Guide and Weather channels."))
-    items.append(Item("Edit lineup", submenu=lambda: lineup_items(app),
-                      help="Hide, rename and renumber channels; make packs (guide tabs)."))
-    items.append(Item("Cathode's channels", submenu=lambda: own_channel_items(app)))
-    items.append(Item("Video Channels", submenu=lambda: video_channel_items(app)))
-    items.append(Item("Library Channels", submenu=lambda: library_channel_items(app)))
-    items.append(Item("Jellyfin, Emby and folders", submenu=lambda: places_items(app),
-                      value=lambda: str(len(cfg.media_servers) + len(cfg.local_folders)),
-                      help="More places for library channels to draw from, beside Plex."))
-    days = [(2, "2 days"), (7, "A week"), (14, "Two weeks"), (30, "A month")]
-
-    def guide_days(d):
-        from . import videochannels as vc
-        cfg.guide_days = _cycle(days, int(cfg.guide_days or 2), d)
-        cfg.save()
-        vc.rebuild(app)
-    items.append(Item("Guide listings", value=lambda: _label(days, int(cfg.guide_days or 2)), adjust=guide_days,
-                      help="How far ahead the guide lists the library and video channels. Further takes longer to "
-                           "draw up and more memory."))
-
-    def sync_value():
-        s = getattr(app, "sync", None)
-        if not cfg.lan_sync or s is None:
-            return "Off"
-        names = sorted(p["name"] for p in s.others())
-        return ("On: " + ", ".join(names))[:32] if names else "On, none found"
-
-    def sync_toggle(d=0):
-        from . import sync
-        cfg.lan_sync = not cfg.lan_sync
-        cfg.save()
-        sync.restart(app)
-
-    def web_toggle(key):
-        from . import sync
-        setattr(cfg, key, not getattr(cfg, key))
-        cfg.save()
-        sync.restart(app)
-
-    def web_value():
-        from . import web
-        s = getattr(app, "sync", None)
-        if not cfg.web_remote or s is None or not s.port:
-            return "Off"
-        return f"http://{web.my_address()}:{s.port}"
-    items.append(Item("Sync with other Cathodes", value=sync_value, adjust=sync_toggle, action=sync_toggle,
-                      help="Every Cathode on your network keeps the same channels: the lists, the library channels' "
-                           "schedules and the YouTube lists. The same channel shows the same thing on each. The last "
-                           "edit made on any of them wins."))
-    def show_qr():
-        from . import sync
-        if not cfg.web_remote:
-            cfg.web_remote = True
-            cfg.save()
-            sync.restart(app)
-        addr = web_value()
-        if addr == "Off":
-            app.toast("The phone remote couldn't start: is another app using its port?", 6.0)
-            return
-        from .screens.qrcode import QrCode
-        app.push(QrCode(app, addr, "Phone remote", "Point your phone's camera here, on the same Wi-Fi."))
-    items.append(Item("Phone remote", show_qr, value=web_value, adjust=lambda d: web_toggle("web_remote"),
-                      help="SELECT shows its address as a QR code: point a phone's camera at it (on your network) for "
-                           "a remote, the channels with what's on (tap to tune), and the lineup and channel settings. "
-                           "LEFT/RIGHT turns it on or off."))
-    items.append(Item("Share channels with other apps", lambda: web_toggle("share_channels"),
-                      value=lambda: "On" if cfg.share_channels else "Off", adjust=lambda d: web_toggle("share_channels"),
-                      help="The library channels for other apps on your network: /lineup.m3u and /xmltv.xml at the "
-                           "Phone remote's address, and as an HDHomeRun tuner there. Their players get the programme "
-                           "on the air through Plex's transcoder; the address carries your Plex token."))
-    if cfg.epg_url:
-        items.append(Item("Refresh guide", lambda: (app.load_epg(), app.toast("Loading the guide...")),
-                          close=True))
     return items
 
 
@@ -1088,54 +1550,6 @@ def own_channel_items(app):
                   "in ~/.config/cathode/music to play that instead.")]
 
 
-def video_channel_items(app):
-    """The video channels: each opens its own page (the maker); one more at
-    the foot; yt-dlp (what resolves them) brought up to date."""
-    from . import videochannels as vc, ytdl
-    cfg = app.config
-
-    def lineup(c):
-        return next((ch for ch in app.channels if vc.is_video(ch) and vc.cid_of(ch) == c["id"]), None)
-
-    def name_of(c):
-        ch = lineup(c)
-        return c.get("name") or (ch.name if ch else "Video Channel")
-
-    def number_of(c):
-        ch = lineup(c)
-        return f"{ch.number:g}" if ch else ""
-
-    def add():
-        def got(text):
-            text = (text or "").strip()
-            if not text:
-                return
-            c = vc.new_channel(text)
-            cfg.video_channels.append(c)
-            cfg.save()
-            app.place_own_channels()
-            app.top().refresh(video_channel_items(app))
-            app.top().open(text.upper(), video_channel_page(app, c["id"]))
-        app.push(Keyboard(app, "Channel name", got, hint="Then add its sources: playlists, channels, @handles."))
-    items = [Item(name_of(c), submenu=lambda c=c: video_channel_page(app, c["id"]), value=lambda c=c: number_of(c),
-                  help="A channel of videos on a timeline, from the sources it mixes. SELECT opens it.")
-             for c in cfg.video_channels]
-    items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
-    heights = [(h, f"{h}p") for h in (1080, 720, 480, 360)]
-
-    def quality(d):
-        cfg.video_quality = _cycle(heights, int(cfg.video_quality or 1080), d)
-        cfg.save()
-    items.append(Item("Video quality", value=lambda: _label(heights, int(cfg.video_quality or 1080)), adjust=quality,
-                      help="The tallest picture a video plays in. If videos stop to buffer, go lower: 720p takes "
-                           "about half the bandwidth of 1080p. Takes effect at the next video."))
-    items.append(Item("YouTube support", lambda: app.check_ytdl(manual=True),
-                      value=lambda: f"yt-dlp {ytdl.version()}",
-                      help="yt-dlp resolves the videos. YouTube changes break it now and then: SELECT fetches "
-                           "the newest release (checked weekly on its own); it takes over at the next start."))
-    return items
-
-
 def video_channel_page(app, cid):
     """The channel maker: name, number, sources, how they mix, what's
     skipped, how the guide lists it, the card, a check, removal."""
@@ -1149,6 +1563,7 @@ def video_channel_page(app, cid):
         cfg.save()
         if place:
             app.place_own_channels()
+            _lists_changed(app)
         else:
             vc.rebuild(app)
         app.invalidate()
@@ -1159,7 +1574,7 @@ def video_channel_page(app, cid):
                 return
             c["name"] = text.strip()
             save()
-        app.push(Keyboard(app, "Channel name (empty = its first source's)", got, initial=c.get("name", "")))
+        app.push(Keyboard(app, "Channel Name (empty = its first source's)", got, initial=c.get("name", "")))
 
     def set_number():
         def got(text):
@@ -1220,9 +1635,8 @@ def video_channel_page(app, cid):
     def remove():
         cfg.video_channels[:] = [x for x in cfg.video_channels if x["id"] != cid]
         save()
-        m = app.top()
-        m.back()
-        m.refresh(video_channel_items(app))
+        app.top().back()
+        _lists_changed(app)
 
     def move(d):
         lst = cfg.video_channels
@@ -1230,18 +1644,14 @@ def video_channel_page(app, cid):
         if 0 <= i + d < len(lst):
             lst[i], lst[i + d] = lst[i + d], lst[i]
             save()
-            m = app.top()
-            m.back()
-            m.refresh(video_channel_items(app))
-            m.open((c.get("name") or "Video Channel").upper(), video_channel_page(app, cid))
+    rows = timeline_items(app, c, cid, save, unit="videos", default="mix")
     return [
-        Item("Name", set_name, value=lambda: c.get("name") or "(its first source's)",
+        Item("Channel Name", set_name, value=lambda: c.get("name") or "(its first source's)",
              help="The channel's name in the lineup and the guide. Empty: named for its first source."),
-        Item("Channel number", set_number, value=number_value,
+        Item("Channel Number", set_number, value=number_value,
              help="Automatic (after the lineup's last number) or one you choose; a taken number moves to the next free."),
-        Item("Sources", submenu=lambda: video_source_items(app, cid), value=lambda: str(len(c.get("sources") or [])),
-             help="The playlists, channels and @handles this channel mixes."),
-        *timeline_items(app, c, cid, save, unit="videos", default="mix"),
+        *_lineup_rows(app, vc.SCHEME + cid),
+        *rows[:-2],
         Item("Minimum length", value=lambda: (f"{c.get('min_seconds', 60)} s" if c.get("min_seconds", 60) else "Any"),
              adjust=min_len, help="Videos shorter than this stay out of the day."),
         Item("Maximum length", value=lambda: hours(c.get("max_seconds", 0)), adjust=max_len,
@@ -1258,7 +1668,10 @@ def video_channel_page(app, cid):
                   "starting in it. Auto: per video when the videos are long (episodes), blocks for songs."),
         Item("Lower-third", value=lambda: "On" if c.get("card", True) else "Off",
              adjust=lambda d: toggle("card"), help="The name card as each video starts and before it ends."),
-        Item("Refresh schedule", refresh,
+        Item("Content", submenu=lambda: video_source_items(app, cid), value=lambda: str(len(c.get("sources") or [])),
+             help="The playlists, channels and @handles this channel mixes."),
+        *rows[-2:],
+        Item("Refresh Schedule", refresh,
              help="Fetches every source's list again, draws up today's running order anew (your changes "
                   "to the sources and their order included) and starts the channel over if it's on."),
         Item("Move up", lambda: move(-1), enabled=cfg.video_channels.index(c) > 0,
@@ -1468,7 +1881,7 @@ def profile_page(app, p):
     return [
         Item("Name", rename, value=lambda: p["name"]),
         Item("Kids' profile", kids, value=lambda: "On" if p.get("kids") else "Off", adjust=kids,
-             help="On: only the channels marked for kids (Edit lineup, a channel's page) and library channels set "
+             help="On: only the channels marked for kids (On kids' profiles, on a channel's page) and library channels set "
                   "to kids' ratings; Settings ask for the parent PIN."),
         Item("Remove profile", submenu=lambda: _confirm(app, "Remove profile", remove, "Keep it")),
     ]
@@ -1496,56 +1909,183 @@ def history_items(app):
 
 # ── The lineup: hide, rename, renumber, packs (lineup.py) ────────────────
 
-def lineup_items(app):
-    from . import lineup as lu
-    cfg = app.config
-    chans = getattr(app, "lineup_all", None) or app.channels
-
-    def unhide():
-        for k in list(cfg.channel_edits):
-            cfg.channel_edits[k].pop("hide", None)
-            if not cfg.channel_edits[k]:
-                del cfg.channel_edits[k]
-        cfg.save()
-        app.relineup()
-        app.top().refresh(lineup_items(app))
-    hidden = sum(1 for e in cfg.channel_edits.values() if e.get("hide"))
-    rows = [Item("Packs", submenu=lambda: pack_items(app), value=lambda: str(len(lu.packs(cfg))),
-                 help="Named sets of channels, each a tab in the guide's categories (THEMES, or OPTIONS)."),
-            Item("Show every hidden channel", unhide, value=lambda: str(hidden), enabled=hidden > 0)]
-    for ch in chans:
-        e = cfg.channel_edits.get(ch.url) or {}
-        rows.append(Item(f"{ch.number:g}  {ch.name}", submenu=lambda ch=ch: channel_edit_items(app, ch),
-                         value=lambda e=e: "Hidden" if e.get("hide") else "Edited" if e else "",
-                         help="SELECT: show or hide it, its name, its number, its packs."))
-    return rows
-
-
 def _lineup_changed(app):
     app.config.save()
     app.relineup()
-    m = app.top()
-    if getattr(m, "pages", None) and len(m.pages) > 1:
-        m.pages[-2][1] = lineup_items(app) if m.pages[-2][0] in ("EDIT LINEUP", "Edit lineup") else m.pages[-2][1]
+    _lists_changed(app)
+
+
+def _packs_page(app, url):
+    from . import lineup as lu
+    cfg = app.config
+
+    def flip(p):
+        keys = p.setdefault("keys", [])
+        (keys.remove if url in keys else keys.append)(url)
+        cfg.save()
+        app._cats = None
+    return [Item(p["name"], lambda p=p: flip(p), adjust=lambda d, p=p: flip(p),
+                 value=lambda p=p: "In" if url in (p.get("keys") or []) else "-") for p in lu.packs(cfg)] or \
+        [Item("No packs yet", enabled=False, help="Make one under Settings > Channels > Channel Packs.")]
+
+
+def _pick(app, url, kind, d):
+    """A picture from the logos folder for a channel's logo or bug, in
+    turn: as it comes, then each file."""
+    from types import SimpleNamespace as NS
+    from . import logos, lineup as lu
+    cfg = app.config
+    names = sorted(os.path.basename(p) for p in logos.files(cfg).values())
+    options = [""] + names
+    cur = (cfg.channel_edits.get(url) or {}).get(kind, "")
+    lu.edit(cfg, NS(url=url), **{kind: options[((options.index(cur) if cur in options else 0) + d) % len(options)]})
+    cfg.save()
+    app.invalidate()
+
+
+def _picked(app, url, kind):
+    v = (app.config.channel_edits.get(url) or {}).get(kind, "")
+    return "None" if v == "off" else v or ("Its logo" if kind == "bug" else "Automatic")
+
+
+def _lineup_rows(app, url, fallback=None) -> list:
+    """The rows every channel's page has: favourite, shown or hidden, packs,
+    logo and screen bug (what the lineup keeps by the channel's address)."""
+    from types import SimpleNamespace as NS
+    from . import lineup as lu
+    cfg = app.config
+
+    def ch():
+        return _by_url(app, url) or fallback
+    if ch() is None:
+        return []
+
+    def e():
+        return cfg.channel_edits.get(url) or {}
+
+    def fav(d=0):
+        app.toggle_favorite(ch())
+
+    def show(d=0):
+        lu.edit(cfg, NS(url=url), hide=not e().get("hide"))
+        _lineup_changed(app)
+
+    def bug_value():
+        own = app.skin.own_bug(ch()) if hasattr(getattr(app, "skin", None), "own_bug") else {}
+        if not cfg.bug_on or own.get("off") or e().get("bug") == "off":
+            return "Off"
+        return (own.get("corner") or cfg.bug_corner).capitalize()
+    return [
+        Item("Favorite", fav, value=lambda: "Yes" if ch().number in cfg.favorites else "No", adjust=fav,
+             help="Starred: in the guide's Favorites."),
+        Item("Channel Visible", show, value=lambda: "No" if e().get("hide") else "Yes", adjust=show,
+             help="Hidden channels are skipped by channel up and down and left out of the guide."),
+        Item("Channel Packs", submenu=lambda: _packs_page(app, url),
+             value=lambda: str(sum(url in (p.get("keys") or []) for p in lu.packs(cfg)))),
+        Item("Custom Logo", lambda: _pick(app, url, "logo", 1), value=lambda: _picked(app, url, "logo"),
+             adjust=lambda d: _pick(app, url, "logo", d),
+             help="A picture from your logos folder (a GIF or APNG moves). Automatic: one named for the channel, "
+                  "else the one it came with."),
+        Item("Screen Bug", submenu=lambda: channel_bug_items(app, url, fallback), value=bug_value,
+             help="The logo in the corner on this channel: on or off, its picture, where, how big, how faint."),
+    ]
+
+
+BUG_WIDTHS = [5, 7, 8, 10, 12, 15, 20]          # a channel's own bug: its width, % of the picture's
+BUG_EDGES = [2, 3, 5, 7, 9]                     # its distance from the edges, %
+
+
+def _step(values, cur, d):
+    """The next value up (d > 0) or down from cur, which needn't be one of
+    them (Tunarr's 35% opacity), round at the ends."""
+    vals = sorted(values)
+    if d > 0:
+        return next((v for v in vals if v > cur), vals[0])
+    return next((v for v in reversed(vals) if v < cur), vals[-1])
+
+
+def channel_bug_items(app, url, fallback=None):
+    """A channel's own screen bug: on or off, its picture, corner, size,
+    opacity, distance from the edge; or back to how it came."""
+    from types import SimpleNamespace as NS
+    from . import lineup as lu
+    from .skins import Skin
+    cfg = app.config
+    at = NS(url=url)
+
+    def e():
+        return cfg.channel_edits.get(url) or {}
+
+    def own():
+        c = _by_url(app, url) or fallback
+        return app.skin.own_bug(c) if c is not None and hasattr(getattr(app, "skin", None), "own_bug") else {}
+
+    def look(**kw):
+        lk = dict(e().get("bug_look") or {})
+        lk.update(kw)
+        lu.edit(cfg, at, bug_look=lk)
+        cfg.save()
+        app.invalidate()
+
+    def shown():
+        return not own().get("off") and e().get("bug") != "off"
+
+    def show(d=0):
+        if shown():
+            look(off=True)
+        else:
+            look(off=False)
+            if e().get("bug") == "off":
+                lu.edit(cfg, at, bug=None)
+                cfg.save()
+
+    def reset():
+        lu.edit(cfg, at, bug_look=None, bug=None)
+        cfg.save()
+        app.invalidate()
+    corners = [(k, k.capitalize()) for k in Skin.BUG_CORNERS]
+
+    def corner():
+        return own().get("corner") or cfg.bug_corner
+
+    def edge():
+        m = own().get("margin")
+        return m[0] if m else None
+    return [
+        Item("Show It", show, value=lambda: "On" if shown() else "Off", adjust=show,
+             help="This channel's bug on or off. (Preferences > Channel Logo turns every channel's off.)"),
+        Item("Picture", lambda: _pick(app, url, "bug", 1), value=lambda: _picked(app, url, "bug"),
+             adjust=lambda d: _pick(app, url, "bug", d),
+             help="Its logo, or a picture from your logos folder."),
+        Item("Position", value=lambda: _label(corners, corner()), adjust=lambda d: look(corner=_cycle(corners, corner(), d))),
+        Item("Size", value=lambda: f"{own()['width']:g}% wide" if own().get("width") else "As every channel",
+             adjust=lambda d: look(width=_step(BUG_WIDTHS, own().get("width") or 9, d)),
+             help="Its width, a share of the picture's."),
+        Item("Opacity", value=lambda: f"{own().get('opacity', cfg.bug_opacity):g}%",
+             adjust=lambda d: look(opacity=_step(BUG_OPACITY, own().get("opacity", cfg.bug_opacity), d))),
+        Item("Distance from the Edge", value=lambda: f"{edge():g}%" if edge() else "As every channel",
+             adjust=lambda d: look(margin=[_step(BUG_EDGES, edge() or 4, d)] * 2)),
+        Item("As It Came", reset,
+             help="Back to how it came: Tunarr's look on a channel made from your Tunarr setup, else the one "
+                  "every channel has (Preferences > Channel Logo)."),
+    ]
 
 
 def channel_edit_items(app, ch):
+    """A channel from a playlist (or one of Cathode's own): its name and
+    number in the lineup, and the rows every channel has."""
     from . import lineup as lu
     cfg = app.config
 
     def e():
         return cfg.channel_edits.get(ch.url) or {}
 
-    def show(d=0):
-        lu.edit(cfg, ch, hide=not e().get("hide"))
-        _lineup_changed(app)
-
     def rename():
         def got(text):
             if text is not None:
                 lu.edit(cfg, ch, name=text.strip() or None)
                 _lineup_changed(app)
-        app.push(Keyboard(app, "Channel name (empty = as it came)", got, initial=e().get("name", "")))
+        app.push(Keyboard(app, "Channel Name (empty = as it came)", got, initial=e().get("name", "")))
 
     def renumber():
         def got(text):
@@ -1560,7 +2100,7 @@ def channel_edit_items(app, ch):
                     return
                 lu.edit(cfg, ch, number=n)
             _lineup_changed(app)
-        app.push(Keyboard(app, "Channel number (empty = as it came; 10.5 is fine)", got,
+        app.push(Keyboard(app, "Channel Number (empty = as it came; 10.5 is fine)", got,
                           initial=f"{e()['number']:g}" if "number" in e() else ""))
 
     def reset():
@@ -1570,47 +2110,15 @@ def channel_edit_items(app, ch):
     def kids(d=0):
         lu.edit(cfg, ch, kids=not e().get("kids"))
         _lineup_changed(app)
-
-    def pick(kind, d):
-        """A picture from the logos folder for this channel's logo or bug,
-        in turn: as it comes, each file, and for a bug, none at all."""
-        from . import logos
-        names = sorted(os.path.basename(p) for p in logos.files(cfg).values())
-        options = [""] + (["off"] if kind == "bug" else []) + names
-        cur = e().get(kind, "")
-        lu.edit(cfg, ch, **{kind: options[((options.index(cur) if cur in options else 0) + d) % len(options)]})
-        cfg.save()
-        app.invalidate()
-
-    def picked(kind):
-        v = e().get(kind, "")
-        return "None" if v == "off" else v or ("Its logo" if kind == "bug" else "Automatic")
-
-    def packs_page():
-        def flip(p):
-            keys = p.setdefault("keys", [])
-            (keys.remove if ch.url in keys else keys.append)(ch.url)
-            cfg.save()
-            app._cats = None
-        return [Item(p["name"], lambda p=p: flip(p), adjust=lambda d, p=p: flip(p),
-                     value=lambda p=p: "In" if ch.url in (p.get("keys") or []) else "-") for p in lu.packs(cfg)] or \
-            [Item("No packs yet", enabled=False, help="Make one under Edit lineup > Packs.")]
     orig = getattr(ch, "orig", (ch.name, ch.number))
     return [
-        Item("Show in the lineup", show, value=lambda: "Hidden" if e().get("hide") else "Shown", adjust=show,
-             help="Hidden channels are skipped by channel up and down and left out of the guide."),
-        Item("Name", rename, value=lambda: e().get("name") or orig[0], help=f"As it came: {orig[0]}"),
-        Item("Number", renumber, value=lambda: f"{e().get('number', orig[1]):g}",
+        Item("Channel Name", rename, value=lambda: e().get("name") or orig[0], help=f"As it came: {orig[0]}"),
+        Item("Channel Number", renumber, value=lambda: f"{e().get('number', orig[1]):g}",
              help=f"As it came: {orig[1]:g}. A taken number is shared: the guide lists them side by side."),
-        Item("Packs", submenu=packs_page, value=lambda: str(sum(ch.url in (p.get("keys") or []) for p in lu.packs(cfg)))),
-        Item("Logo", lambda: pick("logo", 1), value=lambda: picked("logo"), adjust=lambda d: pick("logo", d),
-             help="A picture from your logos folder (Settings > Look > Screen bug shows where). Automatic: one "
-                  "named for the channel, else the guide's or the playlist's."),
-        Item("Screen bug", lambda: pick("bug", 1), value=lambda: picked("bug"), adjust=lambda d: pick("bug", d),
-             help="What this channel shows in the corner: its logo, a picture of its own, or nothing."),
+        *_lineup_rows(app, ch.url, ch),
         Item("On kids' profiles", kids, value=lambda: "Shown" if e().get("kids") else "-", adjust=kids,
-             help="Kids' profiles see only the channels shown here (and library channels set to kids' ratings)."),
-        Item("As it came", reset, enabled=bool(e()), help="Its own name and number, shown."),
+             help="Kids' profiles see only the channels shown here (and library channels for Kids)."),
+        Item("As it came", reset, enabled=bool(e()), help="Its own name and number, shown, its own logo and bug."),
     ]
 
 
@@ -1741,9 +2249,9 @@ def timeline_items(app, c, tid, save, unit="episodes", default="cyclic_shuffle")
         ws = c.get(key) or []
         return ", ".join(ws)[:24] if ws else "None"
     return [
-        Item("Sort method", value=lambda: _label(lc.ORDERS, c.get("order", default)), adjust=order,
+        Item("Sorting Method", value=lambda: _label(lc.ORDERS, c.get("order", default)), adjust=order,
              help=ORDER_HELP.get(c.get("order", default), "") + "  LEFT/RIGHT changes it."),
-        Item("Block length", value=block_value, adjust=block,
+        Item("Block Size", value=block_value, adjust=block,
              help=f"How many {unit} of one show run before the next (the Block and Marathon methods)."),
         Item("Weighting", value=lambda: _label(lc.WEIGHTINGS, c.get("weighting", "auto"))
              if c.get("order", default) == "mix" else "-", adjust=weighting,
@@ -1758,10 +2266,10 @@ def timeline_items(app, c, tid, save, unit="episodes", default="cyclic_shuffle")
         Item("Only titles with", lambda: words("words_in", "Only titles with (commas between; empty = any)"),
              value=lambda: words_value("words_in"),
              help="When set, only titles with one of these words are on the channel."),
-        Item("Breaks", submenu=lambda: breaks_items(app, c, save),
+        Item("Commercials", submenu=lambda: breaks_items(app, c, save),
              value=lambda: "On" if lc.breaks_of(c, getattr(app, "library", None)) else "Off",
-             help="Commercials and bumpers from your Plex libraries between programmes and in long ones, lined "
-                  "up with the clock."),
+             help="This channel's breaks: commercials and its bumpers from your Plex libraries between programmes "
+                  "and in long ones, lined up with the clock."),
         Item("Coming up", submenu=lambda: coming_up_items(app, tid),
              help="What's on now and what follows, with the times."),
         Item("Skipped", submenu=lambda: skipped_items(app, tid),
@@ -1889,125 +2397,6 @@ def _copy_channel(app, lst: list, c: dict, page):
     m.open(d["name"].upper(), page(app, d["id"]))
 
 
-def library_channel_items(app):
-    """The library channels: each opens its page; one more at the foot; the
-    starter lineup; the library read again."""
-    from . import libchannels as lc
-    cfg = app.config
-    if not app.ondemand.signed_in and not (cfg.media_servers or cfg.local_folders):
-        return [Item("Link your Plex account first", enabled=False,
-                     help="Library channels are made from your Plex library (link it under On Demand), or from "
-                          "Jellyfin, Emby or folders (Settings > Channels > Jellyfin, Emby and folders).")]
-
-    def number_of(c):
-        ch = next((ch for ch in app.channels if lc.is_library(ch) and ch.url.endswith(c["id"])), None)
-        return f"{ch.number:g}" if ch else ""
-
-    def again():
-        app.top().refresh(library_channel_items(app))
-
-    def add():
-        def got(text):
-            text = (text or "").strip()
-            if not text:
-                return
-            c = lc.new_channel(text)
-            cfg.library_channels.append(c)
-            cfg.save()
-            lc.place(app)
-            again()
-            app.top().open(text.upper(), library_channel_page(app, c["id"]))
-        app.push(Keyboard(app, "Channel name", got, hint="Then add what it plays: a library, a genre, a decade, a show."))
-
-    def make_starter():
-        if app.library is None:
-            app.toast("Still reading your library. Try again in a moment.")
-            return
-        n = lc.add_starter(cfg, app.library)
-        cfg.library_starter_done = True
-        cfg.save()
-        lc.place(app)
-        again()
-        app.toast(f"{n} channels added." if n else "Every starter channel is already here.")
-
-    def drop_starter():
-        cfg.library_channels[:] = [c for c in cfg.library_channels if not c.get("starter")]
-        cfg.save()
-        lc.place(app)
-        m = app.top()
-        m.back()
-        m.refresh(library_channel_items(app))
-
-    def reread():
-        app.toast("Reading your Plex library...", 120.0)
-        lc.start(app, fresh=True, done=lambda idx, err: (
-            app.toast(f"{idx.count():,} titles in {len(idx.sections)} libraries." if idx and not err
-                      else "Couldn't reach your Plex server.", 6.0)))
-
-    def library_value():
-        if getattr(app, "library_loading", False):
-            p = getattr(app, "library_progress", None)
-            return f"Reading {p[0]}" if p else "Reading..."
-        return f"{app.library.count():,} titles" if app.library else "Not read yet"
-    items = [Item(c.get("name") or "Library Channel", submenu=lambda c=c: library_channel_page(app, c["id"]),
-                  value=lambda c=c: number_of(c),
-                  help="A channel made from your Plex library. SELECT opens it.")
-             for c in cfg.library_channels]
-    items.append(Item("Add a channel...", add, help="A new channel: name it, then add what it plays."))
-    items.append(Item("Content groups", submenu=lambda: content_group_items(app),
-                      value=lambda: str(len(cfg.content_groups)),
-                      help="Named sets of sources (\"Saturday cartoons\", \"90s sitcoms\") to use on any channel: change "
-                           "the group and every channel naming it follows."))
-    def all_breaks():
-        if app.library is None:
-            app.toast("Still reading your library. Try again in a moment.")
-            return
-        n = 0
-        for c in list(cfg.library_channels) + list(cfg.video_channels):
-            if not lc.breaks_of(c, app.library):
-                c.pop("breaks", None)               # back to the defaults
-                if not lc.breaks_of(c, app.library):
-                    c["breaks"] = lc.default_breaks(c, app.library)
-                n += 1
-        cfg.save()
-        lc.place(app)
-        app.toast(f"Breaks on {n} channels." if n else "Every channel already has breaks.")
-    def mids(d):
-        withb = [c for c in list(cfg.library_channels) + list(cfg.video_channels) if lc.breaks_of(c, app.library)]
-        if not withb:
-            app.toast("No channel has breaks.")
-            return
-        to = _cycle(lc.MIDS, lc.breaks_of(withb[0], app.library).get("mid", "off"), d)
-        for c in withb:
-            c["breaks"] = dict(lc.breaks_of(c, app.library), mid=to)
-        cfg.save()
-        lc.place(app)
-
-    def mids_value():
-        got = {lc.breaks_of(c, app.library).get("mid", "off") for c in list(cfg.library_channels) + list(cfg.video_channels)
-               if lc.breaks_of(c, app.library)}
-        return _label(lc.MIDS, got.pop()) if len(got) == 1 else "Mixed" if got else "-"
-    items.append(Item("Breaks during programmes", value=mids_value, adjust=mids,
-                      help="For every channel with breaks at once: none during programmes (Off), one halfway, or one "
-                           "every twenty minutes. Each channel's Breaks page sets its own."))
-    items.append(Item("Give every channel breaks", all_breaks,
-                      help="Commercials from your commercials libraries on every library and YouTube channel that "
-                           "has none, bumpers named for each channel's studio, lined up with the half hours."))
-    items.append(Item("Add the starter lineup", make_starter,
-                      help="Your channels as your Tunarr had them (their numbers, shows, movies, bumpers, logos "
-                           "and screen bugs, with Cathode's dayparts), a few of Cathode's own, and every show or "
-                           "movie nothing else has put on the channel it belongs on. Ones you already have (by "
-                           "name) are left alone."))
-    if any(c.get("starter") for c in cfg.library_channels):
-        items.append(Item("Remove the starter lineup",
-                          submenu=lambda: _confirm(app, "Remove its channels", drop_starter, "Keep them"),
-                          help="Takes out every channel the starter lineup made. Channels you made stay."))
-    items.append(Item("Read the library again", reread, value=library_value,
-                      help="Asks Plex for everything it holds. It checks for changes by itself every few hours; "
-                           "this reads it all afresh."))
-    return items
-
-
 def content_group_items(app):
     """Content groups: each opens its page; one more at the foot."""
     from . import libchannels as lc
@@ -2063,7 +2452,7 @@ def content_group_page(app, gid):
     users = [c["name"] for c in cfg.library_channels
              if any(s.get("kind") == "group" and s.get("value") == gid for s in c.get("sources") or [])]
     return [
-        Item("Plays", submenu=lambda: library_source_items(app, gid), value=lambda: str(len(g.get("sources") or [])),
+        Item("Content", submenu=lambda: library_source_items(app, gid), value=lambda: str(len(g.get("sources") or [])),
              help="What's in the group."),
         Item("Name", rename, value=lambda: g["name"]),
         Item("Used by", value=lambda: str(len(users)), help=", ".join(users) or "No channel names it yet."),
@@ -2073,18 +2462,22 @@ def content_group_page(app, gid):
 
 
 def library_channel_page(app, cid):
-    """A library channel: name, number, what it plays, its sort method."""
-    from . import libchannels as lc
+    """A library channel's editor, NostalgiaTV's rows in its order: name,
+    number, favourite, shown, audience, packs, logo, bug, the logic, the
+    content; what's coming up, a fresh schedule, a copy, removal."""
+    from . import libchannels as lc, videochannels as vc
     cfg = app.config
     c = next((x for x in cfg.library_channels if x["id"] == cid), None)
     if c is None:
         return [Item("(this channel is gone)", enabled=False)]
+    url = vc.SCHEME + lc.PREFIX + cid
 
     def save(place=True):
         c["starter"] = False                # edited: the starter lineup's removal leaves it be
         cfg.save()
         if place:
             lc.place(app)
+            _lists_changed(app)
         else:
             lc.rebuild(app)
         app.invalidate()
@@ -2095,7 +2488,7 @@ def library_channel_page(app, cid):
                 return
             c["name"] = text.strip()
             save()
-        app.push(Keyboard(app, "Channel name", got, initial=c.get("name", "")))
+        app.push(Keyboard(app, "Channel Name", got, initial=c.get("name", "")))
 
     def set_number():
         def got(text):
@@ -2109,11 +2502,11 @@ def library_channel_page(app, cid):
                 return
             save()
         want = c.get("number", "auto")
-        app.push(Keyboard(app, "Channel number (empty = automatic)", got,
+        app.push(Keyboard(app, "Channel Number (empty = automatic)", got,
                           initial=str(want) if isinstance(want, int) else ""))
 
     def number_value():
-        ch = next((ch for ch in app.channels if lc.is_library(ch) and ch.url.endswith(cid)), None)
+        ch = _by_url(app, url)
         at = f" {ch.number:g}" if ch else ""
         return f"Auto{at}" if c.get("number", "auto") == "auto" else f"Channel{at}"
 
@@ -2132,7 +2525,7 @@ def library_channel_page(app, cid):
     def refresh():
         c["seed"] = int(time.time())
         save(place=False)
-        app.toast("Today onward drawn up again.")
+        app.toast("Drawn up again from now.")
         ch = app.live.channel
         if ch is not None and lc.is_library(ch) and ch.url.endswith(cid):
             app.after(1.5, lambda: ch in app.channels and app.live.tune(app.channels.index(ch)))
@@ -2141,9 +2534,8 @@ def library_channel_page(app, cid):
         cfg.library_channels[:] = [x for x in cfg.library_channels if x["id"] != cid]
         cfg.save()
         lc.place(app)
-        m = app.top()
-        m.back()
-        m.refresh(library_channel_items(app))
+        app.top().back()
+        _lists_changed(app)
 
     def holds():
         tl = lc.SCHEDULES.get(lc.PREFIX + cid)
@@ -2151,24 +2543,30 @@ def library_channel_page(app, cid):
             return "Nothing yet"
         hours = sum(i["duration"] for i in tl.entries) / 3600
         return f"{len(tl.entries):,} titles, {hours:,.0f} h"
+    rows = timeline_items(app, c, lc.PREFIX + cid, save)
     return [
-        Item("Name", set_name, value=lambda: c.get("name") or "", help="The channel's name in the lineup and the guide."),
-        Item("Channel number", set_number, value=number_value,
+        Item("Channel Name", set_name, value=lambda: c.get("name") or "",
+             help="The channel's name in the lineup and the guide."),
+        Item("Channel Number", set_number, value=number_value,
              help="Automatic (with the other library channels, after the lineup) or one you choose; a taken "
                   "number moves to the next free."),
-        Item("Plays", submenu=lambda: library_source_items(app, cid), value=holds,
-             help="What the channel draws from: libraries, genres, decades, studios, ratings, shows."),
-        *timeline_items(app, c, lc.PREFIX + cid, save),
+        *_lineup_rows(app, url),
+        Item("Audience", value=lambda: _label(lc.CONTENT, c.get("content", "any")), adjust=content,
+             help="Adults: anything. Everyone: nothing rated TV-MA, R or NC-17. Kids: only TV-Y, TV-Y7, TV-G and G "
+                  "(unrated titles stay off); kids' profiles see the Kids channels."),
+        *rows[:-2],
         Item("Premieres", value=lambda: _label(lc.PREMIERES, c.get("premieres", "off")), adjust=premieres,
              help="Each evening at 8, the newest arrival in your library the channel hasn't premiered yet. The "
                   "guide marks it, and marks every title added in the last two weeks as New."),
-        Item("Ratings", value=lambda: _label(lc.CONTENT, c.get("content", "any")), adjust=content,
-             help="Anything; nothing rated TV-MA, R or NC-17; or only TV-Y, TV-Y7, TV-G and G (unrated titles "
-                  "stay off a kids' channel)."),
         Item("Lower-third", value=lambda: "On" if c.get("card", False) else "Off", adjust=card,
              help="A name card as each programme starts and before it ends."),
-        Item("Draw up the schedule again", refresh,
-             help="Today onward in a fresh order. The show on now changes."),
+        Item("Content", submenu=lambda: library_source_items(app, cid), value=holds,
+             help="What it plays: shows, movies, libraries, genres, decades, studios, groups. SELECT to add some "
+                  "or take some out."),
+        *rows[-2:],
+        Item("Refresh Schedule", refresh,
+             help="This channel drawn up again from now in a fresh order: what's on now changes. (A change to "
+                  "the channel applies by itself; this is a new shuffle.)"),
         Item("Make a copy", lambda: _copy_channel(app, cfg.library_channels, c, library_channel_page),
              help="The same channel again, to change into another."),
         Item("Remove channel", submenu=lambda: _confirm(app, "Remove channel", remove, "Keep it")),
@@ -2182,79 +2580,142 @@ def _holder(cfg, cid):
 
 
 def library_source_items(app, cid):
-    """What a library channel (or a content group) plays: each source
-    opens its page; one more at the foot."""
+    """What a library channel (or a content group) plays, NostalgiaTV's
+    Added Content: each source opens its page. Add Content: by search, by
+    library, genre, decade, studio, show, rating or group, each a list to
+    tick in and out (it stays open to tick several)."""
     from . import libchannels as lc
     cfg = app.config
     c = _holder(cfg, cid)
     if c is None:
         return [Item("(this channel is gone)", enabled=False)]
-    index = app.library
+    index = getattr(app, "library", None)
+    if index is None:
+        return [Item("Still reading your library...", enabled=False)]
 
     def changed():
         c["starter"] = False
         cfg.save()
         lc.rebuild(app)
-        m = app.top()
-        while len(m.pages) > 1 and m.pages[-1][0] != "Plays":
-            m.back()
-        m.refresh(library_source_items(app, cid))
+        _refresh(app, {"Content": lambda: library_source_items(app, cid)})
 
-    def remove(i):
-        c["sources"].pop(i)
+    def same(src, section, kind):
+        """(Shows and titles are one of a kind wherever they are: any library.)"""
+        return not src.get("exclude") and src.get("kind") == kind and (
+            kind in ("show", "title") or (src.get("section") or "") == (section or ""))
+
+    def has(section, kind, v):
+        for src in c.get("sources") or []:
+            if same(src, section, kind):
+                vals = src.get("value")
+                if vals == v or (kind == "title" and isinstance(vals, list) and v in vals):
+                    return True
+        return False
+
+    def tick(section, kind, v):
+        srcs = c.setdefault("sources", [])
+        for src in list(srcs):
+            if not same(src, section, kind):
+                continue
+            vals = src.get("value")
+            if kind == "title" and isinstance(vals, list) and v in vals:
+                vals.remove(v)
+                if not vals:
+                    srcs.remove(src)
+                return changed()
+            if vals == v:
+                srcs.remove(src)
+                return changed()
+        srcs.append({"section": section, "kind": kind, "value": [v] if kind == "title" else v})
         changed()
 
-    def add(section, kind, value):
-        c.setdefault("sources", []).append({"section": section, "kind": kind, "value": value})
-        changed()
+    def row(label, section, kind, v, count="", help=None):
+        return Item(label, lambda: tick(section, kind, v), adjust=lambda d: tick(section, kind, v),
+                    value=lambda: "Added" if has(section, kind, v) else count,
+                    help=help or "SELECT adds it; again takes it out.")
 
     def values(section, kind):
-        return [Item(label, lambda v=v: add(section, kind, v), value=lambda k=k: str(k))
-                for v, label, k in lc.options(index, section, kind)] or [Item("(nothing here)", enabled=False)]
+        return [row(label, section, kind, v, f"{k:,}") for v, label, k in lc.options(index, section, kind)] or \
+            [Item("(nothing here)", enabled=False)]
 
-    def kinds(section):
+    def ratings(section):
+        return [row("Kids' ratings", section, "rating", lc.KIDS, help="TV-Y, TV-Y7, TV-G and G."),
+                row("Grown-ups' ratings", section, "rating", lc.MATURE, help="TV-MA, R and NC-17.")]
+
+    def slices(section):
         sec = index.sections.get(section)
-        rows = [Item("Everything in it", lambda: add(section, "all", None))]
+        rows = [row("Everything in it", section, "all", None, f"{len(sec.items):,}" if sec else "")]
         for kind, label in lc.KINDS[1:]:
             if kind == "rating":
-                rows.append(Item("Kids' ratings", lambda: add(section, "rating", lc.KIDS),
-                                 help="TV-Y, TV-Y7, TV-G and G."))
-                rows.append(Item("Grown-ups' ratings", lambda: add(section, "rating", lc.MATURE),
-                                 help="TV-MA, R and NC-17."))
+                rows += ratings(section)
             elif kind == "show" and sec is not None and sec.kind == "music":
                 rows.append(Item("An artist...", submenu=lambda: values(section, "show")))
-            elif kind != "show" or sec is None or sec.kind == "show":
+            elif (kind == "show" and (sec is None or sec.kind == "show")) or (
+                    kind == "title" and sec is not None and sec.kind not in ("show", "music")) or \
+                    kind not in ("show", "title"):
                 rows.append(Item(f"A {label.lower()}...", submenu=lambda kind=kind: values(section, kind)))
         return rows
 
-    def group_rows():
-        return [Item(g["name"], lambda g=g: (c.setdefault("sources", []).append(
-                    {"kind": "group", "value": g["id"], "label": g["name"]}), changed()))
-                for g in cfg.content_groups] or [Item("No content groups yet", enabled=False,
-                                                      help="Make one under Library Channels > Content groups.")]
+    def libraries():
+        return [Item(sec.title, submenu=lambda sec=sec: slices(sec.key), value=lambda sec=sec: f"{len(sec.items):,}")
+                for sec in sorted(index.sections.values(), key=lambda x: x.title.lower())]
 
-    def where():
-        rows = [Item("Every library", submenu=lambda: kinds(""),
-                     help="All your programme libraries together (not the bumpers, nor ones hidden from On Demand).")]
+    def found(text):
+        hits = []
+        for sec in index.sections.values():
+            if sec.breaks:
+                continue
+            if sec.kind in ("show", "music"):
+                hits += [(sh["title"], sec, "show", k, "Show" if sec.kind == "show" else "Artist")
+                         for k, sh in sec.shows.items() if text in sh["title"].lower()]
+            else:
+                hits += [(f"{i['title']} ({i['year']})" if i.get("year") else i["title"], sec, "title", i["plex"],
+                          "Movie" if sec.kind == "movie" else "Clip") for i in sec.items if text in i["title"].lower()]
+        hits.sort(key=lambda h: h[0].lower())
+        return [row(t, sec.key, kind, v, what, help=f"A {what.lower()} in {sec.title}. SELECT adds it; again takes "
+                                                    "it out.") for t, sec, kind, v, what in hits[:80]] or \
+            [Item("Nothing has that in its title", enabled=False)]
+
+    def search():
+        def got(text):
+            text = (text or "").strip().lower()
+            if text:
+                app.top().open(text.upper(), found(text))
+        app.push(Keyboard(app, "Search titles", got, hint="Part of a show's or a movie's title."))
+
+    def groups():
+        return [row(g["name"], "", "group", g["id"]) for g in cfg.content_groups] or [
+            Item("No content groups yet", enabled=False, help="Make one under Settings > Channels > Content Groups.")]
+
+    def add_rows():
+        rows = [Item("Add by Search", search, help="Type part of a title: the shows and movies that have it."),
+                Item("Add by Library", submenu=libraries, help="A whole library, or a slice of one."),
+                Item("Add by Genre", submenu=lambda: values("", "genre"), help="A genre from every library."),
+                Item("Add by Decade", submenu=lambda: values("", "decade"), help="A decade from every library."),
+                Item("Add by Studio", submenu=lambda: values("", "studio"),
+                     help="A studio or network from every library."),
+                Item("Add by Show", submenu=lambda: values("", "show")),
+                Item("Add by Rating", submenu=lambda: ratings(""))]
         if c in cfg.library_channels:
-            rows.append(Item("A content group...", submenu=group_rows,
-                             help="A named set of sources you made once, to use on any channel."))
-        for sec in sorted(index.sections.values(), key=lambda s: s.title.lower()):
-            rows.append(Item(sec.title, submenu=lambda sec=sec: kinds(sec.key), value=lambda sec=sec: f"{len(sec.items):,}"))
+            rows.append(Item("Add by Group", submenu=groups,
+                             help="A content group: change it and every channel with it follows."))
         return rows
-    if index is None:
-        return [Item("Still reading your library...", enabled=False)]
-    def label(s):
-        return ("Not: " if s.get("exclude") else "") + lc.source_label(index, s)
 
-    def when(s):
-        bits = [_label_of(lc.AIRS, s.get("airs"))] if s.get("airs") else []
-        bits += [_label_of(lc.SEASONS, s.get("season"))] if s.get("season") else []
-        return ", ".join(bits)[:24] or ("Left out" if s.get("exclude") else "Any time")
-    items = [Item(label(s), submenu=lambda i=i: library_source_page(app, cid, i), value=lambda s=s: when(s),
-                  help="SELECT: when it airs, its weight, leaving it out, removing it.")
-             for i, s in enumerate(c.get("sources") or [])]
-    items.append(Item("Add...", submenu=where, help="One more slice of the library for this channel."))
+    def label(src):
+        if src.get("kind") == "group":
+            g = next((g for g in cfg.content_groups if g["id"] == src.get("value")), None)
+            return f"Group: {g['name'] if g else src.get('label') or 'a content group'}"
+        return ("Not: " if src.get("exclude") else "") + lc.source_label(index, src)
+
+    def when(src):
+        bits = [_label_of(lc.AIRS, src.get("airs"))] if src.get("airs") else []
+        bits += [_label_of(lc.SEASONS, src.get("season"))] if src.get("season") else []
+        return ", ".join(bits)[:24] or ("Left out" if src.get("exclude") else "Any time")
+    items = [Item(label(src), submenu=lambda i=i: library_source_page(app, cid, i), value=lambda src=src: when(src),
+                  help="SELECT: when it airs, its weight, leaving it out, taking it out.")
+             for i, src in enumerate(c.get("sources") or [])]
+    items.append(Item("Add Content", submenu=add_rows, help="Search, or add by library, genre, decade, studio, show, "
+                                                            "rating or group."))
     return items
 
 
@@ -2311,9 +2772,8 @@ def library_source_page(app, cid, i):
     def remove():
         srcs.pop(i)
         changed()
-        m = app.top()
-        m.back()
-        m.refresh(library_source_items(app, cid))
+        app.top().back()
+        _refresh(app, {"Content": lambda: library_source_items(app, cid)})
     return [
         Item("Leave these out", leave_out, value=lambda: "On" if s.get("exclude") else "Off", adjust=leave_out,
              help="On: whatever this matches is kept off the channel, though another source takes it in (a "
@@ -2532,14 +2992,14 @@ def playlist_items(app, pl):
         app.config.playlists.remove(pl)
         app.config.save()
         app.toast(f"Deleted {pl.get('name', 'playlist')}")
-        _reopen(app, channel_items(app))
+        _reopen(app, source_items(app))
     def rename():
         def got(name):
             if name:
                 pl["name"] = name
                 app.config.save()
                 app.toast(f"Renamed to {name}")
-                _reopen(app, channel_items(app))
+                _reopen(app, source_items(app))
         app.push(Keyboard(app, "Rename this playlist", got, initial=pl.get("name", "")))
     return [
         Item("Watch this playlist", lambda: app.switch_playlist(pl), close=True),
@@ -2596,7 +3056,7 @@ def add_playlist(app, on_added=None, first_run=False):
                 entry["name"] = "My Channels"
                 app.toast(f"Found {n} channel{'' if n == 1 else 's'}. The guide comes from the same provider.", 5.0)
                 app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
-                                  hint="How it's listed under Settings > Channels."))
+                                  hint="How it's listed under Settings > Channels > Live TV Sources."))
             _check_playlist(app, provider.playlist_url, checked, entry)
             return
         if not servers.looks_like_address(text):
@@ -2645,7 +3105,7 @@ def add_playlist(app, on_added=None, first_run=False):
             return
         entry["epg_url"] = _bare(epg)
         app.push(Keyboard(app, step("c", "Name this playlist"), got_name, initial="My Channels",
-                          hint="How it's listed under Settings > Channels."))
+                          hint="How it's listed under Settings > Channels > Live TV Sources."))
 
     def got_name(name):
         if name is None:
@@ -2732,38 +3192,6 @@ def restore_items(app):
                                                              "Keep mine"),
                          value=lambda b=b: "Weekly" if b["auto"] else "", help=b["path"]))
     return rows or [Item("No backups yet", enabled=False, help="Back up settings makes one; one is made each week.")]
-
-
-def system_items(app):
-    from . import __version__, sounds
-    from .screens.diagnostics import Diagnostics
-    from . import update_flow
-    cfg = app.config
-    return [
-        Item("Diagnostics", lambda: app.push(Diagnostics(app)), close=True),
-        Item("Back up settings", lambda: _back_up(app),
-             help="Every setting to a file in the settings folder's backups (one is also made by itself each week). "
-                  "Your Plex, Jellyfin and Emby sign-ins aren't in it; playlist links are."),
-        Item("Restore settings", submenu=lambda: restore_items(app),
-             help="Put the settings back as a backup has them. Sign-ins stay as they are."),
-        Item("Save diagnostics", lambda: _save_diagnostics(app),
-             help="One zip on your Desktop to attach to a bug report: logs, settings without passwords, system."),
-        Item("Audio output", submenu=lambda: audio_items(app)),
-        Item("Weather", submenu=lambda: weather_items(app)),
-        Item("Check for updates", lambda: update_flow.open_check(app)),
-        Item("Check at start-up", value=lambda: "Yes" if cfg.update_check else "No",
-             adjust=lambda d: (setattr(cfg, "update_check", not cfg.update_check), cfg.save())),
-        *([Item("Sound effects", value=lambda: _label(sounds.LEVELS, cfg.sound_effects),
-                adjust=lambda d: (setattr(cfg, "sound_effects", _cycle(sounds.LEVELS, cfg.sound_effects, d)), cfg.save(),
-                                  app.sound("key")),
-                help="The box's key sounds and its error bonk, as the HR20 had them.")]
-          if getattr(app.skin, "ui_sounds", False) else []),
-        Item("Start-up screen", value=lambda: "On" if cfg.boot_sequence else "Off",
-             adjust=lambda d: (setattr(cfg, "boot_sequence", not cfg.boot_sequence), cfg.save())),
-        Item("Screensaver", value=lambda: "On" if cfg.screensaver else "Off",
-             adjust=lambda d: (setattr(cfg, "screensaver", not cfg.screensaver), cfg.save())),
-        Item(f"Cathode {__version__}", enabled=False),
-    ]
 
 
 def audio_items(app):

@@ -705,36 +705,58 @@ class TestMaker(Temp):
         app = FakeApp([])
         app.ondemand = SimpleNamespace(signed_in=False)
         app.config.video_channels = []
-        self.assertFalse(menus.library_channel_items(app)[0].enabled)      # not linked: says so
+        self.assertFalse(menus.add_channel_items(app)[0].enabled)          # From my library: not linked, says so
         app.ondemand.signed_in = True
         app.library = index()
         app.listings, app.schedules, app.live = {}, {}, None
         app.config.library_channels = [chan("Comedy", "block_shuffle", {"kind": "genre", "value": "Comedy"}, starter=True)]
         app.channels = vc.add_to(lineup(1), app.config)
+        opened, pushed = [], []
+        app.push = pushed.append
+        app.top = lambda: SimpleNamespace(open=lambda t, items: opened.append((t, items)), pages=[])
         lc.rebuild(app)
         cid = app.config.library_channels[0]["id"]
-        pages = [menus.library_channel_items(app), menus.library_channel_page(app, cid),
-                 menus.library_source_items(app, cid)]
-        pages.append(pages[2][-1].submenu())                    # Add...: where
-        pages.append(pages[3][0].submenu())                     # Every library: what kind
-        pages.append(next(it for it in pages[4] if it.label == "A genre...").submenu())
-        pages.append(next(it for it in pages[3] if it.label == "TV Shows").submenu())
-        for items in pages:
+        pages = [menus.channels_tab(app), menus.library_channel_page(app, cid), menus.library_source_items(app, cid)]
+        pages.append(pages[2][-1].submenu())                    # Add Content
+        pages.append(next(it for it in pages[3] if it.label == "Add by Genre").submenu())
+        libs = next(it for it in pages[3] if it.label == "Add by Library").submenu()
+        pages.append(next(it for it in libs if it.label == "TV Shows").submenu())
+        for items in pages + [menus.commercials_tab(app), menus.schedule_tab(app), menus.starter_items(app)]:
             for it in items:
                 self.assertTrue(it.label)
                 if it.value:
                     self.assertIsInstance(it.value(), str)
         self.assertEqual([it.label for it in pages[0]],
-                         ["Comedy", "Add a channel...", "Content groups", "Breaks during programmes", "Give every channel breaks", "Add the starter lineup", "Remove the starter lineup",
-                          "Read the library again"])
-        self.assertEqual(pages[0][0].value(), "101")
-        self.assertEqual(pages[1][2].value(), "14 titles, 6 h")      # (Alpha's special: after its seasons)
-        self.assertEqual((pages[1][3].value(), pages[1][4].value()), ("Block Shuffle", "2 episodes"))
+                         ["Add Custom Channel", "Live TV Sources", "Channel Packs", "Hidden Channels", "Content Groups",
+                          "Cathode's channels", "Starter Lineup", "1  Ch1", "101  Comedy"])
+        self.assertEqual((pages[0][-1].value(), pages[0][-2].value()), ("Library", "Playlist"))
+        rows = {it.label: it for it in pages[1]}
+        self.assertEqual(rows["Content"].value(), "14 titles, 6 h")    # (Alpha's special: after its seasons)
+        self.assertEqual((rows["Sorting Method"].value(), rows["Block Size"].value()), ("Block Shuffle", "2 episodes"))
+        self.assertEqual([it.label for it in pages[1]][:8],
+                         ["Channel Name", "Channel Number", "Favorite", "Channel Visible", "Channel Packs",
+                          "Custom Logo", "Screen Bug", "Audience"])                  # NostalgiaTV's order
         self.assertEqual(pages[2][0].label, "Everything: Comedy")
-        self.assertEqual([(it.label, it.value()) for it in pages[5]][:2], [("Comedy", "3"), ("Action", "1")])
-        self.assertIn("A show...", [it.label for it in pages[6]])
-        movies = next(it for it in pages[3] if it.label == "Movies").submenu()
+        genres = {it.label: it for it in pages[4]}
+        self.assertEqual((genres["Comedy"].value(), genres["Action"].value()), ("Added", "1"))   # ticked in already
+        genres["Action"].action()                               # ticked: in; the page stays to tick more
+        self.assertEqual(genres["Action"].value(), "Added")
+        self.assertEqual(len(app.config.library_channels[0]["sources"]), 2)
+        genres["Action"].action()                               # again: out
+        self.assertEqual(len(app.config.library_channels[0]["sources"]), 1)
+        self.assertIn("A show...", [it.label for it in pages[5]])
+        movies = next(it for it in libs if it.label == "Movies").submenu()
         self.assertNotIn("A show...", [it.label for it in movies])
+        self.assertIn("A title...", [it.label for it in movies])
+        from unittest import mock
+        with mock.patch.object(menus, "Keyboard", lambda app, prompt, got, **k: SimpleNamespace(on_done=got)):
+            next(it for it in pages[3] if it.label == "Add by Search").action()
+        pushed[-1].on_done("bra")                               # typed on the keyboard
+        found = {it.label: it for it in opened[-1][1]}
+        self.assertEqual(found["Bravo"].value(), "Show")
+        found["Bravo"].action()
+        self.assertEqual(found["Bravo"].value(), "Added")
+        self.assertEqual(app.config.library_channels[0]["sources"][-1], {"section": "51", "kind": "show", "value": "200"})
         self.assertEqual(lc.source_label(app.library, {"section": "51", "kind": "show", "value": "200"}), "Bravo")
         self.assertFalse(menus.library_channel_page(app, "nope")[0].enabled)
 

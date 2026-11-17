@@ -26,7 +26,7 @@ def launch_check(app):
         except updater.UpdateError:
             return
         if latest and updater.is_newer(latest["tag"], __version__):
-            app.post(app.toast, f"Update {latest['tag']} available - see Settings > System", 6.0)
+            app.post(app.toast, f"Update {latest['tag']} available - see Settings > Admin", 6.0)
     threading.Thread(target=work, daemon=True).start()
 
 

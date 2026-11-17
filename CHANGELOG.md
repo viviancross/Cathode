@@ -2,6 +2,38 @@
 
 ## 5.2
 
+- **Menus laid out as NostalgiaTV's**, drawn by each box in its own style.
+  Settings is Channels, Commercials, Schedule, Design, Preferences,
+  Servers, Profiles and Admin.
+  - **Channels:** Add Custom Channel (from your library or YouTube: name it,
+    then straight to what it plays), Live TV Sources (your playlists),
+    Channel Packs, Hidden Channels (Restore, Show All), Content Groups,
+    Cathode's channels, Starter Lineup, then every channel in the lineup.
+  - **One editor per channel**, NostalgiaTV's rows in its order: Channel
+    Name, Channel Number, Favorite, Channel Visible, Channel Packs, Custom
+    Logo, Screen Bug, Audience (Adults, Everyone, Kids), Sorting Method,
+    Block Size, the rest of the logic, Commercials, Content, Coming up,
+    Refresh Schedule, Make a copy, Remove channel. Playlist channels get the
+    lineup rows (name, number, favourite, shown, packs, logo, bug).
+  - **Content** is NostalgiaTV's Added Content; **Add Content** adds by
+    Search, Library, Genre, Decade, Studio, Show, Rating or Group, each a
+    list to tick in and out (it stays open to tick several; "Added" shows
+    what's in).
+  - **Screen Bug per channel:** on or off, its picture, position, size,
+    opacity, distance from the edge, or back to how it came (Tunarr's look).
+  - **Commercials:** the commercial libraries, alignment, break length and
+    mid-programme breaks for every channel at once, and Channel
+    Configuration (breaks on or off per channel, Enable All, Disable All).
+  - **Schedule:** Refresh Schedule (every channel drawn up afresh), Refresh
+    Library & Schedule, Schedule Length (2, 7, 14, 30 days), Refresh
+    Listings.
+  - **Preferences:** Subtitles, Channel Logo (the screen bug for every
+    channel), Display, Start-up, Audio output, Remote control, Weather,
+    YouTube. **Servers:** Plex, Jellyfin, Emby and folders. **Admin:** the
+    phone remote, sync, sharing, backups, diagnostics, updates.
+- **Main Menu:** Channel Search (part of a name or a number, SELECT tunes)
+  and a Sleep Timer (30 minutes to 8 hours; Cathode closes when it runs out).
+- **Options over live TV: Edit this channel** opens its editor.
 - **The starter lineup is your Tunarr lineup.** Cathode makes the 26
   channels your Tunarr runs, on Tunarr's numbers (3 ABCNBCBSFOX, 4 BBC,
   7 WBUPN, 13 WBFOX Kids ... 163 Nickelodeon ... 683-685 HBO ... 1000

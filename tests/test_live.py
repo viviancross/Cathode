@@ -319,7 +319,7 @@ class TestTuning(unittest.TestCase):
         opts = self.app.screens[-1]
         self.assertIsInstance(opts, Options)
         self.assertEqual([it.label for it in opts.items],
-                         ["Add to Favorites", "Picture format", "Subtitles"])
+                         ["Add to Favorites", "Picture format", "Subtitles", "Edit this channel"])
 
 
 class TestPauseLive(unittest.TestCase):

@@ -481,11 +481,11 @@ class App:
                     self.config.save()
                     self.post(self.use_agent, agent)
                 err = "" if chans or url == lineup.NONE else (f"Your playlist has no channels in it. Press {self.press_hint(R.MENU)} "
-                                        "to check its address under Settings > Channels.")
+                                        "to check its address under Settings > Channels > Live TV Sources.")
             except Exception as e:
                 print(f"[cathode] playlist load failed: {e!r}")
                 chans, err = [], (f"Couldn't load your channels: {load_error_text(e)}. Press "
-                                  f"{self.press_hint(R.MENU)} to check the address under Settings > Channels.")
+                                  f"{self.press_hint(R.MENU)} to check the address under Settings > Channels > Live TV Sources.")
             self.post(self._playlist_loaded, url, epg_url, chans, err)
         threading.Thread(target=work, daemon=True).start()
 
@@ -693,7 +693,7 @@ class App:
                          if missed else "") + (f"; guide ids e.g. {', '.join(ids[:3])}" if missed else ""))
                 if not ids:
                     self.toast("The guide loaded, but there's nothing in it. Check its address in "
-                               "Settings > Channels.", 8.0)
+                               "Settings > Channels > Live TV Sources.", 8.0)
                 elif chans and not any(epg.resolve_channel_id(ch.epg_id, ch.name) for ch in chans):
                     self.toast("The guide loaded, but it lists none of these channels. Is it the guide "
                                "for this playlist?", 8.0)
@@ -756,7 +756,7 @@ class App:
                 self.config.audio_device = ""
                 self.config.save()
                 self.after(1.5, lambda: self.toast("The saved audio output isn't on this computer, so sound is on "
-                                                   "the default one. Change it under Settings > System > Audio output.", 8.0))
+                                                   "the default one. Change it under Settings > Preferences > Audio output.", 8.0))
         from .ondemand import OnDemand
         self.ondemand = OnDemand(self)
         self.ondemand.downloads.resume()     # anything a quit or a dropout interrupted

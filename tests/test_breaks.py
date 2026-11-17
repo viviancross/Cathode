@@ -266,10 +266,20 @@ class TestMaker(Temp):
             if it.value:
                 self.assertIsInstance(it.value(), str)
         app.config.video_channels[0]["breaks"] = {}
-        lst = {it.label: it for it in menus.library_channel_items(app)}
-        lst["Give every channel breaks"].action()
+        tab = {it.label: it for it in menus.commercials_tab(app)}             # Settings > Commercials
+        conf = {it.label: it for it in tab["Channel Configuration"].submenu()}
+        self.assertEqual(tab["Channel Configuration"].value(), "1 of 2")
+        conf["Enable All"].action()
         self.assertTrue(lc.breaks_of(app.config.video_channels[0], app.library)["ads"])
-        mids = {it.label: it for it in menus.library_channel_items(app)}["Breaks during programmes"]
+        conf["Disable All"].action()
+        self.assertEqual(tab["Channel Configuration"].value(), "0 of 2")
+        conf["Enable All"].action()
+        libs = {it.label: it for it in tab["Commercial Libraries"].submenu()}
+        libs["CN Bumps"].action()                                               # on every channel at once
+        self.assertEqual(libs["CN Bumps"].value(), "On")
+        tab["Commercial Alignment"].adjust(1)
+        self.assertEqual(tab["Commercial Alignment"].value(), "Hours")
+        mids = {it.label: it for it in menus.commercials_tab(app)}["During Programmes"]
         self.assertEqual(mids.value(), "Off")
         mids.adjust(1)
         self.assertEqual(mids.value(), "Halfway")
