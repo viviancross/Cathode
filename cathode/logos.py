@@ -325,6 +325,9 @@ def url_for(app, ch, kind: str = "logo") -> str:
         return mine
     epg = getattr(app, "epg", None)
     url = (epg.icon_url(epg.resolve_channel_id(ch.epg_id, ch.name)) if epg else "") or ch.logo or ""
+    if url.startswith("asset:"):            # one that comes with Cathode (the starter lineup's)
+        from .paths import asset
+        return asset(*url[6:].split("/"))
     if url.startswith("/library/"):         # a show's title art on the Plex server
         od = getattr(app, "ondemand", None)
         c = od.client() if od is not None and getattr(od, "signed_in", False) else None

@@ -1,5 +1,43 @@
 # Changelog
 
+## 5.2
+
+- **The starter lineup is your Tunarr lineup.** Cathode makes the 26
+  channels your Tunarr runs, on Tunarr's numbers (3 ABCNBCBSFOX, 4 BBC,
+  7 WBUPN, 13 WBFOX Kids ... 163 Nickelodeon ... 683-685 HBO ... 1000
+  SASUKE, 1034 Serebii), each with the shows and movies it plays there, the
+  libraries it takes whole (Standup on Comedy Central, Disney Shorts, the
+  wrestling libraries, Noggin) and its bumpers (Disney IDs and UPN Bumpers
+  as Tunarr picked them, clip by clip). Commercials are Classic Commercials
+  only, as Tunarr has them; Noggin runs none.
+  - Kept from Cathode's own: USA Network (105), IFC (131), Toon Disney
+    (173), Animal Planet (184), truTV (246), HBO Signature (686),
+    Defunctland Channel (1001), The Simpsons 24/7, Family Guy 24/7, 10
+    Minute Power Hour 24/7 (1002-1004) and Christmas Specials (1005).
+  - Shuffled as Tunarr shuffles them; GameCenter CX and Serebii play their
+    show in order, SASUKE a show at random, each in order.
+  - Cathode's dayparts stay: Nick at Nite on Nickelodeon, Saturday mornings
+    on ABCNBCBSFOX, Toonami on Cartoon Network weekday afternoons, the
+    classic shorts on Disney Channel in the morning, the Cartoon Express on
+    USA.
+  - **Their logos are your Tunarr icons** (Disney Channel's animated), and
+    **their screen bugs are Tunarr's watermarks**: each channel's corner,
+    width, opacity and margins, and none where Tunarr shows none (HBO,
+    Noggin, wrestling). Other channels wear the usual bug.
+- **Every show and movie is on a channel.** One no channel has goes where it
+  belongs: the channel its network ran it on, else the one it's most like
+  (a spin-off or a show's movie with the show, a studio mostly on one
+  channel, its library, genres and rating; never a grown-ups' title on a
+  kids' channel). 24/7s and one-show channels take nothing.
+- **What your library takes in later finds its channel the same way**: a
+  new show or movie joins its channel when Cathode next reads the library,
+  with a note of where it went ("New in your library: ... on Nickelodeon").
+  New episodes of shows already on were always picked up.
+- A library channel can play picked titles: a source kind "Title" for a
+  movie or a clip.
+- A YouTube channel numbered "auto" goes round the numbers your library
+  channels ask for (it was taking channel 3 from ABCNBCBSFOX).
+
 ## 5.1
 
 - **A new first-run setup, Plex first.** Welcome, your box, its colours,

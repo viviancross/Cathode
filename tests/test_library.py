@@ -342,52 +342,142 @@ class TestLineup(Temp):
         self.assertEqual([c.name for c in vc.add_to([], cfg)][:1], ["Comedy"])    # no playlist: Cathode's own, from 1
         self.assertEqual(vc.entry(cfg, lc.PREFIX + cfg.library_channels[0]["id"])["name"], "Comedy")
 
-    def test_the_starter_lineup_is_network_replicas(self):
-        old = (lc.HBO_MOVIES, lc.MARATHON_EPISODES)
-        lc.HBO_MOVIES, lc.MARATHON_EPISODES = 1, 6
+    def test_a_video_channel_goes_round_the_numbers_library_channels_ask_for(self):
+        app = FakeApp([])
+        cfg = app.config
+        cfg.video_channels = [vc.new_channel("Clips")]
+        cfg.library_channels = [chan("Network", number=3), chan("Cable", number=4)]
+        chans = vc.add_to(lineup(1, 2), cfg)
+        self.assertEqual([(c.number, c.name) for c in chans],
+                         [(1, "Ch1"), (2, "Ch2"), (3, "Network"), (4, "Cable"), (5, "Clips")])
+
+    def table(self, **over):
+        """A starter table as lineup.json has it."""
+        t = {"ads": ["Classic Commercials"], "leave_out": [], "channels": [
+            {"number": 163, "name": "Nickelodeon", "group": "Kids",
+             "shows": ["Rugrats", "Doug", "Hey Arnold!", "SpongeBob SquarePants", "Not In This Library"],
+             "movies": ["Pups (1999)"], "bumps": ["Nickelodeon Bumpers"], "logo": "asset:channels/nickelodeon.png",
+             "bug": {"corner": "top right", "width": 10, "opacity": 30, "margin": [5, 5]},
+             "slots": [{"airs": {"from": 20, "to": 6}, "shows": ["Full House", "The Cosby Show", "Roseanne"]}]},
+            {"number": 164, "name": "Noggin", "group": "Kids", "libs": ["Noggin"], "ads": False, "bug": {"off": True}},
+            {"number": 683, "name": "HBO Comedy", "group": "Premium", "movies": ["Laughs (1999)"],
+             "bump_titles": {"Nickelodeon Bumpers": ["261"]}},
+            {"number": 1002, "name": "The Simpsons 24/7", "group": "24/7", "order": "playlist",
+             "shows": ["The Simpsons"], "logo": "show", "closed": True},
+            {"number": 999, "name": "Nothing Here", "shows": ["Nope"]}]}
+        t.update(over)
+        return t
+
+    def with_table(self, table):
+        old = lc.lineup
+        lc.lineup = lambda: table
+        self.addCleanup(setattr, lc, "lineup", old)
+
+    def test_the_starter_lineup_is_your_tunarr_channels(self):
+        idx = networks_index()
+        idx.sections["26"].hidden = idx.sections["50"].hidden = True    # hidden from On Demand: still the channel's
+        self.with_table(self.table())
+        made = lc.starter(idx)
+        by = {c["name"]: c for c in made}
+        self.assertEqual([(c["number"], c["name"], c["group"]) for c in made],
+                         [(163, "Nickelodeon", "Kids"), (164, "Noggin", "Kids"), (683, "HBO Comedy", "Premium"),
+                          (1002, "The Simpsons 24/7", "24/7")])                # nothing for "Nothing Here"
+        self.assertTrue(all(c["starter"] for c in made))
+        for c in made:
+            self.assertTrue(lc.groups(c, idx), c["name"])
+        nick = by["Nickelodeon"]
+        tv = idx.sections["51"]
+        day = [tv.shows[s["value"]]["title"] for s in nick["sources"] if s["kind"] == "show" and not s.get("airs")]
+        night = [tv.shows[s["value"]]["title"] for s in nick["sources"] if s.get("airs")]
+        self.assertEqual(sorted(day), ["Doug", "Hey Arnold!", "Rugrats", "SpongeBob SquarePants"])
+        self.assertEqual(sorted(night), ["Full House", "Roseanne", "The Cosby Show"])     # the daypart kept
+        self.assertIn({"section": "38", "kind": "title", "value": ["904"]}, nick["sources"])   # its movie, by title
+        self.assertEqual(lc.source_label(idx, {"section": "38", "kind": "title", "value": ["904"]}), "Pups")
+        self.assertEqual(nick["breaks"]["bumps"], [{"section": "26", "kind": "all"}])
+        self.assertEqual(nick["breaks"]["ads"], [{"section": "3", "kind": "all"}])   # the commercials named
+        self.assertEqual((nick["logo"], nick["bug"]["corner"]), ("asset:channels/nickelodeon.png", "top right"))
+        self.assertEqual((by["Noggin"]["sources"], by["Noggin"]["breaks"], by["Noggin"]["bug"]),
+                         ([{"section": "50", "kind": "all"}], {}, {"off": True}))   # no commercials, no bug
+        hbo = by["HBO Comedy"]
+        self.assertEqual({i["title"] for g in lc.groups(hbo, idx) for i in g["items"]}, {"Laughs"})
+        self.assertEqual([i["title"] for i in lc.clips(hbo["breaks"]["bumps"], idx)], ["Nickelodeon Bumpers 1"])
+        self.assertEqual(lc.source_label(idx, hbo["breaks"]["bumps"][0]), "Nickelodeon Bumpers 1")
+        simpsons = by["The Simpsons 24/7"]
+        self.assertTrue(simpsons["closed"])
+        self.assertNotIn("logo", simpsons)                              # (no title art in this library)
+        self.assertEqual([lc.starter(idx)[k]["id"] for k in range(4)], [c["id"] for c in made])   # same ids again
+
+    def test_every_show_and_movie_gets_a_channel(self):
+        idx = networks_index()
+        self.with_table(self.table())
+        app = FakeApp([])
+        cfg = app.config
+        cfg.library_channels = [chan("Nickelodeon")]                    # one of yours by that name: left alone
+        self.assertEqual(lc.add_starter(cfg, idx), 3)
+        self.assertEqual(lc.add_starter(cfg, idx), 0)
+        self.assertFalse(cfg.library_channels[0]["starter"])
+        self.assertEqual(cfg.library_starter_make, lc.STARTER_MAKE)
+        cfg.library_channels = []
+        lc.add_starter(cfg, idx)
+        by = {c["name"]: c for c in cfg.library_channels}
+        titles = {c["name"]: {i["title"] for g in lc.groups(c, idx) for i in g["items"]} for c in cfg.library_channels}
+        self.assertIn("Obscure Local Show", titles["Nickelodeon"])      # the one most like it
+        self.assertIn("Heist", titles["HBO Comedy"])                    # rated R: not on a kids' channel
+        self.assertIn("Space", titles["HBO Comedy"])
+        self.assertEqual(titles["The Simpsons 24/7"], {"The Simpsons"})       # a 24/7 takes nothing
+        everything = set().union(*titles.values())
+        for sec in ("51", "38"):
+            for i in idx.sections[sec].items:
+                self.assertIn(i["title"], everything)
+        self.assertEqual(lc.place_titles(cfg.library_channels, idx), [])     # nothing left out
+        self.assertNotIn("Heist", {i["title"] for g in lc.groups(by["Nickelodeon"], idx) for i in g["items"]})
+
+        # the table's own home for a title wins, and its leave-outs stay out
+        t = self.table(leave_out=["Space"])
+        t["channels"][2]["more"] = ["Obscure Local Show"]
+        self.with_table(t)
+        cfg.library_channels = lc.starter(idx)
+        got = dict(lc.place_titles(cfg.library_channels, idx))
+        self.assertEqual(got["Obscure Local Show"], "HBO Comedy")
+        self.assertNotIn("Space", got)
+
+    def test_what_the_library_takes_in_later_finds_its_channel(self):
+        idx = networks_index()
+        self.with_table(self.table())
+        app = FakeApp([])
+        app.library, app.post = idx, lambda fn, *a, **k: fn(*a, **k)
+        toasts = []
+        app.toast = lambda text, *a, **k: toasts.append(text)
+        cfg = app.config
+        cfg.library_starter_done, cfg.library_starter_make = True, lc.STARTER_MAKE
+        lc.add_starter(cfg, idx)
+        cfg.library_placed_to = 100.0
+        tv, mv = idx.sections["51"], idx.sections["38"]
+        tv.add_show({"ratingKey": "70", "title": "Fresh Toon", "year": 2026, "Genre": [{"tag": "Comedy"}],
+                     "studio": "", "contentRating": "TV-Y7"})
+        for e in (1, 2):
+            tv.add_item({"type": "episode", "ratingKey": f"700{e}", "grandparentRatingKey": "70",
+                         "grandparentTitle": "Fresh Toon", "parentIndex": 1, "index": e, "title": f"Fresh {e}",
+                         "duration": 1320000, "contentRating": "TV-Y7", "addedAt": 200})
+        tv.add_item({"type": "episode", "ratingKey": "1099", "grandparentRatingKey": "1", "grandparentTitle": "Rugrats",
+                     "parentIndex": 2, "index": 1, "title": "Rugrats new", "duration": 1320000, "addedAt": 200})
+        mv.add_item({"type": "movie", "ratingKey": "905", "title": "Laughs Again", "year": 2026, "duration": 6000000,
+                     "Genre": [{"tag": "Comedy"}], "contentRating": "PG-13", "addedAt": 200})
+        old_place, old_load = lc.place, library.load
+        lc.place = lambda app: None
+        library.load = lambda app, done, fresh=False: done(idx, "")
         try:
-            idx = networks_index()
-            idx.sections["26"].hidden = idx.sections["50"].hidden = True    # hidden from On Demand: still the network's
-            made = lc.starter(idx)
-            by = {c["name"]: c for c in made}
-            self.assertEqual([c["name"] for c in made],
-                             ["Nickelodeon", "Nicktoons", "Noggin", "HBO", "HBO Family", "HBO Comedy", "HBO Zone",
-                              "The Simpsons 24/7", "Home Videos"])
-            self.assertEqual([c["group"] for c in made],
-                             ["Kids", "Kids", "Kids", "Premium", "Premium", "Premium", "Premium", "24/7", "Libraries"])
-            self.assertTrue(all(c["starter"] for c in made))
-            for c in made:
-                self.assertTrue(lc.groups(c, idx), c["name"])           # none of them empty
-            nick = by["Nickelodeon"]
-            day = [idx.sections["51"].shows[s["value"]]["title"] for s in nick["sources"] if not s.get("airs")]
-            night = [idx.sections["51"].shows[s["value"]]["title"] for s in nick["sources"] if s.get("airs")]
-            self.assertEqual(sorted(day), ["Doug", "Hey Arnold!", "Rugrats", "SpongeBob SquarePants"])
-            self.assertEqual(sorted(night), ["Full House", "Roseanne", "The Cosby Show"])     # Nick at Nite
-            self.assertEqual(nick["sources"][-1]["airs"], {"from": 20, "to": 6})
-            self.assertEqual(nick["breaks"]["bumps"], [{"section": "26", "kind": "all"}])   # its own bumpers
-            self.assertEqual(nick["breaks"]["ads"], [{"section": "3", "kind": "all"}])
-            self.assertEqual(by["Nicktoons"]["breaks"]["bumps"], [])                       # none of its own
-            self.assertEqual((by["Noggin"]["sources"], by["Noggin"]["breaks"]),
-                             ([{"section": "50", "kind": "all"}], {}))                     # no commercials
-            self.assertEqual(by["HBO"]["breaks"], {})
-            self.assertEqual(by["Nickelodeon"]["logo"], lc.LOGOS["Nickelodeon"])         # their real logos
-            self.assertNotIn("logo", by["Home Videos"])
-            self.assertEqual(by["The Simpsons 24/7"].get("logo", ""), "")              # (no title art in this library)
-            self.assertEqual({i["title"] for g in lc.groups(by["HBO Family"], idx) for i in g["items"]}, {"Pups"})
-            zone = [s for s in by["HBO Zone"]["sources"] if s.get("exclude")]
-            self.assertEqual(zone[0]["value"], lc.KIDS)
-            self.assertEqual({i["title"] for g in lc.groups(by["HBO Zone"], idx) for i in g["items"]}, {"Heist", "Space"})
-            app = FakeApp([])
-            app.config.library_channels = [chan("Nickelodeon")]         # one of yours by that name: left alone
-            self.assertEqual(lc.add_starter(app.config, idx), 8)
-            self.assertEqual(lc.add_starter(app.config, idx), 0)
-            self.assertFalse(app.config.library_channels[0]["starter"])
-            self.assertEqual(app.config.library_starter_make, lc.STARTER_MAKE)
+            lc.start(app)
+            self.assertEqual(toasts, ["New in your library: Fresh Toon on Nickelodeon, Laughs Again on HBO Comedy."])
+            self.assertEqual(cfg.library_placed_to, 200)
+            lc.start(app)                                               # once only
+            self.assertEqual(len(toasts), 1)
         finally:
-            lc.HBO_MOVIES, lc.MARATHON_EPISODES = old
+            lc.place, library.load = old_place, old_load
 
     def test_an_older_starter_lineup_is_renewed_once(self):
         idx = networks_index()
+        self.with_table(self.table())
         app = FakeApp([])
         app.library, app.toast, app.post = idx, lambda *a, **k: None, lambda fn, *a, **k: fn(*a, **k)
         cfg = app.config

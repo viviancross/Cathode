@@ -774,30 +774,44 @@ class Skin:
         """The screen bug: the channel's logo (or its own bug picture) in a
         corner of the picture, faint, while it's watched with nothing over it;
         hidden during a break unless asked for. Size and distance from the
-        edge are shares of the screen's height."""
+        edge are shares of the screen's height; a channel with a bug of its
+        own (as Tunarr had it: a width, an opacity, margins, a corner, or
+        none) wears that."""
         cfg, app = self.app.config, self.app
         ch = live.channel
         if (not getattr(cfg, "bug_on", False) or ch is None or live.message or live.phase != "watch" or live.standby
                 or getattr(live, "signoff", None) or getattr(live, "page", None) is not None
                 or getattr(app, "top", lambda: live)() is not live):
             return
-        if not cfg.bug_in_breaks and self._in_break(ch):
+        own = self.own_bug(ch)
+        if own.get("off") or (not cfg.bug_in_breaks and self._in_break(ch)):
             return
         from ..logos import url_for
         W, H = self.canvas
         size = max(8, H * cfg.bug_size // 100)
-        img = self.logo(url_for(app, ch, "bug"), size * 5 // 2, size)
+        box = (max(8, W * own["width"] // 100), H // 3) if own.get("width") else (size * 5 // 2, size)
+        img = self.logo(url_for(app, ch, "bug"), *box)
         if img is None:
             return
         img = img.copy()
         if cfg.bug_white:                       # the classic bug: a white shape
             img.fill((255, 255, 255, 0), special_flags=pygame.BLEND_RGB_MAX)
-        img.fill((255, 255, 255, round(255 * cfg.bug_opacity / 100)), special_flags=pygame.BLEND_RGBA_MULT)
-        m = H * cfg.bug_margin // 100
-        corner = cfg.bug_corner if cfg.bug_corner in self.BUG_CORNERS else "bottom right"
-        x = m if corner.endswith("left") else W - m - img.get_width()
-        y = m if corner.startswith("top") else H - m - img.get_height()
+        img.fill((255, 255, 255, round(255 * own.get("opacity", cfg.bug_opacity) / 100)),
+                 special_flags=pygame.BLEND_RGBA_MULT)
+        mx, my = (W * own["margin"][0] // 100, H * own["margin"][1] // 100) if own.get("margin") else \
+            (H * cfg.bug_margin // 100,) * 2
+        corner = own.get("corner") or cfg.bug_corner
+        corner = corner if corner in self.BUG_CORNERS else "bottom right"
+        x = mx if corner.endswith("left") else W - mx - img.get_width()
+        y = my if corner.startswith("top") else H - my - img.get_height()
         c.blit(img, (x, y))
+
+    def own_bug(self, ch) -> dict:
+        """A library channel's own screen bug settings ({} for the usual)."""
+        from .. import libchannels as lc, videochannels as vc
+        if not vc.is_video(ch):
+            return {}
+        return (lc.entry(self.app.config, vc.cid_of(ch)) or {}).get("bug") or {}
 
     def _in_break(self, ch) -> bool:
         """A Cathode channel is in a break now (a commercial, a bumper, the

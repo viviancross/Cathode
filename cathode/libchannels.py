@@ -4,7 +4,8 @@ titles come from yt_groups() instead of the library.)
 
 Each channel in the settings (name, number, sources, sort method) sits
 after the lineup. A source is a slice of the library index (library.py):
-a whole library, a genre, a decade, a studio, a rating band or one show.
+a whole library, a genre, a decade, a studio, a rating band, one show or
+picked titles.
 The titles it matches fall into groups, a show's episodes in order being
 one group and each movie its own.
 
@@ -24,6 +25,7 @@ itself being away leaves the stand-by card up."""
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import os
@@ -53,7 +55,7 @@ ORDERS = [("mix", "Mix"), ("random", "Random"), ("cyclic_shuffle", "Cyclic Shuff
           ("round_robin_cyclic", "Round Robin Cyclic"), ("playlist", "Playlist Order")]
 BLOCKS = {"block_shuffle": 2, "block_cyclic": 2, "marathon_shuffle": 12, "marathon_cyclic": 12}
 KINDS = [("all", "Everything"), ("genre", "Genre"), ("decade", "Decade"), ("studio", "Studio"),
-         ("rating", "Rating"), ("show", "Show")]
+         ("rating", "Rating"), ("show", "Show"), ("title", "Title")]
 KIDS = ["TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "G"]
 MATURE = ["TV-MA", "R", "NC-17"]
 OFF = "-off-"                   # an off-the-air stretch among the days drawn up
@@ -253,6 +255,8 @@ def _match(src: dict, obj: dict) -> bool:
         return obj["rating"] in (val or [])
     if kind == "show":
         return obj.get("key") == val
+    if kind == "title":                 # picked titles (a movie, a clip) by rating key
+        return obj.get("plex") in (val if isinstance(val, list) else [val])
     return True
 
 
@@ -1137,470 +1141,271 @@ def _bisect(a, x):
 
 
 # ── The starter lineup ───────────────────────────────────────────────────
-# Network replicas: each network with the shows it aired (matched by title,
-# Plex knowing only who made a show, not where it ran), its dayparts as time
-# slots, the libraries named for it (its bumpers, its own content), and
-# whether it ran commercials. Then the HBO channels from the movies, a few
-# 24/7 channels, and any library nothing else took.
+# Your channels as your Tunarr had them (assets/channels/lineup.json: each
+# with its number, the shows and movies it plays by title, the libraries it
+# takes whole, its bumpers, its logo and screen bug), with the dayparts
+# Cathode adds and a few channels of Cathode's own. Then every show and
+# movie no channel has goes where it belongs (place_titles()): at first, and as
+# the library grows.
 
-STARTER_MAKE = 4                # 4: their real logos; 3: every title placed; 2: network replicas; 1: genres...
-SATURDAY_MORNING = {"from": 7, "to": 12, "days": [5]}
-WEEKDAY_AFTERNOON = {"from": 16, "to": 18, "days": [0, 1, 2, 3, 4]}
-NET_SHOWS, SLOT_SHOWS, HBO_MOVIES = 4, 3, 20
-MARATHON_EPISODES, MARATHONS = 150, 5
-ALWAYS_247 = "10 Minute Power Hour"             # a 24/7 whatever its length
-NOT_247 = {"News", "Talk Show", "Talk", "Sport"}
+STARTER_MAKE = 5                # 5: your Tunarr lineup, every title placed; 4: real logos; 3: every title placed;
+#                                 2: network replicas; 1: genres...
+SLOT_SHOWS = 3                  # a daypart with fewer of its shows in the library isn't kept
+ADS = ["Classic Commercials"]   # the commercials, unless the table names others
 
-# The networks' own logos (their 1990s-2000s marks where Wikimedia has them), fetched by each Cathode
-# and cached; a picture of yours in the logos folder wins. The 24/7s wear the show's title art from Plex.
-LOGOS = {
-    'ABC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/1971_ABC_logo.svg/960px-1971_ABC_logo.svg.png',
-    'CBS': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/CBS_logo.svg/960px-CBS_logo.svg.png',
-    'NBC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_Peacock_1986.svg/960px-NBC_Peacock_1986.svg.png',
-    'Fox': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Fox_Broadcasting_Company_logo_%282019%29.svg/960px-Fox_Broadcasting_Company_logo_%282019%29.svg.png',
-    'The WB': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/The_WB_logo.svg/960px-The_WB_logo.svg.png',
-    'UPN': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/UPN_Logo_%282000-2002%29.svg/960px-UPN_Logo_%282000-2002%29.svg.png',
-    'Nickelodeon': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bb/Nickelodeon_1985_%28Splat%29.svg/960px-Nickelodeon_1985_%28Splat%29.svg.png',
-    'Nicktoons': 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Nicktoons-Network-original-balloon-text-logo.png',
-    'Nick GAS': 'https://thumb.wikimedia.org/wikipedia/en/thumb/9/9f/Nick_GAS.svg/960px-Nick_GAS.svg.png',
-    'Noggin': 'https://thumb.wikimedia.org/wikipedia/en/thumb/0/01/Noggin_logo_2000.svg/960px-Noggin_logo_2000.svg.png',
-    'Cartoon Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Cartoon_Network_logo_%281992-2004%29.svg/960px-Cartoon_Network_logo_%281992-2004%29.svg.png',
-    'Boomerang': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Boomerang_tv_logo_%282000%29.svg/960px-Boomerang_tv_logo_%282000%29.svg.png',
-    'Disney Channel': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/2002_Disney_Channel_logo.svg/960px-2002_Disney_Channel_logo.svg.png',
-    'Toon Disney': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Toon_Disney_logo.svg/960px-Toon_Disney_logo.svg.png',
-    "Kids' WB": 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Kids_WB_%28SVG_Version%29.svg/960px-Kids_WB_%28SVG_Version%29.svg.png',
-    'Fox Kids': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/FOX_Kids_logo.svg/960px-FOX_Kids_logo.svg.png',
-    'Adult Swim': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e4/Adult_Swim_2003_logo.svg/960px-Adult_Swim_2003_logo.svg.png',
-    'Comedy Central': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Comedy_Central.svg/960px-Comedy_Central.svg.png',
-    'MTV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/MTV_1981_logo_%28no_outline%29.svg/960px-MTV_1981_logo_%28no_outline%29.svg.png',
-    'VH1': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/VH1_94-2003_logo.svg/960px-VH1_94-2003_logo.svg.png',
-    'TBS': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/TBS_Superstation_logo_%282003-2004%29.svg/960px-TBS_Superstation_logo_%282003-2004%29.svg.png',
-    'G4': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/G4_2002.svg/960px-G4_2002.svg.png',
-    'Spike TV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Spike_TV_logo.svg/960px-Spike_TV_logo.svg.png',
-    'Food Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Food_Network_Logo.svg/960px-Food_Network_Logo.svg.png',
-    'Game Show Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/71/GSN_2004_logo.svg/960px-GSN_2004_logo.svg.png',
-    'BBC America': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/BBC_America.svg/960px-BBC_America.svg.png',
-    'USA Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/USA_Network_1996.svg/960px-USA_Network_1996.svg.png',
-    'IFC': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fc/Independent_Film_Channel_%28IFC%29_logo.svg/960px-Independent_Film_Channel_%28IFC%29_logo.svg.png',
-    'truTV': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/TruTV_logo.svg/960px-TruTV_logo.svg.png',
-    'Animal Planet': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Animal_Planet_logo_%28black_and_green%29.svg/960px-Animal_Planet_logo_%28black_and_green%29.svg.png',
-    'WWE Network': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/WWE_Network_logo.svg/960px-WWE_Network_logo.svg.png',
-    'HBO': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/960px-HBO_logo.svg.png',
-    'HBO2': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/HBO2_logo.svg/960px-HBO2_logo.svg.png',
-    'HBO Family': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/HBO_Family_logo.svg/960px-HBO_Family_logo.svg.png',
-    'HBO Comedy': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/HBO_Comedy_2000.svg/960px-HBO_Comedy_2000.svg.png',
-    'HBO Signature': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/HBO_Signature.svg/960px-HBO_Signature.svg.png',
-    'HBO Zone': 'https://upload.wikimedia.org/wikipedia/commons/6/6a/HBO_Zone_logo.png',
-    'Christmas Specials': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Freeform%27s_25_Days_Of_Christmas_logo.svg/960px-Freeform%27s_25_Days_Of_Christmas_logo.svg.png',
-    'Defunctland Channel': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Defunctland_logo.png/960px-Defunctland_logo.png',
-    '10 Minute Power Hour 24/7': 'https://upload.wikimedia.org/wikipedia/commons/3/38/Game_Grumps_logo_2018.png',
-}
 
-NETWORKS = [  # name, group, shows ("|" between), and: slots, bumps / libs (patterns on a library's name), ads, order
-    {"name": "ABC", "group": "Broadcast",
-     "shows": "Full House|Family Matters|Step by Step|Perfect Strangers|Boy Meets World|Home Improvement|"
-              "Sabrina, the Teenage Witch|Sister, Sister|Two of a Kind|The Drew Carey Show|Roseanne|George Lopez|"
-              "Whose Line Is It Anyway? (US)|Who Wants to Be a Millionaire (US)|Muppets Tonight|Wife Swap (US)|"
-              "Wipeout (US)|I Survived a Japanese Game Show|Trust Us With Your Life|Dinosaurs|Spin City|"
-              "Grace Under Fire|Coach|The Wonder Years|Who's the Boss?|Growing Pains|Happy Days|Laverne & Shirley|"
-              "Mork & Mindy|America's Funniest Home Videos|Doogie Howser, M.D.|Lost|Modern Family|The Middle|"
-              "The Dana Carvey Show|Clerks: The Animated Series|You Don't Know Jack|The Norm Show",
-     "slots": [(SATURDAY_MORNING, "Recess|Pepper Ann|Teacher's Pet|The Weekenders|Fillmore!|Lloyd in Space|"
-                                  "Teamo Supremo|Sonic the Hedgehog|Schoolhouse Rock!|Pac-Man|Dragon's Lair|"
-                                  "Sabrina: The Animated Series|ReBoot|The Bugs Bunny and Tweety Show")]},
-    {"name": "CBS", "group": "Broadcast",
-     "shows": "Two and a Half Men|How I Met Your Mother|2 Broke Girls|Still Standing|Yes, Dear|The Price is Right|"
-              "Match Game|The Nanny|Everybody Loves Raymond|The King of Queens|Becker|The Big Bang Theory|"
-              "Mike & Molly|Murphy Brown|Newhart|M*A*S*H|Rules of Engagement|Survivor|The Amazing Race",
-     "slots": [(SATURDAY_MORNING, "Teenage Mutant Ninja Turtles|Garfield and Friends|Dungeons & Dragons|"
-                                  "Cadillacs and Dinosaurs|The Weird Al Show|Pee-wee's Playhouse|Muppet Babies|"
-                                  "Mighty Mouse: The New Adventures")]},
-    {"name": "NBC", "group": "Broadcast",
-     "shows": "Friends|The Office (US)|Parks and Recreation|30 Rock|Saturday Night Live|Will & Grace|NewsRadio|"
-              "Just Shoot Me!|3rd Rock from the Sun|The Fresh Prince of Bel-Air|The Cosby Show|Community|"
-              "My Name Is Earl|Scrubs|Columbo|Dog Eat Dog|Fear Factor|The Weakest Link|Chase|Seinfeld|Frasier|"
-              "Cheers|Wings|Mad About You|Family Ties|The Golden Girls|Night Court|ALF|Deal or No Deal|"
-              "Saved by the Bell: The College Years|Late Night with Conan O'Brien",
-     "slots": [(SATURDAY_MORNING, "Saved by the Bell|California Dreams|Hang Time|City Guys|One World|"
-                                  "Super Mario World|The Adventures of Super Mario Bros. 3|Captain N: The Game Master|"
-                                  "The Smurfs|Kissyfur|Camp Candy")]},
-    {"name": "Fox", "group": "Broadcast",
-     "shows": "The Simpsons|Family Guy|King of the Hill|Futurama|American Dad!|Bob's Burgers|Malcolm in the Middle|"
-              "Married... with Children|In Living Color|MADtv|That '70s Show|Arrested Development|The Critic|"
-              "Andy Richter Controls the Universe|The Ben Stiller Show|Firefly|Greed|Don't Forget the Lyrics|"
-              "Are You Smarter Than a 5th Grader?|Grounded for Life|Martin|Titus|The X-Files|Living Single|"
-              "Beverly Hills, 90210|Melrose Place|The Cleveland Show|The Bernie Mac Show|Undeclared|"
-              "Brooklyn Nine-Nine|New Girl|Cops|Herman's Head"},
-    {"name": "The WB", "group": "Broadcast", "bumps": r"wbupn|\bthe wb\b|^wb bump",
-     "shows": "Buffy the Vampire Slayer|Charmed|Reba|What I Like About You|The PJs|Mission Hill|Baby Blues|"
-              "The Oblongs|The Jamie Kennedy Experiment|Drew Carey's Green Screen Show|Dawson's Creek|7th Heaven|"
-              "Gilmore Girls|Smallville|Angel|Felicity|The Wayans Bros.|The Jamie Foxx Show|The Steve Harvey Show|"
-              "Popular|Everwood|One Tree Hill|Smart Guy|Unhappily Ever After|Do Over"},
-    {"name": "UPN", "group": "Broadcast", "bumps": r"wbupn|\bupn\b",
-     "shows": "Everybody Hates Chris|SmackDown!|Gary & Mike|Moesha|The Parkers|Girlfriends|Star Trek: Voyager|"
-              "Star Trek: Enterprise|Veronica Mars|America's Next Top Model|Malcolm & Eddie|Half & Half|"
-              "One on One|The Hughleys|Homeboys in Outer Space|Dilbert"},
-    {"name": "Nickelodeon", "group": "Kids", "bumps": r"^nickelodeon|^nick bump",
-     "shows": "100 Deeds for Eddie McDowd|Aaahh!!! Real Monsters|Action League Now!|All That|The Amanda Show|"
-              "The Angry Beavers|Are You Afraid of the Dark?|As Told By Ginger|Avatar: The Last Airbender|CatDog|"
-              "Catscratch|ChalkZone|Clarissa Explains It All|Cousin Skeeter|Danny Phantom|Doug|Double Dare|"
-              "Double Dare 2000|Drake & Josh|El Tigre: The Adventures of Manny Rivera|The Fairly OddParents|"
-              "Figure It Out|Get the Picture|Global Guts|Hey Arnold!|Hey Dude|Invader ZIM|"
-              "The Adventures of Jimmy Neutron: Boy Genius|KaBlam!|Kenan & Kel|Kids' Choice Awards|"
-              "Legends of the Hidden Temple|Make the Grade|The Mighty B!|Mr. Meaty|My Brother and Me|"
-              "My Life as a Teenage Robot|Ned's Declassified School Survival Guide|Nickelodeon Arcade|"
-              "Nickelodeon Splat|Nickelodeon's Slime Time Live|Oh Yeah! Cartoons|The Adventures of Pete & Pete|"
-              "The Ren & Stimpy Show|Rocket Power|Rocko's Modern Life|Romeo!|Roundhouse|Rugrats|Salute Your Shorts|"
-              "The Secret World of Alex Mack|SNICK on Air Dares|SpongeBob SquarePants|Super Sloppy Double Dare|"
-              "Think Fast|U Pick Live|Unfabulous|Welcome Freshmen|Wild & Crazy Kids|The Wild Thornberrys|"
-              "Weinerville|You're On|What Would You Do?|The Brothers Garcia|Danger Mouse|Count Duckula|SK8-TV|"
-              "Eureeka's Castle|Allegra's Window|Gullah Gullah Island|Blue's Clues|iCarly|Zoey 101|"
-              "The Loud House|Guts|Family Double Dare|Pinwheel|You Can't Do That on Television",
-     # Nick at Nite: the classic sitcoms from 8 PM to 6 AM
-     "slots": [({"from": 20, "to": 6}, "Full House|The Fresh Prince of Bel-Air|Roseanne|The Cosby Show|The Nanny|"
-                                       "George Lopez|Home Improvement|Friends|Family Matters|Step by Step|"
-                                       "The Wonder Years|I Love Lucy|The Dick Van Dyke Show|Bewitched|"
-                                       "The Brady Bunch|Mister Ed|Get Smart|Happy Days|Laverne & Shirley|"
-                                       "Who's the Boss?|Taxi|Cheers|The Munsters|The Patty Duke Show")]},
-    {"name": "Nicktoons", "group": "Kids", "bumps": r"nicktoons",
-     "shows": "Aaahh!!! Real Monsters|Action League Now!|The Angry Beavers|As Told By Ginger|"
-              "Avatar: The Last Airbender|"
-              "CatDog|Catscratch|ChalkZone|Danny Phantom|Doug|El Tigre: The Adventures of Manny Rivera|"
-              "The Fairly OddParents|Hey Arnold!|Invader ZIM|The Adventures of Jimmy Neutron: Boy Genius|KaBlam!|"
-              "Kappa Mikey|The Mighty B!|Mr. Meaty|My Dad the Rock Star|My Life as a Teenage Robot|Oh Yeah! Cartoons|"
-              "The Ren & Stimpy Show|Rocket Power|Rocko's Modern Life|Rugrats|SpongeBob SquarePants|"
-              "The Wild Thornberrys|Back at the Barnyard|Fanboy & Chum Chum|T.U.F.F. Puppy|Planet Sheen|"
-              "The Penguins of Madagascar|Sanjay and Craig|Breadwinners|Harvey Beaks|Edgar & Ellen|"
-              "Random! Cartoons|Making Fiends|Pelswick|Butt-Ugly Martians|Speed Racer: The Next Generation"},
-    {"name": "Nick GAS", "group": "Kids", "bumps": r"nick ?gas",
-     "shows": "Finders Keepers|"
-              "Double Dare|Double Dare 2000|Super Sloppy Double Dare|Family Double Dare|Figure It Out|"
-              "Get the Picture|Global Guts|Guts|Legends of the Hidden Temple|Make the Grade|Nickelodeon Arcade|"
-              "Think Fast|Wild & Crazy Kids|What Would You Do?|You're On|Nickelodeon Splat|"
-              "Nickelodeon's Slime Time Live|Scaredy Camp|Gamefarm|Brain Surge|Webheads"},
-    {"name": "Noggin", "group": "Kids", "libs": r"noggin", "ads": False, "order": "cyclic_shuffle",
-     "shows": "Eureeka's Castle|Allegra's Window|Gullah Gullah Island|Blue's Clues|Little Bear|Franklin|Oswald|"
-              "Maggie and the Ferocious Beast|Kipper|Tweenies|Pinky Dinky Doo|Jack's Big Music Show|3-2-1 Contact|"
-              "Square One TV|The Electric Company|Ghostwriter|Degrassi Junior High|Degrassi High|Fifteen|"
-              "Out of the Box|Sponk!|A Walk in Your Shoes"},
-    {"name": "Cartoon Network", "group": "Kids", "bumps": r"\bcn\b|cartoon network",
-     "shows": "Code Lyoko: Evolution|"
-              "2 Stupid Dogs|Adventure Time|The Amazing World of Gumball|Camp Lazlo|Cartoon Planet|"
-              "Codename: Kids Next Door|Courage the Cowardly Dog|Cow and Chicken|Craig of the Creek|"
-              "Dexter's Laboratory|Ed, Edd n Eddy|Evil Con Carne|Grim & Evil|The Grim Adventures of Billy & Mandy|"
-              "Hi Hi Puffy AmiYumi|I Am Weasel|Johnny Bravo|Mike, Lu & Og|The Powerpuff Girls|Regular Show|"
-              "Samurai Jack|Sheep in the Big City|Time Squad|What a Cartoon|Whatever Happened to... Robot Jones?|"
-              "Code Lyoko|Captain Planet and the Planeteers|Star Wars: The Clone Wars|Yu-Gi-Oh! GX|Looney Tunes|"
-              "Ben 10|Foster's Home for Imaginary Friends|Chowder|The Marvelous Misadventures of Flapjack|"
-              "Duck Dodgers|Squirrel Boy|My Gym Partner's a Monkey|Class of 3000|Steven Universe|Uncle Grandpa|"
-              "Clarence|We Bare Bears|OK K.O.! Let's Be Heroes|Over the Garden Wall|Generator Rex",
-     # Toonami: the action and anime block, weekday afternoons
-     "slots": [(WEEKDAY_AFTERNOON, "Dragon Ball|Dragon Ball Z|Dragon Ball GT|Sailor Moon|Mobile Fighter G Gundam|"
-                                   "Mobile Suit Gundam Wing|The Big O|Naruto|Hunter x Hunter|"
-                                   "JoJo's Bizarre Adventure|ReBoot|Hamtaro|Yu Yu Hakusho|Outlaw Star|Tenchi Muyo!|"
-                                   "Ronin Warriors|ThunderCats|Voltron|Zoids|Rurouni Kenshin|Teen Titans|"
-                                   "Megas XLR|IGPX|One Piece|Blue Submarine No. 6|Powerpuff Girls Z|"
-                                   "Panty & Stocking with Garterbelt|Initial D|Ghost Stories|Lucky Star|"
-                                   "Polar Bear Cafe|Blue Eye Samurai")]},
-    {"name": "Boomerang", "group": "Kids", "bumps": r"boomerang",
-     "shows": "A Pup Named Scooby-Doo|Captain Caveman and the Teen Angels|Droopy|Hong Kong Phooey|"
-              "Inch High, Private Eye|Jabberjaw|Jonny Quest|The Atom Ant Show|The Flintstones|The Jetsons|"
-              "The Magilla Gorilla Show|The New Scooby-Doo Movies|The New Tom & Jerry Show|The Peter Potamus Show|"
-              "The Secret Squirrel Show|Scooby-Doo, Where Are You!|Scooby's All Star Laff-A-Lympics|Speed Racer|"
-              "Top Cat|Wacky Races|Wally Gator|The Yogi Bear Show|Yo Yogi!|Yogi's Galaxy Goof-Ups|Yogi's Gang|"
-              "Yogi's Space Race|Yogi's Treasure Hunt|Looney Tunes|Pac-Man|The Pink Panther|Popeye the Sailor|"
-              "The Dudley Do-Right Show|Tom and Jerry|The Tom and Jerry Show|Dastardly and Muttley in Their Flying Machines|"
-              "The Huckleberry Hound Show|Quick Draw McGraw|The Smurfs|Snorks|The Banana Splits|"
-              "Josie and the Pussycats|Super Friends|The Herculoids|Richie Rich|Heathcliff and the Catillac Cats"},
-    {"name": "Disney Channel", "group": "Kids", "bumps": r"disney (ident|misc|channel|bump)", "ads": False,
-     "shows": "The Muppet Show|"
-              "Even Stevens|Lizzie McGuire|That's So Raven|Phil of the Future|The Suite Life of Zack & Cody|"
-              "The Proud Family|Kim Possible|Lilo & Stitch: The Series|American Dragon: Jake Long|"
-              "The Emperor's New School|Dave the Barbarian|Brandy & Mr. Whiskers|Big City Greens|Bug Juice|Braceface|"
-              "Hannah Montana|Wizards of Waverly Place|Phineas and Ferb|Gravity Falls|Smart Guy|Flash Forward|"
-              "The Famous Jett Jackson|So Weird|Bear in the Big Blue House|Adventures in Wonderland|"
-              "The All-New Mickey Mouse Club|Good Morning, Mickey!",
-     # the classic shorts in the morning, as Good Morning, Mickey! ran them
-     "slots": [({"from": 6, "to": 8}, "", r"disney shorts")]},
-    {"name": "Toon Disney", "group": "Kids", "bumps": r"toon disney|disney (ident|misc)", "ads": False,
-     "shows": "101 Dalmatians: The Series|Aladdin|Bonkers|Buzz Lightyear of Star Command|Chip 'n Dale Rescue Rangers|"
-              "Darkwing Duck|DuckTales|Gargoyles|Goof Troop|Hercules|House of Mouse|The Legend of Tarzan|"
-              "Lloyd in Space|The New Adventures of Winnie the Pooh|Pepper Ann|Quack Pack|Recess|"
-              "The Shnookums and Meat Funny Cartoon Show|TaleSpin|Teacher's Pet|Teamo Supremo|The Weekenders|"
-              "Fillmore!|Timon & Pumbaa|The Little Mermaid|Adventures of the Gummi Bears|Disney's Adventures of the Gummi Bears|"
-              "Marsupilami|Raw Toonage|Jungle Cubs|Mickey Mouse Works|Mighty Ducks"},
-    {"name": "Kids' WB", "group": "Kids", "bumps": r"kids'? ?wb|wb ?fox",
-     "shows": "Animaniacs|Pinky and the Brain|Pinky, Elmyra & the Brain|Freakazoid!|Pokémon|Yu-Gi-Oh! Duel Monsters|"
-              "Xiaolin Showdown|Mucha Lucha|Static Shock|Ozzy & Drix|Jackie Chan Adventures|"
-              "Batman: The Animated Series|Earthworm Jim|Batman Beyond|The Sylvester & Tweety Mysteries|Histeria!|"
-              "Detention|Cardcaptors|Men in Black: The Series|Superman: The Animated Series|The Batman|Johnny Test|"
-              "Loonatics Unleashed|Legion of Super Heroes|Road Rovers|Waynehead"},
-    {"name": "Fox Kids", "group": "Kids", "bumps": r"fox ?kids|wb ?fox",
-     "shows": "X-Men: The Animated Series|Spider-Man: The Animated Series|Power Rangers|Mighty Morphin Power Rangers|"
-              "Bobby's World|Life with Louie|Ninja Turtles: The Next Mutation|Digimon: Digital Monsters|The Tick|"
-              "Tiny Toon Adventures|Eek! the Cat|Goosebumps|Big Bad Beetleborgs|Sonic X|Shinzo|Medabots|"
-              "Spider-Man Unlimited|Silver Surfer|Avengers: United They Stand|Donkey Kong Country|Angela Anaconda|"
-              "Peter Pan & the Pirates|Attack of the Killer Tomatoes|The Ripping Friends|"
-              "The Adventures of Sam & Max: Freelance Police"},
-    {"name": "Adult Swim", "group": "Cable", "bumps": r"adult ?swim",
-     "shows": "Gary & Mike|"
-              "Aqua Teen Hunger Force|Assy McGee|Black Dynamite|The Boondocks|The Brak Show|"
-              "Check It Out! with Dr. Steve Brule|Cowboy Bebop|The Eric Andre Show|Family Guy|Futurama|FLCL|"
-              "Harvey Birdman, Attorney at Law|Home Movies|Joe Pera Talks with You|Metalocalypse|Mike Tyson Mysteries|"
-              "Moral Orel|Robot Chicken|Sealab 2021|Space Ghost Coast to Coast|Squidbillies|Smiling Friends|"
-              "Tim and Eric Awesome Show, Great Job!|Tom Goes to the Mayor|The Venture Bros.|"
-              "Your Pretty Face is Going to Hell|Shin Chan|Three Busy Debras|Lazarus|King of the Hill|American Dad!|"
-              "Bob's Burgers|Mission Hill|The Oblongs|Baby Blues|Rick and Morty|Childrens Hospital|Delocated|"
-              "Frisky Dingo|12 oz. Mouse|Xavier: Renegade Angel|Inuyasha|Trigun|Fullmetal Alchemist|"
-              "Lupin the 3rd|Neon Genesis Evangelion|Samurai Champloo|Bleach|Death Note|The Cleveland Show|"
-              "Stroker and Hoop|Superjail!|Mr. Pickles|Loiter Squad|NTSF:SD:SUV::"},
-    {"name": "Comedy Central", "group": "Cable", "bumps": r"comedy central", "libs": r"stand.?up", "order": "mix",
-     "shows": "Archer|Letterkenny|I Think You Should Leave with Tim Robinson|Jon Benjamin Has a Van|Night Stand|"
-              "Set List: Stand-Up Without A Net|Nirvana the Band the Show|"
-              "South Park|Reno 911!|Insomniac with Dave Attell|Strangers with Candy|The Jeselnik Offensive|"
-              "Comedy Central Roasts|Stella|Comedy Central Presents|Chappelle's Show|Drawn Together|"
-              "Dr. Katz, Professional Therapist|Drunk History|Key & Peele|Kroll Show|Mind of Mencia|Nathan for You|"
-              "Important Things With Demetri Martin|Inside Amy Schumer|Workaholics|Broad City|Detroiters|"
-              "The Sarah Silverman Program|Upright Citizens Brigade|Win Ben Stein's Money|Kenny vs. Spenny|Futurama|"
-              "Scrubs|Whose Line is it Anyway?|@midnight|Nick Swardson's Pretend Time|The Burn With Jeff Ross|"
-              "The Jim Jefferies Show|The Meltdown with Jonah and Kumail|T.V. Funhouse|Shorties Watchin' Shorties|"
-              "BattleBots|The Kids in the Hall|Mystery Science Theater 3000|The Daily Show|The Colbert Report|"
-              "Tosh.0|Crank Yankers|The Man Show|Viva Variety|Exit 57|Premium Blend|Review|Another Period|"
-              "Corporate|Ugly Americans"},
-    {"name": "MTV", "group": "Cable", "bumps": r"\bmtv\b",
-     "shows": "Face to Face With 'Weird Al' Yankovic|"
-              "Beavis and Butt-Head|Daria|Celebrity Deathmatch|The Head|Downtown|Liquid Television|Jackass|"
-              "Viva La Bam|Wildboyz|Pimp My Ride|Punk'd|MTV Cribs|Made|True Life|Next|Parental Control|"
-              "Room Raiders|Remote Control|Singled Out|Rob & Big|Rob Dyrdek's Fantasy Factory|The Osbournes|"
-              "Meet the Barkers|Doggy Fizzle Televizzle|A Shot at Love with Tila Tequila|Double Shot at Love|"
-              "The Andy Milonakis Show|Nitro Circus Live|Nick Cannon Presents: Wild 'N Out|Bam's Bad Ass Game Show|"
-              "The State|The Tom Green Show|Silent Library|The Dudesons in America|Human Giant|The Andy Dick Show|"
-              "Wrestling Society X|Wonder Showzen|Al TV|My Life as Liz|The Dudesons|Clone High|Aeon Flux|Undressed|"
-              "Ridiculousness|The Real World|Road Rules|Laguna Beach|The Hills|Jersey Shore|Total Request Live|"
-              "Yo! MTV Raps|Date My Mom|Damage Control"},
-    {"name": "VH1", "group": "Cable", "bumps": r"\bvh1\b", "libs": r"pop.?up.?video", "order": "mix",
-     "shows": "The Soup|Queer Eye for the Straight Guy|"
-              "Behind the Music|I Love ...|I Love the 70s|I Love the 80s|I Love the 90s|I Love the 2000s|I Love Toys|"
-              "I Love Money|Flavor of Love|Bands on the Run|Supergroup|Ego Trip's The (White) Rapper Show|"
-              "Fabulous Life of|Vh1 the Fabulous Life Of|Late World with Zach|Rock & Roll Jeopardy!|Driven|"
-              "Pop-Up Video|Storytellers|Where Are They Now?|Best Week Ever|The Surreal Life|Celebrity Fit Club|"
-              "Rock of Love|Charm School"},
-    {"name": "TBS", "group": "Cable", "bumps": r"\btbs\b",
-     "shows": "Captain Planet and the Planeteers|Saved by the Bell|Friends|The Fresh Prince of Bel-Air|Family Guy|"
-              "American Dad!|Yes, Dear|My Name Is Earl|Everybody Hates Chris|The Office (US)|Conan Without Borders|"
-              "Conan|WCW Thunder|WCW Saturday Night|Seinfeld|Everybody Loves Raymond|The King of Queens|"
-              "The Andy Griffith Show|The Beverly Hillbillies|Sanford and Son|Cougar Town|Angie Tribeca|"
-              "Ripley's Believe It or Not!"},
-    {"name": "G4", "group": "Cable", "bumps": r"\bg4\b|tech ?tv",
-     "shows": "KASSO|Sports X Casino|Filter|SuperDog|"
-              "Attack of the Show|X-Play|Cheat|Cinematech|Icons|Portal|Reviews on the Run|G4 Arena Classics|G4 Misc|"
-              "G4's Proving Ground|G4TV.COM|GameSpot TV|The Screen Savers|The Electric Playground|Code Monkeys|"
-              "Web Soup|Unbeatable Banzuke|Sasuke|Women of Ninja Warrior|Ninja Warrior|American Ninja Warrior|"
-              "Star Trek: The Next Generation|Arena|Players|Judgment Day|Pulse|Call for Help|Tech Live|Cops 2.0|"
-              "Hurl!|Human Wrecking Balls|Campus Gamers|Bomb Patrol|GameCenter CX"},
-    {"name": "Spike TV", "group": "Cable",
-     "shows": "American Gladiators|Penn & Teller: Bullshit!|Penn & Teller: Fool Us|Penn & Teller Tell a Lie|"
-              "Criss Angel Mindfreak|Breaking the Magician's Code: Magic's Biggest Secrets Finally Revealed|"
-              "Breaking the Magician's Code|Chris Hardwick's All Star Celebrity Bowling|X Games|"
-              "MXC|1000 Ways to Die|Bully Beatdown|Stripperella|Star Trek: The Next Generation|Raw|Robot Wars|"
-              "TNN Motor Madness Monster Jam|Deadliest Warrior|Manswers|Blue Mountain State|Pros vs. Joes|"
-              "The Joe Schmo Show|TNA Impact!|The Ultimate Fighter|UFC Unleashed|Auction Hunters|Bar Rescue|"
-              "Ink Master|Lip Sync Battle|SlamBall"},
-    {"name": "Food Network", "group": "Cable",
-     "shows": "Food Wars|"
-              "Good Eats|Unwrapped|Diners, Drive-ins and Dives|Iron Chef America|Man v. Food|"
-              "Anthony Bourdain: No Reservations|The F Word|Ramsay's Kitchen Nightmares|Ramsay's Boiling Point|"
-              "Inside Eats with Rhett & Link|Fluffy's Food Adventures|Iron Chef|30 Minute Meals|Emeril Live|"
-              "Chopped|Cupcake Wars|Ace of Cakes|Guy's Grocery Games|Beat Bobby Flay|Throwdown! with Bobby Flay|"
-              "A Cook's Tour|Bizarre Foods|Barefoot Contessa|Paula's Home Cooking"},
-    {"name": "Game Show Network", "group": "Cable",
-     "shows": "Match Game|The Price is Right|Supermarket Sweep|Whammy! The All-New Press Your Luck|Press Your Luck|"
-              "Lingo|Chain Reaction|Hollywood Squares|Win Ben Stein's Money|Who Wants to Be a Millionaire (US)|"
-              "The Weakest Link|Greed|Dog Eat Dog|Are You Smarter Than a 5th Grader?|The Cube|Hollywood Showdown|"
-              "America Says|Family Feud|Card Sharks|The $10,000 Pyramid|Password|Password Plus|To Tell the Truth|"
-              "What's My Line?|I've Got a Secret|The Joker's Wild|Tic-Tac-Dough|Sale of the Century|Blockbusters|"
-              "Body Language|Classic Concentration|Let's Make a Deal|The Newlywed Game|The Dating Game|"
-              "Love Connection|Catch 21|Baggage|Russian Roulette|Friend or Foe?|Street Smarts|The Chase|"
-              "Drew Carey's Improv-A-Ganza"},
-    {"name": "BBC America", "group": "Cable", "bumps": r"\bbbc\b",
-     "shows": "The Unpleasant World of Penn and Teller|Hard Quiz|Wipeout (AU)|Wipeout (CA)|"
-              "Top Gear|Monty Python's Flying Circus|Little Britain|Little Britain USA|The Office|Planet Earth|"
-              "Wild Arabia|Doctor Who|QI|The IT Crowd|Would I Lie to You?|8 Out of 10 Cats Does Countdown|"
-              "8 Out of 10 Cats|Peep Show|The Mighty Boosh|The Inbetweeners|Look Around You|Total Wipeout|"
-              "Robot Wars|Taskmaster|Brainiac: Science Abuse|Big Fat Quiz|Dinner Date|Lingo (UK)|Danger Mouse|"
-              "Count Duckula|Whose Line is it Anyway?|Ramsay's Kitchen Nightmares|The F Word|An Idiot Abroad|"
-              "Da Ali G Show|The Increasingly Poor Decisions of Todd Margaret|Fawlty Towers|Blackadder|Red Dwarf|"
-              "Absolutely Fabulous|Mr. Bean|Only Fools and Horses|Father Ted|Spaced|Black Books|The Young Ones|"
-              "Coupling|Gavin & Stacey|Extras|Torchwood|Orphan Black|The Blue Planet|Frozen Planet|Trailer Park Boys"},
-    {"name": "USA Network", "group": "Cable",
-     "shows": "Raw|Monk|Psych|Silk Stalkings|La Femme Nikita|Duckman|Pacific Blue|Weird Science|Up All Night|"
-              "Burn Notice|Royal Pains|Suits|Mr. Robot|Walker, Texas Ranger",
-     # USA Cartoon Express and the Action Extreme Team, mornings
-     "slots": [({"from": 7, "to": 11}, "Street Fighter|Mortal Kombat: Defenders of the Realm|"
-                                      "Adventures of Sonic the Hedgehog|Sonic the Hedgehog|"
-                                      "The Super Mario Bros. Super Show!|Sonic Underground|Dinosaucers|"
-                                      "Wing Commander Academy|Savage Dragon|Exosquad")]},
-    {"name": "IFC", "group": "Cable",
-     "shows": "Portlandia|Garfunkel and Oates|The Increasingly Poor Decisions of Todd Margaret|Arrested Development|"
-              "Malcolm in the Middle|The Whitest Kids U'Know|Freaks and Geeks|Documentary Now!|Comedy Bang! Bang!|"
-              "Maron|Brockmire|Benders|The Spoils of Babylon|Baroness von Sketch Show"},
-    {"name": "truTV", "group": "Cable", "libs": r"\btcgs\b|gethard", "order": "mix",
-     "shows": "Adam Ruins Everything|Billy on the Street|Impractical Jokers|I'm Sorry|Tacoma FD|"
-              "At Home with Amy Sedaris|Those Who Can't|Jon Glaser Loves Gear|The Carbonaro Effect|"
-              "Hack My Life|World's Dumbest...|Bar Rescue"},
-    {"name": "Animal Planet", "group": "Cable",
-     "shows": "The Crocodile Hunter|The Croc Files|The Crocodile Hunter Diaries|Planet Earth|Wild Arabia|"
-              "The Blue Planet|Frozen Planet|The Jeff Corwin Experience|Emergency Vets|Animal Cops: Detroit|"
-              "Animal Precinct|Pet Star|Meerkat Manor|It's Me or the Dog|River Monsters|Whale Wars|"
-              "Untamed and Uncut|The Most Extreme|Dogs 101|Pit Bulls and Parolees"},
-    {"name": "Defunctland Channel", "group": "Cable", "min": 1, "order": "cyclic_shuffle",
-     "shows": "Defunctland|DefunctTV"},
-    {"name": "WWE Network", "group": "Cable", "libs": r"wrestl|wrasslin|\bww[ef]\b|\bwcw\b|\becw\b|\baew\b|\btna\b",
-     "order": "mix",
-     "shows": "Player 54: Chasing the XFL Dream|"
-              "Raw|SmackDown!|SmackDown|Sunday Night Heat|WCW Monday Nitro|WCW Thunder|WWE Velocity|ECW Hardcore TV|"
-              "WWE Confidential|Dark Side of the Ring|Dark Side of the Ring: After Dark|WCW MTV|Wrestling Society X|"
-              "WWF Superstars of Wrestling|WWE NXT|Saturday Night's Main Event|WCW Saturday Night|"
-              "WWF Prime Time Wrestling|Tough Enough|WWE Tough Enough|Legends of Wrestling|ECW on Sci Fi"},
-]
-# HBO from the movie libraries: each feed and what it plays. HBO ran no commercials.
-FAMILY_RATINGS = ["G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG"]
-HBO = [  # name, movie sources (kind, value), HBO's own shows and libraries
-    ("HBO", [("all", None)], "", ""),
-    ("HBO2", [("all", None)], "", ""),
-    ("HBO Family", [("rating", FAMILY_RATINGS)],
-     "Crashbox|Fraggle Rock|Babar|Happily Ever After: Fairy Tales for Every Child|The Little Lulu Show|"
-     "Harold and the Purple Crayon|A Little Curious|Jim Henson's Mother Goose Stories|Looney Tunes Cartoons", ""),
-    ("HBO Comedy", [("genre", "Comedy")],
-     "Mr. Show|Da Ali G Show|Tenacious D|The Kids in the Hall|Curb Your Enthusiasm|Flight of the Conchords|"
-     "Eastbound & Down|The Larry Sanders Show|Dream On|Def Comedy Jam|Not Necessarily the News|Tracey Takes On...|"
-     "Conan O'Brien Must Go",
-     r"stand.?up"),
-    ("HBO Signature", [("genre", g) for g in ("Drama", "Romance", "Crime", "Documentary", "Musical", "History",
-                                              "Biography")], "", ""),
-    ("HBO Zone", [("genre", g) for g in ("Action", "Science Fiction", "Thriller", "Horror", "Fantasy")], "", ""),
-]
+def lineup() -> dict:
+    """The starter lineup's table."""
+    from .paths import asset
+    with open(asset("channels", "lineup.json"), encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _tkey(title: str) -> str:
-    """A title as the network table and the library both have it: letters
-    and digits only, '&' read as 'and', a year at the end left off
-    ('Archer (2009)' is 'archer')."""
+    """A title as the table and the library both have it: letters and
+    digits only, '&' read as 'and', a year at the end left off ('Archer
+    (2009)' is 'archer')."""
     import unicodedata
     t = re.sub(r"\s*\((19|20)\d\d\)\s*$", "", title or "")
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().casefold().replace("&", "and")
     return re.sub(r"[^a-z0-9]+", "", t)
 
 
-def _libs(index, pattern: str, breaks: bool) -> list:
-    """The libraries whose names match a pattern: break material or not.
-    One hidden from On Demand counts: a network names it."""
-    return [s for s in index.sections.values() if pattern and bool(s.breaks) == breaks
-            and re.search(pattern, s.title.lower())]
+def _movie_key(name: str) -> tuple:
+    """'Good Burger (1997)' as (its title's key, 1997)."""
+    m = re.fullmatch(r"(.*) \((\d{4})\)", name or "")
+    return (_tkey(m.group(1)), int(m.group(2))) if m else (_tkey(name), 0)
 
 
-def starter(index) -> list:
-    """The starter lineup: network replicas (each with the shows it aired, its
-    dayparts, its bumpers and libraries), the HBO channels from the movies,
-    a few 24/7 channels, and each library nothing else took."""
-    out, used = [], set()
-
-    def add(name, group, order, sources, **more):
-        # the same id from the same library on any Cathode: two never edited air the same days
-        cid = hashlib.sha1(json.dumps([name, sources], sort_keys=True).encode()).hexdigest()[:8]
-        logo = LOGOS.get(name) or more.pop("logo", "")
-        more.pop("logo", None)              # (the network's own wins over the show's title art)
-        if logo:
-            more["logo"] = logo             # (a Plex path for a show's title art: the app asks its server)
-        out.append(new_channel(name, sources, order, starter=True, group=group, id=cid, **more))
-
-    shows = {}                                      # title key -> [(section, show key, episodes)]
+def starter(index, table=None) -> list:
+    """The starter lineup's channels: each with the shows the table names
+    (by title), its movies, the libraries it takes whole, its dayparts, its
+    bumpers (and its shows' shorts) and the commercials. A channel nothing
+    in the library is for isn't made."""
+    table = table or lineup()
+    libs = {s.title.lower(): s for s in index.sections.values()}
+    shows, movies = {}, {}
     for sec in index.sections.values():
-        if sec.kind == "show" and not sec.hidden and not sec.breaks:
-            n = {}
-            for i in sec.items:
-                n[i["show_key"]] = n.get(i["show_key"], 0) + 1
+        if sec.hidden or sec.breaks:
+            continue
+        if sec.kind == "show":
+            have = {i["show_key"] for i in sec.items}
             for k, sh in sec.shows.items():
-                shows.setdefault(_tkey(sh["title"]), []).append((sec.key, k, n.get(k, 0)))
-
+                if k in have:
+                    shows.setdefault(_tkey(sh["title"]), []).append((sec.key, k))
+        elif sec.kind == "movie":
+            for i in sec.items:
+                movies.setdefault((_tkey(i["title"]), i["year"]), []).append((sec.key, i["plex"]))
     shorts = {(s.key, i["show_key"]) for s in index.sections.values() if s.kind == "show" for i in s.items
               if i["season"] == 0 and 0 < i["duration"] <= CLIP_MAX and any(j["season"] for j in s.items
                                                                              if j["show_key"] == i["show_key"])}
 
-    def found(titles: str) -> list:
-        return [hit for t in dict.fromkeys(_tkey(t) for t in titles.split("|") if t) for hit in shows.get(t, ())]
-    ads = [{"section": s.key, "kind": "all"} for s in index.sections.values()
-           if s.breaks and re.search(r"commercial|\bads?\b|promo", s.title.lower())]
+    def found(titles) -> list:
+        return [h for t in dict.fromkeys(_tkey(t) for t in titles or () if t) for h in shows.get(t, ())]
 
-    for net in NETWORKS:
-        libs = _libs(index, net.get("libs", ""), False)
-        whole = {lib.key for lib in libs}           # (a library taken whole: its shows aren't named again)
+    def lib(name):
+        return libs.get((name or "").lower())
+
+    ads = [{"section": s.key, "kind": "all"} for s in map(lib, table.get("ads", ADS)) if s]
+    out = []
+    for e in table["channels"]:
         slots = []
-        for airs, titles, *pattern in net.get("slots", ()):
-            f, ls = [h for h in found(titles) if h[0] not in whole], _libs(index, pattern[0] if pattern else "", False)
+        for sl in e.get("slots", ()):
+            f, ls = found(sl.get("shows")), [s for s in map(lib, sl.get("libs", ())) if s]
             if len(f) >= SLOT_SHOWS or ls:
-                slots.append((airs, f, ls))
-        in_slot = {h[:2] for _a, f, _l in slots for h in f}
-        day = [h[:2] for h in found(net["shows"]) if h[0] not in whole and h[:2] not in in_slot]
-        if len(day) < SLOT_SHOWS and not libs:      # too little for the rest of the day: the slot's shows all day
-            day += [h[:2] for _a, f, _l in slots for h in f if h[:2] not in day]
-            slots = [(a, [], ls) for a, _f, ls in slots if ls]
-        if len(day) + sum(len(f) for _a, f, _l in slots) < net.get("min", NET_SHOWS) and not libs:
-            continue
+                slots.append((sl["airs"], f, ls))
+        in_slot = {h for _a, f, _l in slots for h in f} | {s.key for _a, _f, ls in slots for s in ls}
+        day = [h for h in found(e.get("shows")) if h not in in_slot]
         sources = [{"section": s, "kind": "show", "value": k} for s, k in day]
-        sources += [{"section": lib.key, "kind": "all"} for lib in libs]
-        for airs, f, ls in slots:
-            sources += [{"section": s, "kind": "show", "value": k, "airs": airs} for s, k, _n in f]
-            sources += [{"section": lib.key, "kind": "all", "airs": airs} for lib in ls]
-        used |= whole | {lib.key for _a, _f, ls in slots for lib in ls}
-        bumps = [{"section": s.key, "kind": "all"} for s in _libs(index, net.get("bumps", ""), True)]
-        bumps += [{"section": s, "kind": "show", "value": k, "specials": True} for s, k in
-                  day + [h[:2] for _a, f, _l in slots for h in f] if (s, k) in shorts]   # its shows' shorts
-        brk = {"ads": ads if net.get("ads", True) else [], "bumps": bumps, "pad": 30, "mid": "off", "length": 120}
-        add(net["name"], net["group"], net.get("order", "round_robin_shuffle"), sources,
-            breaks=brk if brk["ads"] or brk["bumps"] else {})
-
-    movies = [s for s in index.sections.values() if s.kind == "movie" and not s.hidden and s.key not in used
-              and not re.search(r"stand.?up", s.title.lower())]
-    for name, picks, titles, libs in HBO:
-        sources = [dict({"section": s.key, "kind": kind}, **({"value": v} if v is not None else {}))
-                   for s in movies for kind, v in picks]
-        n = sum(1 for s in sources for _i in _matching(s, index))
-        if n < HBO_MOVIES or (name == "HBO2" and n < 5 * HBO_MOVIES):
+        picked = {}
+        for m in e.get("movies", ()):
+            for s, key in movies.get(_movie_key(m), ())[:1]:
+                picked.setdefault(s, []).append(key)
+        sources += [{"section": s, "kind": "title", "value": v} for s, v in picked.items()]
+        sources += [{"section": s.key, "kind": "all"} for s in map(lib, e.get("libs", ())) if s and s.key not in in_slot]
+        sources += [dict({k: v for k, v in src.items() if k != "lib"}, section=lib(src["lib"]).key)
+                    for src in e.get("sources", ()) if lib(src.get("lib"))]
+        for airs, f, ls in slots:         # (a daypart's shows and libraries air in it only)
+            sources += [{"section": s, "kind": "show", "value": k, "airs": airs} for s, k in f]
+            sources += [{"section": s.key, "kind": "all", "airs": airs} for s in ls]
+        if not sources:
             continue
-        sources += [{"section": s, "kind": "show", "value": k} for s, k, _n in found(titles)]
-        sources += [{"section": lib.key, "kind": "all"} for lib in _libs(index, libs, False)]
-        if name == "HBO Zone":              # the late-night feed: nothing for the little ones
-            sources += [{"section": s.key, "kind": "rating", "value": KIDS, "exclude": True} for s in movies]
-        used |= {s.key for s in movies}
-        add(name, "Premium", "cyclic_shuffle", sources, breaks={},
-            **({"content": "family"} if name == "HBO Family" else {}))
-
-    ranked = sorted(((n, sec, k) for sec in index.sections.values() if sec.kind == "show" and not sec.hidden
-                     and not sec.breaks and sec.key not in used for k, n in
-                     ((k, sum(1 for i in sec.items if i["show_key"] == k)) for k in sec.shows)
-                     if n >= MARATHON_EPISODES and not set(sec.shows[k]["genres"]) & NOT_247),
-                    key=lambda t: (-t[0], t[1].shows[t[2]]["title"]))
-    picks = [(sec.key, k) for _n, sec, k in ranked[:MARATHONS]]
-    picks += [h[:2] for h in found(ALWAYS_247) if h[:2] not in picks]
-    for s, k in picks:
-        sh = index.sections[s].shows[k]
-        add(f"{sh['title']} 24/7", "24/7", "playlist", [{"section": s, "kind": "show", "value": k}], logo=sh.get("logo", ""))
-
-    taken = {s.get("section") for c in out for s in c["sources"]}
-    for s in index.programme_sections():
-        if s.key not in taken and s.key not in used and s.kind in ("show", "movie", "clip"):
-            add(s.title, "Libraries", "block_shuffle" if s.kind == "show" else "cyclic_shuffle",
-                [{"section": s.key, "kind": "all"}])
+        bumps = [{"section": s.key, "kind": "all"} for s in map(lib, e.get("bumps", ())) if s]
+        bumps += [{"section": lib(n).key, "kind": "title", "value": v}
+                  for n, v in (e.get("bump_titles") or {}).items() if lib(n)]
+        bumps += [{"section": s, "kind": "show", "value": k, "specials": True}
+                  for s, k in day + [h for _a, f, _l in slots for h in f] if (s, k) in shorts]   # its shows' shorts
+        brk = {"ads": ads if e.get("ads", True) else [], "bumps": bumps, "pad": 30, "mid": "off", "length": 120}
+        more = {k: e[k] for k in ("block", "bug", "closed") if k in e}
+        logo = e.get("logo", "")
+        if logo == "show":              # a 24/7's: the show's title art (a Plex path: the app asks its server)
+            logo = next((index.sections[s].shows[k].get("logo", "") for s, k in day), "")
+        if logo:
+            more["logo"] = logo
+        # the same id from the same library on any Cathode: two never edited air the same days
+        cid = hashlib.sha1(json.dumps([e["name"], sources], sort_keys=True).encode()).hexdigest()[:8]
+        out.append(new_channel(e["name"], sources, e.get("order", "cyclic_shuffle"), starter=True, id=cid,
+                               number=e.get("number", "auto"), group=e.get("group") or "Library",
+                               breaks=brk if brk["ads"] or brk["bumps"] else {}, **more))
     return out
 
 
+def _rows(c: dict, index) -> tuple:
+    """What a channel's sources take: its shows ({(section, key): row}) and
+    its movies ({(section, rating key): item})."""
+    shows, movies = {}, {}
+    for src in c.get("sources") or []:
+        if src.get("exclude") or src.get("kind") == "group":
+            continue
+        for sec in index.sections.values():
+            if (src.get("section") and sec.key != src["section"]) or (
+                    not src.get("section") and (sec.breaks or sec.hidden)):
+                continue
+            if sec.kind == "show":
+                if src.get("kind") == "show":
+                    if src.get("value") in sec.shows:
+                        shows[(sec.key, src["value"])] = sec.shows[src["value"]]
+                else:
+                    shows.update(((sec.key, k), sh) for k, sh in sec.shows.items() if _match(src, sh))
+            elif sec.kind == "movie" and src.get("kind") != "show":
+                movies.update(((sec.key, i["plex"]), i) for i in sec.items if _match(src, i))
+    return shows, movies
+
+
+def _kidness(rating: str) -> float:
+    """How much a rating is for children: 1 for G and TV-Y, 0 for R and TV-MA."""
+    return {"TV-PG": 0.75, "PG": 0.75, "TV-14": 0.4, "PG-13": 0.4}.get(
+        rating, 1.0 if rating in KIDS else 0.0 if rating in MATURE else 0.5)
+
+
+def _name(title: str) -> tuple:
+    """A title's words, as keys ('Hunter x Hunter: Phantom Rouge' starts
+    with 'Hunter x Hunter')."""
+    return tuple(w for w in (_tkey(x) for x in (title or "").split()) if w)
+
+
+def _profile(rows) -> dict:
+    """What a channel's shows (or movies) are like: their libraries, studios,
+    genres, how much they're for kids, their names. rows: (section, row)."""
+    rows = list(rows)
+    return {"sections": {s for s, _r in rows},
+            "studios": collections.Counter(b for b in (brand(r.get("studio") or "") for _s, r in rows) if b),
+            "genres": collections.Counter(g for _s, r in rows for g in r.get("genres") or ()),
+            "n": len(rows), "kids": sum(_kidness(r.get("rating")) for _s, r in rows) / len(rows),
+            "names": {_name(r["title"]) for _s, r in rows if len(_tkey(r["title"])) >= 6}}
+
+
+def _like(row: dict, section: str, profiles: list, shows: list) -> Optional[dict]:
+    """The channel a show (or movie) belongs on, by the ones already there:
+    a spin-off or a show's movie with that show; else the channel most like
+    it (its library, a studio mostly on that channel, its genres, how much
+    it's for kids). Never a grown-ups' title on a kids' channel."""
+    words = _name(row.get("title"))
+    kin = [(len(n), c) for c, p in shows for n in p["names"] if words[:len(n)] == n]
+    if kin:
+        return max(kin, key=lambda t: t[0])[1]
+    if row.get("rating") in MATURE:
+        profiles = [p for p in profiles if p[0].get("content", "any") == "any" and p[1]["kids"] < 0.75] or profiles
+    if not profiles:
+        return None
+    b, gs, k = brand(row.get("studio") or ""), row.get("genres") or [], _kidness(row.get("rating"))
+    total = sum(p["studios"][b] for _c, p in profiles) if b else 0
+
+    def score(cp):
+        p = cp[1]
+        g = sum(p["genres"][x] for x in gs) / ((p["n"] + 5) * len(gs)) if gs else 0.0     # (a few movies prove little)
+        mostly = b and p["studios"][b] >= 2 and 2 * p["studios"][b] >= total               # (Hanna-Barbera's: Boomerang)
+        return g + 0.25 * (1 - abs(k - p["kids"])) + 0.5 * (section in p["sections"]) + (1.0 if mostly else 0.0)
+    return max(profiles, key=score)[0]
+
+
+def newest(index) -> float:
+    """When the library last took in a show or movie."""
+    return max((i.get("added") or 0 for s in index.sections.values() if s.kind in ("show", "movie")
+                and not s.breaks and not s.hidden for i in s.items), default=0)
+
+
+def place_titles(chans: list, index, since: float = 0.0, config=None, table=None) -> list:
+    """Each show and movie no channel has, put on the channel it belongs on
+    (with `since`, only those the library took in after that moment): the
+    one the starter's table names it for (in its daypart, if that's where
+    it ran), else the one whose shows (movies) it's most like. A channel of
+    one show (a 24/7) takes nothing; the table's leave-outs stay out.
+    [(title, channel name)] placed."""
+    table = table or lineup()
+    leave = {_tkey(t) for t in table.get("leave_out", ())}
+    homes = {}
+    for e in table["channels"]:
+        for t in e.get("shows", ()):
+            homes.setdefault(_tkey(t), (e["name"], None))
+    for e in table["channels"]:
+        for sl in e.get("slots", ()):
+            for t in sl.get("shows", ()):
+                homes.setdefault(_tkey(t), (e["name"], sl["airs"]))
+    for e in table["channels"]:
+        for t in e.get("more", ()):
+            homes.setdefault(_tkey(t), (e["name"], None))
+    takes = {c["name"]: c for c in chans if not c.get("closed")}
+    have_s, have_m, like_s, like_m = set(), set(), [], []
+    for c in chans:
+        s, m = _rows(expand(c, config) if config is not None else c, index)
+        have_s |= s.keys()
+        have_m |= {p for _s, p in m}
+        if not c.get("closed"):
+            like_s += [(c, _profile((k[0], r) for k, r in s.items()))] if s else []
+            like_m += [(c, _profile((k[0], r) for k, r in m.items()))] if m else []
+    placed = []
+    for sec in index.sections.values():
+        if sec.hidden or sec.breaks or sec.kind not in ("show", "movie"):
+            continue
+        if sec.kind == "show":
+            first = {}
+            for i in sec.items:
+                first[i["show_key"]] = min(first.get(i["show_key"], i.get("added") or 0), i.get("added") or 0)
+            for k, sh in sorted(sec.shows.items(), key=lambda kv: kv[1]["title"].lower()):
+                t = _tkey(sh["title"])
+                if (sec.key, k) in have_s or k not in first or (since and first[k] <= since) or t in leave:
+                    continue
+                name, airs = homes.get(t, (None, None))
+                c = takes.get(name)
+                if c is None:
+                    c, airs = _like(sh, sec.key, like_s, like_s), None
+                if c is None:
+                    continue
+                c.setdefault("sources", []).append(dict({"section": sec.key, "kind": "show", "value": k},
+                                                        **({"airs": airs} if airs else {})))
+                have_s.add((sec.key, k))
+                placed.append((sh["title"], c["name"]))
+            continue
+        for i in sec.items:
+            if i["plex"] in have_m or (since and (i.get("added") or 0) <= since) or i["duration"] < MIN_SECONDS \
+                    or _tkey(i["title"]) in leave:
+                continue
+            c = _like(i, sec.key, like_m, like_s)
+            if c is None:
+                continue
+            src = next((s for s in c.get("sources") or [] if s.get("kind") == "title" and s.get("section") == sec.key
+                        and not s.get("exclude") and not s.get("airs")), None)
+            if src is None:
+                src = {"section": sec.key, "kind": "title", "value": []}
+                c.setdefault("sources", []).append(src)
+            elif not isinstance(src.get("value"), list):
+                src["value"] = [src["value"]]
+            src["value"].append(i["plex"])
+            have_m.add(i["plex"])
+            placed.append((i["title"], c["name"]))
+    return placed
+
+
 def add_starter(config, index) -> int:
-    """The starter lineup's channels not already there (by name) added."""
+    """The starter lineup's channels not already there (by name) added, and
+    every show and movie no channel has put on one."""
     have = {c.get("name") for c in config.library_channels}
     new = [c for c in starter(index) if c["name"] not in have]
     config.library_channels.extend(new)
+    place_titles(config.library_channels, index, config=config)
     config.library_starter_make = STARTER_MAKE
+    config.library_placed_to = newest(index)
     return len(new)
 
 
@@ -1640,8 +1445,19 @@ def start(app, fresh: bool = False, done=None):
                 cfg.save()
                 _sync.quiet(app)
                 if n:
-                    app.toast(f"The starter lineup is now network replicas: {n} channels. Channels you "
+                    app.toast(f"The starter lineup is now your Tunarr channels: {n} channels. Channels you "
                               "changed are as they were.", 10.0)
+            got = place_titles(cfg.library_channels, index, since=cfg.library_placed_to, config=cfg) \
+                if cfg.library_placed_to else []
+            top = newest(index)
+            if got or top > cfg.library_placed_to:
+                cfg.library_placed_to = max(top, cfg.library_placed_to)
+                cfg.save()
+                _sync.quiet(app)
+            if got:                         # what the library took in, on its channels
+                said = ", ".join(f"{t} on {c}" for t, c in got[:3]) + (f" and {len(got) - 3} more" if len(got) > 3
+                                                                        else "")
+                app.toast(f"New in your library: {said}.", 10.0)
             place(app)
         if done:
             done(index, err)
@@ -1743,13 +1559,16 @@ def options(index, section: str, kind: str) -> list:
             elif kind == "show":
                 vals = [r["key"]] if sec.kind in ("show", "music") else []
                 names[r.get("key")] = r["title"]
+            elif kind == "title":
+                vals = [] if sec.kind in ("show", "music") else [r["plex"]]
+                names[r.get("plex")] = f"{r['title']} ({r['year']})" if r.get("year") else r["title"]
             else:
                 vals = []
             for v in vals:
                 n[v] = n.get(v, 0) + 1
     if kind == "decade":
         return [(v, f"{v}s", k) for v, k in sorted(n.items())]
-    if kind == "show":
+    if kind in ("show", "title"):
         return sorted(((v, names[v], k) for v, k in n.items()), key=lambda r: r[1].lower())
     return [(v, str(v), k) for v, k in sorted(n.items(), key=lambda kv: (-kv[1], str(kv[0])))]
 
@@ -1765,6 +1584,11 @@ def source_label(index, src: dict) -> str:
         return where
     if kind == "show":
         return (sec.shows.get(val) or {}).get("title", "A show") if sec else "A show"
+    if kind == "title":
+        vals = val if isinstance(val, list) else [val]
+        if len(vals) == 1 and sec:
+            return next((i["title"] for i in sec.items if i["plex"] == vals[0]), "A title")
+        return f"{where}: {len(vals)} titles"
     if kind == "decade":
         return f"{where}: {val}s"
     if kind == "rating":

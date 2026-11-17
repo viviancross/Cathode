@@ -136,6 +136,11 @@ def add_to(chans: list, config, names: Optional[dict] = None) -> list:
         return out
     taken = {c.number for c in out}
     nxt = int(max((c.number for c in out), default=0)) + 1
+    for c in getattr(config, "library_channels", None) or []:     # numbers library channels ask for: kept for them
+        try:
+            taken.add(int(c.get("number")))
+        except (TypeError, ValueError):
+            pass
     for c in config.video_channels or []:
         want = c.get("number", "auto")
         try:

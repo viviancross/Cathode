@@ -204,8 +204,8 @@ def open_welcome(app):
             app.after(0.5, tick)
         m.open("BUILDING YOUR CHANNELS", [
             Item("Reading your Plex library", enabled=False, value=progress,
-                 help="Networks with the shows they aired, HBO from your movies, 24/7s. A big library takes a "
-                      "minute or two the first time; after that it's quick.")])
+                 help="Your channels as your Tunarr had them, every show and movie on one. A big library takes "
+                      "a minute or two the first time; after that it's quick.")])
         lc.start(app, done=built)
         app.after(0.5, tick)
 
@@ -230,8 +230,8 @@ def open_welcome(app):
 
     def channels(title, extra=()):
         return [title, [Item("From my Plex library", plex, value=lambda: "Recommended",
-                             help="Cathode makes a cable lineup from your library: networks with the shows they "
-                                  "aired and their bumpers, HBO from your movies, 24/7s. You'll link Plex next."),
+                             help="Cathode makes a cable lineup from your library: your channels as your Tunarr "
+                                  "had them, every show and movie on one. You'll link Plex next."),
                         Item("From Tunarr, ErsatzTV or an M3U link", setup, help=PLAYLIST_HELP), *extra,
                         Item("Restart Cathode", submenu=lambda: _confirm(app, "Restart Cathode", app.restart,
                                                                           "Keep going", close=True)),
@@ -871,7 +871,9 @@ def bug_items(app):
     corners = [(c, c.capitalize()) for c in Skin.BUG_CORNERS]
     return [
         Item("Screen bug", set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on)),
-             value=lambda: "On" if cfg.bug_on else "Off", adjust=set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on))),
+             value=lambda: "On" if cfg.bug_on else "Off", adjust=set_and(lambda d: setattr(cfg, "bug_on", not cfg.bug_on)),
+             help="The channel's logo, faint, in a corner. Channels with a bug of their own (the ones made from "
+                  "your Tunarr setup) keep its corner, size and opacity."),
         Item("Corner", value=lambda: _label(corners, cfg.bug_corner),
              adjust=set_and(lambda d: setattr(cfg, "bug_corner", _cycle(corners, cfg.bug_corner, d)))),
         Item("Size", value=lambda: _label(BUG_SIZES, cfg.bug_size), adjust=set_and(lambda d: step("bug_size", BUG_SIZES, d))),
@@ -1992,9 +1994,10 @@ def library_channel_items(app):
                       help="Commercials from your commercials libraries on every library and YouTube channel that "
                            "has none, bumpers named for each channel's studio, lined up with the half hours."))
     items.append(Item("Add the starter lineup", make_starter,
-                      help="Network replicas made from what your library holds (each with the shows it aired, "
-                           "its bumpers and dayparts), HBO channels from your movies, a few 24/7 channels. "
-                           "Ones you already have (by name) are left alone."))
+                      help="Your channels as your Tunarr had them (their numbers, shows, movies, bumpers, logos "
+                           "and screen bugs, with Cathode's dayparts), a few of Cathode's own, and every show or "
+                           "movie nothing else has put on the channel it belongs on. Ones you already have (by "
+                           "name) are left alone."))
     if any(c.get("starter") for c in cfg.library_channels):
         items.append(Item("Remove the starter lineup",
                           submenu=lambda: _confirm(app, "Remove its channels", drop_starter, "Keep them"),

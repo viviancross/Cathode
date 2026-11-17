@@ -307,6 +307,7 @@ class TestMaker(Temp):
         self.assertEqual(app.config.video_channels[0]["sources"][0]["limit"], 50)
         # a skipped title, and putting it back
         s.update(airs=None, season=None, exclude=False)
+        app.config.library_channels[0]["hours"] = None     # (on the air whatever the time: 2 to 6 AM it'd be off)
         lc.rebuild(app)
         tl = lc.SCHEDULES[lc.PREFIX + lid]
         first = tl.at(datetime.now(timezone.utc))["entry"]["id"]

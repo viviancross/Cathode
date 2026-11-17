@@ -170,7 +170,8 @@ class Config:
     # after the lineup. See libchannels.new_channel() for an entry's fields.
     library_channels: list = field(default_factory=list)
     library_starter_done: bool = False      # the starter lineup was made once
-    library_starter_make: int = 0           # which make of it (libchannels.STARTER_MAKE; 2: network replicas)
+    library_starter_make: int = 0           # which make of it (libchannels.STARTER_MAKE; 5: your Tunarr lineup)
+    library_placed_to: float = 0.0          # the library's newest title when titles were last given channels
     # The screen bug: the channel's logo in a corner of the picture (skins.Skin.draw_bug); your own
     # logos and bugs go in the settings folder's logos folder (logos.py).
     bug_on: bool = True

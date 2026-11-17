@@ -463,8 +463,11 @@ class TestLogosAndBug(unittest.TestCase):
         self.assertEqual(logos.url_for(app, ch), num)           # picked on its page
         from cathode import libchannels as lc
         net = Channel(number=101, name="Cartoon Network", url="cathode://video/lib.ab12", epg_id="x",
-                      logo=lc.LOGOS["Cartoon Network"])
+                      logo="https://upload.wikimedia.org/Cartoon_Network_logo_%281992-2004%29.png")
         self.assertIn("Cartoon_Network_logo_%281992-2004%29", logos.url_for(app, net))     # the network's real one
+        own = Channel(number=163, name="Nickelodeon", url="cathode://video/lib.ef56", epg_id="z",
+                      logo="asset:channels/nickelodeon.png")
+        self.assertTrue(os.path.isfile(logos.url_for(app, own)))        # one that comes with Cathode
         show = Channel(number=102, name="The Simpsons 24/7", url="cathode://video/lib.cd34", epg_id="y",
                        logo="/library/metadata/7/clearLogo/1")
         self.assertEqual(logos.url_for(app, show), "")                 # its title art needs the Plex server
@@ -525,6 +528,15 @@ class TestLogosAndBug(unittest.TestCase):
         app.config.bug_on = False
         self.assertEqual(draw().get_at((m + 2, m + 2))[3], 0)
         app.config.bug_on, app.config.bug_in_breaks = True, False
+        skin._in_break = lambda ch: False
+        skin.own_bug = lambda ch: {"corner": "top right", "width": 10, "opacity": 30, "margin": [5, 5]}  # Tunarr's
+        c = draw()
+        at = (W - W * 5 // 100 - 2, H * 5 // 100 + 2)
+        self.assertAlmostEqual(c.get_at(at)[3], 77, delta=3)           # its corner, its opacity
+        self.assertEqual(c.get_at((m + 2, m + 2))[3], 0)               # not the usual corner
+        skin.own_bug = lambda ch: {"off": True}                         # none on this channel
+        self.assertEqual(draw().get_at(at)[3], 0)
+        del skin.own_bug
         app.config.bug_corner, app.config.bug_opacity = "bottom right", 15
         for name, cls in skin_classes().items():                # every skin's way of drawing the live screen
             skin = app.skin = cls(app)
